@@ -1,0 +1,35 @@
+/**
+ * @swimlane-cloud/editor — the shared DSL editor surface.
+ *
+ * Public entry. Consumers also import the stylesheet:
+ *   import "@swimlane-cloud/editor/styles.css";
+ */
+export { DslEditor } from "./dsl-editor.jsx";
+export { FileEditorProvider } from "./context/file-editor-provider.jsx";
+export { useEditor } from "./context/editor-context.js";
+
+// EditorHost contract + capability helpers.
+export {
+  TEMPLATE_SECTIONS,
+  hostHas,
+  hostSupportsVersioning,
+  hostIsReadOnly,
+} from "./host.js";
+
+// Pure libs, useful to host adapters and tests.
+export { serializeDSL } from "./lib/serialize-dsl.js";
+export { formatDsl } from "./lib/format-dsl.js";
+export { mergeSectionTemplate } from "./lib/template-merge.js";
+export {
+  DEFAULT_TAB_TEMPLATE,
+  isDocumentDirty,
+  createDocument,
+  normalizeNewTxtRelPath,
+  normalizeDirPath,
+} from "./lib/dsl-document.js";
+export { buildFolderTree } from "./lib/folder-tree.js";
+export { parseGuiModel, applyModelEdit } from "./lib/gui-model.js";
+
+// i18n (English + Japanese). Consumers can seed the language via
+// <DslEditor options={{ lang: "ja" }} /> or read/switch it with useT().
+export { LanguageProvider, useT, LANGUAGES } from "./i18n.jsx";

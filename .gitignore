@@ -1,3 +1,23 @@
 node_modules/
 *.log
 .DS_Store
+
+# Build outputs
+dist/
+dist-electron/
+build/
+out/
+release/
+.next/
+.vercel/
+.turbo/
+
+# Env
+.env
+.env.local
+.env*.local
+
+# Misc
+.dev-port
+coverage/
+*.tsbuildinfo

@@ -1,0 +1,54 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+.web-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.web-topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.web-topbar__title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.web-topbar__spacer {
+  flex: 1;
+}
+
+.web-topbar__btn {
+  font-size: 13px;
+  padding: 4px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.web-topbar__btn:hover {
+  background: #f1f5f9;
+}
+
+.web-editor {
+  flex: 1;
+  min-height: 0;
+}
