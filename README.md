@@ -17,64 +17,142 @@ apps/
 nginx/
   nginx.conf           # Reverse proxy base config
   conf.d/app.conf      # Virtual hosts for app + Gitea
-docker-compose.yml     # Full production stack
+docker-compose.yml     # Self-hosted services (Gitea + app + Nginx)
 .env.example           # Environment variable template
 ```
 
 ---
 
-## Deploying on Amazon Web Services (EC2)
+## Deploying on Amazon Web Services
 
-The full stack (Next.js app + Gitea + Postgres + Nginx) runs on a single EC2 instance via Docker Compose. Supabase is used as a managed service for auth and the app database; only Gitea (the git server) is self-hosted.
+### Infrastructure overview
+
+| What | Where | Cost |
+|---|---|---|
+| Next.js app + Gitea + Nginx | EC2 t3.medium (Docker Compose) | ~$30/mo |
+| Gitea Postgres | Docker volume on the same EC2 | included |
+| SVG blob storage | **S3** | ~$0.023/GB — negligible |
+| Transactional email | **SES** | $0.10/1000 emails |
+| Auth + app database | Supabase (managed SaaS) | free tier |
+| DNS | Route 53 | $0.50/zone |
+| Billing | Stripe (managed SaaS) | % of revenue |
+
+Everything that runs as a managed service is pay-per-use with no server to maintain. The single EC2 instance hosts only what must be self-managed: Gitea and the app itself.
+
+---
 
 ### Prerequisites
 
 - AWS account
-- A domain name with DNS hosted in Route 53 (or any registrar)
-- A Supabase project (free tier works for development)
-- A Stripe account
+- Domain with DNS hosted in Route 53 (or any registrar)
+- Supabase project (free tier works for development)
+- Stripe account
 
 ---
 
-### Step 1 — Launch an EC2 instance
+### Step 1 — Create the S3 bucket
 
-1. Open the [EC2 console](https://console.aws.amazon.com/ec2) and click **Launch instance**.
-2. Choose **Ubuntu 24.04 LTS (x86_64)**.
-3. Instance type: **t3.medium** minimum (Gitea + Postgres + Next.js; upgrade to t3.large for production load).
-4. Storage: **30 GB gp3** root volume (increase to 50+ GB if you expect heavy diagram history).
-5. Security group — open these inbound ports:
+SVG blobs (the canonical diagram renders) are stored in S3 instead of running a storage server.
 
-   | Port | Protocol | Source    | Purpose              |
-   |------|----------|-----------|----------------------|
-   | 22   | TCP      | Your IP   | SSH                  |
-   | 80   | TCP      | 0.0.0.0/0 | HTTP (certbot)       |
-   | 443  | TCP      | 0.0.0.0/0 | HTTPS (app + Gitea)  |
+1. Open [S3 → Create bucket](https://s3.console.aws.amazon.com/s3/bucket/create).
+2. Name: `swimlane-svg-blobs` (or your preferred name — set `S3_SVG_BUCKET` to match).
+3. Region: choose where your EC2 will live (e.g. `us-east-1`).
+4. Block all public access: **on** (the app serves SVGs via signed URLs or proxy).
+5. Versioning: off.
+6. Click **Create bucket**.
 
-6. Create or select a key pair, then launch.
-7. **Allocate and associate an Elastic IP** to the instance so the address doesn't change on restart:
+---
+
+### Step 2 — Create an IAM role for the EC2 instance
+
+Using an IAM role means zero credentials in your `.env` — the AWS SDK picks them up automatically.
+
+1. Open [IAM → Roles → Create role](https://console.aws.amazon.com/iam/home#/roles).
+2. Trusted entity type: **AWS service → EC2**.
+3. Attach a new **inline policy** (or a named policy) with these permissions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SvgBlobs",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::swimlane-svg-blobs/*"
+    },
+    {
+      "Sid": "SvgBlobsList",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::swimlane-svg-blobs"
+    },
+    {
+      "Sid": "SesEmail",
+      "Effect": "Allow",
+      "Action": "ses:SendRawEmail",
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+4. Name the role `swimlane-ec2-role` and create it.
+
+---
+
+### Step 3 — (Optional) Set up SES for email
+
+Skip this step if you don't need email notifications. Gitea and the app will run without it.
+
+1. Open [SES → Verified identities → Create identity](https://console.aws.amazon.com/ses/home#/verified-identities).
+2. Verify your sending domain (e.g. `yourdomain.com`) by adding the DNS records SES provides.
+3. If your account is in the **SES sandbox**, request production access so you can send to any address.
+4. For Gitea's SMTP relay, create SMTP credentials:
+   - SES → SMTP settings → Create SMTP credentials → this generates an IAM user with `ses:SendRawEmail`.
+   - Save the SMTP username and password — set them as `SES_SMTP_USER` / `SES_SMTP_PASSWORD` in `.env`.
+
+---
+
+### Step 4 — Launch an EC2 instance
+
+1. Open [EC2 → Launch instance](https://console.aws.amazon.com/ec2).
+2. **AMI:** Ubuntu 24.04 LTS (x86_64).
+3. **Instance type:** t3.medium (Gitea + Postgres + Next.js). Upgrade to t3.large for heavy load.
+4. **IAM instance profile:** select `swimlane-ec2-role` created in Step 2.
+5. **Storage:** 30 GB gp3 root volume (50+ GB if you expect large git repositories).
+6. **Security group** — inbound rules:
+
+   | Port | Protocol | Source    | Purpose             |
+   |------|----------|-----------|---------------------|
+   | 22   | TCP      | Your IP   | SSH                 |
+   | 80   | TCP      | 0.0.0.0/0 | HTTP (Let's Encrypt)|
+   | 443  | TCP      | 0.0.0.0/0 | HTTPS               |
+
+7. Select or create a key pair, then launch.
+8. **Allocate and associate an Elastic IP** so the address survives reboots:
    - EC2 → Elastic IPs → Allocate → Associate → select your instance.
 
 ---
 
-### Step 2 — Point DNS to the instance
+### Step 5 — Point DNS to the instance
 
-In Route 53 (or your registrar), create two **A records** pointing to the Elastic IP:
+In Route 53 (or your registrar) create two **A records** pointing to the Elastic IP:
 
-| Record name           | Type | Value         |
-|-----------------------|------|---------------|
-| `app.yourdomain.com`  | A    | `<Elastic IP>`|
-| `git.yourdomain.com`  | A    | `<Elastic IP>`|
+| Name                  | Type | Value          |
+|-----------------------|------|----------------|
+| `app.yourdomain.com`  | A    | `<Elastic IP>` |
+| `git.yourdomain.com`  | A    | `<Elastic IP>` |
 
-DNS propagation takes a few minutes.
+Wait a few minutes for DNS to propagate before the next step.
 
 ---
 
-### Step 3 — Install Docker on the instance
+### Step 6 — Install Docker
 
 ```bash
 ssh -i your-key.pem ubuntu@<Elastic IP>
 
-# Install Docker + Compose plugin
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
@@ -86,108 +164,99 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-# Allow ubuntu user to run docker without sudo
 sudo usermod -aG docker ubuntu
 newgrp docker
 ```
 
 ---
 
-### Step 4 — Clone the repo and configure environment
+### Step 7 — Clone and configure
 
 ```bash
 git clone https://github.com/your-org/swimlane-cloud.git
 cd swimlane-cloud
 
-# Copy the env template and fill in values
 cp .env.example .env
 nano .env
 ```
 
-Required values to set in `.env`:
+Values to fill in:
 
-| Variable | Where to get it |
+| Variable | How to get it |
 |---|---|
-| `APP_DOMAIN` | Your app subdomain, e.g. `app.yourdomain.com` |
-| `GITEA_DOMAIN` | Your Gitea subdomain, e.g. `git.yourdomain.com` |
-| `CERTBOT_EMAIL` | Your email for Let's Encrypt notifications |
-| `GITEA_DB_PASSWORD` | Generate: `openssl rand -hex 20` |
-| `GITEA_SECRET_KEY` | Generate: `openssl rand -hex 32` |
-| `GITEA_INTERNAL_TOKEN` | Generate: `openssl rand -hex 32` |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project → Settings → API |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project → Settings → API |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase project → Settings → API |
-| `NEXTAUTH_SECRET` | Generate: `openssl rand -hex 32` |
-| `STRIPE_SECRET_KEY` | Stripe dashboard → Developers → API keys |
-| `STRIPE_WEBHOOK_SECRET` | Stripe dashboard → Webhooks |
+| `APP_DOMAIN` | e.g. `app.yourdomain.com` |
+| `GITEA_DOMAIN` | e.g. `git.yourdomain.com` |
+| `CERTBOT_EMAIL` | Your email for Let's Encrypt expiry notices |
+| `GITEA_DB_PASSWORD` | `openssl rand -hex 20` |
+| `GITEA_SECRET_KEY` | `openssl rand -hex 32` |
+| `GITEA_INTERNAL_TOKEN` | `openssl rand -hex 32` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API |
+| `AWS_REGION` | Region you chose in Step 1 |
+| `S3_SVG_BUCKET` | Bucket name from Step 1 |
+| `SES_FROM_EMAIL` | Verified SES sender (Step 3, or leave blank) |
+| `SES_SMTP_USER` / `SES_SMTP_PASSWORD` | SES SMTP credentials (Step 3, or leave blank) |
+| `GITEA_SES_FROM` | Same as `SES_FROM_EMAIL` (or leave blank) |
+| `NEXTAUTH_SECRET` | `openssl rand -hex 32` |
+| `STRIPE_SECRET_KEY` | Stripe → Developers → API keys |
+| `STRIPE_WEBHOOK_SECRET` | Stripe → Webhooks |
 
 ---
 
-### Step 5 — Configure Nginx virtual hosts
+### Step 8 — Configure Nginx virtual hosts
 
-Update the placeholder domain names in the Nginx config:
+Substitute the placeholder domain names in the Nginx config:
 
 ```bash
-sed -i "s/APP_DOMAIN_PLACEHOLDER/$(grep APP_DOMAIN .env | cut -d= -f2)/g" nginx/conf.d/app.conf
-sed -i "s/GITEA_DOMAIN_PLACEHOLDER/$(grep GITEA_DOMAIN .env | cut -d= -f2)/g" nginx/conf.d/app.conf
+source .env
+sed -i "s/APP_DOMAIN_PLACEHOLDER/${APP_DOMAIN}/g" nginx/conf.d/app.conf
+sed -i "s/GITEA_DOMAIN_PLACEHOLDER/${GITEA_DOMAIN}/g" nginx/conf.d/app.conf
 ```
 
 ---
 
-### Step 6 — Obtain SSL certificates
-
-Run Certbot once before starting Nginx with SSL (it uses the HTTP challenge):
+### Step 9 — Obtain SSL certificates
 
 ```bash
-# Start just Nginx in HTTP-only mode temporarily
+# Start Nginx in HTTP-only mode so Certbot can complete the challenge
 docker compose up -d nginx
 
-# Request certificates for both domains
+# Issue certificates for both domains
 docker compose run --rm certbot
 
-# Restart Nginx to pick up the certificates
+# Restart Nginx with SSL enabled
 docker compose restart nginx
 ```
 
 ---
 
-### Step 7 — Start the full stack
+### Step 10 — Start the full stack
 
 ```bash
 docker compose up -d
-```
-
-Check that all services are healthy:
-
-```bash
-docker compose ps
-docker compose logs -f
+docker compose ps        # all services should show "healthy" / "Up"
+docker compose logs -f   # tail logs
 ```
 
 ---
 
-### Step 8 — Create the Gitea bot account
-
-Gitea's web installer is disabled (`INSTALL_LOCK=true`). Create the admin account via CLI:
+### Step 11 — Create the Gitea bot account
 
 ```bash
 docker compose exec gitea gitea admin user create \
   --admin \
   --username swimlane-bot \
   --password "$(openssl rand -hex 16)" \
-  --email bot@yourdomain.com
-```
+  --email "bot@yourdomain.com"
 
-Then generate an API token:
-
-```bash
 docker compose exec gitea gitea admin user generate-access-token \
   --username swimlane-bot \
   --token-name saas-api \
   --raw
 ```
 
-Copy the token and add it to `.env` as `GITEA_ADMIN_TOKEN`, then restart the app:
+Copy the printed token, add it to `.env` as `GITEA_ADMIN_TOKEN`, then:
 
 ```bash
 docker compose restart app
@@ -195,18 +264,16 @@ docker compose restart app
 
 ---
 
-### Step 9 — Set up Supabase
+### Step 12 — Set up Supabase auth and database
 
-1. In your Supabase project, go to **SQL Editor** and run the schema migrations from `apps/saas/supabase/migrations/` (in order).
+1. In your Supabase project → **SQL Editor**, run the migrations from `apps/saas/supabase/migrations/` in order.
 2. Enable **Row Level Security** on all tenant-scoped tables.
-3. Create the **`svg-blobs` Storage bucket** (or whichever name you set in `SVG_STORAGE_BUCKET`), set it to private.
-4. Enable **Magic Link** auth under Authentication → Providers.
+3. Under **Authentication → Providers**, enable **Magic Link**.
+4. SVG blobs are stored in S3 (Step 1) — no Supabase Storage bucket needed.
 
 ---
 
-### Step 10 — Automate SSL renewal
-
-Add a cron job on the host to renew certificates monthly:
+### Step 13 — Automate SSL renewal
 
 ```bash
 (crontab -l 2>/dev/null; echo "0 3 1 * * cd /home/ubuntu/swimlane-cloud && docker compose run --rm certbot renew && docker compose restart nginx") | crontab -
@@ -223,29 +290,30 @@ docker compose build app
 docker compose up -d app
 ```
 
-Zero-downtime: Nginx keeps serving the old container until the new one passes its health check.
+Nginx continues serving the old container until the new one passes its health check.
 
 ---
 
-### Recommended production hardening
+### Production hardening checklist
 
-- Enable **EC2 Instance Connect** or use AWS Systems Manager Session Manager instead of open SSH.
-- Attach an **IAM role** to the instance with `s3:PutObject` / `s3:GetObject` if you use S3 for SVG storage instead of Supabase Storage.
-- Enable **Amazon CloudWatch** log agent to ship container logs off-instance.
-- Snapshot the EBS volume weekly via **AWS Backup**.
-- Set up a **Stripe webhook endpoint** at `https://app.yourdomain.com/api/billing/webhook` in the Stripe dashboard.
+- [ ] Use **AWS Systems Manager Session Manager** instead of exposing port 22.
+- [ ] Enable **Amazon CloudWatch** agent on the instance to ship container logs.
+- [ ] Schedule weekly EBS snapshots via **AWS Backup**.
+- [ ] Register the Stripe webhook at `https://app.yourdomain.com/api/billing/webhook`.
+- [ ] Set a **S3 lifecycle rule** to delete orphaned SVG blobs after 1 year.
+- [ ] Enable **S3 server-side encryption** (SSE-S3) on the bucket.
 
 ---
 
 ## Local development
 
 ```bash
-# Install dependencies (requires Node 20+, pnpm)
+# Requires Node 20+ and pnpm
 pnpm install
 
-# Run the engine package tests
+# Run engine tests
 cd packages/diagram-converter
 pnpm test
 ```
 
-Full local stack (app + Gitea) coming once `apps/saas` is scaffolded.
+For local S3, set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in `.env` (or use a local S3-compatible service like LocalStack). On EC2, the IAM role supplies credentials automatically — no keys in the file.

@@ -46,8 +46,14 @@ services:
       # Registration — only allow invites (bot account only)
       GITEA__service__DISABLE_REGISTRATION: "true"
       GITEA__service__REQUIRE_SIGNIN_VIEW: "true"
-      # Mailer (optional — remove if not sending git emails)
-      GITEA__mailer__ENABLED: "false"
+      # Mailer — AWS SES (set GITEA_SES_FROM to enable)
+      GITEA__mailer__ENABLED: ${GITEA_SES_FROM:+true}
+      GITEA__mailer__PROTOCOL: smtp
+      GITEA__mailer__SMTP_ADDR: email-smtp.${AWS_REGION:-us-east-1}.amazonaws.com
+      GITEA__mailer__SMTP_PORT: 587
+      GITEA__mailer__USER: ${SES_SMTP_USER:-}
+      GITEA__mailer__PASSWD: ${SES_SMTP_PASSWORD:-}
+      GITEA__mailer__FROM: ${GITEA_SES_FROM:-}
       # Logging
       GITEA__log__LEVEL: Warn
     volumes:
@@ -84,8 +90,11 @@ services:
       # Stripe
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
-      # S3 for SVG blobs (uses Supabase Storage bucket or AWS S3)
-      SVG_STORAGE_BUCKET: ${SVG_STORAGE_BUCKET:-svg-blobs}
+      # AWS — S3 for SVG blobs + SES for transactional email
+      # Credentials come from the EC2 IAM role; no keys needed here.
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_SVG_BUCKET: ${S3_SVG_BUCKET}
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-}
     networks:
       - internal
     healthcheck:
