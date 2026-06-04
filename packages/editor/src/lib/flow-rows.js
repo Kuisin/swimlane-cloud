@@ -200,6 +200,47 @@ export function swapStepRows(rows, indexA, indexB) {
   return next;
 }
 
+/** True when a row is a reorderable step (non-blank, has a role). */
+export function isStepRow(row) {
+  return isReorderableStep(row);
+}
+
+/**
+ * Indices of reorderable steps at the SAME branch-nesting level as `rowIndex`
+ * (i.e. sharing the same directly-enclosing branch — not steps nested deeper in
+ * a child branch). This keeps reordering from hopping across branch boundaries.
+ */
+export function getFrameStepIndices(rows, rowIndex) {
+  const { frameStart, frameEnd } = getStepReorderFrame(rows, rowIndex);
+  const enclosing = findEnclosingBranchStart(rows, rowIndex);
+  const out = [];
+  for (let i = frameStart; i <= frameEnd; i++) {
+    if (isReorderableStep(rows[i]) && findEnclosingBranchStart(rows, i) === enclosing) {
+      out.push(i);
+    }
+  }
+  return out;
+}
+
+/** True when two indices are reorderable steps sharing one branch level. */
+export function sameReorderFrame(rows, a, b) {
+  if (!isReorderableStep(rows[a]) || !isReorderableStep(rows[b])) return false;
+  return findEnclosingBranchStart(rows, a) === findEnclosingBranchStart(rows, b);
+}
+
+/**
+ * Move the row at `from` so it lands at rows-index `to` (before whatever was
+ * there). Returns a new array and the moved item's resulting index.
+ */
+export function moveRow(rows, from, to) {
+  if (from === to) return { rows, index: from };
+  const next = [...rows];
+  const [item] = next.splice(from, 1);
+  const insertAt = from < to ? to - 1 : to;
+  next.splice(insertAt, 0, item);
+  return { rows: next, index: insertAt };
+}
+
 /** When the user selects branchEnd, edit the paired branchStart in the inspector. */
 export function resolveInspectorTarget(rows, rowIndex) {
   const row = rows?.[rowIndex];
@@ -240,29 +281,29 @@ function laneLabel(lanes, roleId, t = defaultT) {
   return lane?.label || roleId;
 }
 
-/** Short, language-neutral type tag shown in the list badge. */
-export function rowBadgeLabel(row) {
+/** Localized type tag shown in the list badge. */
+export function rowBadgeLabel(row, t = defaultT) {
   if (!row) return "";
   switch (row.kind) {
     case "step":
-      return row.empty ? "blank" : "step";
+      return row.empty ? t("badge.blank") : t("badge.step");
     case "branchStart":
-      return row.parallel ? "fork" : "if";
+      return row.parallel ? t("badge.fork") : t("badge.if");
     case "branchCase":
-      if (row.parallel) return "and";
-      return /^else$/i.test((row.label || "").trim()) ? "else" : "case";
+      if (row.parallel) return t("badge.and");
+      return /^else$/i.test((row.label || "").trim()) ? t("badge.else") : t("badge.case");
     case "branchEnd":
-      return row.parallel ? "endfork" : "endif";
+      return row.parallel ? t("badge.endfork") : t("badge.endif");
     case "branchLoop":
-      return "loop";
+      return t("badge.loop");
     case "branchMerge":
-      return "merge";
+      return t("badge.merge");
     case "groupStart":
-      return (row.groupMode ?? "branch") === "branch" ? "branch" : "section";
+      return (row.groupMode ?? "branch") === "branch" ? t("badge.branch") : t("badge.section");
     case "groupEnd":
-      return (row.groupMode ?? "branch") === "branch" ? "end-branch" : "end-section";
+      return (row.groupMode ?? "branch") === "branch" ? t("badge.endBranch") : t("badge.endSection");
     default:
-      return "row";
+      return t("badge.row");
   }
 }
 

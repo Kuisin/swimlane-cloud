@@ -35,6 +35,7 @@ describe("public entry imports cleanly", () => {
     await import("./components/mode-toggle.jsx");
     await import("./components/language-toggle.jsx");
     await import("./components/gui/parts-preview-popup.jsx");
+    await import("./components/gui/move-step-modal.jsx");
     await import("./i18n.jsx");
     await import("./lib/parts-extract.js");
     await import("./hooks/use-drag-width.js");

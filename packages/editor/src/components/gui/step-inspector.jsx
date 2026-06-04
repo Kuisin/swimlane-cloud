@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Eye, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Eye, ListOrdered, Trash2 } from "lucide-react";
 import { useT } from "../../i18n.jsx";
 import { PartsPreviewPopup } from "./parts-preview-popup.jsx";
 
@@ -20,6 +20,7 @@ export function StepInspector({
   reorder,
   onPatch,
   onMove,
+  onOpenMove,
   onDelete,
   readOnly,
 }) {
@@ -71,6 +72,15 @@ export function StepInspector({
             title={t("step.moveDown")}
           >
             <ArrowDown size={14} />
+          </button>
+          <button
+            type="button"
+            className="sw-icon-btn"
+            disabled={fieldDisabled || (!reorder?.canUp && !reorder?.canDown)}
+            onClick={onOpenMove}
+            title={t("step.moveTo")}
+          >
+            <ListOrdered size={14} />
           </button>
           <button
             type="button"

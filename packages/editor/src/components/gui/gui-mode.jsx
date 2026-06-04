@@ -8,11 +8,13 @@ import {
   getReorderBounds,
   resolveInspectorTarget,
   swapStepRows,
+  moveRow,
 } from "../../lib/flow-rows.js";
 import { buildLockedGuiRowIndices } from "../../lib/parse-error-policy.js";
 import { FlowStepList } from "./flow-step-list.jsx";
 import { StepInspector } from "./step-inspector.jsx";
 import { BranchInspector } from "./branch-inspector.jsx";
+import { MoveStepModal } from "./move-step-modal.jsx";
 
 /**
  * GUI editing surface over the same DSL document. Parses `src` to a GUI model,
@@ -24,6 +26,7 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
   const { t } = useT();
   const inspector = useDragWidth(300, { min: 220, max: 520, edge: "left" });
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [showMove, setShowMove] = useState(false);
   const guiModel = useMemo(() => parseGuiModel(src), [src]);
   const rows = guiModel.rows;
   const lockedRows = useMemo(
@@ -66,6 +69,18 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
     setSelectedIndex(adj);
   }
 
+  /** Move a step row to a specific rows index (drag-drop or "Move to…"). */
+  function moveStepTo(from, to) {
+    let landed = from;
+    commit((draft) => {
+      const result = moveRow(draft.rows, from, to);
+      draft.rows = result.rows;
+      landed = result.index;
+    });
+    setSelectedIndex(landed);
+    setShowMove(false);
+  }
+
   function addStep() {
     const firstLane = guiModel.lanes[0]?.id || "";
     commit((draft) => {
@@ -98,6 +113,8 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
           lanes={guiModel.lanes}
           selectedIndex={selectedIndex}
           lockedRows={lockedRows}
+          canReorder={!readOnly}
+          onReorder={moveStepTo}
           onSelect={setSelectedIndex}
         />
       </div>
@@ -124,6 +141,7 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
             readOnly={readOnly}
             onPatch={patchRow}
             onMove={moveStep}
+            onOpenMove={() => setShowMove(true)}
             onDelete={deleteRow}
           />
         ) : inspectorRow ? (
@@ -137,6 +155,15 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
           <div className="sw-gui-empty">{t("gui.selectRow")}</div>
         )}
       </div>
+
+      <MoveStepModal
+        open={showMove && isStep && saveIndex >= 0}
+        rows={rows}
+        currentIndex={saveIndex}
+        lanes={guiModel.lanes}
+        onMove={(to) => moveStepTo(saveIndex, to)}
+        onClose={() => setShowMove(false)}
+      />
     </div>
   );
 }

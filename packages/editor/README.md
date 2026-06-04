@@ -56,12 +56,15 @@ The editor mounts a full surface:
 - **Action bar** — Save / Save all / New file / New folder / Export (.txt) /
   Templates / Help / Format (text mode). Checkpoint, Flag version, and template
   forcing appear only when the host advertises those capabilities.
-- **GUI mode** — flow step list with color-coded type badges + lane chips, step
-  inspector (role, text, label, desc, remark, block style, arrow, merge id,
-  props), branch/section inspector, color presets, and section-template
-  insertion. The block and prop pickers each have an eye button that opens a
-  **design preview popup** (rendered via the engine) while the dropdown/chips
-  stay the primary way to pick.
+- **GUI mode** — flow step list with localized, color-coded type badges + lane
+  chips, step inspector (role, text, label, desc, remark, block style, arrow,
+  merge id, props), branch/section inspector, color presets, and
+  section-template insertion. The block and prop pickers each have an eye button
+  that opens a **design preview popup** (rendered via the engine) while the
+  dropdown/chips stay the primary way to pick.
+- **Step reordering** — drag a step within its branch level to drop it at a new
+  position, or use the inspector's "Move to…" popup to jump it to a specific
+  slot. Both stay inside the step's branch frame so structure is preserved.
 
 ## EditorHost contract
 
