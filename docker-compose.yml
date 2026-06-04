@@ -1,7 +1,5 @@
-version: "3.9"
-
 services:
-  # ─── Gitea (git server) ────────────────────────────────────────────────────
+  # ─── Gitea database ────────────────────────────────────────────────────────
   gitea-db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -17,8 +15,9 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - internal
+      - backend
 
+  # ─── Gitea (git server) ────────────────────────────────────────────────────
   gitea:
     image: gitea/gitea:1.22
     restart: unless-stopped
@@ -43,72 +42,29 @@ services:
       GITEA__security__INSTALL_LOCK: "true"
       GITEA__security__SECRET_KEY: ${GITEA_SECRET_KEY}
       GITEA__security__INTERNAL_TOKEN: ${GITEA_INTERNAL_TOKEN}
-      # Registration — only allow invites (bot account only)
+      # Registration — bot account only; no self-signup
       GITEA__service__DISABLE_REGISTRATION: "true"
       GITEA__service__REQUIRE_SIGNIN_VIEW: "true"
-      # Mailer — AWS SES (set GITEA_SES_FROM to enable)
-      GITEA__mailer__ENABLED: ${GITEA_SES_FROM:+true}
+      # Mailer — AWS SES via SMTP (set GITEA_MAILER_ENABLED=true to enable)
+      GITEA__mailer__ENABLED: ${GITEA_MAILER_ENABLED:-false}
       GITEA__mailer__PROTOCOL: smtp
       GITEA__mailer__SMTP_ADDR: email-smtp.${AWS_REGION:-us-east-1}.amazonaws.com
       GITEA__mailer__SMTP_PORT: 587
       GITEA__mailer__USER: ${SES_SMTP_USER:-}
       GITEA__mailer__PASSWD: ${SES_SMTP_PASSWORD:-}
       GITEA__mailer__FROM: ${GITEA_SES_FROM:-}
-      # Logging
       GITEA__log__LEVEL: Warn
     volumes:
       - gitea_data:/data
     networks:
-      - internal
-    # SSH not exposed — API-only access via nginx reverse proxy
-
-  # ─── Next.js SaaS App ──────────────────────────────────────────────────────
-  app:
-    build:
-      context: ./apps/saas
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-    restart: unless-stopped
-    depends_on:
-      - gitea
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      # Supabase
-      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      # Gitea bot
-      GITEA_URL: http://gitea:3000
-      GITEA_ADMIN_TOKEN: ${GITEA_ADMIN_TOKEN}
-      # App
-      APP_URL: https://${APP_DOMAIN}
-      NEXTAUTH_URL: https://${APP_DOMAIN}
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
-      # Stripe
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
-      # AWS — S3 for SVG blobs + SES for transactional email
-      # Credentials come from the EC2 IAM role; no keys needed here.
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      S3_SVG_BUCKET: ${S3_SVG_BUCKET}
-      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-}
-    networks:
-      - internal
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - backend
 
   # ─── Nginx (reverse proxy + SSL termination) ───────────────────────────────
+  # The Next.js app runs on Vercel — this proxy is Gitea only.
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
     depends_on:
-      - app
       - gitea
     ports:
       - "80:80"
@@ -119,16 +75,14 @@ services:
       - certbot_www:/var/www/certbot:ro
       - certbot_certs:/etc/letsencrypt:ro
     networks:
-      - internal
-      - external
+      - backend
 
-  # ─── Certbot (SSL certificate renewal) ─────────────────────────────────────
+  # ─── Certbot (run once manually; renewal via host cron) ───────────────────
   certbot:
     image: certbot/certbot:latest
     volumes:
       - certbot_www:/var/www/certbot
       - certbot_certs:/etc/letsencrypt
-    # Run manually on first boot; renewal runs via cron on the host
     profiles: ["certbot"]
     command: >
       certonly --webroot
@@ -136,7 +90,6 @@ services:
       --email ${CERTBOT_EMAIL}
       --agree-tos
       --no-eff-email
-      -d ${APP_DOMAIN}
       -d ${GITEA_DOMAIN}
 
 volumes:
@@ -146,8 +99,7 @@ volumes:
   certbot_certs:
 
 networks:
-  internal:
-    driver: bridge
-    internal: true
-  external:
+  # Single bridge network — the EC2 security group (ports 80/443 only) is the
+  # external firewall. No internal: true so Gitea can reach SES SMTP outbound.
+  backend:
     driver: bridge
