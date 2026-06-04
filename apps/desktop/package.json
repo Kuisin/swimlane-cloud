@@ -1,0 +1,34 @@
+{
+  "name": "@swimlane-cloud/desktop",
+  "version": "0.1.0",
+  "description": "Electron desktop shell that mounts @swimlane-cloud/editor over a local-filesystem host. Open a folder of .txt DSL files, edit with live preview, save back to disk.",
+  "private": true,
+  "main": "electron/main.js",
+  "type": "module",
+  "scripts": {
+    "predev": "node -e \"try{require('fs').unlinkSync('.dev-port')}catch(e){}\"",
+    "dev": "concurrently -k \"vite\" \"wait-on file:.dev-port && node scripts/launch-electron.mjs\"",
+    "build": "vite build",
+    "start": "electron .",
+    "build:mac": "vite build && electron-builder --mac",
+    "build:win": "vite build && electron-builder --win"
+  },
+  "dependencies": {
+    "@swimlane-cloud/diagram-converter": "workspace:*",
+    "@swimlane-cloud/editor": "workspace:*",
+    "chokidar": "^3.6.0",
+    "lucide-react": "^0.469.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "tailwindcss": "^4.0.0",
+    "vite": "^6.0.0",
+    "wait-on": "^8.0.1"
+  }
+}

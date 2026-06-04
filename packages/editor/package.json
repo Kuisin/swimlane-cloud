@@ -1,0 +1,29 @@
+{
+  "name": "@swimlane-cloud/editor",
+  "version": "0.1.0",
+  "description": "Shared DSL editor surface (GUI + text modes, live preview, folder tree, document model). Storage-agnostic via the EditorHost contract. Consumed identically by web, desktop, and SaaS.",
+  "license": "SEE LICENSE IN README.md",
+  "type": "module",
+  "sideEffects": ["*.css"],
+  "files": ["src"],
+  "exports": {
+    ".": "./src/index.jsx",
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@swimlane-cloud/diagram-converter": "workspace:*",
+    "lucide-react": "^0.469.0"
+  },
+  "peerDependencies": {
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19"
+  },
+  "devDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vitest": "^3.2.4"
+  }
+}

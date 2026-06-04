@@ -9,6 +9,9 @@
   "engines": {
     "node": ">=20"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "electron", "sharp"]
+  },
   "scripts": {
     "build:engine": "pnpm --filter @swimlane-cloud/diagram-converter build",
     "build:editor": "pnpm --filter @swimlane-cloud/editor build",
