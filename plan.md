@@ -601,27 +601,6 @@ Non-technical users see "Create workspace" → under the hood, Gitea is provisio
 - Load content from draft or git at `filepath_in_repo` for active branch (`tmp-*` / `test` / `main`).
 - Pass `projectId` into editor so GUI can load `project_section_templates` (API or local `templates/`).
 
-### Step 1.7 — Project section templates (CRUD + force policy + editor)
-**API (SaaS):**
-- `GET/POST/PATCH/DELETE /api/projects/[id]/templates?section=role`
-- Body: `{ name, slug, body, is_default? }` — validate `section` and parse `body` with
-  `parseDSL` / `parseDSLParts` before save (reject invalid fragments).
-- On write: upsert DB row + write `templates/{section}/{slug}.txt` in repo (`test` branch or
-  direct commit per workspace policy).
-- `GET/PATCH /api/projects/[id]/template-policies` — per-section `{ mode, forced_template_id? }`.
-  PATCH `forced` requires `forced_template_id` belonging to same `project_id` + `section`.
-- **Checkpoint / draft batch:** call `assertForcedSections` before persisting (Step 1.5).
-
-**Editor (port from txt-editor):**
-- Template modal / side panel: tabs **Page · Option · Role · Block · Prop**.
-- **Insert** merges fragment into model (`mergeRole`, `mergeBlockProp`, or replace `/page/` /
-  `/option/` block in serializer) — disabled for **forced** sections in GUI.
-- **Apply default** when creating a new `.txt`; **apply forced** when policy `mode = forced`.
-- Load `getTemplatePolicies()` on mount; lock forced section UIs; surface validation errors inline.
-
-**Ship criteria:** Owner forces `/option/` to "Standard gutters"; author cannot checkpoint a
-diagram with different `/option/` text; new diagrams inherit forced sections automatically.
-
 ### Save strategy — draft vs. checkpoint (grouped saves)
 
 **Is commit-per-save too much?** Often yes for SaaS, even with SVG deduplication.
@@ -655,10 +634,10 @@ SVG dedup fixes **storage**, not **history noise** or **API churn**.
 **EditorHost (SaaS only extends the contract):**
 
 ```ts
+// list / read / writeDraft / writeDraftMany / checkpoint are defined once in §A4
+// (checkpoint takes { message?, files? } — one commit, multi-path). SaaS adds the
+// versioning trigger:
 interface EditorHost {
-  // ... list, read, watch unchanged
-  writeDraft(id: string, dsl: string): Promise<void>;   // Save — draft only
-  checkpoint(id: string, dsl: string, opts?: { message?: string }): Promise<void>;  // git commit, no server SVG
   flagNewVersion?(commitSha: string, opts: { name: string; note?: string }): Promise<void>;  // test only → server SVG
 }
 ```
@@ -700,6 +679,27 @@ await clearDrafts(projectId, branch, changed.map(f => f.id))
   this commit is also a flagged version — then show stored thumbnail).
 - **Versions** panel (separate): only rows from `versions` where `is_new_version` — server SVG
   thumbnails from `svg_blobs`. Badge commits on `test` that are eligible to flag.
+
+### Step 1.7 — Project section templates (CRUD + force policy + editor)
+**API (SaaS):**
+- `GET/POST/PATCH/DELETE /api/projects/[id]/templates?section=role`
+- Body: `{ name, slug, body, is_default? }` — validate `section` and parse `body` with
+  `parseDSL` / `parseDSLParts` before save (reject invalid fragments).
+- On write: upsert DB row + write `templates/{section}/{slug}.txt` in repo (`test` branch or
+  direct commit per workspace policy).
+- `GET/PATCH /api/projects/[id]/template-policies` — per-section `{ mode, forced_template_id? }`.
+  PATCH `forced` requires `forced_template_id` belonging to same `project_id` + `section`.
+- **Checkpoint / draft batch:** call `assertForcedSections` before persisting (Step 1.5).
+
+**Editor (port from txt-editor):**
+- Template modal / side panel: tabs **Page · Option · Role · Block · Prop**.
+- **Insert** merges fragment into model (`mergeRole`, `mergeBlockProp`, or replace `/page/` /
+  `/option/` block in serializer) — disabled for **forced** sections in GUI.
+- **Apply default** when creating a new `.txt`; **apply forced** when policy `mode = forced`.
+- Load `getTemplatePolicies()` on mount; lock forced section UIs; surface validation errors inline.
+
+**Ship criteria:** Owner forces `/option/` to "Standard gutters"; author cannot checkpoint a
+diagram with different `/option/` text; new diagrams inherit forced sections automatically.
 
 ---
 
