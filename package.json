@@ -1,0 +1,23 @@
+{
+  "name": "swimlane-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DSL Editor + DSL Management SaaS — two independently shippable products sharing one open-source engine.",
+  "license": "SEE LICENSE IN README.md",
+  "type": "module",
+  "packageManager": "pnpm@10.20.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:engine": "pnpm --filter @swimlane-cloud/diagram-converter build",
+    "build:editor": "pnpm --filter @swimlane-cloud/editor build",
+    "build:desktop": "pnpm --filter @swimlane-cloud/desktop build",
+    "build:web": "pnpm --filter @swimlane-cloud/web build",
+    "build:saas": "pnpm --filter @swimlane-cloud/saas build",
+    "dev:web": "pnpm --filter @swimlane-cloud/web dev",
+    "dev:desktop": "pnpm --filter @swimlane-cloud/desktop dev",
+    "dev:saas": "pnpm --filter @swimlane-cloud/saas dev",
+    "test": "pnpm -r test"
+  }
+}
