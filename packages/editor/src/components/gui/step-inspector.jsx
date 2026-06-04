@@ -1,32 +1,42 @@
-import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
-
-const ARROW_OPTIONS = [
-  { value: "solid", label: "solid" },
-  { value: "dashed", label: "dashed" },
-  { value: "none", label: "none" },
-];
+import { useState } from "react";
+import { ArrowDown, ArrowUp, Eye, Trash2 } from "lucide-react";
+import { useT } from "../../i18n.jsx";
+import { PartsPreviewPopup } from "./parts-preview-popup.jsx";
 
 /**
  * Inspector for a single step row. Edits role / text / label / desc / remark /
  * block ref / props / merge id / arrow style, plus move up/down and delete.
- * All edits go through `onPatch` which mutates the parsed model row.
+ * All edits go through `onPatch` which mutates the parsed model row. The block
+ * and prop pickers each gain an eye button that opens a design preview popup
+ * (the dropdown / chips stay the primary way to pick).
  */
 export function StepInspector({
   row,
   lanes,
   blocks,
   props,
+  src,
+  theme,
   reorder,
   onPatch,
   onMove,
   onDelete,
   readOnly,
 }) {
+  const { t } = useT();
+  const [preview, setPreview] = useState(null); // "block" | "prop" | null
+
   if (!row || row.kind !== "step" || row.empty) {
-    return <div className="sw-gui-empty">Select a step to edit it.</div>;
+    return <div className="sw-gui-empty">{t("gui.selectStep")}</div>;
   }
   const set = (key) => (value) => onPatch({ [key]: value });
   const fieldDisabled = readOnly;
+
+  const ARROW_OPTIONS = [
+    { value: "solid", label: t("arrow.solid") },
+    { value: "dashed", label: t("arrow.dashed") },
+    { value: "none", label: t("arrow.none") },
+  ];
 
   const selectedProps = new Set(row.props || []);
   const toggleProp = (id) => {
@@ -36,17 +46,20 @@ export function StepInspector({
     onPatch({ props: [...next] });
   };
 
+  const hasBlocks = Object.values(blocks || {}).length > 0;
+  const propList = Object.values(props || {});
+
   return (
     <div className="sw-inspector">
       <div className="sw-inspector-head">
-        <h3>Step</h3>
+        <h3>{t("step.title")}</h3>
         <div className="sw-inspector-tools">
           <button
             type="button"
             className="sw-icon-btn"
             disabled={fieldDisabled || !reorder?.canUp}
             onClick={() => onMove("up")}
-            title="Move up"
+            title={t("step.moveUp")}
           >
             <ArrowUp size={14} />
           </button>
@@ -55,7 +68,7 @@ export function StepInspector({
             className="sw-icon-btn"
             disabled={fieldDisabled || !reorder?.canDown}
             onClick={() => onMove("down")}
-            title="Move down"
+            title={t("step.moveDown")}
           >
             <ArrowDown size={14} />
           </button>
@@ -64,7 +77,7 @@ export function StepInspector({
             className="sw-icon-btn sw-icon-danger"
             disabled={fieldDisabled}
             onClick={onDelete}
-            title="Delete step"
+            title={t("step.delete")}
           >
             <Trash2 size={14} />
           </button>
@@ -72,14 +85,14 @@ export function StepInspector({
       </div>
 
       <label className="sw-field">
-        <span className="sw-field-label">Role (lane)</span>
+        <span className="sw-field-label">{t("step.role")}</span>
         <select
           className="sw-input"
           value={row.role || ""}
           disabled={fieldDisabled}
           onChange={(e) => set("role")(e.target.value)}
         >
-          {!row.role && <option value="">(choose a role)</option>}
+          {!row.role && <option value="">{t("step.chooseRole")}</option>}
           {(lanes || []).map((lane) => (
             <option key={lane.id} value={lane.id}>
               {lane.label || lane.id}
@@ -89,7 +102,7 @@ export function StepInspector({
       </label>
 
       <label className="sw-field">
-        <span className="sw-field-label">Text</span>
+        <span className="sw-field-label">{t("step.text")}</span>
         <input
           type="text"
           className="sw-input"
@@ -100,7 +113,7 @@ export function StepInspector({
       </label>
 
       <label className="sw-field">
-        <span className="sw-field-label">Label (optional)</span>
+        <span className="sw-field-label">{t("step.label")}</span>
         <input
           type="text"
           className="sw-input"
@@ -111,7 +124,7 @@ export function StepInspector({
       </label>
 
       <label className="sw-field">
-        <span className="sw-field-label">Description</span>
+        <span className="sw-field-label">{t("step.description")}</span>
         <textarea
           className="sw-input sw-textarea-sm"
           rows={2}
@@ -122,7 +135,7 @@ export function StepInspector({
       </label>
 
       <label className="sw-field">
-        <span className="sw-field-label">Remark</span>
+        <span className="sw-field-label">{t("step.remark")}</span>
         <textarea
           className="sw-input sw-textarea-sm"
           rows={2}
@@ -133,24 +146,35 @@ export function StepInspector({
       </label>
 
       <div className="sw-field-row">
+        <div className="sw-field">
+          <span className="sw-field-label">{t("step.block")}</span>
+          <div className="sw-field-with-action">
+            <select
+              className="sw-input"
+              value={row.blockRef || ""}
+              disabled={fieldDisabled}
+              onChange={(e) => set("blockRef")(e.target.value || null)}
+            >
+              <option value="">{t("step.none")}</option>
+              {Object.values(blocks || {}).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.label || b.id}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="sw-icon-btn"
+              disabled={!hasBlocks}
+              title={t("step.viewDesign")}
+              onClick={() => setPreview("block")}
+            >
+              <Eye size={14} />
+            </button>
+          </div>
+        </div>
         <label className="sw-field">
-          <span className="sw-field-label">Block style</span>
-          <select
-            className="sw-input"
-            value={row.blockRef || ""}
-            disabled={fieldDisabled}
-            onChange={(e) => set("blockRef")(e.target.value || null)}
-          >
-            <option value="">(none)</option>
-            {Object.values(blocks || {}).map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.label || b.id}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="sw-field">
-          <span className="sw-field-label">Arrow</span>
+          <span className="sw-field-label">{t("step.arrow")}</span>
           <select
             className="sw-input"
             value={row.arrowLine || "solid"}
@@ -167,7 +191,7 @@ export function StepInspector({
       </div>
 
       <label className="sw-field">
-        <span className="sw-field-label">Merge id (optional)</span>
+        <span className="sw-field-label">{t("step.mergeId")}</span>
         <input
           type="text"
           className="sw-input"
@@ -177,11 +201,21 @@ export function StepInspector({
         />
       </label>
 
-      {Object.values(props || {}).length > 0 && (
+      {propList.length > 0 && (
         <div className="sw-field">
-          <span className="sw-field-label">Props</span>
+          <span className="sw-field-label sw-field-label-row">
+            {t("step.props")}
+            <button
+              type="button"
+              className="sw-icon-btn sw-icon-btn-xs"
+              title={t("step.viewDesign")}
+              onClick={() => setPreview("prop")}
+            >
+              <Eye size={13} />
+            </button>
+          </span>
           <div className="sw-prop-chips">
-            {Object.values(props).map((p) => (
+            {propList.map((p) => (
               <button
                 key={p.id}
                 type="button"
@@ -195,6 +229,23 @@ export function StepInspector({
           </div>
         </div>
       )}
+
+      <PartsPreviewPopup
+        open={preview === "block"}
+        section="block"
+        src={src}
+        theme={theme}
+        selectedId={row.blockRef || null}
+        onClose={() => setPreview(null)}
+      />
+      <PartsPreviewPopup
+        open={preview === "prop"}
+        section="prop"
+        src={src}
+        theme={theme}
+        selectedId={(row.props || [])[0] || null}
+        onClose={() => setPreview(null)}
+      />
     </div>
   );
 }

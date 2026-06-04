@@ -10,6 +10,7 @@ import {
   Tag,
   Wand2,
 } from "lucide-react";
+import { useT } from "../i18n.jsx";
 
 /**
  * Top action bar. Save / Save all / New file / New folder / Export / Templates
@@ -38,47 +39,48 @@ export function ActionBar({
   onCheckpoint,
   onFlagVersion,
 }) {
+  const { t } = useT();
   return (
     <div className="sw-actionbar">
       <div className="sw-actionbar-left">
         {canCreate && !readOnly && (
           <button type="button" className="sw-btn" onClick={() => onNewFile()}>
-            <FilePlus size={14} /> New file
+            <FilePlus size={14} /> {t("action.newFile")}
           </button>
         )}
         {canMkdir && !readOnly && (
           <button type="button" className="sw-btn" onClick={() => onNewFolder()}>
-            <FolderPlus size={14} /> New folder
+            <FolderPlus size={14} /> {t("action.newFolder")}
           </button>
         )}
         <button type="button" className="sw-btn" onClick={onOpenTemplates}>
-          <LayoutTemplate size={14} /> Templates
+          <LayoutTemplate size={14} /> {t("action.templates")}
         </button>
         {mode === "text" && canFormat && (
           <button type="button" className="sw-btn" onClick={onFormat}>
-            <Wand2 size={14} /> Format
+            <Wand2 size={14} /> {t("action.format")}
           </button>
         )}
       </div>
 
       <div className="sw-actionbar-counts">
-        <span>{counts.roles} roles</span>
+        <span>{t("counts.roles", { n: counts.roles })}</span>
         <span className="sw-dot-sep">·</span>
-        <span>{counts.blocks} blocks</span>
+        <span>{t("counts.blocks", { n: counts.blocks })}</span>
         <span className="sw-dot-sep">·</span>
-        <span>{counts.steps} steps</span>
+        <span>{t("counts.steps", { n: counts.steps })}</span>
       </div>
 
       <div className="sw-actionbar-right">
-        <button type="button" className="sw-btn" onClick={onExport} title="Export .txt">
-          <Download size={14} /> Export
+        <button type="button" className="sw-btn" onClick={onExport} title={t("action.exportTitle")}>
+          <Download size={14} /> {t("action.export")}
         </button>
-        <button type="button" className="sw-icon-btn" onClick={onOpenHelp} title="Help">
+        <button type="button" className="sw-icon-btn" onClick={onOpenHelp} title={t("action.help")}>
           <HelpCircle size={16} />
         </button>
         {canVersion && (
-          <button type="button" className="sw-btn" onClick={onFlagVersion} title="Flag new version">
-            <Tag size={14} /> Version
+          <button type="button" className="sw-btn" onClick={onFlagVersion} title={t("action.versionTitle")}>
+            <Tag size={14} /> {t("action.version")}
           </button>
         )}
         {canCheckpoint && (
@@ -87,9 +89,9 @@ export function ActionBar({
             className="sw-btn"
             onClick={onCheckpoint}
             disabled={!hasAnyUnsavedChanges}
-            title="Checkpoint"
+            title={t("action.checkpoint")}
           >
-            <GitBranch size={14} /> Checkpoint
+            <GitBranch size={14} /> {t("action.checkpoint")}
           </button>
         )}
         {!readOnly && (
@@ -99,9 +101,9 @@ export function ActionBar({
               className="sw-btn"
               onClick={onSaveAll}
               disabled={!hasAnyUnsavedChanges}
-              title="Save all"
+              title={t("action.saveAll")}
             >
-              <SaveAll size={14} /> Save all
+              <SaveAll size={14} /> {t("action.saveAll")}
             </button>
             <button
               type="button"
@@ -109,7 +111,7 @@ export function ActionBar({
               onClick={onSave}
               disabled={!hasUnsavedChanges}
             >
-              <Save size={14} /> {hasUnsavedChanges ? "Save*" : "Save"}
+              <Save size={14} /> {hasUnsavedChanges ? t("action.saveDirty") : t("action.save")}
             </button>
           </>
         )}

@@ -20,23 +20,48 @@ export function App({ host }) {
 }
 ```
 
-`options` (all optional): `{ themeKey, initialMode: "text"|"gui", initialSplit: number }`.
+`options` (all optional): `{ themeKey, initialMode: "text"|"gui", initialSplit: number, initialTreeWidth: number, lang: "en"|"ja" }`.
+
+### Localization (English + Japanese)
+
+The UI ships English and Japanese dictionaries. The initial language comes from
+`options.lang`, else the browser language, else English; users switch live with
+the **language toggle** in the sub-bar. Consumers can also read or set the
+language programmatically:
+
+```jsx
+import { useT, LanguageProvider, LANGUAGES } from "@swimlane-cloud/editor";
+
+function Toolbar() {
+  const { t, lang, setLang } = useT();  // inside a <DslEditor> (provider is built in)
+  return <span>{t("action.save")}</span>;
+}
+```
+
+`<DslEditor>` wraps its own `LanguageProvider`; `LanguageProvider`/`LANGUAGES`
+are exported for mounting a shared toggle outside the editor. Adding a language
+is one more entry in `src/i18n.jsx` (a test asserts every dictionary has the
+same keys).
 
 The editor mounts a full surface:
 
 - **Folder tree + tabs** — a nested tree built by splitting each `FileRef.id` on
   `/` (ids are POSIX relative paths like `ops/onboarding/flow.txt`). Files open
   via `host.read`; switching away from a dirty tab prompts to discard.
-- **Resizable split pane** — editor on the left, live SVG preview on the right.
+- **Resizable panels** — drag the folder-tree edge, the editor/preview divider,
+  and (in GUI mode) the inspector edge.
 - **Mode toggle** — GUI ⇄ Text over the *same* DSL document, with a loss-free
   round trip through the serializer. If the text has parse errors, GUI mode is
   disabled and the error list is shown (non-blocking).
 - **Action bar** — Save / Save all / New file / New folder / Export (.txt) /
   Templates / Help / Format (text mode). Checkpoint, Flag version, and template
   forcing appear only when the host advertises those capabilities.
-- **GUI mode** — flow step list, step inspector (role, text, label, desc,
-  remark, block style, arrow, merge id, props), branch/section inspector, color
-  presets, and section-template insertion.
+- **GUI mode** — flow step list with color-coded type badges + lane chips, step
+  inspector (role, text, label, desc, remark, block style, arrow, merge id,
+  props), branch/section inspector, color presets, and section-template
+  insertion. The block and prop pickers each have an eye button that opens a
+  **design preview popup** (rendered via the engine) while the dropdown/chips
+  stay the primary way to pick.
 
 ## EditorHost contract
 

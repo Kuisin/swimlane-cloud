@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { renderPartsPreviewHtml } from "@swimlane-cloud/diagram-converter";
 import { TEMPLATE_SECTIONS, hostHas } from "../host.js";
+import { useT } from "../i18n.jsx";
 
 /**
  * Section template modal. One tab per section (page/option/role/block/prop).
@@ -10,6 +11,7 @@ import { TEMPLATE_SECTIONS, hostHas } from "../host.js";
  * mode === 'forced'.
  */
 export function TemplatePanel({ open, host, theme, policies, onClose, onInsert }) {
+  const { t } = useT();
   const [section, setSection] = useState("role");
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -29,7 +31,7 @@ export function TemplatePanel({ open, host, theme, policies, onClose, onInsert }
         if (!cancelled) setTemplates(Array.isArray(list) ? list : []);
       })
       .catch((err) => {
-        if (!cancelled) setError(err?.message || "Could not load templates");
+        if (!cancelled) setError(err?.message || t("tpl.loadError"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -49,8 +51,8 @@ export function TemplatePanel({ open, host, theme, policies, onClose, onInsert }
     <div className="sw-modal-overlay" onClick={onClose}>
       <div className="sw-modal sw-modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="sw-modal-header">
-          <h2>Section templates</h2>
-          <button type="button" className="sw-icon-btn" onClick={onClose}>
+          <h2>{t("tpl.title")}</h2>
+          <button type="button" className="sw-icon-btn" onClick={onClose} title={t("tab.close")}>
             <X size={16} />
           </button>
         </div>
@@ -70,19 +72,10 @@ export function TemplatePanel({ open, host, theme, policies, onClose, onInsert }
         </div>
 
         <div className="sw-modal-body">
-          {forced && (
-            <div className="sw-tpl-forced">
-              This section is <strong>forced</strong> by the project policy. New
-              diagrams inherit it automatically and manual inserts are disabled.
-            </div>
-          )}
-          {!supports && (
-            <div className="sw-gui-empty">
-              This host does not provide section templates.
-            </div>
-          )}
+          {forced && <div className="sw-tpl-forced">{t("tpl.forced")}</div>}
+          {!supports && <div className="sw-gui-empty">{t("tpl.noHost")}</div>}
           {error && <div className="sw-tpl-forced">{error}</div>}
-          {loading && <div className="sw-gui-empty">Loading…</div>}
+          {loading && <div className="sw-gui-empty">{t("common.loading")}</div>}
 
           {!loading &&
             supports &&
@@ -97,7 +90,7 @@ export function TemplatePanel({ open, host, theme, policies, onClose, onInsert }
               />
             ))}
           {!loading && supports && templates.length === 0 && !error && (
-            <div className="sw-gui-empty">No templates for this section.</div>
+            <div className="sw-gui-empty">{t("tpl.none")}</div>
           )}
         </div>
       </div>
@@ -106,6 +99,7 @@ export function TemplatePanel({ open, host, theme, policies, onClose, onInsert }
 }
 
 function TemplateCard({ template, section, theme, disabled, onInsert }) {
+  const { t } = useT();
   const showPreview = section === "block" || section === "prop";
   let previewHtml = null;
   if (showPreview) {
@@ -120,10 +114,10 @@ function TemplateCard({ template, section, theme, disabled, onInsert }) {
       <div className="sw-tpl-card-head">
         <span className="sw-tpl-card-name">
           {template.name}
-          {template.isDefault && <span className="sw-tpl-default"> default</span>}
+          {template.isDefault && <span className="sw-tpl-default"> {t("tpl.default")}</span>}
         </span>
         <button type="button" className="sw-btn sw-btn-sm" disabled={disabled} onClick={onInsert}>
-          Insert
+          {t("tpl.insert")}
         </button>
       </div>
       {previewHtml ? (

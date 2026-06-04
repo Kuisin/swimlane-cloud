@@ -13,6 +13,10 @@ import {
   findEnclosingBranchStart,
   findGroupEndIndex,
 } from "./branch-rows.js";
+import { EN, tr } from "../i18n.jsx";
+
+/** English fallback translator for callers that don't pass one (e.g. tests). */
+const defaultT = (key, vars) => tr(EN, key, vars);
 
 export { findBranchEndIndex, findEnclosingBranchStart, branchNestLevel, findGroupEndIndex };
 
@@ -224,18 +228,19 @@ export function resolveInspectorTarget(rows, rowIndex) {
   return { inspectorRow: row, saveRowIndex: rowIndex, isBranchRow, viaBranchEnd: false };
 }
 
-export function stepBlockDisplayName(row, rowIndex = 0) {
+export function stepBlockDisplayName(row, rowIndex = 0, t = defaultT) {
   const name = (row.name || "").trim();
   const text = (row.text || "").trim();
-  return name || text || `Step ${rowIndex + 1}`;
+  return name || text || t("flow.stepN", { n: rowIndex + 1 });
 }
 
-function laneLabel(lanes, roleId) {
-  if (!roleId) return "(no role)";
+function laneLabel(lanes, roleId, t = defaultT) {
+  if (!roleId) return t("flow.noRole");
   const lane = (lanes || []).find((l) => l.id === roleId);
   return lane?.label || roleId;
 }
 
+/** Short, language-neutral type tag shown in the list badge. */
 export function rowBadgeLabel(row) {
   if (!row) return "";
   switch (row.kind) {
@@ -261,37 +266,76 @@ export function rowBadgeLabel(row) {
   }
 }
 
-export function rowSummaryText(row, lanes) {
+/**
+ * Semantic color group for a row's badge, driving the `sw-badge-{kind}` class.
+ * Keeps the step list visually scannable: control flow, parallelism, grouping,
+ * and plain steps each read as their own color family.
+ */
+export function rowBadgeKind(row) {
+  if (!row) return "default";
+  switch (row.kind) {
+    case "step":
+      return row.empty ? "blank" : "step";
+    case "branchStart":
+      return row.parallel ? "fork" : "if";
+    case "branchEnd":
+      return row.parallel ? "fork" : "if";
+    case "branchCase":
+      if (row.parallel) return "fork";
+      return /^else$/i.test((row.label || "").trim()) ? "else" : "case";
+    case "branchLoop":
+      return "loop";
+    case "branchMerge":
+      return "merge";
+    case "groupStart":
+    case "groupEnd":
+      return "group";
+    default:
+      return "default";
+  }
+}
+
+/** Lane label for a step row (used as a chip), or "" for non-steps / blanks. */
+export function rowLaneLabel(row, lanes, t = defaultT) {
+  if (!row || row.kind !== "step" || row.empty || !row.role) return "";
+  return laneLabel(lanes, row.role, t);
+}
+
+export function rowSummaryText(row, lanes, t = defaultT) {
   if (!row) return "";
   switch (row.kind) {
     case "step": {
-      if (row.empty) return "(blank line)";
-      const who = laneLabel(lanes, row.role);
-      const title = (row.name || row.text || "").trim() || "(no text)";
-      const idPart = (row.mergeId || "").trim() ? `id=${row.mergeId} · ` : "";
-      const arrowPart =
-        row.arrowLine && row.arrowLine !== "solid" ? `arrow=${row.arrowLine} · ` : "";
-      return `${idPart}${arrowPart}${who}: ${title}`;
+      if (row.empty) return t("flow.blankLine");
+      return (row.name || row.text || "").trim() || t("flow.noText");
     }
     case "branchStart":
-      return row.parallel ? "parallel (fork)" : (row.cond || "").trim() || "condition";
+      return row.parallel ? t("flow.parallelFork") : (row.cond || "").trim() || t("flow.condition");
     case "branchCase":
-      if (row.parallel) return "parallel path";
-      if (/^else$/i.test((row.label || "").trim())) return "otherwise";
-      return (row.label || "").trim() || "case";
+      if (row.parallel) return t("flow.parallelPath");
+      if (/^else$/i.test((row.label || "").trim())) return t("flow.otherwise");
+      return (row.label || "").trim() || t("flow.case");
     case "branchEnd":
-      return row.parallel ? "end of parallel" : "end of branch";
+      return row.parallel ? t("flow.endParallel") : t("flow.endBranch");
     case "branchLoop":
-      return "loop within branch";
+      return t("flow.loopInBranch");
     case "branchMerge":
-      return `merge to id: ${(row.mergeTarget || "").trim() || "(unset)"}`;
+      return t("flow.mergeTo", { id: (row.mergeTarget || "").trim() || t("flow.unset") });
     case "groupStart":
-      return (row.groupMode ?? "branch") === "branch" ? "sub-branch" : "section box";
+      return (row.groupMode ?? "branch") === "branch" ? t("flow.subbranch") : t("flow.sectionBox");
     case "groupEnd":
-      return (row.groupMode ?? "branch") === "branch" ? "end of sub-branch" : "end of section";
+      return (row.groupMode ?? "branch") === "branch" ? t("flow.endSubbranch") : t("flow.endSection");
     default:
       return "";
   }
+}
+
+/** Tiny muted meta suffix for a step (merge id / non-default arrow). */
+export function rowStepMeta(row) {
+  if (!row || row.kind !== "step" || row.empty) return "";
+  const parts = [];
+  if ((row.mergeId || "").trim()) parts.push(`#${row.mergeId.trim()}`);
+  if (row.arrowLine && row.arrowLine !== "solid") parts.push(row.arrowLine);
+  return parts.join(" · ");
 }
 
 /** Matches diagram case chips; uses row.branchColor key (blue, green, …). */
@@ -299,7 +343,11 @@ export function branchCaseBadgeStyle(row) {
   if (row.kind !== "branchCase" || !row.branchColor) return undefined;
   const palette = BRANCH_COLOR_STYLES[row.branchColor];
   if (!palette) return undefined;
-  return { backgroundColor: palette.stroke };
+  return {
+    backgroundColor: palette.stroke,
+    color: "#fff",
+    borderColor: palette.stroke,
+  };
 }
 
 export function collectMergeTargetOptions(rows) {

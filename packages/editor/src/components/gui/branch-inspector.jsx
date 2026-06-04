@@ -1,10 +1,12 @@
 import { Trash2 } from "lucide-react";
+import { useT } from "../../i18n.jsx";
 
 const BRANCH_COLORS = ["", "blue", "green", "red", "orange", "purple", "gray", "black"];
 
 /** Inspector for branch/case/group rows (condition, case label, accent color). */
 export function BranchInspector({ row, onPatch, onDelete, readOnly }) {
-  if (!row) return <div className="sw-gui-empty">Select a row to edit it.</div>;
+  const { t } = useT();
+  if (!row) return <div className="sw-gui-empty">{t("gui.selectRow")}</div>;
 
   const isStart = row.kind === "branchStart";
   const isCase = row.kind === "branchCase";
@@ -14,13 +16,13 @@ export function BranchInspector({ row, onPatch, onDelete, readOnly }) {
     <div className="sw-inspector">
       <div className="sw-inspector-head">
         <h3>
-          {isStart && (row.parallel ? "Parallel (fork)" : "Branch (if)")}
-          {isCase && (row.parallel ? "Parallel path" : "Case")}
-          {isGroup && (row.groupMode === "section" ? "Section" : "Sub-branch")}
-          {!isStart && !isCase && !isGroup && "Row"}
+          {isStart && (row.parallel ? t("branch.fork") : t("branch.if"))}
+          {isCase && (row.parallel ? t("branch.parallelPath") : t("branch.case"))}
+          {isGroup && (row.groupMode === "section" ? t("branch.section") : t("branch.subbranch"))}
+          {!isStart && !isCase && !isGroup && t("branch.row")}
         </h3>
         {!readOnly && onDelete && (
-          <button type="button" className="sw-icon-btn sw-icon-danger" onClick={onDelete} title="Delete">
+          <button type="button" className="sw-icon-btn sw-icon-danger" onClick={onDelete} title={t("common.delete")}>
             <Trash2 size={14} />
           </button>
         )}
@@ -28,7 +30,7 @@ export function BranchInspector({ row, onPatch, onDelete, readOnly }) {
 
       {isStart && !row.parallel && (
         <label className="sw-field">
-          <span className="sw-field-label">Condition</span>
+          <span className="sw-field-label">{t("branch.condition")}</span>
           <input
             type="text"
             className="sw-input"
@@ -41,7 +43,7 @@ export function BranchInspector({ row, onPatch, onDelete, readOnly }) {
 
       {isCase && !row.parallel && !/^else$/i.test((row.label || "").trim()) && (
         <label className="sw-field">
-          <span className="sw-field-label">Case label</span>
+          <span className="sw-field-label">{t("branch.caseLabel")}</span>
           <input
             type="text"
             className="sw-input"
@@ -54,7 +56,7 @@ export function BranchInspector({ row, onPatch, onDelete, readOnly }) {
 
       {isGroup && (
         <label className="sw-field">
-          <span className="sw-field-label">Name</span>
+          <span className="sw-field-label">{t("branch.name")}</span>
           <input
             type="text"
             className="sw-input"
@@ -67,7 +69,7 @@ export function BranchInspector({ row, onPatch, onDelete, readOnly }) {
 
       {(isStart || isCase || isGroup) && (
         <label className="sw-field">
-          <span className="sw-field-label">Accent color</span>
+          <span className="sw-field-label">{t("branch.accent")}</span>
           <select
             className="sw-input"
             value={(isGroup ? row.sectionColor : row.branchColor) || ""}
@@ -78,7 +80,7 @@ export function BranchInspector({ row, onPatch, onDelete, readOnly }) {
           >
             {BRANCH_COLORS.map((c) => (
               <option key={c} value={c}>
-                {c || "(default)"}
+                {c || t("branch.default")}
               </option>
             ))}
           </select>

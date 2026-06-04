@@ -12,6 +12,9 @@ describe("public entry imports cleanly", () => {
     expect(typeof mod.buildFolderTree).toBe("function");
     expect(typeof mod.hostHas).toBe("function");
     expect(Array.isArray(mod.TEMPLATE_SECTIONS)).toBe(true);
+    expect(typeof mod.LanguageProvider).toBe("function");
+    expect(typeof mod.useT).toBe("function");
+    expect(Array.isArray(mod.LANGUAGES)).toBe(true);
   });
 
   it("loads every component module (JSX compiles, imports resolve)", async () => {
@@ -30,6 +33,11 @@ describe("public entry imports cleanly", () => {
     await import("./components/error-list.jsx");
     await import("./components/help-modal.jsx");
     await import("./components/mode-toggle.jsx");
+    await import("./components/language-toggle.jsx");
+    await import("./components/gui/parts-preview-popup.jsx");
+    await import("./i18n.jsx");
+    await import("./lib/parts-extract.js");
+    await import("./hooks/use-drag-width.js");
     expect(true).toBe(true);
   });
 });

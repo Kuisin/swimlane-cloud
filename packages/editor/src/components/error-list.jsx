@@ -1,12 +1,14 @@
 import { AlertTriangle } from "lucide-react";
+import { useT } from "../i18n.jsx";
 
 /** Non-blocking list of parse errors mapped to line numbers. */
 export function ErrorList({ errors, includeText = true, onSelectLine }) {
+  const { t } = useT();
   if (!errors?.length) return null;
   return (
     <div className="sw-error-list">
       <div className="sw-error-list-title">
-        <AlertTriangle size={12} aria-hidden /> Parse errors
+        <AlertTriangle size={12} aria-hidden /> {t("errors.title")}
       </div>
       {errors.map((err, i) => (
         <button

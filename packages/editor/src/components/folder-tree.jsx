@@ -9,6 +9,7 @@ import {
   FilePlus,
 } from "lucide-react";
 import { buildFolderTree } from "../lib/folder-tree.js";
+import { useT } from "../i18n.jsx";
 
 /**
  * Nested folder tree built by splitting each FileRef.id on "/". Clicking a file
@@ -16,6 +17,7 @@ import { buildFolderTree } from "../lib/folder-tree.js";
  */
 export function FolderTree({
   files,
+  width,
   activeId,
   dirtyIds,
   selectedDir,
@@ -26,18 +28,19 @@ export function FolderTree({
   canCreate,
   canMkdir,
 }) {
+  const { t } = useT();
   const tree = useMemo(() => buildFolderTree(files), [files]);
 
   return (
-    <div className="sw-tree">
+    <div className="sw-tree" style={width ? { width, flex: "0 0 auto" } : undefined}>
       <div className="sw-tree-header">
-        <span className="sw-tree-title">Files</span>
+        <span className="sw-tree-title">{t("tree.files")}</span>
         <span className="sw-tree-actions">
           {canCreate && (
             <button
               type="button"
               className="sw-icon-btn"
-              title="New file"
+              title={t("action.newFile")}
               onClick={() => onNewFile(selectedDir)}
             >
               <FilePlus size={14} />
@@ -47,7 +50,7 @@ export function FolderTree({
             <button
               type="button"
               className="sw-icon-btn"
-              title="New folder"
+              title={t("action.newFolder")}
               onClick={() => onNewFolder(selectedDir)}
             >
               <FolderPlus size={14} />
@@ -66,7 +69,7 @@ export function FolderTree({
           onOpenFile={onOpenFile}
           isRoot
         />
-        {files.length === 0 && <div className="sw-tree-empty">No files</div>}
+        {files.length === 0 && <div className="sw-tree-empty">{t("tree.noFiles")}</div>}
       </div>
     </div>
   );

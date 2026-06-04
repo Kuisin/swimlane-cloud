@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
+import { useT } from "../../i18n.jsx";
+import { useDragWidth } from "../../hooks/use-drag-width.js";
 import { parseGuiModel, applyModelEdit } from "../../lib/gui-model.js";
 import {
   findAdjacentStepIndex,
@@ -18,7 +20,9 @@ import { BranchInspector } from "./branch-inspector.jsx";
  * `applyModelEdit` (re-parse → mutate row → re-serialize), so the round-trip is
  * lossless and identical to text mode.
  */
-export function GuiMode({ src, onChange, readOnly }) {
+export function GuiMode({ src, onChange, readOnly, theme }) {
+  const { t } = useT();
+  const inspector = useDragWidth(300, { min: 220, max: 520, edge: "left" });
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const guiModel = useMemo(() => parseGuiModel(src), [src]);
   const rows = guiModel.rows;
@@ -69,7 +73,7 @@ export function GuiMode({ src, onChange, readOnly }) {
       draft.rows.splice(insertAt, 0, {
         kind: "step",
         role: firstLane,
-        text: "New step",
+        text: t("gui.newStepText"),
         depth: 0,
       });
     });
@@ -82,10 +86,10 @@ export function GuiMode({ src, onChange, readOnly }) {
     <div className="sw-gui">
       <div className="sw-gui-list-pane">
         <div className="sw-gui-list-head">
-          <span>Flow</span>
+          <span>{t("gui.flow")}</span>
           {!readOnly && (
             <button type="button" className="sw-btn sw-btn-sm" onClick={addStep}>
-              <Plus size={13} /> Add step
+              <Plus size={13} /> {t("gui.addStep")}
             </button>
           )}
         </div>
@@ -97,13 +101,25 @@ export function GuiMode({ src, onChange, readOnly }) {
           onSelect={setSelectedIndex}
         />
       </div>
-      <div className="sw-gui-inspector-pane">
+      <div
+        className="sw-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        onMouseDown={inspector.startDrag}
+        onTouchStart={inspector.startDrag}
+      />
+      <div
+        className="sw-gui-inspector-pane"
+        style={{ width: inspector.width, flex: "0 0 auto" }}
+      >
         {isStep ? (
           <StepInspector
             row={inspectorRow}
             lanes={guiModel.lanes}
             blocks={guiModel.blocks}
             props={guiModel.props}
+            src={src}
+            theme={theme}
             reorder={reorder}
             readOnly={readOnly}
             onPatch={patchRow}
@@ -118,7 +134,7 @@ export function GuiMode({ src, onChange, readOnly }) {
             onDelete={deleteRow}
           />
         ) : (
-          <div className="sw-gui-empty">Select a row to edit it.</div>
+          <div className="sw-gui-empty">{t("gui.selectRow")}</div>
         )}
       </div>
     </div>

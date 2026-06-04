@@ -1,7 +1,9 @@
 import { COLOR_PRESET_GROUPS, findMatchingPresetValue } from "../../lib/color-presets.js";
+import { useT } from "../../i18n.jsx";
 
 /** Color input with a swatch dropdown of curated presets. */
 export function ColorField({ label, value, onChange }) {
+  const { t } = useT();
   const preset = findMatchingPresetValue(value);
   return (
     <label className="sw-field">
@@ -25,7 +27,7 @@ export function ColorField({ label, value, onChange }) {
           value={preset}
           onChange={(e) => e.target.value && onChange(e.target.value)}
         >
-          <option value="">presets…</option>
+          <option value="">{t("color.presets")}</option>
           {COLOR_PRESET_GROUPS.map((group) => (
             <optgroup key={group.id} label={group.label}>
               {group.colors.map((c) => (

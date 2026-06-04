@@ -3,13 +3,16 @@ import { FileEditorProvider } from "./context/file-editor-provider.jsx";
 import { useEditor } from "./context/editor-context.js";
 import { useLivePreview } from "./hooks/use-live-preview.js";
 import { useSplitPane } from "./hooks/use-split-pane.js";
+import { useDragWidth } from "./hooks/use-drag-width.js";
 import { hostHas, hostSupportsVersioning } from "./host.js";
+import { LanguageProvider, useT } from "./i18n.jsx";
 import { formatDsl } from "./lib/format-dsl.js";
 import { canUseGuiEditing } from "./lib/parse-error-policy.js";
 import { mergeSectionTemplate } from "./lib/template-merge.js";
 import { modelCounts } from "./components/model-counts.js";
 import { ActionBar } from "./components/action-bar.jsx";
 import { ModeToggle } from "./components/mode-toggle.jsx";
+import { LanguageToggle } from "./components/language-toggle.jsx";
 import { Tabs } from "./components/tabs.jsx";
 import { FolderTree } from "./components/folder-tree.jsx";
 import { TextEditor } from "./components/text-editor.jsx";
@@ -28,14 +31,17 @@ import { GuiMode } from "./components/gui/gui-mode.jsx";
  */
 export function DslEditor({ host, projectId, options }) {
   return (
-    <FileEditorProvider host={host} projectId={projectId} options={options}>
-      <DslEditorInner options={options} />
-    </FileEditorProvider>
+    <LanguageProvider defaultLang={options?.lang}>
+      <FileEditorProvider host={host} projectId={projectId} options={options}>
+        <DslEditorInner options={options} />
+      </FileEditorProvider>
+    </LanguageProvider>
   );
 }
 
 function DslEditorInner({ options }) {
   const editor = useEditor();
+  const { t } = useT();
   const {
     host,
     readOnly,
@@ -77,6 +83,11 @@ function DslEditorInner({ options }) {
   const { leftPct, containerRef, onDividerMouseDown } = useSplitPane(
     options?.initialSplit ?? 52,
   );
+  const tree = useDragWidth(options?.initialTreeWidth ?? 240, {
+    min: 160,
+    max: 480,
+    edge: "right",
+  });
 
   const counts = useMemo(() => modelCounts(model), [model]);
   const dirtyIds = useMemo(
@@ -107,26 +118,26 @@ function DslEditorInner({ options }) {
   async function handleFormat() {
     const result = formatDsl(src);
     if (!result.ok) {
-      await dialog.alert("Cannot format: fix parse errors first.");
+      await dialog.alert(t("dlg.cannotFormat"));
       return;
     }
     updateActiveDocumentSrc(result.value);
   }
 
   async function handleCheckpoint() {
-    const message = await dialog.prompt("Checkpoint message (optional)", "");
+    const message = await dialog.prompt(t("dlg.checkpointMsg"), "");
     if (message === null) return;
     await checkpoint(message || undefined);
   }
 
   async function handleFlagVersion() {
-    const name = await dialog.prompt("Version name", "");
+    const name = await dialog.prompt(t("dlg.versionName"), "");
     if (!name) return;
     if (hostHas(host, "flagNewVersion")) {
       try {
         await host.flagNewVersion("HEAD", { name });
       } catch (err) {
-        await dialog.alert(err?.message || "Could not flag version.");
+        await dialog.alert(err?.message || t("dlg.versionFail"));
       }
     }
   }
@@ -137,18 +148,19 @@ function DslEditorInner({ options }) {
       updateActiveDocumentSrc(merged);
       setShowTemplates(false);
     } catch (err) {
-      dialog.alert(err?.message || "Could not insert template.");
+      dialog.alert(err?.message || t("dlg.templateFail"));
     }
   }
 
   if (loadError) {
-    return <div className="sw-editor sw-fatal">Failed to load: {loadError}</div>;
+    return <div className="sw-editor sw-fatal">{t("fatal.load", { msg: loadError })}</div>;
   }
 
   return (
     <div className="sw-editor">
       <FolderTree
         files={files}
+        width={tree.width}
         activeId={activeDocumentId}
         dirtyIds={dirtyIds}
         selectedDir={selectedDir}
@@ -158,6 +170,13 @@ function DslEditorInner({ options }) {
         onNewFolder={createNewFolder}
         canCreate={!readOnly && hostHas(host, "create")}
         canMkdir={!readOnly && hostHas(host, "mkdir")}
+      />
+      <div
+        className="sw-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        onMouseDown={tree.startDrag}
+        onTouchStart={tree.startDrag}
       />
 
       <div className="sw-main">
@@ -185,12 +204,7 @@ function DslEditorInner({ options }) {
         />
 
         <div className="sw-subbar">
-          <ModeToggle
-            mode={effectiveMode}
-            onChange={setMode}
-            guiDisabled={!guiAllowed}
-            guiDisabledReason="Fix parse errors to use GUI mode"
-          />
+          <ModeToggle mode={effectiveMode} onChange={setMode} guiDisabled={!guiAllowed} />
           <Tabs
             openDocuments={openDocuments}
             activeId={activeDocumentId}
@@ -198,16 +212,22 @@ function DslEditorInner({ options }) {
             onSelect={setActiveDocumentId}
             onClose={closeDocumentTab}
           />
+          <LanguageToggle />
         </div>
 
         <div className="sw-split" ref={containerRef}>
           <div className="sw-split-left" style={{ width: `${leftPct}%` }}>
             {!activeDocument ? (
               <div className="sw-gui-empty">
-                {isHydrated ? "Open or create a file to start." : "Loading…"}
+                {isHydrated ? t("gui.openFile") : t("common.loading")}
               </div>
             ) : effectiveMode === "gui" ? (
-              <GuiMode src={src} onChange={updateActiveDocumentSrc} readOnly={readOnly} />
+              <GuiMode
+                src={src}
+                onChange={updateActiveDocumentSrc}
+                readOnly={readOnly}
+                theme={theme}
+              />
             ) : (
               <TextEditor
                 value={src}
