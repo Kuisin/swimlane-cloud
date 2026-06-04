@@ -1,0 +1,144 @@
+version: "3.9"
+
+services:
+  # ─── Gitea (git server) ────────────────────────────────────────────────────
+  gitea-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${GITEA_DB_USER:-gitea}
+      POSTGRES_PASSWORD: ${GITEA_DB_PASSWORD}
+      POSTGRES_DB: ${GITEA_DB_NAME:-gitea}
+    volumes:
+      - gitea_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${GITEA_DB_USER:-gitea}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  gitea:
+    image: gitea/gitea:1.22
+    restart: unless-stopped
+    depends_on:
+      gitea-db:
+        condition: service_healthy
+    environment:
+      USER_UID: 1000
+      USER_GID: 1000
+      # Server
+      GITEA__server__DOMAIN: ${GITEA_DOMAIN}
+      GITEA__server__ROOT_URL: https://${GITEA_DOMAIN}/
+      GITEA__server__HTTP_PORT: 3000
+      GITEA__server__DISABLE_SSH: "true"
+      # Database
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: gitea-db:5432
+      GITEA__database__NAME: ${GITEA_DB_NAME:-gitea}
+      GITEA__database__USER: ${GITEA_DB_USER:-gitea}
+      GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
+      # Security
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__security__SECRET_KEY: ${GITEA_SECRET_KEY}
+      GITEA__security__INTERNAL_TOKEN: ${GITEA_INTERNAL_TOKEN}
+      # Registration — only allow invites (bot account only)
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__service__REQUIRE_SIGNIN_VIEW: "true"
+      # Mailer (optional — remove if not sending git emails)
+      GITEA__mailer__ENABLED: "false"
+      # Logging
+      GITEA__log__LEVEL: Warn
+    volumes:
+      - gitea_data:/data
+    networks:
+      - internal
+    # SSH not exposed — API-only access via nginx reverse proxy
+
+  # ─── Next.js SaaS App ──────────────────────────────────────────────────────
+  app:
+    build:
+      context: ./apps/saas
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    restart: unless-stopped
+    depends_on:
+      - gitea
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Supabase
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      # Gitea bot
+      GITEA_URL: http://gitea:3000
+      GITEA_ADMIN_TOKEN: ${GITEA_ADMIN_TOKEN}
+      # App
+      APP_URL: https://${APP_DOMAIN}
+      NEXTAUTH_URL: https://${APP_DOMAIN}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      # Stripe
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      # S3 for SVG blobs (uses Supabase Storage bucket or AWS S3)
+      SVG_STORAGE_BUCKET: ${SVG_STORAGE_BUCKET:-svg-blobs}
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── Nginx (reverse proxy + SSL termination) ───────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+      - gitea
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+    networks:
+      - internal
+      - external
+
+  # ─── Certbot (SSL certificate renewal) ─────────────────────────────────────
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    # Run manually on first boot; renewal runs via cron on the host
+    profiles: ["certbot"]
+    command: >
+      certonly --webroot
+      --webroot-path=/var/www/certbot
+      --email ${CERTBOT_EMAIL}
+      --agree-tos
+      --no-eff-email
+      -d ${APP_DOMAIN}
+      -d ${GITEA_DOMAIN}
+
+volumes:
+  gitea_data:
+  gitea_db_data:
+  certbot_www:
+  certbot_certs:
+
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  external:
+    driver: bridge
