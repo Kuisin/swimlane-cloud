@@ -36,10 +36,15 @@ export default function PullsPage() {
             reviewPR={reviewPR}
             onReview={(id) => setReviewPR(reviewPR === id ? null : id)}
             onMerge={(id) => {
+              const pr = st.prs.find((p) => p.id === id);
+              if (!window.confirm(`Merge this pull request${pr ? ` into ${pr.base}` : ""}?`)) return;
               setSt(mergePR(projectId, st, id));
               setReviewPR(null);
             }}
-            onClose={(id) => setSt(closePR(projectId, st, id))}
+            onClose={(id) => {
+              if (!window.confirm("Close this pull request without merging?")) return;
+              setSt(closePR(projectId, st, id));
+            }}
             onComment={(id, text) => setSt(addPRComment(projectId, st, id, text))}
           />
         </div>

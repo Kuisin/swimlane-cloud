@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { tipFiles } from "@/lib/demo-workflow";
+import { tipFiles, toggleCommitFlag } from "@/lib/demo-workflow";
 import { ProjectNav, HistoryPanel, useProject } from "../_components";
 
 export default function BranchesPage() {
-  const { projectId, projectName, st, setRole, reset } = useProject();
+  const { projectId, projectName, st, setSt, setRole, reset } = useProject();
   const [selected, setSelected] = useState<string | null>(null);
 
   if (!st) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
@@ -63,7 +63,13 @@ export default function BranchesPage() {
             <h2 className="mb-2 text-sm font-semibold text-neutral-700">
               History · <span className="font-mono">{view}</span>
             </h2>
-            <HistoryPanel st={st} branch={view} />
+            <HistoryPanel
+              st={st}
+              branch={view}
+              onToggleFlag={
+                view === "main" ? (id) => setSt(toggleCommitFlag(projectId, st, view, id)) : undefined
+              }
+            />
           </div>
         </div>
       </div>

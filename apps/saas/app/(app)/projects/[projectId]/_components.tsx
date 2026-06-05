@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Flag,
   FolderOpen,
   Plus,
   Smartphone,
@@ -32,6 +33,7 @@ import {
   resetDemo,
   tipFiles,
   primaryPath,
+  type Commit,
   type Files,
   type WorkflowState,
   type Role,
@@ -231,93 +233,177 @@ export function Modal({
   );
 }
 
-export function HistoryPanel({ st, branch }: { st: WorkflowState; branch: string }) {
-  const commits = [...(st.branches[branch]?.commits ?? [])].reverse();
-  const [preview, setPreview] = useState<{ title: string; files: Files } | null>(null);
-  if (commits.length === 0) return <Empty>No commits on this branch.</Empty>;
+export function HistoryPanel({
+  st,
+  branch,
+  onToggleFlag,
+}: {
+  st: WorkflowState;
+  branch: string;
+  onToggleFlag?: (commitId: string) => void;
+}) {
+  const all = st.branches[branch]?.commits ?? [];
+  const [detail, setDetail] = useState<{ commit: Commit; parent: Commit | null } | null>(null);
+  if (all.length === 0) return <Empty>No commits on this branch.</Empty>;
+  const view = [...all].reverse();
   return (
     <>
       <ol className="space-y-2">
-        {commits.map((c, i) => (
-          <li key={c.id} className="rounded-md border border-neutral-200 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="font-medium">{c.message}</div>
-                <div className="text-xs text-neutral-500">
-                  {c.author} · {new Date(c.ts).toLocaleString()}
-                  {i === 0 && (
-                    <span className="ml-2 rounded bg-green-100 px-1 text-green-700">tip</span>
+        {view.map((c) => {
+          const idx = all.indexOf(c);
+          const parent = idx > 0 ? all[idx - 1] : null;
+          const isTip = idx === all.length - 1;
+          return (
+            <li key={c.id} className="rounded-md border border-neutral-200 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    {c.flagged && (
+                      <Flag size={13} className="shrink-0 text-amber-500" fill="currentColor" />
+                    )}
+                    <span className="truncate">{c.message}</span>
+                  </div>
+                  <div className="text-xs text-neutral-500">
+                    {c.author} · {new Date(c.ts).toLocaleString()}
+                    {isTip && (
+                      <span className="ml-2 rounded bg-green-100 px-1 text-green-700">tip</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {onToggleFlag && (
+                    <button
+                      onClick={() => onToggleFlag(c.id)}
+                      title={c.flagged ? "Remove flag" : "Flag this commit"}
+                      className={`rounded p-1.5 ${
+                        c.flagged
+                          ? "text-amber-500"
+                          : "text-neutral-300 hover:text-neutral-500"
+                      }`}
+                    >
+                      <Flag size={15} fill={c.flagged ? "currentColor" : "none"} />
+                    </button>
                   )}
+                  <button
+                    onClick={() => setDetail({ commit: c, parent })}
+                    className="rounded border border-neutral-300 px-2 py-1 text-xs hover:border-indigo-400 hover:text-indigo-600"
+                  >
+                    View
+                  </button>
                 </div>
               </div>
-              <button
-                onClick={() => setPreview({ title: c.message, files: c.files })}
-                className="shrink-0 rounded border border-neutral-300 px-2 py-1 text-xs hover:border-indigo-400 hover:text-indigo-600"
-              >
-                Preview
-              </button>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ol>
-      {preview && (
-        <PreviewModal
-          title={preview.title}
-          files={preview.files}
-          onClose={() => setPreview(null)}
+      {detail && (
+        <CommitDetailModal
+          commit={detail.commit}
+          parent={detail.parent}
+          onClose={() => setDetail(null)}
         />
       )}
     </>
   );
 }
 
-/** On-device diagram preview (renders DSL→SVG in the browser with the engine). */
-export function PreviewModal({
-  title,
-  files,
+/**
+ * Full snapshot of a commit: all files at that point, with per-file Preview
+ * (on-device render), Diff (side-by-side vs the previous commit), and raw Text.
+ */
+function CommitDetailModal({
+  commit,
+  parent,
   onClose,
 }: {
-  title: string;
-  files: Files;
+  commit: Commit;
+  parent: Commit | null;
   onClose: () => void;
 }) {
-  const paths = Object.keys(files).filter((p) => p.endsWith(".txt")).sort();
+  const files = commit.files;
+  const prev = parent?.files ?? {};
+  const paths = Array.from(new Set([...Object.keys(files), ...Object.keys(prev)]))
+    .filter((p) => p.endsWith(".txt"))
+    .sort();
   const [path, setPath] = useState(primaryPath(files) ?? paths[0] ?? "");
+  const [mode, setMode] = useState<"preview" | "diff" | "text">("preview");
+  const after = files[path] ?? "";
+  const before = prev[path] ?? "";
+  const changed = before !== after;
   const svg = useMemo(() => {
-    const src = files[path];
-    if (!src) return null;
+    if (mode !== "preview" || !after) return null;
     try {
-      return textToSvg(src, { themeKey: "basic" }).svg;
+      return textToSvg(after, { themeKey: "basic" }).svg;
     } catch {
       return null;
     }
-  }, [files, path]);
+  }, [after, mode]);
 
   return (
-    <Modal title={title} onClose={onClose} maxW="max-w-3xl">
-      {paths.length > 1 && (
-        <div className="mb-3 flex gap-1">
-          {paths.map((p) => (
+    <Modal title={commit.message} onClose={onClose} maxW="max-w-4xl">
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-1">
+          {paths.map((p) => {
+            const ch = (prev[p] ?? "") !== (files[p] ?? "");
+            const added = !(p in prev);
+            const removed = !(p in files);
+            return (
+              <button
+                key={p}
+                onClick={() => setPath(p)}
+                className={`flex items-center gap-1.5 rounded px-2 py-1 font-mono text-xs ${
+                  p === path ? "bg-indigo-600 text-white" : "bg-neutral-100 text-neutral-600"
+                }`}
+                title={added ? "added" : removed ? "removed" : ch ? "changed" : "unchanged"}
+              >
+                {p}
+                {ch && (
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      p === path ? "bg-white" : added ? "bg-green-500" : removed ? "bg-red-500" : "bg-amber-500"
+                    }`}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex gap-1 text-xs">
+          {(["preview", "diff", "text"] as const).map((m) => (
             <button
-              key={p}
-              onClick={() => setPath(p)}
-              className={`rounded px-2 py-1 font-mono text-xs ${
-                p === path ? "bg-indigo-600 text-white" : "text-neutral-500 hover:bg-neutral-100"
+              key={m}
+              onClick={() => setMode(m)}
+              className={`rounded px-3 py-1 capitalize ${
+                mode === m ? "bg-neutral-800 text-white" : "text-neutral-500 hover:bg-neutral-100"
               }`}
             >
-              {p}
+              {m}
             </button>
           ))}
         </div>
-      )}
-      {svg ? (
-        <div
-          className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
-          dangerouslySetInnerHTML={{ __html: svg }}
-        />
-      ) : (
-        <Empty>Could not render this commit (parse error or empty).</Empty>
-      )}
+
+        {mode === "preview" &&
+          (svg ? (
+            <div
+              className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          ) : (
+            <Empty>Could not render this file (parse error or empty).</Empty>
+          ))}
+        {mode === "diff" &&
+          (changed ? (
+            <Diff path={path} before={before} after={after} />
+          ) : (
+            <Empty>No change to this file in this commit.</Empty>
+          ))}
+        {mode === "text" && (
+          <pre className="overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-3 font-mono text-xs">
+            {after || "(empty)"}
+          </pre>
+        )}
+      </div>
     </Modal>
   );
 }

@@ -19,6 +19,7 @@ export interface Commit {
   author: Role;
   ts: number;
   files: Files;
+  flagged?: boolean;
 }
 export interface Branch {
   name: string;
@@ -256,6 +257,31 @@ export function startEdit(
     activeBranch: branchName,
   };
   setWorking(pid, branchName, { ...tipFiles(base) });
+  saveState(pid, next);
+  return next;
+}
+
+/** Toggle a "flag" (release marker) on a commit. */
+export function toggleCommitFlag(
+  pid: string,
+  st: WorkflowState,
+  branch: string,
+  commitId: string,
+): WorkflowState {
+  const b = st.branches[branch];
+  if (!b) return st;
+  const next: WorkflowState = {
+    ...st,
+    branches: {
+      ...st.branches,
+      [branch]: {
+        ...b,
+        commits: b.commits.map((c) =>
+          c.id === commitId ? { ...c, flagged: !c.flagged } : c,
+        ),
+      },
+    },
+  };
   saveState(pid, next);
   return next;
 }
