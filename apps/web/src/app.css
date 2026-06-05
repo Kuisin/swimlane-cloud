@@ -19,6 +19,8 @@ body,
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
   font-family:
+    "Noto Sans JP",
+    "Noto Sans",
     system-ui,
     -apple-system,
     sans-serif;
