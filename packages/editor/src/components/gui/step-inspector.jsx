@@ -246,6 +246,11 @@ export function StepInspector({
         src={src}
         theme={theme}
         selectedId={row.blockRef || null}
+        readOnly={readOnly}
+        onSelect={(id) => {
+          onPatch({ blockRef: id === row.blockRef ? null : id });
+          setPreview(null);
+        }}
         onClose={() => setPreview(null)}
       />
       <PartsPreviewPopup
@@ -253,7 +258,9 @@ export function StepInspector({
         section="prop"
         src={src}
         theme={theme}
-        selectedId={(row.props || [])[0] || null}
+        selectedId={row.props || []}
+        readOnly={readOnly}
+        onSelect={(id) => toggleProp(id)}
         onClose={() => setPreview(null)}
       />
     </div>

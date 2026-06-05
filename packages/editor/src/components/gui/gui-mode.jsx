@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
 import { useT } from "../../i18n.jsx";
 import { useDragWidth } from "../../hooks/use-drag-width.js";
 import { parseGuiModel, applyModelEdit } from "../../lib/gui-model.js";
@@ -15,6 +15,7 @@ import { FlowStepList } from "./flow-step-list.jsx";
 import { StepInspector } from "./step-inspector.jsx";
 import { BranchInspector } from "./branch-inspector.jsx";
 import { MoveStepModal } from "./move-step-modal.jsx";
+import { FileSettingsModal } from "./file-settings-modal.jsx";
 
 /**
  * GUI editing surface over the same DSL document. Parses `src` to a GUI model,
@@ -27,6 +28,7 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
   const inspector = useDragWidth(300, { min: 220, max: 520, edge: "left" });
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [showMove, setShowMove] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const guiModel = useMemo(() => parseGuiModel(src), [src]);
   const rows = guiModel.rows;
   const lockedRows = useMemo(
@@ -102,11 +104,21 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
       <div className="sw-gui-list-pane">
         <div className="sw-gui-list-head">
           <span>{t("gui.flow")}</span>
-          {!readOnly && (
-            <button type="button" className="sw-btn sw-btn-sm" onClick={addStep}>
-              <Plus size={13} /> {t("gui.addStep")}
+          <div className="sw-gui-list-head-right">
+            <button
+              type="button"
+              className="sw-icon-btn sw-icon-btn-xs"
+              onClick={() => setShowSettings(true)}
+              title={t("settings.title")}
+            >
+              <Settings size={14} />
             </button>
-          )}
+            {!readOnly && (
+              <button type="button" className="sw-btn sw-btn-sm" onClick={addStep}>
+                <Plus size={13} /> {t("gui.addStep")}
+              </button>
+            )}
+          </div>
         </div>
         <FlowStepList
           rows={rows}
@@ -163,6 +175,20 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
         lanes={guiModel.lanes}
         onMove={(to) => moveStepTo(saveIndex, to)}
         onClose={() => setShowMove(false)}
+      />
+
+      <FileSettingsModal
+        open={showSettings}
+        model={guiModel}
+        readOnly={readOnly}
+        onSave={(newPage, newOptions) => {
+          commit((draft) => {
+            draft.page = { ...(draft.page || {}), ...newPage };
+            draft.options = { ...newOptions };
+          });
+          setShowSettings(false);
+        }}
+        onClose={() => setShowSettings(false)}
       />
     </div>
   );
