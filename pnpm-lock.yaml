@@ -74,6 +74,9 @@ importers:
       '@swimlane-cloud/editor':
         specifier: workspace:*
         version: link:../../packages/editor
+      '@swimlane-cloud/mobile-view':
+        specifier: workspace:*
+        version: link:../../packages/mobile-view
       lucide-react:
         specifier: ^0.469.0
         version: 0.469.0(react@19.2.7)
@@ -160,6 +163,22 @@ importers:
       lucide-react:
         specifier: ^0.469.0
         version: 0.469.0(react@19.2.7)
+    devDependencies:
+      react:
+        specifier: ^19.0.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.7(react@19.2.7)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.6(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)
+
+  packages/mobile-view:
+    dependencies:
+      '@swimlane-cloud/diagram-converter':
+        specifier: workspace:*
+        version: link:../diagram-converter
     devDependencies:
       react:
         specifier: ^19.0.0

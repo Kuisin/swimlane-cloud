@@ -42,3 +42,15 @@ declare module "@swimlane-cloud/editor" {
 }
 
 declare module "@swimlane-cloud/editor/styles.css";
+
+// Mobile-view package (separate, JSX, no bundled types).
+declare module "@swimlane-cloud/mobile-view" {
+  import type { ComponentType } from "react";
+  export const MobileDiagram: ComponentType<{ dsl?: string; model?: unknown }>;
+  export function buildMobileTree(model: unknown): unknown;
+  export function dslToMobile(dsl: string): { model: unknown; tree: unknown };
+  export function roleColor(lane: unknown): string;
+  export function toColor(value: unknown): string | null;
+}
+
+declare module "@swimlane-cloud/mobile-view/styles.css";

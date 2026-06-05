@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DslEditor } from "@swimlane-cloud/editor";
 import "@swimlane-cloud/editor/styles.css";
 import {
@@ -12,12 +12,52 @@ import {
   canEditBranch,
   isLocked,
   editLockReason,
+  getWorking,
 } from "@/lib/demo-workflow";
-import { ProjectNav, Action, Badge, useProject } from "../_components";
+import {
+  ProjectNav,
+  Action,
+  Badge,
+  MobileView,
+  MobilePrompt,
+  isMobileDevice,
+  useProject,
+} from "../_components";
+
+const VIEW_PREF = "sw-view-mode";
 
 export default function EditPage() {
   const { projectId, projectName, st, setSt, setRole, reset } = useProject();
   const [reload, setReload] = useState(0);
+  const [mobile, setMobile] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  useEffect(() => {
+    const pref = typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_PREF) : null;
+    if (pref === "mobile") setMobile(true);
+    else if (pref === "editor") setMobile(false);
+    else if (isMobileDevice() && sessionStorage.getItem("sw-mobile-asked") !== "1") {
+      setShowPrompt(true);
+    }
+  }, []);
+
+  const chooseMobile = () => {
+    localStorage.setItem(VIEW_PREF, "mobile");
+    sessionStorage.setItem("sw-mobile-asked", "1");
+    setMobile(true);
+    setShowPrompt(false);
+  };
+  const stayEditor = () => {
+    sessionStorage.setItem("sw-mobile-asked", "1");
+    setShowPrompt(false);
+  };
+  const toggleView = () => {
+    setMobile((m) => {
+      const next = !m;
+      localStorage.setItem(VIEW_PREF, next ? "mobile" : "editor");
+      return next;
+    });
+  };
 
   const role = st?.role ?? "member";
   const branch = st && st.branches[st.activeBranch] ? st.activeBranch : "test";
@@ -55,6 +95,34 @@ export default function EditPage() {
     setSt(openPR(projectId, st, branch, title));
     window.alert("Pull request opened. The branch is now locked until a Manager merges it.");
   };
+
+  if (mobile) {
+    return (
+      <div className="flex h-screen flex-col">
+        <ProjectNav
+          projectId={projectId}
+          projectName={projectName}
+          active="edit"
+          role={st.role}
+          onRole={setRole}
+          onReset={reset}
+        />
+        <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-4 py-2 text-sm">
+          <Badge>📱 mobile view · {branch}</Badge>
+          <button
+            onClick={toggleView}
+            className="ml-auto rounded-md border border-neutral-300 bg-white px-2.5 py-1 hover:border-indigo-400 hover:text-indigo-600"
+          >
+            🖥 Open full editor
+          </button>
+        </div>
+        <div className="min-h-0 flex-1">
+          <MobileView files={getWorking(projectId, branch)} />
+        </div>
+        {showPrompt && <MobilePrompt onMobile={chooseMobile} onStay={stayEditor} />}
+      </div>
+    );
+  }
 
   const statusLabel = onMain
     ? "production · read-only"
@@ -109,9 +177,15 @@ export default function EditPage() {
         >
           ⇧ Open pull request → test
         </Action>
-        <div className="ml-auto text-xs text-neutral-500">
-          <b>{role === "manager" ? "Manager" : "Member"}</b> · Save then Checkpoint to commit
-        </div>
+        <button
+          onClick={toggleView}
+          className="ml-auto rounded-md border border-neutral-300 bg-white px-2.5 py-1 hover:border-indigo-400 hover:text-indigo-600"
+        >
+          📱 Mobile view
+        </button>
+        <span className="text-xs text-neutral-500">
+          <b>{role === "manager" ? "Manager" : "Member"}</b>
+        </span>
       </div>
 
       {readOnly && (
@@ -131,6 +205,7 @@ export default function EditPage() {
       <div className="min-h-0 flex-1">
         <DslEditor key={`${branch}:${reload}`} host={host} />
       </div>
+      {showPrompt && <MobilePrompt onMobile={chooseMobile} onStay={stayEditor} />}
     </div>
   );
 }

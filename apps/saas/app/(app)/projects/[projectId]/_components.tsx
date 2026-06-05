@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { textToSvg } from "@swimlane-cloud/diagram-converter";
+import { MobileDiagram } from "@swimlane-cloud/mobile-view";
+import "@swimlane-cloud/mobile-view/styles.css";
 import {
   loadState,
   setRole as setRoleAction,
@@ -485,4 +487,74 @@ export function VersionPanel({
       ))}
     </ul>
   );
+}
+
+/** Read-only mobile render of the active branch's files (separate package). */
+export function MobileView({ files }: { files: Files }) {
+  const paths = Object.keys(files).filter((p) => p.endsWith(".txt")).sort();
+  const [path, setPath] = useState(primaryPath(files) ?? paths[0] ?? "");
+  const active = files[path] !== undefined ? path : paths[0] ?? "";
+  return (
+    <div className="flex h-full flex-col bg-neutral-100">
+      {paths.length > 1 && (
+        <div className="flex shrink-0 gap-1 overflow-auto border-b border-neutral-200 bg-white px-3 py-2">
+          {paths.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPath(p)}
+              className={`whitespace-nowrap rounded px-2 py-1 font-mono text-xs ${
+                p === active ? "bg-indigo-600 text-white" : "text-neutral-500 hover:bg-neutral-100"
+              }`}
+            >
+              {p.split("/").pop()}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="min-h-0 flex-1 overflow-auto">
+        <MobileDiagram dsl={files[active] ?? ""} />
+      </div>
+    </div>
+  );
+}
+
+/** "Switch to mobile view?" prompt shown when opening the editor on a phone. */
+export function MobilePrompt({
+  onMobile,
+  onStay,
+}: {
+  onMobile: () => void;
+  onStay: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+        <h2 className="text-lg font-semibold">Small screen detected</h2>
+        <p className="mt-1 text-sm text-neutral-600">
+          The full editor is built for wide screens. Switch to a mobile-friendly,
+          read-only view of this diagram?
+        </p>
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            onClick={onMobile}
+            className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+          >
+            📱 Switch to mobile view
+          </button>
+          <button
+            onClick={onStay}
+            className="w-full rounded-lg border border-neutral-300 px-4 py-2 text-sm text-neutral-600"
+          >
+            Stay in the editor
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** True on a phone-sized / touch screen. */
+export function isMobileDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia?.("(max-width: 768px)").matches || window.innerWidth <= 768;
 }

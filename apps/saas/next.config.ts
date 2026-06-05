@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     "@swimlane-cloud/editor",
     "@swimlane-cloud/diagram-converter",
+    "@swimlane-cloud/mobile-view",
   ],
   eslint: {
     // Lint is run separately; do not block production builds on it.

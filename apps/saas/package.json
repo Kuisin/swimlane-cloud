@@ -17,6 +17,7 @@
     "@supabase/ssr": "^0.5.2",
     "@swimlane-cloud/diagram-converter": "workspace:*",
     "@swimlane-cloud/editor": "workspace:*",
+    "@swimlane-cloud/mobile-view": "workspace:*",
     "lucide-react": "^0.469.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
