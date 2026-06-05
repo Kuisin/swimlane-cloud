@@ -1,7 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Check, GitPullRequest, Lock, Monitor, Plus, Smartphone } from "lucide-react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Check,
+  GitMerge,
+  GitPullRequest,
+  Lock,
+  Monitor,
+  Plus,
+  Smartphone,
+} from "lucide-react";
 import { DslEditor } from "@swimlane-cloud/editor";
 import "@swimlane-cloud/editor/styles.css";
 import {
@@ -9,6 +18,8 @@ import {
   startEdit,
   checkpoint,
   openPR,
+  mergeTestToMain,
+  isBranchDirty,
   createWorkflowHost,
   canEditBranch,
   isLocked,
@@ -28,19 +39,84 @@ import {
 const VIEW_PREF = "sw-view-mode";
 
 export default function EditPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-neutral-500">Loading…</div>}>
+      <EditPageInner />
+    </Suspense>
+  );
+}
+
+function EditPageInner() {
   const { projectId, projectName, st, setSt, setRole, reset } = useProject();
+  const router = useRouter();
+  const sp = useSearchParams();
+
   const [reload, setReload] = useState(0);
   const [mobile, setMobile] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
+  // Mobile open-file + editing-block, persisted to the URL so reloads restore.
+  const [mFile, setMFile] = useState<string | undefined>(undefined);
+  const [mStep, setMStep] = useState<number | null>(null);
+  const restored = useRef(false);
 
+  const role = st?.role ?? "member";
+  const branch = st && st.branches[st.activeBranch] ? st.activeBranch : "test";
+  const onMain = branch === "main";
+  const readOnly = st ? !canEditBranch(st, branch, role) : true;
+  const host = useMemo(
+    () => createWorkflowHost(projectId, branch, readOnly),
+    [projectId, branch, readOnly, reload],
+  );
+
+  // Restore state from the URL once the workflow state has loaded.
   useEffect(() => {
-    const pref = typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_PREF) : null;
-    if (pref === "mobile") setMobile(true);
-    else if (pref === "editor") setMobile(false);
-    else if (isMobileDevice() && sessionStorage.getItem("sw-mobile-asked") !== "1") {
-      setShowPrompt(true);
+    if (!st || restored.current) return;
+    restored.current = true;
+    const v = sp.get("view");
+    if (v === "mobile") setMobile(true);
+    else if (v === "editor") setMobile(false);
+    else {
+      const pref = localStorage.getItem(VIEW_PREF);
+      if (pref === "mobile") setMobile(true);
+      else if (isMobileDevice() && sessionStorage.getItem("sw-mobile-asked") !== "1") {
+        setShowPrompt(true);
+      }
     }
-  }, []);
+    const b = sp.get("branch");
+    if (b && st.branches[b] && b !== st.activeBranch) setSt(setActiveBranch(projectId, st, b));
+    const f = sp.get("file");
+    if (f) setMFile(f);
+    const s = sp.get("step");
+    if (s != null && s !== "") {
+      const n = Number(s);
+      if (!Number.isNaN(n)) setMStep(n);
+    }
+  }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep the URL in sync with branch / view / open file / editing block.
+  useEffect(() => {
+    if (!restored.current) return;
+    const params = new URLSearchParams(sp.toString());
+    params.set("branch", branch);
+    params.set("view", mobile ? "mobile" : "editor");
+    if (mFile) params.set("file", mFile);
+    else params.delete("file");
+    if (mStep != null) params.set("step", String(mStep));
+    else params.delete("step");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }, [branch, mobile, mFile, mStep]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Warn before leaving/reloading with uncommitted changes on the active branch.
+  const dirty = st ? isBranchDirty(projectId, st, branch) : false;
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
 
   const chooseMobile = () => {
     localStorage.setItem(VIEW_PREF, "mobile");
@@ -60,17 +136,9 @@ export default function EditPage() {
     });
   };
 
-  const role = st?.role ?? "member";
-  const branch = st && st.branches[st.activeBranch] ? st.activeBranch : "test";
-  const onMain = branch === "main";
-  const readOnly = st ? !canEditBranch(st, branch, role) : true;
-  const host = useMemo(
-    () => createWorkflowHost(projectId, branch, readOnly),
-    [projectId, branch, readOnly, reload],
-  );
-
   if (!st) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
 
+  const isManager = role === "manager";
   const onTmp = branch.startsWith("tmp-");
   const locked = isLocked(st, branch);
   const lockReason = editLockReason(st, branch, role);
@@ -96,6 +164,11 @@ export default function EditPage() {
     setSt(openPR(projectId, st, branch, title));
     window.alert("Pull request opened. The branch is now locked until a Manager merges it.");
   };
+  const doMergeMain = () => {
+    if (!window.confirm("Merge the current test branch into main (production)?")) return;
+    setSt(mergeTestToMain(projectId, st));
+    setReload((r) => r + 1);
+  };
 
   const statusLabel = onMain
     ? "production · read-only"
@@ -118,7 +191,6 @@ export default function EditPage() {
         onReset={reset}
       />
 
-      {/* one shared action bar for both the full editor and mobile views */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-sm">
         <select
           value={branch}
@@ -153,6 +225,11 @@ export default function EditPage() {
         >
           <GitPullRequest size={14} /> Open PR
         </Action>
+        {isManager && branch === "test" && (
+          <Action onClick={doMergeMain} title="Admin: merge test into main">
+            <GitMerge size={14} /> Merge → main
+          </Action>
+        )}
         <Action onClick={toggleView}>
           {mobile ? (
             <>
@@ -164,7 +241,8 @@ export default function EditPage() {
             </>
           )}
         </Action>
-        <span className="ml-auto text-xs text-neutral-500">
+        <span className="ml-auto inline-flex items-center gap-2 text-xs text-neutral-500">
+          {dirty && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">unsaved</span>}
           <b>{role === "manager" ? "Manager" : "Member"}</b>
         </span>
       </div>
@@ -191,6 +269,10 @@ export default function EditPage() {
             files={getWorking(projectId, branch)}
             editable={!readOnly}
             onSave={(p, d) => host.writeDraft(p, d)}
+            path={mFile}
+            onPath={setMFile}
+            editStep={mStep}
+            onEditStep={setMStep}
           />
         ) : (
           <DslEditor key={`${branch}:${reload}`} host={host} />

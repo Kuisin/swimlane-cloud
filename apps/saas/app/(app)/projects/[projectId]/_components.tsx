@@ -5,7 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   Check,
+  ChevronDown,
   ChevronRight,
+  FolderOpen,
   Plus,
   Smartphone,
   Trash2,
@@ -542,16 +544,30 @@ export function MobileView({
   files,
   editable = false,
   onSave,
+  path: pathProp,
+  onPath,
+  editStep: editStepProp,
+  onEditStep,
 }: {
   files: Files;
   editable?: boolean;
   onSave?: (path: string, dsl: string) => void;
+  path?: string;
+  onPath?: (p: string) => void;
+  editStep?: number | null;
+  onEditStep?: (i: number | null) => void;
 }) {
   const paths = Object.keys(files).filter((p) => p.endsWith(".txt")).sort();
-  const [path, setPath] = useState(primaryPath(files) ?? paths[0] ?? "");
+  const [pathState, setPathState] = useState(primaryPath(files) ?? paths[0] ?? "");
+  const path = pathProp ?? pathState;
+  const setPath = (p: string) => (onPath ? onPath(p) : setPathState(p));
   const active = files[path] !== undefined ? path : paths[0] ?? "";
   const [dsl, setDsl] = useState(files[active] ?? "");
-  const [editStep, setEditStep] = useState<number | null>(null);
+  const [stepState, setStepState] = useState<number | null>(null);
+  const editStep = editStepProp !== undefined ? editStepProp : stepState;
+  const setEditStep = (i: number | null) => (onEditStep ? onEditStep(i) : setStepState(i));
+  const [showFiles, setShowFiles] = useState(false);
+  const activeDir = active.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "";
 
   useEffect(() => {
     setDsl(files[active] ?? "");
@@ -602,19 +618,17 @@ export function MobileView({
 
   return (
     <div className="flex h-full flex-col bg-neutral-100">
-      {paths.length > 1 && (
-        <div className="flex shrink-0 gap-1 overflow-auto border-b border-neutral-200 bg-white px-3 py-2">
-          {paths.map((p) => (
-            <button
-              key={p}
-              onClick={() => setPath(p)}
-              className={`whitespace-nowrap rounded px-2 py-1 font-mono text-xs ${
-                p === active ? "bg-indigo-600 text-white" : "text-neutral-500 hover:bg-neutral-100"
-              }`}
-            >
-              {p.split("/").pop()}
-            </button>
-          ))}
+      {paths.length > 0 && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 bg-white px-3 py-2">
+          <button
+            onClick={() => setShowFiles(true)}
+            className="flex items-center gap-2 rounded-md border border-neutral-300 px-2.5 py-1 hover:border-indigo-400"
+          >
+            <FolderOpen size={15} className="text-neutral-500" />
+            <span className="font-mono text-xs">{active.split("/").pop() || "—"}</span>
+            <ChevronDown size={14} className="text-neutral-400" />
+          </button>
+          {activeDir && <span className="truncate text-xs text-neutral-400">{activeDir}/</span>}
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-auto">
@@ -646,6 +660,62 @@ export function MobileView({
           onDelete={deleteStep}
         />
       )}
+      {showFiles && (
+        <Modal title="Files" onClose={() => setShowFiles(false)}>
+          <FileList
+            paths={paths}
+            active={active}
+            onPick={(p) => {
+              setPath(p);
+              setShowFiles(false);
+            }}
+          />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function FileList({
+  paths,
+  active,
+  onPick,
+}: {
+  paths: string[];
+  active: string;
+  onPick: (p: string) => void;
+}) {
+  const groups: Record<string, string[]> = {};
+  for (const p of paths) {
+    const dir = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+    (groups[dir] ||= []).push(p);
+  }
+  const dirs = Object.keys(groups).sort();
+  if (paths.length === 0) return <Empty>No files.</Empty>;
+  return (
+    <div className="space-y-4">
+      {dirs.map((dir) => (
+        <div key={dir || "root"}>
+          <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-neutral-400">
+            <FolderOpen size={13} /> {dir || "/"}
+          </div>
+          <ul className="space-y-1">
+            {groups[dir].map((p) => (
+              <li key={p}>
+                <button
+                  onClick={() => onPick(p)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left ${
+                    p === active ? "bg-indigo-50 text-indigo-700" : "hover:bg-neutral-100"
+                  }`}
+                >
+                  <span className="truncate font-mono text-sm">{p.split("/").pop()}</span>
+                  {p === active && <Check size={15} className="shrink-0 text-indigo-600" />}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }
@@ -815,7 +885,17 @@ export function isMobileDevice(): boolean {
 
 /* ---- mobile preview-popup pickers (block / arrow / props) ---- */
 
-function PartsPreview({ dsl, section, id }: { dsl: string; section: "block" | "prop"; id: string }) {
+function PartsPreview({
+  dsl,
+  section,
+  id,
+  compact = false,
+}: {
+  dsl: string;
+  section: "block" | "prop";
+  id: string;
+  compact?: boolean;
+}) {
   const html = useMemo(() => {
     try {
       const code = extractPartsCode(dsl, section, id);
@@ -826,12 +906,11 @@ function PartsPreview({ dsl, section, id }: { dsl: string; section: "block" | "p
     }
   }, [dsl, section, id]);
   if (!html) return null;
-  return (
-    <div
-      className="max-h-16 overflow-hidden [&_svg]:h-auto [&_svg]:max-h-14 [&_svg]:max-w-full"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
+  // Let the SVG scale to fit its box (aspect preserved) instead of being clipped.
+  const cls = compact
+    ? "[&_svg]:h-7 [&_svg]:w-auto [&_svg]:max-w-[140px]"
+    : "flex w-full items-center justify-center [&_svg]:h-auto [&_svg]:max-h-32 [&_svg]:max-w-full";
+  return <div className={cls} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function ArrowPreview({ kind }: { kind: string }) {
@@ -905,15 +984,17 @@ function PickerTile({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center gap-3 rounded-lg border p-2 text-left text-sm ${
+      className={`w-full rounded-lg border p-2 text-left text-sm ${
         selected ? "border-indigo-600 bg-indigo-50" : "border-neutral-200"
       }`}
     >
-      <span className="flex h-16 w-24 shrink-0 items-center justify-center overflow-hidden rounded bg-neutral-50">
+      <div className="flex min-h-[72px] items-center justify-center rounded bg-neutral-50 p-2">
         {preview ?? <span className="text-xs text-neutral-400">—</span>}
-      </span>
-      <span className="flex-1 truncate">{label}</span>
-      {selected && <Check size={16} className="text-indigo-600" />}
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <span className="truncate">{label}</span>
+        {selected && <Check size={16} className="shrink-0 text-indigo-600" />}
+      </div>
     </button>
   );
 }
@@ -939,7 +1020,7 @@ function BlockPicker({
     <>
       <PickerTrigger
         label={current}
-        preview={value ? <PartsPreview dsl={dsl} section="block" id={value} /> : undefined}
+        preview={value ? <PartsPreview dsl={dsl} section="block" id={value} compact /> : undefined}
         onClick={() => setOpen(true)}
       />
       {open && (

@@ -368,6 +368,43 @@ export function flagVersion(
   return next;
 }
 
+/** Admin/manager: merge the current test tip straight into main. */
+export function mergeTestToMain(pid: string, st: WorkflowState): WorkflowState {
+  const test = st.branches.test;
+  const main = st.branches.main;
+  if (!test || !main) return st;
+  const commit: Commit = {
+    id: genId("c"),
+    message: "Merge test into main",
+    author: "manager",
+    ts: now(),
+    files: { ...tipFiles(test) },
+  };
+  setWorking(pid, "main", { ...commit.files });
+  const next: WorkflowState = {
+    ...st,
+    branches: {
+      ...st.branches,
+      main: { ...main, commits: [...main.commits, commit] },
+    },
+  };
+  saveState(pid, next);
+  return next;
+}
+
+/** True when a branch's working copy differs from its last commit (uncommitted). */
+export function isBranchDirty(pid: string, st: WorkflowState, branch: string): boolean {
+  const b = st.branches[branch];
+  if (!b) return false;
+  const working = getWorking(pid, branch);
+  const tip = tipFiles(b);
+  const keys = new Set([...Object.keys(working), ...Object.keys(tip)]);
+  for (const k of keys) {
+    if ((working[k] ?? "") !== (tip[k] ?? "")) return true;
+  }
+  return false;
+}
+
 export function promote(pid: string, st: WorkflowState, versionId: string): WorkflowState {
   const v = st.versions.find((x) => x.id === versionId);
   if (!v || v.promoted) return st;
