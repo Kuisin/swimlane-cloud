@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Check, GitPullRequest, Lock, Monitor, Plus, Smartphone } from "lucide-react";
 import { DslEditor } from "@swimlane-cloud/editor";
 import "@swimlane-cloud/editor/styles.css";
 import {
@@ -96,38 +97,6 @@ export default function EditPage() {
     window.alert("Pull request opened. The branch is now locked until a Manager merges it.");
   };
 
-  if (mobile) {
-    return (
-      <div className="flex h-screen flex-col">
-        <ProjectNav
-          projectId={projectId}
-          projectName={projectName}
-          active="edit"
-          role={st.role}
-          onRole={setRole}
-          onReset={reset}
-        />
-        <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-4 py-2 text-sm">
-          <Badge>📱 mobile view · {branch}</Badge>
-          <button
-            onClick={toggleView}
-            className="ml-auto rounded-md border border-neutral-300 bg-white px-2.5 py-1 hover:border-indigo-400 hover:text-indigo-600"
-          >
-            🖥 Open full editor
-          </button>
-        </div>
-        <div className="min-h-0 flex-1">
-          <MobileView
-            files={getWorking(projectId, branch)}
-            editable={!readOnly}
-            onSave={(p, d) => host.writeDraft(p, d)}
-          />
-        </div>
-        {showPrompt && <MobilePrompt onMobile={chooseMobile} onStay={stayEditor} />}
-      </div>
-    );
-  }
-
   const statusLabel = onMain
     ? "production · read-only"
     : locked
@@ -148,8 +117,9 @@ export default function EditPage() {
         onRole={setRole}
         onReset={reset}
       />
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-4 py-2 text-sm">
-        <span className="text-neutral-500">Branch</span>
+
+      {/* one shared action bar for both the full editor and mobile views */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-sm">
         <select
           value={branch}
           onChange={(e) => setSt(setActiveBranch(projectId, st, e.target.value))}
@@ -164,9 +134,11 @@ export default function EditPage() {
         </select>
         <Badge>{statusLabel}</Badge>
         <div className="mx-1 h-5 w-px bg-neutral-300" />
-        <Action onClick={doStartEdit}>＋ Start edit</Action>
+        <Action onClick={doStartEdit}>
+          <Plus size={14} /> Start edit
+        </Action>
         <Action onClick={doCheckpoint} disabled={readOnly} title={lockReason ?? undefined}>
-          ✓ Checkpoint
+          <Check size={14} /> Checkpoint
         </Action>
         <Action
           onClick={doOpenPR}
@@ -179,36 +151,52 @@ export default function EditPage() {
                 : undefined
           }
         >
-          ⇧ Open pull request → test
+          <GitPullRequest size={14} /> Open PR
         </Action>
-        <button
-          onClick={toggleView}
-          className="ml-auto rounded-md border border-neutral-300 bg-white px-2.5 py-1 hover:border-indigo-400 hover:text-indigo-600"
-        >
-          📱 Mobile view
-        </button>
-        <span className="text-xs text-neutral-500">
+        <Action onClick={toggleView}>
+          {mobile ? (
+            <>
+              <Monitor size={14} /> Editor
+            </>
+          ) : (
+            <>
+              <Smartphone size={14} /> Mobile
+            </>
+          )}
+        </Action>
+        <span className="ml-auto text-xs text-neutral-500">
           <b>{role === "manager" ? "Manager" : "Member"}</b>
         </span>
       </div>
 
       {readOnly && (
         <div className="flex shrink-0 items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-          <span>🔒 Read-only: {lockReason}.</span>
+          <span className="inline-flex items-center gap-1.5">
+            <Lock size={14} /> Read-only: {lockReason}.
+          </span>
           {!onMain && !locked && (
             <button
               onClick={doStartEdit}
-              className="rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-500"
+              className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-500"
             >
-              ＋ Start an edit branch
+              <Plus size={13} /> Start an edit branch
             </button>
           )}
         </div>
       )}
 
       <div className="min-h-0 flex-1">
-        <DslEditor key={`${branch}:${reload}`} host={host} />
+        {mobile ? (
+          <MobileView
+            files={getWorking(projectId, branch)}
+            editable={!readOnly}
+            onSave={(p, d) => host.writeDraft(p, d)}
+          />
+        ) : (
+          <DslEditor key={`${branch}:${reload}`} host={host} />
+        )}
       </div>
+
       {showPrompt && <MobilePrompt onMobile={chooseMobile} onStay={stayEditor} />}
     </div>
   );

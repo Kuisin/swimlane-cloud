@@ -3,6 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import {
+  Check,
+  ChevronRight,
+  Plus,
+  Smartphone,
+  Trash2,
+  X,
+} from "lucide-react";
 import { textToSvg, renderPartsPreviewHtml } from "@swimlane-cloud/diagram-converter";
 import { THEMES } from "@swimlane-cloud/diagram-converter/themes";
 import { parseGuiModel, applyModelEdit, extractPartsCode } from "@swimlane-cloud/editor";
@@ -148,7 +156,7 @@ export function Action({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-sm hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-neutral-300 disabled:hover:text-neutral-400"
+      className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-sm hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-neutral-300 disabled:hover:text-neutral-400"
     >
       {children}
     </button>
@@ -165,6 +173,52 @@ export function Badge({ children }: { children: React.ReactNode }) {
 
 export function Empty({ children }: { children: React.ReactNode }) {
   return <p className="px-1 py-6 text-center text-sm text-neutral-400">{children}</p>;
+}
+
+/**
+ * Shared modal / bottom-sheet: one backdrop + panel used by every popup
+ * (preview, step edit, pickers) so they look and behave consistently. Bottom
+ * sheet on phones, centered card on wider screens.
+ */
+export function Modal({
+  title,
+  onClose,
+  footer,
+  maxW = "max-w-md",
+  z = "z-50",
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  footer?: React.ReactNode;
+  maxW?: string;
+  z?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={`fixed inset-0 ${z} flex items-end justify-center bg-black/40 sm:items-center`}
+      onClick={onClose}
+    >
+      <div
+        className={`flex max-h-[90vh] w-full ${maxW} flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+          <h2 className="text-base font-semibold">{title}</h2>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto p-4">{children}</div>
+        {footer && <div className="border-t border-neutral-200 p-4">{footer}</div>}
+      </div>
+    </div>
+  );
 }
 
 export function HistoryPanel({ st, branch }: { st: WorkflowState; branch: string }) {
@@ -230,50 +284,31 @@ export function PreviewModal({
   }, [files, path]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6"
-      onClick={onClose}
-    >
-      <div
-        className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-lg bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-          <div className="min-w-0">
-            <div className="truncate font-medium">{title}</div>
-            <div className="text-xs text-neutral-400">Rendered on device</div>
-          </div>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
-            ✕
-          </button>
+    <Modal title={title} onClose={onClose} maxW="max-w-3xl">
+      {paths.length > 1 && (
+        <div className="mb-3 flex gap-1">
+          {paths.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPath(p)}
+              className={`rounded px-2 py-1 font-mono text-xs ${
+                p === path ? "bg-indigo-600 text-white" : "text-neutral-500 hover:bg-neutral-100"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
         </div>
-        {paths.length > 1 && (
-          <div className="flex gap-1 border-b border-neutral-200 px-3 py-2">
-            {paths.map((p) => (
-              <button
-                key={p}
-                onClick={() => setPath(p)}
-                className={`rounded px-2 py-1 font-mono text-xs ${
-                  p === path ? "bg-indigo-600 text-white" : "text-neutral-500 hover:bg-neutral-100"
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="min-h-0 flex-1 overflow-auto p-4">
-          {svg ? (
-            <div
-              className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
-              dangerouslySetInnerHTML={{ __html: svg }}
-            />
-          ) : (
-            <Empty>Could not render this commit (parse error or empty).</Empty>
-          )}
-        </div>
-      </div>
-    </div>
+      )}
+      {svg ? (
+        <div
+          className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      ) : (
+        <Empty>Could not render this commit (parse error or empty).</Empty>
+      )}
+    </Modal>
   );
 }
 
@@ -542,6 +577,29 @@ export function MobileView({
     setEditStep(null);
   };
 
+  const addStep = () => {
+    const next = applyModelEdit(dsl, (draft) => {
+      draft.rows.push({
+        kind: "step",
+        role: gui.lanes[0]?.id ?? "",
+        text: "New step",
+      });
+    });
+    setDsl(next);
+    onSave?.(active, next);
+  };
+
+  const deleteStep = () => {
+    if (editStep == null) return;
+    const next = applyModelEdit(dsl, (draft) => {
+      const i = nthStepRowIndex(draft.rows, editStep);
+      if (i >= 0) draft.rows.splice(i, 1);
+    });
+    setDsl(next);
+    onSave?.(active, next);
+    setEditStep(null);
+  };
+
   return (
     <div className="flex h-full flex-col bg-neutral-100">
       {paths.length > 1 && (
@@ -565,6 +623,16 @@ export function MobileView({
           editable={editable}
           onEditStep={editable ? (i) => setEditStep(i) : undefined}
         />
+        {editable && (
+          <div className="px-3 pb-6">
+            <button
+              onClick={addStep}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 py-2.5 text-sm text-neutral-600 hover:border-indigo-400 hover:text-indigo-600"
+            >
+              <Plus size={16} /> Add step
+            </button>
+          </div>
+        )}
       </div>
       {editing && (
         <StepEditModal
@@ -575,6 +643,7 @@ export function MobileView({
           props={gui.props}
           onSave={applyPatch}
           onClose={() => setEditStep(null)}
+          onDelete={deleteStep}
         />
       )}
     </div>
@@ -591,6 +660,7 @@ function StepEditModal({
   props,
   onSave,
   onClose,
+  onDelete,
 }: {
   row: Record<string, unknown>;
   dsl: string;
@@ -599,6 +669,7 @@ function StepEditModal({
   props: Record<string, { id: string; label?: string }>;
   onSave: (patch: Record<string, unknown>) => void;
   onClose: () => void;
+  onDelete?: () => void;
 }) {
   const [role, setRole] = useState(String(row.role ?? ""));
   const [text, setText] = useState(String(row.text ?? ""));
@@ -611,17 +682,43 @@ function StepEditModal({
   );
   const propList = Object.values(props);
 
+  const footer = (
+    <div className="flex items-center gap-2">
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          title="Delete step"
+          className="rounded-lg border border-red-200 px-3 py-2 text-red-600 hover:bg-red-50"
+        >
+          <Trash2 size={16} />
+        </button>
+      )}
+      <button onClick={onClose} className="flex-1 rounded-lg border border-neutral-300 py-2 text-sm">
+        Cancel
+      </button>
+      <button
+        onClick={() =>
+          onSave({
+            role: role || null,
+            text,
+            description,
+            remark,
+            arrowLine,
+            blockRef: blockRef || null,
+            props: [...sel],
+          })
+        }
+        className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+      >
+        Save
+      </button>
+    </div>
+  );
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-t-2xl bg-white sm:rounded-2xl">
-        <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-          <h2 className="text-base font-semibold">Edit step</h2>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
-            ✕
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
-          <Field label="Role (lane)">
+    <Modal title="Edit step" onClose={onClose} z="z-[60]" footer={footer}>
+      <div className="space-y-3">
+        <Field label="Role (lane)">
             <select value={role} onChange={(e) => setRole(e.target.value)} className="sw-mf">
               {!role && <option value="">(choose a role)</option>}
               {lanes.map((l) => (
@@ -661,30 +758,8 @@ function StepEditModal({
               <PropsPicker value={sel} props={props} dsl={dsl} onChange={setSel} />
             </Field>
           )}
-        </div>
-        <div className="flex gap-2 border-t border-neutral-200 p-4">
-          <button onClick={onClose} className="flex-1 rounded-lg border border-neutral-300 py-2 text-sm">
-            Cancel
-          </button>
-          <button
-            onClick={() =>
-              onSave({
-                role: role || null,
-                text,
-                description,
-                remark,
-                arrowLine,
-                blockRef: blockRef || null,
-                props: [...sel],
-              })
-            }
-            className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-          >
-            Save
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -716,9 +791,9 @@ export function MobilePrompt({
         <div className="mt-4 flex flex-col gap-2">
           <button
             onClick={onMobile}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
           >
-            📱 Switch to mobile view
+            <Smartphone size={16} /> Switch to mobile view
           </button>
           <button
             onClick={onStay}
@@ -794,7 +869,7 @@ function PickerTrigger({
     >
       {preview && <span className="shrink-0">{preview}</span>}
       <span className="flex-1 truncate">{label}</span>
-      <span className="text-neutral-400">▸</span>
+      <ChevronRight size={16} className="text-neutral-400" />
     </button>
   );
 }
@@ -802,26 +877,16 @@ function PickerTrigger({
 function PickerSheet({
   title,
   onClose,
-  onDone,
   children,
 }: {
   title: string;
   onClose: () => void;
-  onDone?: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="flex max-h-[80vh] w-full max-w-md flex-col rounded-t-2xl bg-white sm:rounded-2xl">
-        <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-          <h3 className="font-semibold">{title}</h3>
-          <button onClick={onDone ?? onClose} className="text-sm font-medium text-indigo-600">
-            {onDone ? "Done" : "Close"}
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-2 overflow-auto p-3">{children}</div>
-      </div>
-    </div>
+    <Modal title={title} onClose={onClose} z="z-[70]">
+      <div className="space-y-2">{children}</div>
+    </Modal>
   );
 }
 
@@ -848,7 +913,7 @@ function PickerTile({
         {preview ?? <span className="text-xs text-neutral-400">—</span>}
       </span>
       <span className="flex-1 truncate">{label}</span>
-      {selected && <span className="text-indigo-600">✓</span>}
+      {selected && <Check size={16} className="text-indigo-600" />}
     </button>
   );
 }
@@ -943,7 +1008,7 @@ function PropsPicker({
         onClick={() => setOpen(true)}
       />
       {open && (
-        <PickerSheet title="Props" onClose={() => setOpen(false)} onDone={() => setOpen(false)}>
+        <PickerSheet title="Props" onClose={() => setOpen(false)}>
           {list.map((p) => (
             <PickerTile
               key={p.id}

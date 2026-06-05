@@ -1,5 +1,6 @@
 "use client";
 
+import { Tag } from "lucide-react";
 import { flagVersion, promote, publishVersion, unpublishVersion } from "@/lib/demo-workflow";
 import { ProjectNav, VersionPanel, useProject } from "../_components";
 
@@ -40,9 +41,9 @@ export default function VersionsPage() {
             {isManager ? (
               <button
                 onClick={doFlag}
-                className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+                className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
               >
-                🏷 Flag new version
+                <Tag size={15} /> Flag new version
               </button>
             ) : (
               <span className="text-xs text-neutral-400">Switch to Manager to flag a version</span>
