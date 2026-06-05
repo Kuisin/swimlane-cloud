@@ -122,17 +122,38 @@ function DslEditorInner({ options }) {
 
     if (format === "png") {
       if (!svg) return;
+      // Parse viewBox to get the intrinsic SVG dimensions.
+      // SVG uses width:"100%"/height:"auto" which causes naturalWidth/Height
+      // to be unreliable when loaded as an <img>, leading to cropped exports.
+      const parser = new DOMParser();
+      const svgDoc = parser.parseFromString(svg, "image/svg+xml");
+      const svgEl = svgDoc.documentElement;
+      const viewBox = svgEl.getAttribute("viewBox");
+      let svgW = 0, svgH = 0;
+      if (viewBox) {
+        const parts = viewBox.trim().split(/[\s,]+/);
+        svgW = parseFloat(parts[2]) || 0;
+        svgH = parseFloat(parts[3]) || 0;
+      }
+      if (svgW > 0 && svgH > 0) {
+        svgEl.setAttribute("width", String(svgW));
+        svgEl.setAttribute("height", String(svgH));
+      }
+      const serializer = new XMLSerializer();
+      const svgString = serializer.serializeToString(svgEl);
       const img = new Image();
-      const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
       const svgUrl = URL.createObjectURL(svgBlob);
       img.onload = () => {
         const scale = 2;
+        const w = svgW || img.naturalWidth;
+        const h = svgH || img.naturalHeight;
         const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth * scale;
-        canvas.height = img.naturalHeight * scale;
+        canvas.width = w * scale;
+        canvas.height = h * scale;
         const ctx = canvas.getContext("2d");
         ctx.scale(scale, scale);
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, w, h);
         URL.revokeObjectURL(svgUrl);
         canvas.toBlob((blob) => {
           const url = URL.createObjectURL(blob);
