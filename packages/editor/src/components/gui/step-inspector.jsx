@@ -247,6 +247,10 @@ export function StepInspector({
         theme={theme}
         selectedId={row.blockRef || null}
         onClose={() => setPreview(null)}
+        onSelect={(id) => {
+          set("blockRef")(id || null);
+          setPreview(null);
+        }}
       />
       <PartsPreviewPopup
         open={preview === "prop"}
@@ -255,6 +259,10 @@ export function StepInspector({
         theme={theme}
         selectedId={(row.props || [])[0] || null}
         onClose={() => setPreview(null)}
+        onSelect={(id) => {
+          toggleProp(id);
+          setPreview(null);
+        }}
       />
     </div>
   );

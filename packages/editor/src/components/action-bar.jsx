@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import {
+  ChevronDown,
   Download,
   FilePlus,
   FolderPlus,
@@ -16,6 +18,8 @@ import { useT } from "../i18n.jsx";
  * Top action bar. Save / Save all / New file / New folder / Export / Templates
  * / Help are always shown when the host supports them; Checkpoint / Flag new
  * version are gated on host capability + method presence.
+ *
+ * `onExport(format)` is called with "txt", "svg", or "png".
  */
 export function ActionBar({
   counts,
@@ -28,6 +32,7 @@ export function ActionBar({
   canFormat,
   canCheckpoint,
   canVersion,
+  hasSvg,
   onSave,
   onSaveAll,
   onNewFile,
@@ -40,6 +45,20 @@ export function ActionBar({
   onFlagVersion,
 }) {
   const { t } = useT();
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef(null);
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    function handleClick(e) {
+      if (exportRef.current && !exportRef.current.contains(e.target)) {
+        setExportOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [exportOpen]);
+
   return (
     <div className="sw-actionbar">
       <div className="sw-actionbar-left">
@@ -72,9 +91,42 @@ export function ActionBar({
       </div>
 
       <div className="sw-actionbar-right">
-        <button type="button" className="sw-btn" onClick={onExport} title={t("action.exportTitle")}>
-          <Download size={14} /> {t("action.export")}
-        </button>
+        <div className="sw-export-wrap" ref={exportRef}>
+          <button
+            type="button"
+            className="sw-btn sw-export-toggle"
+            onClick={() => setExportOpen((v) => !v)}
+          >
+            <Download size={14} /> {t("action.export")} <ChevronDown size={12} />
+          </button>
+          {exportOpen && (
+            <div className="sw-export-menu">
+              <button
+                type="button"
+                className="sw-export-item"
+                onClick={() => { onExport("txt"); setExportOpen(false); }}
+              >
+                {t("action.exportTxt")}
+              </button>
+              <button
+                type="button"
+                className="sw-export-item"
+                disabled={!hasSvg}
+                onClick={() => { onExport("svg"); setExportOpen(false); }}
+              >
+                {t("action.exportSvg")}
+              </button>
+              <button
+                type="button"
+                className="sw-export-item"
+                disabled={!hasSvg}
+                onClick={() => { onExport("png"); setExportOpen(false); }}
+              >
+                {t("action.exportPng")}
+              </button>
+            </div>
+          )}
+        </div>
         <button type="button" className="sw-icon-btn" onClick={onOpenHelp} title={t("action.help")}>
           <HelpCircle size={16} />
         </button>

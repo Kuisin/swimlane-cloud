@@ -193,7 +193,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   padding: 8px 12px;
   border-bottom: 1px solid var(--sw-border);
   background: var(--sw-bg);
@@ -223,11 +224,13 @@
 .sw-subbar {
   display: flex;
   align-items: stretch;
+  flex-wrap: nowrap;
   gap: 10px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--sw-border);
   background: var(--sw-bg-alt);
   min-height: 0;
+  overflow-x: auto;
 }
 .sw-mode-toggle {
   display: inline-flex;
@@ -413,7 +416,6 @@
   min-height: 0;
 }
 .sw-gui-list-pane {
-  flex: 1;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--sw-border);
@@ -423,17 +425,24 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 6px 10px 6px 12px;
   border-bottom: 1px solid var(--sw-border);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--sw-text-muted);
+  gap: 6px;
+}
+.sw-gui-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 .sw-gui-inspector-pane {
-  width: 300px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 200px;
   overflow: auto;
   background: var(--sw-bg-alt);
 }
@@ -955,4 +964,156 @@
 .sw-move-end {
   width: 100%;
   justify-content: center;
+}
+
+/* ---- export dropdown ---- */
+.sw-export-wrap {
+  position: relative;
+}
+.sw-export-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.sw-export-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 140px;
+  background: var(--sw-bg);
+  border: 1px solid var(--sw-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  z-index: 200;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sw-export-item {
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  color: var(--sw-text);
+  cursor: pointer;
+}
+.sw-export-item:hover:not(:disabled) {
+  background: var(--sw-bg-sunken);
+}
+.sw-export-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- collapsed tree strip ---- */
+.sw-tree-collapsed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  border-right: 1px solid var(--sw-border);
+  background: var(--sw-bg-alt);
+  flex-shrink: 0;
+}
+
+/* ---- inspector select truncation ---- */
+.sw-inspector .sw-input[type="text"],
+.sw-inspector select.sw-input {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- parts item grid ---- */
+.sw-parts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+.sw-parts-item {
+  border: 2px solid var(--sw-border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.sw-parts-item-selected {
+  border-color: var(--sw-accent);
+}
+.sw-parts-item-clickable {
+  cursor: pointer;
+}
+.sw-parts-item-clickable:hover {
+  border-color: var(--sw-accent);
+  box-shadow: 0 0 0 2px var(--sw-accent-bg);
+}
+.sw-parts-item-label {
+  padding: 5px 8px;
+  font-family: var(--sw-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sw-text-muted);
+  background: var(--sw-bg-sunken);
+  border-bottom: 1px solid var(--sw-border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sw-parts-item-selected .sw-parts-item-label {
+  background: var(--sw-accent-bg);
+  color: var(--sw-accent);
+}
+.sw-parts-item-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--sw-text-faint);
+  font-size: 12px;
+}
+
+/* ---- file settings modal ---- */
+.sw-settings-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px 0;
+  border-bottom: 1px solid var(--sw-border);
+}
+.sw-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sw-settings-row3 {
+  display: flex;
+  gap: 8px;
+}
+.sw-settings-row3 .sw-field {
+  flex: 1;
+}
+.sw-settings-row2 {
+  display: flex;
+  gap: 8px;
+}
+.sw-settings-row2 .sw-field {
+  flex: 1;
+}
+.sw-settings-bools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.sw-settings-bool {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border: 1px solid var(--sw-border);
+  border-radius: 6px;
+}
+.sw-settings-bool:hover {
+  background: var(--sw-bg-sunken);
 }

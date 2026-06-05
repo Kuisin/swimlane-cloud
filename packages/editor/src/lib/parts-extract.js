@@ -50,6 +50,23 @@ function sliceDef(sectionBody, id) {
 }
 
 /**
+ * All definition ids in a section (block or prop).
+ * @param {string} src full DSL document
+ * @param {"block"|"prop"} section
+ * @returns {string[]}
+ */
+export function extractDefIds(src, section) {
+  const marker = `/${section}/`;
+  const body = sliceSection(src, marker);
+  const ids = [];
+  for (const line of body.split(/\r?\n/)) {
+    const m = line.trim().match(/^<([^>]+)>$/);
+    if (m) ids.push(m[1].trim());
+  }
+  return ids;
+}
+
+/**
  * Parts code (engine `kai-swimlane-parts` shape) for a document.
  * @param {string} src full DSL document
  * @param {"block"|"prop"|"both"} [section]
