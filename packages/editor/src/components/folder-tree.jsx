@@ -7,6 +7,8 @@ import {
   FolderOpen,
   FolderPlus,
   FilePlus,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { buildFolderTree } from "../lib/folder-tree.js";
 import { useT } from "../i18n.jsx";
@@ -14,6 +16,7 @@ import { useT } from "../i18n.jsx";
 /**
  * Nested folder tree built by splitting each FileRef.id on "/". Clicking a file
  * opens it; "New file"/"New folder" act under the selected folder.
+ * When `collapsed` is true, only a thin strip with an expand button is shown.
  */
 export function FolderTree({
   files,
@@ -21,15 +24,32 @@ export function FolderTree({
   activeId,
   dirtyIds,
   selectedDir,
+  collapsed,
   onSelectDir,
   onOpenFile,
   onNewFile,
   onNewFolder,
   canCreate,
   canMkdir,
+  onToggleCollapse,
 }) {
   const { t } = useT();
   const tree = useMemo(() => buildFolderTree(files), [files]);
+
+  if (collapsed) {
+    return (
+      <div className="sw-tree-collapsed">
+        <button
+          type="button"
+          className="sw-icon-btn"
+          title={t("tree.expand")}
+          onClick={onToggleCollapse}
+        >
+          <PanelLeftOpen size={16} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="sw-tree" style={width ? { width, flex: "0 0 auto" } : undefined}>
@@ -56,6 +76,14 @@ export function FolderTree({
               <FolderPlus size={14} />
             </button>
           )}
+          <button
+            type="button"
+            className="sw-icon-btn"
+            title={t("tree.collapse")}
+            onClick={onToggleCollapse}
+          >
+            <PanelLeftClose size={14} />
+          </button>
         </span>
       </div>
       <div className="sw-tree-body">

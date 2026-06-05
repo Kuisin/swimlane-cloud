@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
 import { useT } from "../../i18n.jsx";
 import { useDragWidth } from "../../hooks/use-drag-width.js";
 import { parseGuiModel, applyModelEdit } from "../../lib/gui-model.js";
@@ -15,18 +15,23 @@ import { FlowStepList } from "./flow-step-list.jsx";
 import { StepInspector } from "./step-inspector.jsx";
 import { BranchInspector } from "./branch-inspector.jsx";
 import { MoveStepModal } from "./move-step-modal.jsx";
+import { FileSettingsModal } from "./file-settings-modal.jsx";
 
 /**
  * GUI editing surface over the same DSL document. Parses `src` to a GUI model,
  * renders the flow list + a row inspector, and writes edits back as DSL via
  * `applyModelEdit` (re-parse → mutate row → re-serialize), so the round-trip is
  * lossless and identical to text mode.
+ *
+ * The step list owns the fixed pixel width (resizable from its right edge);
+ * the inspector fills the remaining space so the main split works naturally.
  */
 export function GuiMode({ src, onChange, readOnly, theme }) {
   const { t } = useT();
-  const inspector = useDragWidth(300, { min: 220, max: 520, edge: "left" });
+  const stepList = useDragWidth(260, { min: 180, max: 520, edge: "right" });
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [showMove, setShowMove] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const guiModel = useMemo(() => parseGuiModel(src), [src]);
   const rows = guiModel.rows;
   const lockedRows = useMemo(
@@ -99,14 +104,27 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
 
   return (
     <div className="sw-gui">
-      <div className="sw-gui-list-pane">
+      <div
+        className="sw-gui-list-pane"
+        style={{ width: stepList.width, flex: "0 0 auto" }}
+      >
         <div className="sw-gui-list-head">
           <span>{t("gui.flow")}</span>
-          {!readOnly && (
-            <button type="button" className="sw-btn sw-btn-sm" onClick={addStep}>
-              <Plus size={13} /> {t("gui.addStep")}
+          <div className="sw-gui-list-actions">
+            {!readOnly && (
+              <button type="button" className="sw-btn sw-btn-sm" onClick={addStep}>
+                <Plus size={13} /> {t("gui.addStep")}
+              </button>
+            )}
+            <button
+              type="button"
+              className="sw-icon-btn"
+              title={t("file.settings")}
+              onClick={() => setShowSettings(true)}
+            >
+              <Settings size={14} />
             </button>
-          )}
+          </div>
         </div>
         <FlowStepList
           rows={rows}
@@ -122,12 +140,12 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
         className="sw-resizer"
         role="separator"
         aria-orientation="vertical"
-        onMouseDown={inspector.startDrag}
-        onTouchStart={inspector.startDrag}
+        onMouseDown={stepList.startDrag}
+        onTouchStart={stepList.startDrag}
       />
       <div
         className="sw-gui-inspector-pane"
-        style={{ width: inspector.width, flex: "0 0 auto" }}
+        style={{ flex: 1 }}
       >
         {isStep ? (
           <StepInspector
@@ -163,6 +181,14 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
         lanes={guiModel.lanes}
         onMove={(to) => moveStepTo(saveIndex, to)}
         onClose={() => setShowMove(false)}
+      />
+
+      <FileSettingsModal
+        open={showSettings}
+        src={src}
+        readOnly={readOnly}
+        onChange={onChange}
+        onClose={() => setShowSettings(false)}
       />
     </div>
   );
