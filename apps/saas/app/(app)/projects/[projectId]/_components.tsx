@@ -236,11 +236,11 @@ export function Modal({
 export function HistoryPanel({
   st,
   branch,
-  onToggleFlag,
+  onTogglePublish,
 }: {
   st: WorkflowState;
   branch: string;
-  onToggleFlag?: (commitId: string) => void;
+  onTogglePublish?: (commitId: string) => void;
 }) {
   const all = st.branches[branch]?.commits ?? [];
   const [detail, setDetail] = useState<{ commit: Commit; parent: Commit | null } | null>(null);
@@ -269,15 +269,25 @@ export function HistoryPanel({
                       <span className="ml-2 rounded bg-green-100 px-1 text-green-700">tip</span>
                     )}
                   </div>
+                  {c.flagged && c.publicSlug && (
+                    <a
+                      href={`/p/${c.publicSlug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-0.5 inline-block font-mono text-xs text-emerald-600 underline"
+                    >
+                      /p/{c.publicSlug}
+                    </a>
+                  )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {onToggleFlag && (
+                  {onTogglePublish && (
                     <button
-                      onClick={() => onToggleFlag(c.id)}
-                      title={c.flagged ? "Remove flag" : "Flag this commit"}
+                      onClick={() => onTogglePublish(c.id)}
+                      title={c.flagged ? "Unpublish" : "Publish to a public link"}
                       className={`rounded p-1.5 ${
                         c.flagged
-                          ? "text-amber-500"
+                          ? "text-emerald-600"
                           : "text-neutral-300 hover:text-neutral-500"
                       }`}
                     >
@@ -339,34 +349,52 @@ function CommitDetailModal({
     }
   }, [after, mode]);
 
+  // Group all files at this commit by folder; color each by edit status.
+  const groups: Record<string, string[]> = {};
+  for (const p of paths) {
+    const dir = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+    (groups[dir] ||= []).push(p);
+  }
+  const dirs = Object.keys(groups).sort();
+  const statusOf = (p: string) =>
+    !(p in prev) ? "added" : !(p in files) ? "removed" : prev[p] !== files[p] ? "changed" : "same";
+  const fileClass = (p: string) => {
+    if (p === path) return "border-indigo-600 bg-indigo-600 text-white";
+    switch (statusOf(p)) {
+      case "added":
+        return "border-green-200 bg-green-50 text-green-700";
+      case "removed":
+        return "border-red-200 bg-red-50 text-red-700 line-through";
+      case "changed":
+        return "border-amber-200 bg-amber-50 text-amber-700";
+      default:
+        return "border-neutral-200 bg-neutral-50 text-neutral-600";
+    }
+  };
+
   return (
     <Modal title={commit.message} onClose={onClose} maxW="max-w-4xl">
       <div className="space-y-3">
-        <div className="flex flex-wrap gap-1">
-          {paths.map((p) => {
-            const ch = (prev[p] ?? "") !== (files[p] ?? "");
-            const added = !(p in prev);
-            const removed = !(p in files);
-            return (
-              <button
-                key={p}
-                onClick={() => setPath(p)}
-                className={`flex items-center gap-1.5 rounded px-2 py-1 font-mono text-xs ${
-                  p === path ? "bg-indigo-600 text-white" : "bg-neutral-100 text-neutral-600"
-                }`}
-                title={added ? "added" : removed ? "removed" : ch ? "changed" : "unchanged"}
-              >
-                {p}
-                {ch && (
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      p === path ? "bg-white" : added ? "bg-green-500" : removed ? "bg-red-500" : "bg-amber-500"
-                    }`}
-                  />
-                )}
-              </button>
-            );
-          })}
+        <div className="space-y-2">
+          {dirs.map((dir) => (
+            <div key={dir || "root"}>
+              <div className="mb-1 flex items-center gap-1 text-[11px] font-medium text-neutral-400">
+                <FolderOpen size={12} /> {dir || "/"}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {groups[dir].map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPath(p)}
+                    title={statusOf(p)}
+                    className={`rounded border px-2 py-1 font-mono text-xs ${fileClass(p)}`}
+                  >
+                    {p.split("/").pop()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="flex gap-1 text-xs">

@@ -19,7 +19,8 @@ export interface Commit {
   author: Role;
   ts: number;
   files: Files;
-  flagged?: boolean;
+  flagged?: boolean; // on main: published to a public link
+  publicSlug?: string;
 }
 export interface Branch {
   name: string;
@@ -261,8 +262,11 @@ export function startEdit(
   return next;
 }
 
-/** Toggle a "flag" (release marker) on a commit. */
-export function toggleCommitFlag(
+/**
+ * Publish / unpublish a commit (the "flag" on main = published to a public
+ * link). Publishing renders the primary diagram and registers a public slug.
+ */
+export function toggleCommitPublish(
   pid: string,
   st: WorkflowState,
   branch: string,
@@ -270,6 +274,39 @@ export function toggleCommitFlag(
 ): WorkflowState {
   const b = st.branches[branch];
   if (!b) return st;
+  const commit = b.commits.find((c) => c.id === commitId);
+  if (!commit) return st;
+
+  const willPublish = !commit.flagged;
+  let publicSlug = commit.publicSlug;
+  const map = loadPublished();
+  if (willPublish) {
+    publicSlug =
+      publicSlug ?? `${slug(commit.message)}-${Math.random().toString(36).slice(2, 6)}`;
+    const pp = primaryPath(commit.files);
+    let svg: string | null = null;
+    if (pp) {
+      try {
+        svg = textToSvg(commit.files[pp], { themeKey: "basic" }).svg;
+      } catch {
+        svg = null;
+      }
+    }
+    map[publicSlug] = {
+      slug: publicSlug,
+      projectId: pid,
+      versionId: commitId,
+      name: commit.message,
+      note: `${branch} · ${new Date(commit.ts).toLocaleString()}`,
+      svg,
+      dsl: pp ? commit.files[pp] : "",
+      ts: now(),
+    };
+  } else if (publicSlug) {
+    delete map[publicSlug];
+  }
+  savePublished(map);
+
   const next: WorkflowState = {
     ...st,
     branches: {
@@ -277,7 +314,7 @@ export function toggleCommitFlag(
       [branch]: {
         ...b,
         commits: b.commits.map((c) =>
-          c.id === commitId ? { ...c, flagged: !c.flagged } : c,
+          c.id === commitId ? { ...c, flagged: willPublish, publicSlug } : c,
         ),
       },
     },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { tipFiles, toggleCommitFlag } from "@/lib/demo-workflow";
+import { tipFiles, toggleCommitPublish } from "@/lib/demo-workflow";
 import { ProjectNav, HistoryPanel, useProject } from "../_components";
 
 export default function BranchesPage() {
@@ -66,8 +66,17 @@ export default function BranchesPage() {
             <HistoryPanel
               st={st}
               branch={view}
-              onToggleFlag={
-                view === "main" ? (id) => setSt(toggleCommitFlag(projectId, st, view, id)) : undefined
+              onTogglePublish={
+                view === "main"
+                  ? (id) => {
+                      const c = st.branches.main?.commits.find((x) => x.id === id);
+                      const msg = c?.flagged
+                        ? "Unpublish this commit (remove its public link)?"
+                        : "Publish this commit to a public link?";
+                      if (!window.confirm(msg)) return;
+                      setSt(toggleCommitPublish(projectId, st, view, id));
+                    }
+                  : undefined
               }
             />
           </div>
