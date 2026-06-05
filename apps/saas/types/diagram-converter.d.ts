@@ -39,6 +39,33 @@ declare module "@swimlane-cloud/editor" {
     projectId?: string;
     [key: string]: unknown;
   }>;
+  // GUI-model helpers used by the mobile edit modal.
+  export interface GuiRow {
+    kind: string;
+    empty?: boolean;
+    role?: string | null;
+    text?: string;
+    name?: string;
+    description?: string;
+    remark?: string;
+    arrowLine?: string;
+    blockRef?: string | null;
+    mergeId?: string;
+    props?: string[];
+    [key: string]: unknown;
+  }
+  export interface GuiModel {
+    rows: GuiRow[];
+    lanes: Array<{ id: string; label?: string }>;
+    blocks: Record<string, { id: string; label?: string }>;
+    props: Record<string, { id: string; label?: string }>;
+    [key: string]: unknown;
+  }
+  export function parseGuiModel(src: string): GuiModel;
+  export function applyModelEdit(
+    src: string,
+    edit: (draft: { rows: GuiRow[]; [k: string]: unknown }) => void,
+  ): string;
 }
 
 declare module "@swimlane-cloud/editor/styles.css";
@@ -46,7 +73,12 @@ declare module "@swimlane-cloud/editor/styles.css";
 // Mobile-view package (separate, JSX, no bundled types).
 declare module "@swimlane-cloud/mobile-view" {
   import type { ComponentType } from "react";
-  export const MobileDiagram: ComponentType<{ dsl?: string; model?: unknown }>;
+  export const MobileDiagram: ComponentType<{
+    dsl?: string;
+    model?: unknown;
+    editable?: boolean;
+    onEditStep?: (stepIndex: number) => void;
+  }>;
   export function buildMobileTree(model: unknown): unknown;
   export function dslToMobile(dsl: string): { model: unknown; tree: unknown };
   export function roleColor(lane: unknown): string;

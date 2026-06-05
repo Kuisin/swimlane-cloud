@@ -117,7 +117,11 @@ export default function EditPage() {
           </button>
         </div>
         <div className="min-h-0 flex-1">
-          <MobileView files={getWorking(projectId, branch)} />
+          <MobileView
+            files={getWorking(projectId, branch)}
+            editable={!readOnly}
+            onSave={(p, d) => host.writeDraft(p, d)}
+          />
         </div>
         {showPrompt && <MobilePrompt onMobile={chooseMobile} onStay={stayEditor} />}
       </div>

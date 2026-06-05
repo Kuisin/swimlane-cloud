@@ -63,6 +63,57 @@
   padding: 12px 14px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
+.sw-m-card-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sw-m-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.sw-m-chevron {
+  flex-shrink: 0;
+  width: 12px;
+  color: var(--m-faint);
+  font-size: 11px;
+}
+.sw-m-edit {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--m-line);
+  background: #fff;
+  border-radius: 9px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--m-muted);
+  cursor: pointer;
+}
+.sw-m-edit:active,
+.sw-m-edit:hover {
+  border-color: #818cf8;
+  color: #4f46e5;
+}
+.sw-m-detail {
+  margin-top: 8px;
+  padding-inline-start: 20px;
+}
+.sw-m-count {
+  margin-inline-start: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--m-faint);
+}
 .sw-m-card-head {
   display: flex;
   flex-wrap: wrap;
@@ -153,6 +204,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+  text-align: start;
   background: #eff6ff;
   color: #1d4ed8;
   font-size: 13px;
@@ -192,6 +247,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+  text-align: start;
+  background: none;
   font-size: 12px;
   font-weight: 700;
   color: var(--m-muted);

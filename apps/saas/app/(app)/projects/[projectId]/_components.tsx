@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { textToSvg } from "@swimlane-cloud/diagram-converter";
+import { parseGuiModel, applyModelEdit } from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import "@swimlane-cloud/mobile-view/styles.css";
 import {
@@ -489,11 +490,57 @@ export function VersionPanel({
   );
 }
 
-/** Read-only mobile render of the active branch's files (separate package). */
-export function MobileView({ files }: { files: Files }) {
+function nthStepRowIndex(rows: { kind: string; empty?: boolean }[], n: number): number {
+  let c = 0;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].kind === "step" && !rows[i].empty) {
+      if (c === n) return i;
+      c++;
+    }
+  }
+  return -1;
+}
+
+/** Mobile render of the active branch's files; editable per-step when allowed. */
+export function MobileView({
+  files,
+  editable = false,
+  onSave,
+}: {
+  files: Files;
+  editable?: boolean;
+  onSave?: (path: string, dsl: string) => void;
+}) {
   const paths = Object.keys(files).filter((p) => p.endsWith(".txt")).sort();
   const [path, setPath] = useState(primaryPath(files) ?? paths[0] ?? "");
   const active = files[path] !== undefined ? path : paths[0] ?? "";
+  const [dsl, setDsl] = useState(files[active] ?? "");
+  const [editStep, setEditStep] = useState<number | null>(null);
+
+  useEffect(() => {
+    setDsl(files[active] ?? "");
+  }, [active, files]);
+
+  const gui = useMemo(() => parseGuiModel(dsl), [dsl]);
+  const editing =
+    editStep != null
+      ? (() => {
+          const i = nthStepRowIndex(gui.rows, editStep);
+          return i >= 0 ? gui.rows[i] : null;
+        })()
+      : null;
+
+  const applyPatch = (patch: Record<string, unknown>) => {
+    if (editStep == null) return;
+    const next = applyModelEdit(dsl, (draft) => {
+      const i = nthStepRowIndex(draft.rows, editStep);
+      if (i >= 0) draft.rows[i] = { ...draft.rows[i], ...patch };
+    });
+    setDsl(next);
+    onSave?.(active, next);
+    setEditStep(null);
+  };
+
   return (
     <div className="flex h-full flex-col bg-neutral-100">
       {paths.length > 1 && (
@@ -512,9 +559,177 @@ export function MobileView({ files }: { files: Files }) {
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-auto">
-        <MobileDiagram dsl={files[active] ?? ""} />
+        <MobileDiagram
+          dsl={dsl}
+          editable={editable}
+          onEditStep={editable ? (i) => setEditStep(i) : undefined}
+        />
+      </div>
+      {editing && (
+        <StepEditModal
+          row={editing}
+          lanes={gui.lanes}
+          blocks={gui.blocks}
+          props={gui.props}
+          onSave={applyPatch}
+          onClose={() => setEditStep(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+const ARROWS = ["solid", "dashed", "none"];
+
+function StepEditModal({
+  row,
+  lanes,
+  blocks,
+  props,
+  onSave,
+  onClose,
+}: {
+  row: Record<string, unknown>;
+  lanes: Array<{ id: string; label?: string }>;
+  blocks: Record<string, { id: string; label?: string }>;
+  props: Record<string, { id: string; label?: string }>;
+  onSave: (patch: Record<string, unknown>) => void;
+  onClose: () => void;
+}) {
+  const [role, setRole] = useState(String(row.role ?? ""));
+  const [text, setText] = useState(String(row.text ?? ""));
+  const [description, setDescription] = useState(String(row.description ?? ""));
+  const [remark, setRemark] = useState(String(row.remark ?? ""));
+  const [arrowLine, setArrowLine] = useState(String(row.arrowLine ?? "solid"));
+  const [blockRef, setBlockRef] = useState(String(row.blockRef ?? ""));
+  const [sel, setSel] = useState<Set<string>>(
+    new Set(Array.isArray(row.props) ? (row.props as string[]) : []),
+  );
+  const propList = Object.values(props);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center">
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-t-2xl bg-white sm:rounded-2xl">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+          <h2 className="text-base font-semibold">Edit step</h2>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
+            ✕
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
+          <Field label="Role (lane)">
+            <select value={role} onChange={(e) => setRole(e.target.value)} className="sw-mf">
+              {!role && <option value="">(choose a role)</option>}
+              {lanes.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label || l.id}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Text">
+            <input value={text} onChange={(e) => setText(e.target.value)} className="sw-mf" />
+          </Field>
+          <Field label="Description">
+            <textarea
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="sw-mf"
+            />
+          </Field>
+          <Field label="Remark">
+            <textarea
+              rows={2}
+              value={remark}
+              onChange={(e) => setRemark(e.target.value)}
+              className="sw-mf"
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Block style">
+              <select value={blockRef} onChange={(e) => setBlockRef(e.target.value)} className="sw-mf">
+                <option value="">(none)</option>
+                {Object.values(blocks).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label || b.id}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Arrow">
+              <select value={arrowLine} onChange={(e) => setArrowLine(e.target.value)} className="sw-mf">
+                {ARROWS.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          {propList.length > 0 && (
+            <Field label="Props">
+              <div className="flex flex-wrap gap-2">
+                {propList.map((p) => {
+                  const on = sel.has(p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() =>
+                        setSel((s) => {
+                          const n = new Set(s);
+                          if (n.has(p.id)) n.delete(p.id);
+                          else n.add(p.id);
+                          return n;
+                        })
+                      }
+                      className={`rounded-full border px-3 py-1 text-xs ${
+                        on
+                          ? "border-indigo-600 bg-indigo-600 text-white"
+                          : "border-neutral-300 text-neutral-600"
+                      }`}
+                    >
+                      {p.label || p.id}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+          )}
+        </div>
+        <div className="flex gap-2 border-t border-neutral-200 p-4">
+          <button onClick={onClose} className="flex-1 rounded-lg border border-neutral-300 py-2 text-sm">
+            Cancel
+          </button>
+          <button
+            onClick={() =>
+              onSave({
+                role: role || null,
+                text,
+                description,
+                remark,
+                arrowLine,
+                blockRef: blockRef || null,
+                props: [...sel],
+              })
+            }
+            className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+          >
+            Save
+          </button>
+        </div>
       </div>
     </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-neutral-500">{label}</span>
+      {children}
+    </label>
   );
 }
 

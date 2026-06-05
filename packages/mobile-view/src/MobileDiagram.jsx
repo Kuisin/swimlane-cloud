@@ -1,18 +1,20 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { buildMobileTree, dslToMobile, roleColor } from "./mobile-model.js";
 
 /**
  * Mobile-friendly, vertical, card-based render of a kai-swimlane diagram.
- * Pass `dsl` (string) or a pre-parsed `model`. Read-only for now — a base for a
- * future mobile editor.
+ * Blocks are collapsed by default (tap to expand for detail). Pass `editable`
+ * + `onEditStep(stepIndex)` to show a per-step edit button; the host owns the
+ * actual edit modal + DSL write-back. Pass `dsl` (string) or a parsed `model`.
  */
-export function MobileDiagram({ dsl, model }) {
+export function MobileDiagram({ dsl, model, editable = false, onEditStep }) {
   const { tree, laneMap } = useMemo(() => {
     const t = model ? buildMobileTree(model) : dslToMobile(dsl || "").tree;
     const lm = new Map(t.lanes.map((l) => [l.id, { ...l, color: roleColor(l) }]));
     return { tree: t, laneMap: lm };
   }, [dsl, model]);
 
+  const ctx = { laneMap, tree, editable, onEditStep };
   const hasError = tree.errors?.length > 0;
 
   return (
@@ -27,104 +29,146 @@ export function MobileDiagram({ dsl, model }) {
       {tree.nodes.length === 0 ? (
         <div className="sw-m-empty">Nothing to show yet.</div>
       ) : (
-        <NodeList nodes={tree.nodes} laneMap={laneMap} tree={tree} />
+        <NodeList nodes={tree.nodes} ctx={ctx} />
       )}
     </div>
   );
 }
 
-function NodeList({ nodes, laneMap, tree }) {
+function NodeList({ nodes, ctx }) {
   return (
     <div className="sw-m-list">
       {nodes.map((n, i) => (
         <div key={i} className="sw-m-item">
           {i > 0 && <div className="sw-m-connector" aria-hidden />}
-          <Node node={n} laneMap={laneMap} tree={tree} />
+          <Node node={n} ctx={ctx} />
         </div>
       ))}
     </div>
   );
 }
 
-function Node({ node, laneMap, tree }) {
+function Node({ node, ctx }) {
   switch (node.type) {
     case "step":
-      return <StepCard node={node} laneMap={laneMap} tree={tree} />;
+      return <StepCard node={node} ctx={ctx} />;
     case "branch":
-      return <BranchCard node={node} laneMap={laneMap} tree={tree} />;
+      return <BranchCard node={node} ctx={ctx} />;
     case "group":
-      return <GroupCard node={node} laneMap={laneMap} tree={tree} />;
+      return <GroupCard node={node} ctx={ctx} />;
     case "loop":
       return <span className="sw-m-pill sw-m-pill-loop">⟳ loop</span>;
     case "merge":
       return (
-        <span className="sw-m-pill sw-m-pill-merge">
-          merge → {node.target || "?"}
-        </span>
+        <span className="sw-m-pill sw-m-pill-merge">merge → {node.target || "?"}</span>
       );
     default:
       return null;
   }
 }
 
-function StepCard({ node, laneMap, tree }) {
-  const lane = node.role ? laneMap.get(node.role) : null;
+function Chevron({ open }) {
+  return <span className="sw-m-chevron">{open ? "▾" : "▸"}</span>;
+}
+
+function StepCard({ node, ctx }) {
+  const [open, setOpen] = useState(false);
+  const lane = node.role ? ctx.laneMap.get(node.role) : null;
   const color = lane?.color || "#94a3b8";
-  const block = node.blockRef ? tree.blocks?.[node.blockRef] : null;
+  const block = node.blockRef ? ctx.tree.blocks?.[node.blockRef] : null;
+  const hasDetail =
+    node.description || node.remark || node.props?.length > 0 || block || node.mergeId;
+
   return (
     <div className="sw-m-card" style={{ borderInlineStartColor: color }}>
-      <div className="sw-m-card-head">
-        {lane && (
-          <span className="sw-m-chip" style={{ background: color }}>
-            {lane.icon ? `${lane.icon} ` : ""}
-            {lane.label}
-          </span>
-        )}
-        {block && (
-          <span className="sw-m-badge">{block.label || block.id}</span>
-        )}
-        {node.arrowLine === "dashed" && <span className="sw-m-badge">dashed</span>}
-        {node.mergeId && <span className="sw-m-id">#{node.mergeId}</span>}
-      </div>
-      <div className="sw-m-text">{node.text || "(no text)"}</div>
-      {node.description && <div className="sw-m-desc">{node.description}</div>}
-      {node.remark && <div className="sw-m-remark">{node.remark}</div>}
-      {node.props?.length > 0 && (
-        <div className="sw-m-props">
-          {node.props.map((p) => (
-            <span key={p} className="sw-m-prop">
-              {tree.props?.[p]?.label || p}
+      <div className="sw-m-card-row">
+        <button
+          type="button"
+          className="sw-m-toggle"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+        >
+          {hasDetail ? <Chevron open={open} /> : <span className="sw-m-chevron" />}
+          {lane && (
+            <span className="sw-m-chip" style={{ background: color }}>
+              {lane.icon ? `${lane.icon} ` : ""}
+              {lane.label}
             </span>
-          ))}
+          )}
+          <span className="sw-m-text">{node.text || "(no text)"}</span>
+        </button>
+        {ctx.editable && ctx.onEditStep && (
+          <button
+            type="button"
+            className="sw-m-edit"
+            title="Edit step"
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx.onEditStep(node.stepIndex);
+            }}
+          >
+            ✎
+          </button>
+        )}
+      </div>
+
+      {open && hasDetail && (
+        <div className="sw-m-detail">
+          <div className="sw-m-card-head">
+            {block && <span className="sw-m-badge">{block.label || block.id}</span>}
+            {node.arrowLine === "dashed" && <span className="sw-m-badge">dashed</span>}
+            {node.mergeId && <span className="sw-m-id">#{node.mergeId}</span>}
+          </div>
+          {node.description && <div className="sw-m-desc">{node.description}</div>}
+          {node.remark && <div className="sw-m-remark">{node.remark}</div>}
+          {node.props?.length > 0 && (
+            <div className="sw-m-props">
+              {node.props.map((p) => (
+                <span key={p} className="sw-m-prop">
+                  {ctx.tree.props?.[p]?.label || p}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function BranchCard({ node, laneMap, tree }) {
+function BranchCard({ node, ctx }) {
+  const [open, setOpen] = useState(false);
   return (
     <div className="sw-m-branch">
-      <div className="sw-m-branch-head">
-        {node.parallel ? "▥ parallel" : "◇ if"}
+      <button
+        type="button"
+        className="sw-m-branch-head"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <Chevron open={open} />
+        <span>{node.parallel ? "▥ parallel" : "◇ if"}</span>
         {!node.parallel && node.cond && (
           <span className="sw-m-branch-cond">{node.cond}</span>
         )}
-      </div>
-      <div className="sw-m-cases">
-        {node.cases.map((c, i) => (
-          <div key={i} className="sw-m-case">
-            <div className="sw-m-case-label">
-              {caseLabel(node, c, i)}
+        <span className="sw-m-count">
+          {node.cases.length} {node.cases.length === 1 ? "case" : "cases"}
+        </span>
+      </button>
+      {open && (
+        <div className="sw-m-cases">
+          {node.cases.map((c, i) => (
+            <div key={i} className="sw-m-case">
+              <div className="sw-m-case-label">{caseLabel(node, c, i)}</div>
+              {c.children.length > 0 ? (
+                <NodeList nodes={c.children} ctx={ctx} />
+              ) : (
+                <div className="sw-m-empty-sm">(empty)</div>
+              )}
             </div>
-            {c.children.length > 0 ? (
-              <NodeList nodes={c.children} laneMap={laneMap} tree={tree} />
-            ) : (
-              <div className="sw-m-empty-sm">(empty)</div>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -135,18 +179,27 @@ function caseLabel(branch, c, i) {
   return c.label || (i === 0 ? "case" : `case ${i + 1}`);
 }
 
-function GroupCard({ node, laneMap, tree }) {
+function GroupCard({ node, ctx }) {
+  const [open, setOpen] = useState(false);
   return (
     <div className="sw-m-group">
-      <div className="sw-m-group-head">
-        {node.mode === "section" ? "▦ section" : "▸ sub-branch"}
+      <button
+        type="button"
+        className="sw-m-group-head"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <Chevron open={open} />
+        <span>{node.mode === "section" ? "▦ section" : "▸ sub-branch"}</span>
         {node.name && <span className="sw-m-group-name">{node.name}</span>}
-      </div>
-      {node.children.length > 0 ? (
-        <NodeList nodes={node.children} laneMap={laneMap} tree={tree} />
-      ) : (
-        <div className="sw-m-empty-sm">(empty)</div>
-      )}
+        <span className="sw-m-count">{node.children.length}</span>
+      </button>
+      {open &&
+        (node.children.length > 0 ? (
+          <NodeList nodes={node.children} ctx={ctx} />
+        ) : (
+          <div className="sw-m-empty-sm">(empty)</div>
+        ))}
     </div>
   );
 }

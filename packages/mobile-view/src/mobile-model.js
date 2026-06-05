@@ -40,9 +40,10 @@ export function roleColor(lane) {
   return toColor(lane?.bg) || hashColor(lane?.id || "role");
 }
 
-function stepNode(row) {
+function stepNode(row, stepIndex) {
   return {
     type: "step",
+    stepIndex,
     role: row.role || null,
     text: (row.name || row.text || "").trim(),
     description: (row.description || "").trim(),
@@ -59,6 +60,7 @@ export function buildMobileTree(model) {
   const root = [];
   const stack = [{ container: root, branch: null }];
   const top = () => stack[stack.length - 1];
+  let stepCounter = 0;
 
   const push = (node) => {
     const f = top();
@@ -74,7 +76,7 @@ export function buildMobileTree(model) {
   for (const row of model.rows || []) {
     switch (row.kind) {
       case "step":
-        if (!row.empty) push(stepNode(row));
+        if (!row.empty) push(stepNode(row, stepCounter++));
         break;
       case "branchLoop":
         push({ type: "loop" });
