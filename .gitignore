@@ -21,3 +21,8 @@ release/
 .dev-port
 coverage/
 *.tsbuildinfo
+.vercel
+
+# Supabase CLI local state
+supabase/.temp/
+**/supabase/.temp/
