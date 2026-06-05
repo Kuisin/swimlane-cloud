@@ -27,6 +27,7 @@ import {
 } from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import "@swimlane-cloud/mobile-view/styles.css";
+import { FileTree } from "@/components/file-tree";
 import {
   loadState,
   setRole as setRoleAction,
@@ -349,88 +350,64 @@ function CommitDetailModal({
     }
   }, [after, mode]);
 
-  // Group all files at this commit by folder; color each by edit status.
-  const groups: Record<string, string[]> = {};
-  for (const p of paths) {
-    const dir = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
-    (groups[dir] ||= []).push(p);
-  }
-  const dirs = Object.keys(groups).sort();
-  const statusOf = (p: string) =>
+  const statusOf = (p: string): "added" | "removed" | "changed" | "same" =>
     !(p in prev) ? "added" : !(p in files) ? "removed" : prev[p] !== files[p] ? "changed" : "same";
-  const fileClass = (p: string) => {
-    if (p === path) return "border-indigo-600 bg-indigo-600 text-white";
-    switch (statusOf(p)) {
-      case "added":
-        return "border-green-200 bg-green-50 text-green-700";
-      case "removed":
-        return "border-red-200 bg-red-50 text-red-700 line-through";
-      case "changed":
-        return "border-amber-200 bg-amber-50 text-amber-700";
-      default:
-        return "border-neutral-200 bg-neutral-50 text-neutral-600";
-    }
-  };
+  const status = statusOf(path);
+  const statusBadge =
+    status === "added"
+      ? "bg-green-100 text-green-700"
+      : status === "removed"
+        ? "bg-red-100 text-red-700"
+        : status === "changed"
+          ? "bg-amber-100 text-amber-700"
+          : "bg-neutral-100 text-neutral-500";
 
   return (
     <Modal title={commit.message} onClose={onClose} maxW="max-w-4xl">
-      <div className="space-y-3">
-        <div className="space-y-2">
-          {dirs.map((dir) => (
-            <div key={dir || "root"}>
-              <div className="mb-1 flex items-center gap-1 text-[11px] font-medium text-neutral-400">
-                <FolderOpen size={12} /> {dir || "/"}
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {groups[dir].map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setPath(p)}
-                    title={statusOf(p)}
-                    className={`rounded border px-2 py-1 font-mono text-xs ${fileClass(p)}`}
-                  >
-                    {p.split("/").pop()}
-                  </button>
-                ))}
-              </div>
+      <div className="flex gap-4">
+        <aside className="max-h-[62vh] w-44 shrink-0 overflow-auto border-r border-neutral-200 pr-2">
+          <FileTree paths={paths} active={path} onPick={setPath} statusOf={statusOf} />
+        </aside>
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-mono text-xs text-neutral-500">{path}</span>
+            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${statusBadge}`}>{status}</span>
+            <div className="ml-auto flex gap-1 text-xs">
+              {(["preview", "diff", "text"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={`rounded px-3 py-1 capitalize ${
+                    mode === m ? "bg-neutral-800 text-white" : "text-neutral-500 hover:bg-neutral-100"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
 
-        <div className="flex gap-1 text-xs">
-          {(["preview", "diff", "text"] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`rounded px-3 py-1 capitalize ${
-                mode === m ? "bg-neutral-800 text-white" : "text-neutral-500 hover:bg-neutral-100"
-              }`}
-            >
-              {m}
-            </button>
-          ))}
+          {mode === "preview" &&
+            (svg ? (
+              <div
+                className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+                dangerouslySetInnerHTML={{ __html: svg }}
+              />
+            ) : (
+              <Empty>Could not render this file (parse error or empty).</Empty>
+            ))}
+          {mode === "diff" &&
+            (changed ? (
+              <Diff path={path} before={before} after={after} />
+            ) : (
+              <Empty>No change to this file in this commit.</Empty>
+            ))}
+          {mode === "text" && (
+            <pre className="overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-3 font-mono text-xs">
+              {after || "(empty)"}
+            </pre>
+          )}
         </div>
-
-        {mode === "preview" &&
-          (svg ? (
-            <div
-              className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
-              dangerouslySetInnerHTML={{ __html: svg }}
-            />
-          ) : (
-            <Empty>Could not render this file (parse error or empty).</Empty>
-          ))}
-        {mode === "diff" &&
-          (changed ? (
-            <Diff path={path} before={before} after={after} />
-          ) : (
-            <Empty>No change to this file in this commit.</Empty>
-          ))}
-        {mode === "text" && (
-          <pre className="overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-3 font-mono text-xs">
-            {after || "(empty)"}
-          </pre>
-        )}
       </div>
     </Modal>
   );

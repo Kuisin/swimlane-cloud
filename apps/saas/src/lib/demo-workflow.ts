@@ -66,6 +66,7 @@ export interface PublishedEntry {
   note: string;
   svg: string | null;
   dsl: string;
+  files: Files;
   ts: number;
 }
 export interface WorkflowState {
@@ -300,6 +301,7 @@ export function toggleCommitPublish(
       note: `${branch} · ${new Date(commit.ts).toLocaleString()}`,
       svg,
       dsl: pp ? commit.files[pp] : "",
+      files: { ...commit.files },
       ts: now(),
     };
   } else if (publicSlug) {
@@ -571,6 +573,7 @@ export function publishVersion(
     note: v.note,
     svg: v.svg,
     dsl: pp ? v.files[pp] : "",
+    files: { ...v.files },
     ts: now(),
   };
   savePublished(map);
