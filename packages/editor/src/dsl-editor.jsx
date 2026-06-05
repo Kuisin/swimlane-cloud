@@ -103,7 +103,7 @@ function DslEditorInner({ options }) {
   const guiAllowed = canUseGuiEditing(model.errors, activeParseErrorPolicy);
   const effectiveMode = mode === "gui" && !guiAllowed ? "text" : mode;
 
-  function handleExport() {
+  function handleExportTxt() {
     if (typeof document === "undefined") return;
     const name = (activeDocument?.name || "diagram") + ".txt";
     const blob = new Blob([src], { type: "text/plain;charset=utf-8" });
@@ -113,6 +113,52 @@ function DslEditorInner({ options }) {
     a.download = name;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function handleExportSvg() {
+    if (typeof document === "undefined" || !svg) return;
+    const name = (activeDocument?.name || "diagram") + ".svg";
+    const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleExportPng() {
+    if (typeof document === "undefined" || !svg) return;
+    const name = (activeDocument?.name || "diagram") + ".png";
+    const vbMatch = svg.match(/viewBox="0 0 ([0-9.]+) ([0-9.]+)"/);
+    const natW = vbMatch ? parseFloat(vbMatch[1]) : 800;
+    const natH = vbMatch ? parseFloat(vbMatch[2]) : 600;
+    const rasterSvg = svg.replace(/<svg /, `<svg width="${natW}" height="${natH}" `);
+    const blob = new Blob([rasterSvg], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    try {
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = 2;
+          const canvas = document.createElement("canvas");
+          canvas.width = natW * scale;
+          canvas.height = natH * scale;
+          const ctx = canvas.getContext("2d");
+          ctx.scale(scale, scale);
+          ctx.drawImage(img, 0, 0, natW, natH);
+          const a = document.createElement("a");
+          a.download = name;
+          a.href = canvas.toDataURL("image/png");
+          a.click();
+          resolve();
+        };
+        img.onerror = reject;
+        img.src = url;
+      });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   async function handleFormat() {
@@ -191,11 +237,14 @@ function DslEditorInner({ options }) {
           canFormat={model.errors.length === 0}
           canCheckpoint={hostHas(host, "checkpoint")}
           canVersion={hostSupportsVersioning(host) && hostHas(host, "flagNewVersion")}
+          canExportImage={!!svg}
           onSave={() => saveDocuments()}
           onSaveAll={saveAllDocuments}
           onNewFile={() => createNewFile(selectedDir)}
           onNewFolder={() => createNewFolder(selectedDir)}
-          onExport={handleExport}
+          onExportTxt={handleExportTxt}
+          onExportSvg={handleExportSvg}
+          onExportPng={handleExportPng}
           onFormat={handleFormat}
           onOpenTemplates={() => setShowTemplates(true)}
           onOpenHelp={() => setShowHelp(true)}

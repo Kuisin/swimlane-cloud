@@ -219,6 +219,45 @@
   color: var(--sw-border-strong);
 }
 
+/* ---- export dropdown ---- */
+.sw-export-wrap {
+  position: relative;
+}
+.sw-export-btn {
+  gap: 4px;
+}
+.sw-export-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 100;
+  min-width: 160px;
+  background: var(--sw-bg);
+  border: 1px solid var(--sw-border-strong);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+.sw-export-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--sw-text);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sw-export-item:hover:not(:disabled) {
+  background: var(--sw-bg-sunken);
+}
+.sw-export-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ---- subbar (mode toggle + tabs) ---- */
 .sw-subbar {
   display: flex;
