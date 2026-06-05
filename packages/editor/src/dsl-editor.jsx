@@ -78,6 +78,7 @@ function DslEditorInner({ options }) {
   const [showHelp, setShowHelp] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [gotoLine, setGotoLine] = useState(null);
+  const [treeCollapsed, setTreeCollapsed] = useState(false);
 
   const { svg, errors } = useLivePreview(src, { themeKey, theme });
   const { leftPct, containerRef, onDividerMouseDown } = useSplitPane(
@@ -103,14 +104,55 @@ function DslEditorInner({ options }) {
   const guiAllowed = canUseGuiEditing(model.errors, activeParseErrorPolicy);
   const effectiveMode = mode === "gui" && !guiAllowed ? "text" : mode;
 
-  function handleExport() {
+  function handleExport(format) {
     if (typeof document === "undefined") return;
-    const name = (activeDocument?.name || "diagram") + ".txt";
+    const baseName = activeDocument?.name || "diagram";
+
+    if (format === "svg") {
+      if (!svg) return;
+      const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = baseName + ".svg";
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    if (format === "png") {
+      if (!svg) return;
+      const img = new Image();
+      const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      img.onload = () => {
+        const scale = 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth * scale;
+        canvas.height = img.naturalHeight * scale;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(svgUrl);
+        canvas.toBlob((blob) => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = baseName + ".png";
+          a.click();
+          URL.revokeObjectURL(url);
+        }, "image/png");
+      };
+      img.src = svgUrl;
+      return;
+    }
+
+    // default: txt
     const blob = new Blob([src], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = name;
+    a.download = baseName + ".txt";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -160,24 +202,28 @@ function DslEditorInner({ options }) {
     <div className="sw-editor">
       <FolderTree
         files={files}
-        width={tree.width}
+        width={treeCollapsed ? 0 : tree.width}
         activeId={activeDocumentId}
         dirtyIds={dirtyIds}
         selectedDir={selectedDir}
+        collapsed={treeCollapsed}
         onSelectDir={(d) => setSelectedDir((cur) => (cur === d ? "" : d))}
         onOpenFile={openFile}
         onNewFile={createNewFile}
         onNewFolder={createNewFolder}
         canCreate={!readOnly && hostHas(host, "create")}
         canMkdir={!readOnly && hostHas(host, "mkdir")}
+        onToggleCollapse={() => setTreeCollapsed((v) => !v)}
       />
-      <div
-        className="sw-resizer"
-        role="separator"
-        aria-orientation="vertical"
-        onMouseDown={tree.startDrag}
-        onTouchStart={tree.startDrag}
-      />
+      {!treeCollapsed && (
+        <div
+          className="sw-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          onMouseDown={tree.startDrag}
+          onTouchStart={tree.startDrag}
+        />
+      )}
 
       <div className="sw-main">
         <ActionBar
@@ -191,6 +237,7 @@ function DslEditorInner({ options }) {
           canFormat={model.errors.length === 0}
           canCheckpoint={hostHas(host, "checkpoint")}
           canVersion={hostSupportsVersioning(host) && hostHas(host, "flagNewVersion")}
+          hasSvg={Boolean(svg)}
           onSave={() => saveDocuments()}
           onSaveAll={saveAllDocuments}
           onNewFile={() => createNewFile(selectedDir)}
