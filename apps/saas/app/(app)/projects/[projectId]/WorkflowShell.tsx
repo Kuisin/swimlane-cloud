@@ -39,21 +39,23 @@ export default function WorkflowShell({
     setSt(loadState(projectId));
   }, [projectId]);
 
+  // All hooks must run unconditionally (before any early return), so derive the
+  // active branch with a safe fallback while state is still loading.
+  const branch = st?.activeBranch ?? "test";
+  const onMain = branch === "main";
+  const host = useMemo(
+    () => createWorkflowHost(projectId, branch, onMain),
+    [projectId, branch, onMain, reload],
+  );
+
   if (!st) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
 
   const isManager = st.role === "manager";
-  const branch = st.activeBranch;
-  const onMain = branch === "main";
   const onTmp = branch.startsWith("tmp-");
   const branchNames = Object.keys(st.branches).sort((a, b) => {
     const order = (n: string) => (n === "main" ? 0 : n === "test" ? 1 : 2);
     return order(a) - order(b) || a.localeCompare(b);
   });
-
-  const host = useMemo(
-    () => createWorkflowHost(projectId, branch, onMain),
-    [projectId, branch, onMain, reload],
-  );
 
   const apply = (next: WorkflowState) => setSt(next);
   const bump = () => setReload((r) => r + 1);
