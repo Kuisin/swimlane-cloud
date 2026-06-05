@@ -49,7 +49,7 @@ function blockMaxTextCols(shape, hasIcon) {
   );
 }
 function PageTriColumnText({ y, width, xPad, left, center, right, fill, fontSize = 11 }) {
-  const fontFamily = "'Shippori Mincho','Noto Serif JP',Georgia,serif";
+  const fontFamily = "'Noto Sans JP','Noto Sans',sans-serif";
   return /* @__PURE__ */ h(Fragment, null, left?.trim() && /* @__PURE__ */ h(
     "text",
     {
@@ -158,7 +158,7 @@ function PrintLayer({
   hasPageFooter,
   height
 }) {
-  const serif = "'Shippori Mincho','Noto Serif JP',Georgia,serif";
+  const serif = "'Noto Sans JP','Noto Sans',sans-serif";
   return /* @__PURE__ */ h(Fragment, null, hasPageHeader && pageHeaderY != null && /* @__PURE__ */ h(
     PageTriColumnText,
     {

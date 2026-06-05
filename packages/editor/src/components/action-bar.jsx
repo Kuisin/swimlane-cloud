@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   Download,
-  FilePlus,
-  FolderPlus,
   GitBranch,
   HelpCircle,
   LayoutTemplate,
@@ -46,6 +44,7 @@ export function ActionBar({
 }) {
   const { t } = useT();
   const [exportOpen, setExportOpen] = useState(false);
+  const [exportMenuPos, setExportMenuPos] = useState(null);
   const exportRef = useRef(null);
 
   useEffect(() => {
@@ -59,19 +58,20 @@ export function ActionBar({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [exportOpen]);
 
+  function handleExportToggle() {
+    if (!exportOpen && exportRef.current) {
+      const rect = exportRef.current.getBoundingClientRect();
+      setExportMenuPos({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setExportOpen((v) => !v);
+  }
+
   return (
     <div className="sw-actionbar">
       <div className="sw-actionbar-left">
-        {canCreate && !readOnly && (
-          <button type="button" className="sw-btn" onClick={() => onNewFile()}>
-            <FilePlus size={14} /> {t("action.newFile")}
-          </button>
-        )}
-        {canMkdir && !readOnly && (
-          <button type="button" className="sw-btn" onClick={() => onNewFolder()}>
-            <FolderPlus size={14} /> {t("action.newFolder")}
-          </button>
-        )}
         <button type="button" className="sw-btn" onClick={onOpenTemplates}>
           <LayoutTemplate size={14} /> {t("action.templates")}
         </button>
@@ -95,12 +95,12 @@ export function ActionBar({
           <button
             type="button"
             className="sw-btn sw-export-toggle"
-            onClick={() => setExportOpen((v) => !v)}
+            onClick={handleExportToggle}
           >
             <Download size={14} /> {t("action.export")} <ChevronDown size={12} />
           </button>
-          {exportOpen && (
-            <div className="sw-export-menu">
+          {exportOpen && exportMenuPos && (
+            <div className="sw-export-menu" style={{ position: "fixed", top: exportMenuPos.top, right: exportMenuPos.right }}>
               <button
                 type="button"
                 className="sw-export-item"
