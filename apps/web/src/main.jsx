@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { Download, Upload, Workflow } from "lucide-react";
 import "@swimlane-cloud/editor/styles.css";
 import { DslEditor } from "@swimlane-cloud/editor";
 import { browserHost } from "./browser-host";
@@ -45,21 +46,24 @@ function App() {
   return (
     <div className="web-shell">
       <header className="web-topbar">
-        <span className="web-topbar__title">Swimlane Editor</span>
+        <span className="web-topbar__title">
+          <Workflow size={16} className="web-topbar__logo" />
+          Swimlane Editor
+        </span>
         <span className="web-topbar__spacer" />
         <button
           type="button"
           className="web-topbar__btn"
           onClick={() => fileInputRef.current?.click()}
         >
-          Import .txt
+          <Upload size={14} /> Import
         </button>
         <button
           type="button"
           className="web-topbar__btn"
           onClick={handleDownloadAll}
         >
-          Download all
+          <Download size={14} /> Download all
         </button>
         <input
           ref={fileInputRef}

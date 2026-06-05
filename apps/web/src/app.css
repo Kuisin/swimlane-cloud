@@ -9,45 +9,63 @@ body,
   display: flex;
   flex-direction: column;
   height: 100vh;
+  /* Match the editor's surface + font so the app reads as one piece. */
+  background: #ffffff;
+  color: #1e293b;
+  font-family: "Noto Sans JP", "Noto Sans", system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
 }
 
 .web-topbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  height: 48px;
+  padding: 0 12px;
   border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
-  font-family:
-    "Noto Sans JP",
-    "Noto Sans",
-    system-ui,
-    -apple-system,
-    sans-serif;
+  background: #ffffff;
 }
 
 .web-topbar__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 600;
   font-size: 14px;
   color: #0f172a;
+}
+
+.web-topbar__logo {
+  color: #2563eb;
 }
 
 .web-topbar__spacer {
   flex: 1;
 }
 
+/* Mirror the editor's .sw-btn so the buttons feel native to the editor. */
 .web-topbar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
   font-size: 13px;
-  padding: 4px 10px;
+  padding: 5px 10px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background: #ffffff;
-  color: #0f172a;
+  color: #334155;
   cursor: pointer;
+  transition:
+    border-color 0.1s ease,
+    color 0.1s ease,
+    background 0.1s ease;
 }
 
 .web-topbar__btn:hover {
-  background: #f1f5f9;
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #2563eb;
 }
 
 .web-editor {

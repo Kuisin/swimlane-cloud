@@ -358,17 +358,22 @@ export function openPR(
   title: string,
 ): WorkflowState {
   const base: "test" | "main" = head.startsWith("tmp-") ? "test" : "main";
+  // Capture any uncommitted work on the head branch first, so the PR (and its
+  // diff/merge) reflects the latest edits and newly-created files.
+  const cur = isBranchDirty(pid, st, head)
+    ? checkpoint(pid, st, head, "Update for pull request")
+    : st;
   const pr: PullRequest = {
     id: genId("pr"),
     title: title || `Merge ${head} into ${base}`,
     head,
     base,
     status: "open",
-    author: st.role,
+    author: cur.role,
     comments: [],
     ts: now(),
   };
-  const next = { ...st, prs: [pr, ...st.prs] };
+  const next = { ...cur, prs: [pr, ...cur.prs] };
   saveState(pid, next);
   return next;
 }

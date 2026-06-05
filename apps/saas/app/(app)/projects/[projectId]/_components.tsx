@@ -453,6 +453,7 @@ export function PrPanel({
   onClose: (id: string) => void;
   onComment: (id: string, text: string) => void;
 }) {
+  const reviewing = reviewPR ? st.prs.find((p) => p.id === reviewPR) ?? null : null;
   if (st.prs.length === 0)
     return (
       <Empty>
@@ -461,6 +462,7 @@ export function PrPanel({
       </Empty>
     );
   return (
+    <>
     <ul className="space-y-3">
       {st.prs.map((pr) => {
         const headFiles = tipFiles(st.branches[pr.head]);
@@ -487,16 +489,16 @@ export function PrPanel({
               <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${badge}`}>{pr.status}</span>
             </div>
 
-            {pr.status === "open" && (
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => onReview(pr.id)}
-                  className="text-xs text-indigo-600 hover:underline"
-                >
-                  {reviewPR === pr.id
-                    ? "Hide diff"
-                    : `Review (${changed.length} file${changed.length === 1 ? "" : "s"})`}
-                </button>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => onReview(pr.id)}
+                className="text-xs text-indigo-600 hover:underline"
+              >
+                {reviewPR === pr.id
+                  ? "Hide files"
+                  : `Review (${changed.length} file${changed.length === 1 ? "" : "s"} changed)`}
+              </button>
+              {pr.status === "open" && (
                 <div className="ml-auto flex items-center gap-2">
                   {canClose && (
                     <button
@@ -517,23 +519,34 @@ export function PrPanel({
                     <span className="text-xs text-neutral-400">Manager merges</span>
                   )}
                 </div>
-              </div>
-            )}
-
-            {reviewPR === pr.id && (
-              <div className="mt-3 space-y-2">
-                {changed.length === 0 && <Empty>No differences.</Empty>}
-                {changed.map((p) => (
-                  <Diff key={p} path={p} before={baseFiles[p] ?? ""} after={headFiles[p] ?? ""} />
-                ))}
-              </div>
-            )}
+              )}
+            </div>
 
             <PrComments pr={pr} role={st.role} onComment={onComment} />
           </li>
         );
       })}
     </ul>
+    {reviewing && (
+      <CommitDetailModal
+        commit={{
+          id: reviewing.id,
+          message: `${reviewing.title}  (${reviewing.head} → ${reviewing.base})`,
+          author: reviewing.author,
+          ts: reviewing.ts,
+          files: tipFiles(st.branches[reviewing.head]),
+        }}
+        parent={{
+          id: `${reviewing.id}_base`,
+          message: "",
+          author: reviewing.author,
+          ts: reviewing.ts,
+          files: tipFiles(st.branches[reviewing.base]),
+        }}
+        onClose={() => onReview(reviewing.id)}
+      />
+    )}
+    </>
   );
 }
 
