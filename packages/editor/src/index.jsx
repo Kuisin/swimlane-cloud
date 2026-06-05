@@ -29,6 +29,7 @@ export {
 } from "./lib/dsl-document.js";
 export { buildFolderTree } from "./lib/folder-tree.js";
 export { parseGuiModel, applyModelEdit } from "./lib/gui-model.js";
+export { extractPartsCode } from "./lib/parts-extract.js";
 
 // i18n (English + Japanese). Consumers can seed the language via
 // <DslEditor options={{ lang: "ja" }} /> or read/switch it with useT().

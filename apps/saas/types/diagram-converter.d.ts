@@ -11,6 +11,7 @@ declare module "@swimlane-cloud/diagram-converter" {
     src: string,
     options?: { theme?: object; themeKey?: string },
   ): TextToSvgResult;
+  export function renderPartsPreviewHtml(code: string, theme: unknown): string;
 }
 
 declare module "@swimlane-cloud/diagram-converter/parser" {
@@ -65,6 +66,11 @@ declare module "@swimlane-cloud/editor" {
   export function applyModelEdit(
     src: string,
     edit: (draft: { rows: GuiRow[]; [k: string]: unknown }) => void,
+  ): string;
+  export function extractPartsCode(
+    src: string,
+    section?: "block" | "prop" | "both",
+    onlyId?: string | null,
   ): string;
 }
 

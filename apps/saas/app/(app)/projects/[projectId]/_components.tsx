@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { textToSvg } from "@swimlane-cloud/diagram-converter";
-import { parseGuiModel, applyModelEdit } from "@swimlane-cloud/editor";
+import { textToSvg, renderPartsPreviewHtml } from "@swimlane-cloud/diagram-converter";
+import { THEMES } from "@swimlane-cloud/diagram-converter/themes";
+import { parseGuiModel, applyModelEdit, extractPartsCode } from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import "@swimlane-cloud/mobile-view/styles.css";
 import {
@@ -568,6 +569,7 @@ export function MobileView({
       {editing && (
         <StepEditModal
           row={editing}
+          dsl={dsl}
           lanes={gui.lanes}
           blocks={gui.blocks}
           props={gui.props}
@@ -583,6 +585,7 @@ const ARROWS = ["solid", "dashed", "none"];
 
 function StepEditModal({
   row,
+  dsl,
   lanes,
   blocks,
   props,
@@ -590,6 +593,7 @@ function StepEditModal({
   onClose,
 }: {
   row: Record<string, unknown>;
+  dsl: string;
   lanes: Array<{ id: string; label?: string }>;
   blocks: Record<string, { id: string; label?: string }>;
   props: Record<string, { id: string; label?: string }>;
@@ -646,55 +650,15 @@ function StepEditModal({
               className="sw-mf"
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Block style">
-              <select value={blockRef} onChange={(e) => setBlockRef(e.target.value)} className="sw-mf">
-                <option value="">(none)</option>
-                {Object.values(blocks).map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.label || b.id}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Arrow">
-              <select value={arrowLine} onChange={(e) => setArrowLine(e.target.value)} className="sw-mf">
-                {ARROWS.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
+          <Field label="Block style">
+            <BlockPicker value={blockRef} blocks={blocks} dsl={dsl} onChange={setBlockRef} />
+          </Field>
+          <Field label="Arrow">
+            <ArrowPicker value={arrowLine} onChange={setArrowLine} />
+          </Field>
           {propList.length > 0 && (
             <Field label="Props">
-              <div className="flex flex-wrap gap-2">
-                {propList.map((p) => {
-                  const on = sel.has(p.id);
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() =>
-                        setSel((s) => {
-                          const n = new Set(s);
-                          if (n.has(p.id)) n.delete(p.id);
-                          else n.add(p.id);
-                          return n;
-                        })
-                      }
-                      className={`rounded-full border px-3 py-1 text-xs ${
-                        on
-                          ? "border-indigo-600 bg-indigo-600 text-white"
-                          : "border-neutral-300 text-neutral-600"
-                      }`}
-                    >
-                      {p.label || p.id}
-                    </button>
-                  );
-                })}
-              </div>
+              <PropsPicker value={sel} props={props} dsl={dsl} onChange={setSel} />
             </Field>
           )}
         </div>
@@ -772,4 +736,230 @@ export function MobilePrompt({
 export function isMobileDevice(): boolean {
   if (typeof window === "undefined") return false;
   return window.matchMedia?.("(max-width: 768px)").matches || window.innerWidth <= 768;
+}
+
+/* ---- mobile preview-popup pickers (block / arrow / props) ---- */
+
+function PartsPreview({ dsl, section, id }: { dsl: string; section: "block" | "prop"; id: string }) {
+  const html = useMemo(() => {
+    try {
+      const code = extractPartsCode(dsl, section, id);
+      if (!code) return "";
+      return renderPartsPreviewHtml(code, THEMES.basic);
+    } catch {
+      return "";
+    }
+  }, [dsl, section, id]);
+  if (!html) return null;
+  return (
+    <div
+      className="max-h-16 overflow-hidden [&_svg]:h-auto [&_svg]:max-h-14 [&_svg]:max-w-full"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
+function ArrowPreview({ kind }: { kind: string }) {
+  if (kind === "none") return <span className="text-xs text-neutral-400">no connector</span>;
+  return (
+    <svg width="96" height="14" viewBox="0 0 96 14" aria-hidden>
+      <line
+        x1="2"
+        y1="7"
+        x2="84"
+        y2="7"
+        stroke="#475569"
+        strokeWidth="2"
+        strokeDasharray={kind === "dashed" ? "7 5" : undefined}
+      />
+      <path d="M84 7 L76 3 L76 11 Z" fill="#475569" />
+    </svg>
+  );
+}
+
+function PickerTrigger({
+  label,
+  preview,
+  onClick,
+}: {
+  label: string;
+  preview?: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-left text-sm hover:border-indigo-400"
+    >
+      {preview && <span className="shrink-0">{preview}</span>}
+      <span className="flex-1 truncate">{label}</span>
+      <span className="text-neutral-400">▸</span>
+    </button>
+  );
+}
+
+function PickerSheet({
+  title,
+  onClose,
+  onDone,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  onDone?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40 sm:items-center">
+      <div className="flex max-h-[80vh] w-full max-w-md flex-col rounded-t-2xl bg-white sm:rounded-2xl">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+          <h3 className="font-semibold">{title}</h3>
+          <button onClick={onDone ?? onClose} className="text-sm font-medium text-indigo-600">
+            {onDone ? "Done" : "Close"}
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-2 overflow-auto p-3">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function PickerTile({
+  selected,
+  label,
+  preview,
+  onClick,
+}: {
+  selected: boolean;
+  label: string;
+  preview?: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 rounded-lg border p-2 text-left text-sm ${
+        selected ? "border-indigo-600 bg-indigo-50" : "border-neutral-200"
+      }`}
+    >
+      <span className="flex h-16 w-24 shrink-0 items-center justify-center overflow-hidden rounded bg-neutral-50">
+        {preview ?? <span className="text-xs text-neutral-400">—</span>}
+      </span>
+      <span className="flex-1 truncate">{label}</span>
+      {selected && <span className="text-indigo-600">✓</span>}
+    </button>
+  );
+}
+
+function BlockPicker({
+  value,
+  blocks,
+  dsl,
+  onChange,
+}: {
+  value: string;
+  blocks: Record<string, { id: string; label?: string }>;
+  dsl: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = value ? blocks[value]?.label || value : "(none)";
+  const opts = [
+    { id: "", label: "(none)" },
+    ...Object.values(blocks).map((b) => ({ id: b.id, label: b.label || b.id })),
+  ];
+  return (
+    <>
+      <PickerTrigger
+        label={current}
+        preview={value ? <PartsPreview dsl={dsl} section="block" id={value} /> : undefined}
+        onClick={() => setOpen(true)}
+      />
+      {open && (
+        <PickerSheet title="Block style" onClose={() => setOpen(false)}>
+          {opts.map((o) => (
+            <PickerTile
+              key={o.id || "none"}
+              selected={o.id === value}
+              label={o.label}
+              preview={o.id ? <PartsPreview dsl={dsl} section="block" id={o.id} /> : undefined}
+              onClick={() => {
+                onChange(o.id);
+                setOpen(false);
+              }}
+            />
+          ))}
+        </PickerSheet>
+      )}
+    </>
+  );
+}
+
+function ArrowPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <PickerTrigger label={value} preview={<ArrowPreview kind={value} />} onClick={() => setOpen(true)} />
+      {open && (
+        <PickerSheet title="Arrow" onClose={() => setOpen(false)}>
+          {ARROWS.map((a) => (
+            <PickerTile
+              key={a}
+              selected={a === value}
+              label={a}
+              preview={<ArrowPreview kind={a} />}
+              onClick={() => {
+                onChange(a);
+                setOpen(false);
+              }}
+            />
+          ))}
+        </PickerSheet>
+      )}
+    </>
+  );
+}
+
+function PropsPicker({
+  value,
+  props,
+  dsl,
+  onChange,
+}: {
+  value: Set<string>;
+  props: Record<string, { id: string; label?: string }>;
+  dsl: string;
+  onChange: (v: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const list = Object.values(props);
+  const count = value.size;
+  return (
+    <>
+      <PickerTrigger
+        label={count ? `${count} selected` : "(none)"}
+        onClick={() => setOpen(true)}
+      />
+      {open && (
+        <PickerSheet title="Props" onClose={() => setOpen(false)} onDone={() => setOpen(false)}>
+          {list.map((p) => (
+            <PickerTile
+              key={p.id}
+              selected={value.has(p.id)}
+              label={p.label || p.id}
+              preview={<PartsPreview dsl={dsl} section="prop" id={p.id} />}
+              onClick={() => {
+                const n = new Set(value);
+                if (n.has(p.id)) n.delete(p.id);
+                else n.add(p.id);
+                onChange(n);
+              }}
+            />
+          ))}
+        </PickerSheet>
+      )}
+    </>
+  );
 }
