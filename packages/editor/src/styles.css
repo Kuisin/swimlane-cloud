@@ -21,6 +21,10 @@
   --sw-amber-bg: #fffbeb;
   --sw-danger: #dc2626;
   --sw-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* Text-editor font: HackGen first (a JP-friendly coding font), then fall
+     back to the standard mono stack for users who don't have it / the webfont. */
+  --sw-code: "HackGen Console NF", "HackGenConsole NF", "HackGen Console",
+    "HackGenConsole", "HackGen35 Console NF", "HackGen", "HackGen35", var(--sw-mono);
 
   display: flex;
   height: 100%;
@@ -343,7 +347,7 @@
   outline: none;
   resize: none;
   padding: 12px 14px;
-  font-family: var(--sw-mono);
+  font-family: var(--sw-code);
   font-size: 13px;
   line-height: 1.6;
   color: var(--sw-text);

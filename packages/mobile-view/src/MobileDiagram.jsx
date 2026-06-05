@@ -1,11 +1,22 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Diamond,
+  GitFork,
+  Pencil,
+  Repeat,
+  GitMerge,
+  Square,
+} from "lucide-react";
 import { buildMobileTree, dslToMobile, roleColor } from "./mobile-model.js";
 
 /**
  * Mobile-friendly, vertical, card-based render of a kai-swimlane diagram.
- * Blocks are collapsed by default (tap to expand for detail). Pass `editable`
- * + `onEditStep(stepIndex)` to show a per-step edit button; the host owns the
- * actual edit modal + DSL write-back. Pass `dsl` (string) or a parsed `model`.
+ * Blocks collapse by default (tap to expand). `editable` + `onEditStep` show a
+ * per-step edit button; the host owns the edit modal + DSL write-back.
  */
 export function MobileDiagram({ dsl, model, editable = false, onEditStep }) {
   const { tree, laneMap } = useMemo(() => {
@@ -14,12 +25,34 @@ export function MobileDiagram({ dsl, model, editable = false, onEditStep }) {
     return { tree: t, laneMap: lm };
   }, [dsl, model]);
 
-  const ctx = { laneMap, tree, editable, onEditStep };
+  // Expand/collapse-all signal: bumping `n` re-syncs every card's open state.
+  const [signal, setSignal] = useState({ open: false, n: 0 });
+  const ctx = { laneMap, tree, editable, onEditStep, signal };
   const hasError = tree.errors?.length > 0;
 
   return (
     <div className="sw-m">
-      {tree.title && <h1 className="sw-m-title">{tree.title}</h1>}
+      <div className="sw-m-bar">
+        {tree.title ? <h1 className="sw-m-title">{tree.title}</h1> : <span />}
+        {tree.nodes.length > 0 && (
+          <div className="sw-m-bar-actions">
+            <button
+              type="button"
+              className="sw-m-tool"
+              onClick={() => setSignal((s) => ({ open: true, n: s.n + 1 }))}
+            >
+              <ChevronsUpDown size={14} /> Expand
+            </button>
+            <button
+              type="button"
+              className="sw-m-tool"
+              onClick={() => setSignal((s) => ({ open: false, n: s.n + 1 }))}
+            >
+              <ChevronsDownUp size={14} /> Collapse
+            </button>
+          </div>
+        )}
+      </div>
       {hasError && (
         <div className="sw-m-error">
           {tree.errors.length} parse issue{tree.errors.length === 1 ? "" : "s"} —
@@ -57,22 +90,40 @@ function Node({ node, ctx }) {
     case "group":
       return <GroupCard node={node} ctx={ctx} />;
     case "loop":
-      return <span className="sw-m-pill sw-m-pill-loop">⟳ loop</span>;
+      return (
+        <span className="sw-m-pill sw-m-pill-loop">
+          <Repeat size={13} /> loop
+        </span>
+      );
     case "merge":
       return (
-        <span className="sw-m-pill sw-m-pill-merge">merge → {node.target || "?"}</span>
+        <span className="sw-m-pill sw-m-pill-merge">
+          <GitMerge size={13} /> {node.target || "?"}
+        </span>
       );
     default:
       return null;
   }
 }
 
+function useSignalOpen(ctx) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    setOpen(ctx.signal.open);
+  }, [ctx.signal.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  return [open, setOpen];
+}
+
 function Chevron({ open }) {
-  return <span className="sw-m-chevron">{open ? "▾" : "▸"}</span>;
+  return open ? (
+    <ChevronDown size={14} className="sw-m-chevron" />
+  ) : (
+    <ChevronRight size={14} className="sw-m-chevron" />
+  );
 }
 
 function StepCard({ node, ctx }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useSignalOpen(ctx);
   const lane = node.role ? ctx.laneMap.get(node.role) : null;
   const color = lane?.color || "#94a3b8";
   const block = node.blockRef ? ctx.tree.blocks?.[node.blockRef] : null;
@@ -91,7 +142,6 @@ function StepCard({ node, ctx }) {
           {hasDetail ? <Chevron open={open} /> : <span className="sw-m-chevron" />}
           {lane && (
             <span className="sw-m-chip" style={{ background: color }}>
-              {lane.icon ? `${lane.icon} ` : ""}
               {lane.label}
             </span>
           )}
@@ -107,7 +157,7 @@ function StepCard({ node, ctx }) {
               ctx.onEditStep(node.stepIndex);
             }}
           >
-            ✎
+            <Pencil size={15} />
           </button>
         )}
       </div>
@@ -137,7 +187,7 @@ function StepCard({ node, ctx }) {
 }
 
 function BranchCard({ node, ctx }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useSignalOpen(ctx);
   return (
     <div className="sw-m-branch">
       <button
@@ -147,7 +197,8 @@ function BranchCard({ node, ctx }) {
         aria-expanded={open}
       >
         <Chevron open={open} />
-        <span>{node.parallel ? "▥ parallel" : "◇ if"}</span>
+        {node.parallel ? <GitFork size={14} /> : <Diamond size={14} />}
+        <span>{node.parallel ? "parallel" : "if"}</span>
         {!node.parallel && node.cond && (
           <span className="sw-m-branch-cond">{node.cond}</span>
         )}
@@ -180,7 +231,7 @@ function caseLabel(branch, c, i) {
 }
 
 function GroupCard({ node, ctx }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useSignalOpen(ctx);
   return (
     <div className="sw-m-group">
       <button
@@ -190,7 +241,8 @@ function GroupCard({ node, ctx }) {
         aria-expanded={open}
       >
         <Chevron open={open} />
-        <span>{node.mode === "section" ? "▦ section" : "▸ sub-branch"}</span>
+        <Square size={13} />
+        <span>{node.mode === "section" ? "section" : "sub-branch"}</span>
         {node.name && <span className="sw-m-group-name">{node.name}</span>}
         <span className="sw-m-count">{node.children.length}</span>
       </button>

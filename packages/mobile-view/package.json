@@ -17,10 +17,12 @@
     "@swimlane-cloud/diagram-converter": "workspace:*"
   },
   "peerDependencies": {
+    "lucide-react": ">=0.4",
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19"
   },
   "devDependencies": {
+    "lucide-react": "^0.469.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "vitest": "^3.2.4"
