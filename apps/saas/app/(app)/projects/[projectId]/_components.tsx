@@ -320,18 +320,22 @@ export function PrPanel({
   reviewPR,
   onReview,
   onMerge,
+  onClose,
+  onComment,
 }: {
   st: WorkflowState;
   isManager: boolean;
   reviewPR: string | null;
   onReview: (id: string) => void;
   onMerge: (id: string) => void;
+  onClose: (id: string) => void;
+  onComment: (id: string, text: string) => void;
 }) {
   if (st.prs.length === 0)
     return (
       <Empty>
-        No pull requests yet. On the Edit page, start an edit branch and click
-        “Open pull request”.
+        No pull requests yet. On the Edit page, open a PR from a tmp-* branch
+        (→ test) or from test (→ main).
       </Empty>
     );
   return (
@@ -342,6 +346,13 @@ export function PrPanel({
         const changed = Object.keys({ ...headFiles, ...baseFiles }).filter(
           (p) => (headFiles[p] ?? "") !== (baseFiles[p] ?? ""),
         );
+        const canClose = pr.status === "open" && (isManager || st.role === pr.author);
+        const badge =
+          pr.status === "merged"
+            ? "bg-purple-100 text-purple-700"
+            : pr.status === "closed"
+              ? "bg-neutral-200 text-neutral-600"
+              : "bg-amber-100 text-amber-700";
         return (
           <li key={pr.id} className="rounded-md border border-neutral-200 p-3">
             <div className="flex items-center justify-between gap-2">
@@ -351,18 +362,11 @@ export function PrPanel({
                   {pr.head} → {pr.base} · opened by {pr.author}
                 </div>
               </div>
-              <span
-                className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${
-                  pr.status === "merged"
-                    ? "bg-purple-100 text-purple-700"
-                    : "bg-amber-100 text-amber-700"
-                }`}
-              >
-                {pr.status}
-              </span>
+              <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${badge}`}>{pr.status}</span>
             </div>
+
             {pr.status === "open" && (
-              <div className="mt-2 flex items-center gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => onReview(pr.id)}
                   className="text-xs text-indigo-600 hover:underline"
@@ -371,39 +375,96 @@ export function PrPanel({
                     ? "Hide diff"
                     : `Review (${changed.length} file${changed.length === 1 ? "" : "s"})`}
                 </button>
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-2">
+                  {canClose && (
+                    <button
+                      onClick={() => onClose(pr.id)}
+                      className="rounded border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-50"
+                    >
+                      Close
+                    </button>
+                  )}
                   {isManager ? (
                     <button
                       onClick={() => onMerge(pr.id)}
                       className="rounded bg-purple-600 px-3 py-1 text-xs font-medium text-white hover:bg-purple-500"
                     >
-                      Merge to test
+                      Merge → {pr.base}
                     </button>
                   ) : (
-                    <span className="text-xs text-neutral-400">
-                      Switch to Manager to merge
-                    </span>
+                    <span className="text-xs text-neutral-400">Manager merges</span>
                   )}
                 </div>
               </div>
             )}
+
             {reviewPR === pr.id && (
               <div className="mt-3 space-y-2">
                 {changed.length === 0 && <Empty>No differences.</Empty>}
                 {changed.map((p) => (
-                  <Diff
-                    key={p}
-                    path={p}
-                    before={baseFiles[p] ?? ""}
-                    after={headFiles[p] ?? ""}
-                  />
+                  <Diff key={p} path={p} before={baseFiles[p] ?? ""} after={headFiles[p] ?? ""} />
                 ))}
               </div>
             )}
+
+            <PrComments pr={pr} role={st.role} onComment={onComment} />
           </li>
         );
       })}
     </ul>
+  );
+}
+
+function PrComments({
+  pr,
+  role,
+  onComment,
+}: {
+  pr: WorkflowState["prs"][number];
+  role: string;
+  onComment: (id: string, text: string) => void;
+}) {
+  const [text, setText] = useState("");
+  const comments = pr.comments ?? [];
+  return (
+    <div className="mt-3 border-t border-neutral-100 pt-2">
+      {comments.length > 0 && (
+        <ul className="mb-2 space-y-1.5">
+          {comments.map((c, i) => (
+            <li key={i} className="rounded-md bg-neutral-50 px-2 py-1.5 text-sm">
+              <span className="mr-2 text-xs font-medium text-neutral-500">{c.author}</span>
+              {c.text}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex items-center gap-2">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && text.trim()) {
+              onComment(pr.id, text);
+              setText("");
+            }
+          }}
+          placeholder={`Comment as ${role}…`}
+          className="flex-1 rounded-md border border-neutral-300 px-2 py-1 text-sm"
+        />
+        <button
+          onClick={() => {
+            if (text.trim()) {
+              onComment(pr.id, text);
+              setText("");
+            }
+          }}
+          disabled={!text.trim()}
+          className="rounded-md bg-neutral-800 px-3 py-1 text-xs font-medium text-white disabled:opacity-40"
+        >
+          Comment
+        </button>
+      </div>
+    </div>
   );
 }
 

@@ -25,15 +25,22 @@ export interface Branch {
   base: string | null;
   commits: Commit[]; // oldest → newest; tip = last
 }
+export interface PRComment {
+  author: Role;
+  text: string;
+  ts: number;
+}
 export interface PullRequest {
   id: string;
   title: string;
   head: string;
-  base: string;
-  status: "open" | "merged";
+  base: "test" | "main";
+  status: "open" | "merged" | "closed";
   author: Role;
+  comments: PRComment[];
   ts: number;
   mergedTs?: number;
+  closedTs?: number;
 }
 export interface Version {
   id: string;
@@ -100,9 +107,12 @@ export function primaryPath(files: Files): string | null {
   return txt[0] ?? null;
 }
 
-/** A branch is locked while it has an open pull request. */
+/** A tmp-* edit branch is locked while it has an open pull request. */
 export function isLocked(st: WorkflowState, branch: string): boolean {
-  return st.prs.some((p) => p.status === "open" && p.head === branch);
+  return (
+    branch.startsWith("tmp-") &&
+    st.prs.some((p) => p.status === "open" && p.head === branch)
+  );
 }
 
 /**
@@ -277,22 +287,56 @@ export function checkpoint(
   return next;
 }
 
+/** Open a PR. tmp-* → test; test → main. Any role may open one. */
 export function openPR(
   pid: string,
   st: WorkflowState,
   head: string,
   title: string,
 ): WorkflowState {
+  const base: "test" | "main" = head.startsWith("tmp-") ? "test" : "main";
   const pr: PullRequest = {
     id: genId("pr"),
-    title: title || `Merge ${head} into test`,
+    title: title || `Merge ${head} into ${base}`,
     head,
-    base: "test",
+    base,
     status: "open",
     author: st.role,
+    comments: [],
     ts: now(),
   };
   const next = { ...st, prs: [pr, ...st.prs] };
+  saveState(pid, next);
+  return next;
+}
+
+export function closePR(pid: string, st: WorkflowState, prId: string): WorkflowState {
+  const next: WorkflowState = {
+    ...st,
+    prs: st.prs.map((p) =>
+      p.id === prId && p.status === "open" ? { ...p, status: "closed", closedTs: now() } : p,
+    ),
+  };
+  saveState(pid, next);
+  return next;
+}
+
+export function addPRComment(
+  pid: string,
+  st: WorkflowState,
+  prId: string,
+  text: string,
+): WorkflowState {
+  const t = text.trim();
+  if (!t) return st;
+  const next: WorkflowState = {
+    ...st,
+    prs: st.prs.map((p) =>
+      p.id === prId
+        ? { ...p, comments: [...(p.comments ?? []), { author: st.role, text: t, ts: now() }] }
+        : p,
+    ),
+  };
   saveState(pid, next);
   return next;
 }
@@ -312,20 +356,24 @@ export function mergePR(pid: string, st: WorkflowState, prId: string): WorkflowS
   };
   setWorking(pid, pr.base, { ...mergeCommit.files });
 
-  // Close the edit branch after merge: drop it from branches + working copies.
   const branches = {
     ...st.branches,
     [pr.base]: { ...base, commits: [...base.commits, mergeCommit] },
   };
-  delete branches[pr.head];
-  const w = loadWorking(pid);
-  delete w[pr.head];
-  saveWorking(pid, w);
+  let activeBranch = st.activeBranch;
+  // Only tmp-* edit branches are closed/deleted after merge; test persists.
+  if (pr.head.startsWith("tmp-")) {
+    delete branches[pr.head];
+    const w = loadWorking(pid);
+    delete w[pr.head];
+    saveWorking(pid, w);
+    if (activeBranch === pr.head) activeBranch = "test";
+  }
 
   const next: WorkflowState = {
     ...st,
     branches,
-    activeBranch: st.activeBranch === pr.head ? "test" : st.activeBranch,
+    activeBranch,
     prs: st.prs.map((p) =>
       p.id === prId ? { ...p, status: "merged", mergedTs: now() } : p,
     ),
@@ -368,39 +416,24 @@ export function flagVersion(
   return next;
 }
 
-/** Admin/manager: merge the current test tip straight into main. */
-export function mergeTestToMain(pid: string, st: WorkflowState): WorkflowState {
-  const test = st.branches.test;
-  const main = st.branches.main;
-  if (!test || !main) return st;
-  const commit: Commit = {
-    id: genId("c"),
-    message: "Merge test into main",
-    author: "manager",
-    ts: now(),
-    files: { ...tipFiles(test) },
-  };
-  setWorking(pid, "main", { ...commit.files });
-  const next: WorkflowState = {
-    ...st,
-    branches: {
-      ...st.branches,
-      main: { ...main, commits: [...main.commits, commit] },
-    },
-  };
-  saveState(pid, next);
-  return next;
-}
+const normDsl = (s: string | undefined) =>
+  (s ?? "").replace(/\r\n/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\s+$/, "");
 
-/** True when a branch's working copy differs from its last commit (uncommitted). */
+/**
+ * True when a branch's working copy meaningfully differs from its last commit.
+ * Ignores whitespace-only diffs, non-.txt entries, and an uninitialized working
+ * copy (which otherwise looked permanently "unsaved").
+ */
 export function isBranchDirty(pid: string, st: WorkflowState, branch: string): boolean {
   const b = st.branches[branch];
   if (!b) return false;
   const working = getWorking(pid, branch);
+  const wKeys = Object.keys(working).filter((k) => k.endsWith(".txt"));
+  if (wKeys.length === 0) return false; // working not initialized → read from tip
   const tip = tipFiles(b);
-  const keys = new Set([...Object.keys(working), ...Object.keys(tip)]);
+  const keys = new Set([...wKeys, ...Object.keys(tip).filter((k) => k.endsWith(".txt"))]);
   for (const k of keys) {
-    if ((working[k] ?? "") !== (tip[k] ?? "")) return true;
+    if (normDsl(working[k]) !== normDsl(tip[k])) return true;
   }
   return false;
 }

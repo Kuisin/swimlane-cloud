@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { mergePR } from "@/lib/demo-workflow";
+import { mergePR, closePR, addPRComment } from "@/lib/demo-workflow";
 import { ProjectNav, PrPanel, useProject } from "../_components";
 
 export default function PullsPage() {
@@ -27,7 +27,7 @@ export default function PullsPage() {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Pull requests</h2>
             <span className="text-xs text-neutral-500">
-              {isManager ? "You can merge open PRs into test." : "Switch to Manager to merge."}
+              {isManager ? "You can merge or close PRs." : "Switch to Manager to merge."}
             </span>
           </div>
           <PrPanel
@@ -39,6 +39,8 @@ export default function PullsPage() {
               setSt(mergePR(projectId, st, id));
               setReviewPR(null);
             }}
+            onClose={(id) => setSt(closePR(projectId, st, id))}
+            onComment={(id, text) => setSt(addPRComment(projectId, st, id, text))}
           />
         </div>
       </div>

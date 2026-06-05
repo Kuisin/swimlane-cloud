@@ -2,15 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  Check,
-  GitMerge,
-  GitPullRequest,
-  Lock,
-  Monitor,
-  Plus,
-  Smartphone,
-} from "lucide-react";
+import { Check, GitPullRequest, Lock, Monitor, Plus, Smartphone } from "lucide-react";
 import { DslEditor } from "@swimlane-cloud/editor";
 import "@swimlane-cloud/editor/styles.css";
 import {
@@ -18,7 +10,6 @@ import {
   startEdit,
   checkpoint,
   openPR,
-  mergeTestToMain,
   isBranchDirty,
   createWorkflowHost,
   canEditBranch,
@@ -138,7 +129,6 @@ function EditPageInner() {
 
   if (!st) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
 
-  const isManager = role === "manager";
   const onTmp = branch.startsWith("tmp-");
   const locked = isLocked(st, branch);
   const lockReason = editLockReason(st, branch, role);
@@ -158,16 +148,14 @@ function EditPageInner() {
     if (msg === null) return;
     setSt(checkpoint(projectId, st, branch, msg));
   };
+  const prBase = onTmp ? "test" : branch === "test" ? "main" : null;
+  const canOpenPR = prBase !== null && !locked;
   const doOpenPR = () => {
-    const title = window.prompt("Pull request title:", `Merge ${branch} into test`);
+    if (!prBase) return;
+    const title = window.prompt("Pull request title:", `Merge ${branch} into ${prBase}`);
     if (title === null) return;
     setSt(openPR(projectId, st, branch, title));
-    window.alert("Pull request opened. The branch is now locked until a Manager merges it.");
-  };
-  const doMergeMain = () => {
-    if (!window.confirm("Merge the current test branch into main (production)?")) return;
-    setSt(mergeTestToMain(projectId, st));
-    setReload((r) => r + 1);
+    window.alert(`Pull request opened (${branch} → ${prBase}). A Manager reviews and merges it.`);
   };
 
   const statusLabel = onMain
@@ -214,22 +202,17 @@ function EditPageInner() {
         </Action>
         <Action
           onClick={doOpenPR}
-          disabled={!onTmp || locked}
+          disabled={!canOpenPR}
           title={
-            !onTmp
-              ? "Open PRs from a tmp-* edit branch"
+            prBase === null
+              ? "Open a PR from a tmp-* branch (→ test) or from test (→ main)"
               : locked
                 ? "A pull request is already open for this branch"
                 : undefined
           }
         >
-          <GitPullRequest size={14} /> Open PR
+          <GitPullRequest size={14} /> {prBase ? `Open PR → ${prBase}` : "Open PR"}
         </Action>
-        {isManager && branch === "test" && (
-          <Action onClick={doMergeMain} title="Admin: merge test into main">
-            <GitMerge size={14} /> Merge → main
-          </Action>
-        )}
         <Action onClick={toggleView}>
           {mobile ? (
             <>
