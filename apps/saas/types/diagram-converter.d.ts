@@ -72,6 +72,16 @@ declare module "@swimlane-cloud/editor" {
     section?: "block" | "prop" | "both",
     onlyId?: string | null,
   ): string;
+  export function findAdjacentStepIndex(
+    rows: GuiRow[],
+    rowIndex: number,
+    direction: "up" | "down",
+  ): number;
+  export function moveRow(
+    rows: GuiRow[],
+    from: number,
+    to: number,
+  ): { rows: GuiRow[]; index: number };
 }
 
 declare module "@swimlane-cloud/editor/styles.css";

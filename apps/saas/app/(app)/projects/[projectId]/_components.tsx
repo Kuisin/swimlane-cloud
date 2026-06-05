@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import {
+  ArrowDown,
+  ArrowUp,
   Check,
   ChevronDown,
   ChevronRight,
@@ -15,7 +17,13 @@ import {
 } from "lucide-react";
 import { textToSvg, renderPartsPreviewHtml } from "@swimlane-cloud/diagram-converter";
 import { THEMES } from "@swimlane-cloud/diagram-converter/themes";
-import { parseGuiModel, applyModelEdit, extractPartsCode } from "@swimlane-cloud/editor";
+import {
+  parseGuiModel,
+  applyModelEdit,
+  extractPartsCode,
+  findAdjacentStepIndex,
+  moveRow,
+} from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import "@swimlane-cloud/mobile-view/styles.css";
 import {
@@ -677,6 +685,21 @@ export function MobileView({
     setEditStep(null);
   };
 
+  const editRowIndex = editStep != null ? nthStepRowIndex(gui.rows, editStep) : -1;
+  const canMoveUp = editRowIndex >= 0 && findAdjacentStepIndex(gui.rows, editRowIndex, "up") >= 0;
+  const canMoveDown = editRowIndex >= 0 && findAdjacentStepIndex(gui.rows, editRowIndex, "down") >= 0;
+  const moveStep = (dir: "up" | "down") => {
+    if (editStep == null) return;
+    const next = applyModelEdit(dsl, (draft) => {
+      const i = nthStepRowIndex(draft.rows, editStep);
+      const adj = findAdjacentStepIndex(draft.rows, i, dir);
+      if (i >= 0 && adj >= 0) draft.rows = moveRow(draft.rows, i, adj).rows;
+    });
+    setDsl(next);
+    onSave?.(active, next);
+    setEditStep(dir === "up" ? Math.max(0, editStep - 1) : editStep + 1);
+  };
+
   return (
     <div className="flex h-full flex-col bg-neutral-100">
       {paths.length > 0 && (
@@ -719,6 +742,9 @@ export function MobileView({
           onSave={applyPatch}
           onClose={() => setEditStep(null)}
           onDelete={deleteStep}
+          onMove={moveStep}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
         />
       )}
       {showFiles && (
@@ -792,6 +818,9 @@ function StepEditModal({
   onSave,
   onClose,
   onDelete,
+  onMove,
+  canMoveUp,
+  canMoveDown,
 }: {
   row: Record<string, unknown>;
   dsl: string;
@@ -801,6 +830,9 @@ function StepEditModal({
   onSave: (patch: Record<string, unknown>) => void;
   onClose: () => void;
   onDelete?: () => void;
+  onMove?: (dir: "up" | "down") => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }) {
   const [role, setRole] = useState(String(row.role ?? ""));
   const [text, setText] = useState(String(row.text ?? ""));
@@ -849,6 +881,29 @@ function StepEditModal({
   return (
     <Modal title="Edit step" onClose={onClose} z="z-[60]" footer={footer}>
       <div className="space-y-3">
+        {onMove && (
+          <div className="flex items-center justify-between rounded-lg bg-neutral-50 px-3 py-2">
+            <span className="text-xs font-medium text-neutral-500">Move position</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onMove("up")}
+                disabled={!canMoveUp}
+                title="Move up"
+                className="rounded-md border border-neutral-300 bg-white p-1.5 text-neutral-600 hover:border-indigo-400 disabled:opacity-40"
+              >
+                <ArrowUp size={16} />
+              </button>
+              <button
+                onClick={() => onMove("down")}
+                disabled={!canMoveDown}
+                title="Move down"
+                className="rounded-md border border-neutral-300 bg-white p-1.5 text-neutral-600 hover:border-indigo-400 disabled:opacity-40"
+              >
+                <ArrowDown size={16} />
+              </button>
+            </div>
+          </div>
+        )}
         <Field label="Role (lane)">
             <select value={role} onChange={(e) => setRole(e.target.value)} className="sw-mf">
               {!role && <option value="">(choose a role)</option>}

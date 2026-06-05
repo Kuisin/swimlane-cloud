@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   rowBadgeLabel,
   rowBadgeKind,
-  rowLaneLabel,
+  rowLaneInfo,
   rowSummaryText,
   rowStepMeta,
   rowListIndentDepth,
@@ -40,7 +40,7 @@ export function FlowStepList({ rows, lanes, selectedIndex, lockedRows, canReorde
     <ul className="sw-flow-list">
       {rows.map((row, index) => {
         const locked = lockedRows?.has(index);
-        const lane = rowLaneLabel(row, lanes, t);
+        const lane = rowLaneInfo(row, lanes, t);
         const meta = rowStepMeta(row);
         const isDragging = dragIndex === index;
         const isOver = overIndex === index && validTarget(index);
@@ -81,7 +81,15 @@ export function FlowStepList({ rows, lanes, selectedIndex, lockedRows, canReorde
             >
               {rowBadgeLabel(row, t)}
             </span>
-            {lane && <span className="sw-flow-lane">{lane}</span>}
+            {lane && (
+              <span
+                className="sw-flow-lane"
+                style={{ background: lane.bg, color: lane.fg }}
+                title={lane.label}
+              >
+                {lane.label}
+              </span>
+            )}
             <span className="sw-flow-summary">{rowSummaryText(row, lanes, t)}</span>
             {meta && <span className="sw-flow-meta">{meta}</span>}
           </li>

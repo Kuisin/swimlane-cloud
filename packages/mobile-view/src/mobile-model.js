@@ -40,6 +40,36 @@ export function roleColor(lane) {
   return toColor(lane?.bg) || hashColor(lane?.id || "role");
 }
 
+/** Readable text color (dark/light) for a given background color. */
+export function contrastText(color) {
+  const hsl = String(color).match(/hsl\(\s*\d+\s+\d+%\s+(\d+)%/);
+  if (hsl) return Number(hsl[1]) > 62 ? "#111827" : "#ffffff";
+  let hex = String(color).replace("#", "");
+  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return "#ffffff";
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? "#111827" : "#ffffff";
+}
+
+/** Truncate by fullwidth units: CJK = 1, others = 0.5; default cap 4 (≈4 JP chars). */
+export function truncateFullwidth(s, max = 4) {
+  const str = String(s ?? "");
+  let w = 0;
+  let out = "";
+  for (const ch of str) {
+    const fw = /[　-〿぀-ヿ㐀-鿿＀-￯가-힯]/.test(ch)
+      ? 1
+      : 0.5;
+    if (w + fw > max) return `${out}…`;
+    w += fw;
+    out += ch;
+  }
+  return out;
+}
+
 function stepNode(row, stepIndex) {
   return {
     type: "step",

@@ -121,13 +121,14 @@
 }
 .sw-m-edit {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--m-line);
   background: #fff;
   border-radius: 9px;
-  font-size: 15px;
-  line-height: 1;
   color: var(--m-muted);
   cursor: pointer;
 }

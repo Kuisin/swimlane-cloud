@@ -11,7 +11,13 @@ import {
   GitMerge,
   Square,
 } from "lucide-react";
-import { buildMobileTree, dslToMobile, roleColor } from "./mobile-model.js";
+import {
+  buildMobileTree,
+  dslToMobile,
+  roleColor,
+  contrastText,
+  truncateFullwidth,
+} from "./mobile-model.js";
 
 /**
  * Mobile-friendly, vertical, card-based render of a kai-swimlane diagram.
@@ -141,8 +147,12 @@ function StepCard({ node, ctx }) {
         >
           {hasDetail ? <Chevron open={open} /> : <span className="sw-m-chevron" />}
           {lane && (
-            <span className="sw-m-chip" style={{ background: color }}>
-              {lane.label}
+            <span
+              className="sw-m-chip"
+              style={{ background: color, color: contrastText(color) }}
+              title={lane.label}
+            >
+              {truncateFullwidth(lane.label, 4)}
             </span>
           )}
           <span className="sw-m-text">{node.text || "(no text)"}</span>

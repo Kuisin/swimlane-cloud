@@ -281,6 +281,57 @@ function laneLabel(lanes, roleId, t = defaultT) {
   return lane?.label || roleId;
 }
 
+const NAMED_LANE_COLORS = {
+  blue: "#2563eb", green: "#16a34a", red: "#dc2626", orange: "#ea580c",
+  purple: "#7c3aed", gray: "#6b7280", grey: "#6b7280", black: "#111827",
+  teal: "#0d9488", yellow: "#ca8a04", pink: "#db2777",
+};
+function laneColorHex(value, roleId) {
+  const k = String(value || "").trim().toLowerCase();
+  if (NAMED_LANE_COLORS[k]) return NAMED_LANE_COLORS[k];
+  if (/^#?[0-9a-fA-F]{3,8}$/.test(value || "")) return value.startsWith("#") ? value : `#${value}`;
+  let h = 0;
+  for (const ch of String(roleId || "role")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return `hsl(${h % 360} 60% 45%)`;
+}
+function contrastText(color) {
+  const hsl = String(color).match(/hsl\(\s*\d+\s+\d+%\s+(\d+)%/);
+  if (hsl) return Number(hsl[1]) > 62 ? "#111827" : "#ffffff";
+  let hex = String(color).replace("#", "");
+  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return "#ffffff";
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111827" : "#ffffff";
+}
+
+/** Truncate by fullwidth units (CJK = 1, others = 0.5); cap defaults to 4. */
+export function truncateFullwidth(s, max = 4) {
+  const str = String(s ?? "");
+  let w = 0;
+  let out = "";
+  for (const ch of str) {
+    const fw = /[　-〿぀-ヿ㐀-鿿＀-￯가-힯]/.test(ch) ? 1 : 0.5;
+    if (w + fw > max) return `${out}…`;
+    w += fw;
+    out += ch;
+  }
+  return out;
+}
+
+/** Role chip info for a step row: truncated label + background + contrasting text. */
+export function rowLaneInfo(row, lanes, t = defaultT) {
+  if (!row || row.kind !== "step" || row.empty || !row.role) return null;
+  const lane = (lanes || []).find((l) => l.id === row.role);
+  const bg = laneColorHex(lane?.bg, row.role);
+  return {
+    label: truncateFullwidth(laneLabel(lanes, row.role, t), 4),
+    bg,
+    fg: contrastText(bg),
+  };
+}
+
 /** Localized type tag shown in the list badge. */
 export function rowBadgeLabel(row, t = defaultT) {
   if (!row) return "";
