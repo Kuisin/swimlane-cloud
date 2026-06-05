@@ -11,8 +11,12 @@ export default function DashboardPage() {
         </span>
       </div>
       <p className="mb-8 text-sm text-neutral-500">
-        Open a project to edit its diagrams. Changes are saved in your browser
-        (localStorage) — no account or server needed.
+        Open a project to try the full workflow: switch between{" "}
+        <b>Manager</b> and <b>Member</b> roles, edit on a <code>tmp-*</code>{" "}
+        branch, checkpoint, open a pull request into <code>test</code> (a
+        Manager merges it), then flag a version and promote it to{" "}
+        <code>main</code>. Everything is saved in your browser — no account or
+        server needed.
       </p>
 
       <ul className="space-y-3">
