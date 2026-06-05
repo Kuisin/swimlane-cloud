@@ -1,15 +1,10 @@
-import WorkflowShell from "./WorkflowShell";
-import { demoProjectName } from "@/lib/demo";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function ProjectEditorPage({
+export default async function ProjectIndex({
   params,
 }: {
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  return (
-    <WorkflowShell projectId={projectId} projectName={demoProjectName(projectId)} />
-  );
+  redirect(`/projects/${projectId}/edit`);
 }
