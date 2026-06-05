@@ -1,107 +1,77 @@
-import { notFound } from "next/navigation";
-import { getServiceSupabase } from "@/lib/supabase/server";
-import { getGitea } from "@/lib/gitea";
-import { getRepoCoords } from "@/lib/projects";
+"use client";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { getPublished, type PublishedEntry } from "@/lib/demo-workflow";
 
 /**
- * Public share page (plan Step 2.4). No auth. Fetches the version by
- * public_slug, renders the stored SVG, and shows read-only DSL when
- * share_mode === 'svg_and_dsl'.
+ * Public share page (demo). Reads a published version from the local registry
+ * and renders its SVG + read-only DSL. Demo only: the registry lives in
+ * localStorage, so a link resolves in the same browser that published it.
  */
-export default async function PublicSharePage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params;
+export default function PublicSharePage() {
+  const params = useParams();
+  const slug = String(params.slug);
+  const [entry, setEntry] = useState<PublishedEntry | null | undefined>(undefined);
 
-  let svg: string | null = null;
-  let dsl: string | null = null;
-  let name = "";
-  let shareMode: string | null = null;
+  useEffect(() => {
+    setEntry(getPublished(slug));
+  }, [slug]);
 
-  try {
-    const supabase = getServiceSupabase();
-    const { data: version } = await supabase
-      .from("versions")
-      .select(
-        "id, name, commit_sha, share_mode, public, diagram_id, svg_blobs(svg_storage_path)",
-      )
-      .eq("public_slug", slug)
-      .eq("public", true)
-      .maybeSingle();
-
-    if (!version) notFound();
-    name = version.name as string;
-    shareMode = version.share_mode as string | null;
-
-    // Fetch the stored SVG from S3 (public read).
-    const blob = (version as { svg_blobs?: { svg_storage_path?: string } })
-      .svg_blobs;
-    if (blob?.svg_storage_path) {
-      const region = process.env.AWS_REGION ?? "us-east-1";
-      const bucket = process.env.S3_SVG_BUCKET ?? "";
-      const url = `https://${bucket}.s3.${region}.amazonaws.com/${blob.svg_storage_path}`;
-      try {
-        const res = await fetch(url, { cache: "no-store" });
-        if (res.ok) svg = await res.text();
-      } catch {
-        /* fall through */
-      }
-    }
-
-    if (shareMode === "svg_and_dsl") {
-      const { data: diagram } = await supabase
-        .from("diagrams")
-        .select("project_id, filepath_in_repo")
-        .eq("id", version.diagram_id as string)
-        .single();
-      if (diagram) {
-        const { org, repo } = await getRepoCoords(diagram.project_id as string);
-        const gitea = getGitea();
-        dsl = await gitea.readFileText(
-          org,
-          repo,
-          diagram.filepath_in_repo as string,
-          version.commit_sha as string,
-        );
-      }
-    }
-  } catch {
-    notFound();
+  if (entry === undefined) {
+    return <Centered>Loading…</Centered>;
+  }
+  if (!entry) {
+    return (
+      <Centered>
+        <h1 className="text-lg font-semibold">Not found</h1>
+        <p className="mt-1 text-sm text-neutral-500">
+          No published version for <code>/p/{slug}</code> in this browser. (Demo
+          links resolve only where they were published.)
+        </p>
+      </Centered>
+    );
   }
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="mb-6 text-2xl font-semibold">{name}</h1>
+      <div className="mb-6">
+        <div className="text-xs uppercase tracking-wide text-neutral-400">
+          Published version
+        </div>
+        <h1 className="text-2xl font-semibold">{entry.name}</h1>
+        {entry.note && <p className="text-sm text-neutral-500">{entry.note}</p>}
+      </div>
 
-      <section className="rounded-lg border border-neutral-200 bg-white p-4">
-        {svg ? (
-          // Stored, server-rendered SVG — safe content authored by the project.
-          <div
-            className="overflow-auto"
-            dangerouslySetInnerHTML={{ __html: svg }}
-          />
-        ) : (
-          <p className="text-neutral-500">Diagram preview is unavailable.</p>
-        )}
-      </section>
-
-      {shareMode === "svg_and_dsl" && dsl && (
-        <section className="mt-8">
-          <h2 className="mb-2 text-sm font-medium text-neutral-700">DSL source</h2>
-          <pre className="overflow-auto rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-xs">
-            {dsl}
-          </pre>
-        </section>
+      {entry.svg ? (
+        <div
+          className="overflow-auto rounded-lg border border-neutral-200 bg-white p-4 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+          dangerouslySetInnerHTML={{ __html: entry.svg }}
+        />
+      ) : (
+        <p className="text-sm text-neutral-500">No rendered diagram.</p>
       )}
 
-      <footer className="mt-10 text-xs text-neutral-400">
-        Shared via Swimlane Cloud — read only.
-      </footer>
+      <details className="mt-6">
+        <summary className="cursor-pointer text-sm font-medium text-neutral-600">
+          View DSL source
+        </summary>
+        <pre className="mt-2 overflow-auto rounded-md bg-neutral-50 p-4 font-mono text-xs text-neutral-700">
+          {entry.dsl}
+        </pre>
+      </details>
+
+      <p className="mt-8 text-xs text-neutral-400">
+        Shared read-only via Swimlane Cloud (demo).
+      </p>
+    </main>
+  );
+}
+
+function Centered({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
+      <div>{children}</div>
     </main>
   );
 }

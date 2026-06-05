@@ -1,6 +1,6 @@
 "use client";
 
-import { flagVersion, promote } from "@/lib/demo-workflow";
+import { flagVersion, promote, publishVersion, unpublishVersion } from "@/lib/demo-workflow";
 import { ProjectNav, VersionPanel, useProject } from "../_components";
 
 export default function VersionsPage() {
@@ -52,6 +52,8 @@ export default function VersionsPage() {
             st={st}
             isManager={isManager}
             onPromote={(id) => setSt(promote(projectId, st, id))}
+            onPublish={(id) => setSt(publishVersion(projectId, st, id))}
+            onUnpublish={(id) => setSt(unpublishVersion(projectId, st, id))}
           />
         </div>
       </div>

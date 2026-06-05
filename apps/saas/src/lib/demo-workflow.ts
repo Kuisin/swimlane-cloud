@@ -44,6 +44,19 @@ export interface Version {
   files: Files;
   svg: string | null;
   promoted: boolean;
+  published?: boolean;
+  publicSlug?: string;
+  ts: number;
+}
+
+export interface PublishedEntry {
+  slug: string;
+  projectId: string;
+  versionId: string;
+  name: string;
+  note: string;
+  svg: string | null;
+  dsl: string;
   ts: number;
 }
 export interface WorkflowState {
@@ -329,6 +342,80 @@ export function promote(pid: string, st: WorkflowState, versionId: string): Work
     },
     versions: st.versions.map((x) =>
       x.id === versionId ? { ...x, promoted: true } : x,
+    ),
+  };
+  saveState(pid, next);
+  return next;
+}
+
+// ---- publishing (public share registry, demo / same-browser) ----
+
+const PUB = "swimlane-published";
+
+export function loadPublished(): Record<string, PublishedEntry> {
+  if (typeof localStorage === "undefined") return {};
+  try {
+    return JSON.parse(localStorage.getItem(PUB) || "{}");
+  } catch {
+    return {};
+  }
+}
+function savePublished(map: Record<string, PublishedEntry>) {
+  if (typeof localStorage !== "undefined")
+    localStorage.setItem(PUB, JSON.stringify(map));
+}
+export function getPublished(slug: string): PublishedEntry | null {
+  return loadPublished()[slug] ?? null;
+}
+
+/** Publish a promoted (on-main) version to a public slug (demo: localStorage). */
+export function publishVersion(
+  pid: string,
+  st: WorkflowState,
+  versionId: string,
+): WorkflowState {
+  const v = st.versions.find((x) => x.id === versionId);
+  if (!v || !v.promoted) return st;
+  const s = v.publicSlug ?? `${slug(v.name)}-${Math.random().toString(36).slice(2, 6)}`;
+  const pp = primaryPath(v.files);
+  const map = loadPublished();
+  map[s] = {
+    slug: s,
+    projectId: pid,
+    versionId,
+    name: v.name,
+    note: v.note,
+    svg: v.svg,
+    dsl: pp ? v.files[pp] : "",
+    ts: now(),
+  };
+  savePublished(map);
+  const next = {
+    ...st,
+    versions: st.versions.map((x) =>
+      x.id === versionId ? { ...x, published: true, publicSlug: s } : x,
+    ),
+  };
+  saveState(pid, next);
+  return next;
+}
+
+export function unpublishVersion(
+  pid: string,
+  st: WorkflowState,
+  versionId: string,
+): WorkflowState {
+  const v = st.versions.find((x) => x.id === versionId);
+  if (!v) return st;
+  if (v.publicSlug) {
+    const map = loadPublished();
+    delete map[v.publicSlug];
+    savePublished(map);
+  }
+  const next = {
+    ...st,
+    versions: st.versions.map((x) =>
+      x.id === versionId ? { ...x, published: false } : x,
     ),
   };
   saveState(pid, next);
