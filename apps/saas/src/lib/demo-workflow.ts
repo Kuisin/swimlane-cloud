@@ -100,6 +100,43 @@ export function primaryPath(files: Files): string | null {
   return txt[0] ?? null;
 }
 
+/** A branch is locked while it has an open pull request. */
+export function isLocked(st: WorkflowState, branch: string): boolean {
+  return st.prs.some((p) => p.status === "open" && p.head === branch);
+}
+
+/**
+ * Editing rules: main is always read-only (production); a locked branch (open
+ * PR) is read-only; test is editable by Managers only; tmp-* edit branches are
+ * editable by anyone. Members therefore must create a tmp-* branch to change
+ * anything.
+ */
+export function canEditBranch(
+  st: WorkflowState,
+  branch: string,
+  role: Role,
+): boolean {
+  if (branch === "main") return false;
+  if (isLocked(st, branch)) return false;
+  if (branch === "test") return role === "manager";
+  if (branch.startsWith("tmp-")) return true;
+  return false;
+}
+
+/** Why a branch can't be edited (for UI hints), or null if editable. */
+export function editLockReason(
+  st: WorkflowState,
+  branch: string,
+  role: Role,
+): string | null {
+  if (branch === "main") return "main is production (read-only)";
+  if (isLocked(st, branch)) return "locked — a pull request is open";
+  if (branch === "test" && role !== "manager")
+    return "test is read-only for Members — start an edit branch";
+  if (!branch.startsWith("tmp-") && branch !== "test") return "read-only";
+  return null;
+}
+
 // ---- persistence ----
 
 function loadWorking(pid: string): Record<string, Files> {
@@ -274,12 +311,21 @@ export function mergePR(pid: string, st: WorkflowState, prId: string): WorkflowS
     files: { ...tipFiles(head) },
   };
   setWorking(pid, pr.base, { ...mergeCommit.files });
+
+  // Close the edit branch after merge: drop it from branches + working copies.
+  const branches = {
+    ...st.branches,
+    [pr.base]: { ...base, commits: [...base.commits, mergeCommit] },
+  };
+  delete branches[pr.head];
+  const w = loadWorking(pid);
+  delete w[pr.head];
+  saveWorking(pid, w);
+
   const next: WorkflowState = {
     ...st,
-    branches: {
-      ...st.branches,
-      [pr.base]: { ...base, commits: [...base.commits, mergeCommit] },
-    },
+    branches,
+    activeBranch: st.activeBranch === pr.head ? "test" : st.activeBranch,
     prs: st.prs.map((p) =>
       p.id === prId ? { ...p, status: "merged", mergedTs: now() } : p,
     ),
