@@ -7,6 +7,7 @@ import {
   FolderOpen,
   FolderPlus,
   FilePlus,
+  PanelLeftClose,
 } from "lucide-react";
 import { buildFolderTree } from "../lib/folder-tree.js";
 import { useT } from "../i18n.jsx";
@@ -27,6 +28,7 @@ export function FolderTree({
   onNewFolder,
   canCreate,
   canMkdir,
+  onCollapse,
 }) {
   const { t } = useT();
   const tree = useMemo(() => buildFolderTree(files), [files]);
@@ -54,6 +56,16 @@ export function FolderTree({
               onClick={() => onNewFolder(selectedDir)}
             >
               <FolderPlus size={14} />
+            </button>
+          )}
+          {onCollapse && (
+            <button
+              type="button"
+              className="sw-icon-btn"
+              title={t("tree.hide")}
+              onClick={onCollapse}
+            >
+              <PanelLeftClose size={14} />
             </button>
           )}
         </span>

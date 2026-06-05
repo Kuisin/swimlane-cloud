@@ -40,6 +40,8 @@ export const EN = {
   // tree
   "tree.files": "Files",
   "tree.noFiles": "No files",
+  "tree.hide": "Hide file tree",
+  "tree.show": "Show file tree",
   // errors
   "errors.title": "Parse errors",
   // gui
@@ -203,6 +205,8 @@ export const JA = {
   // tree
   "tree.files": "ファイル",
   "tree.noFiles": "ファイルなし",
+  "tree.hide": "ファイルツリーを隠す",
+  "tree.show": "ファイルツリーを表示",
   // errors
   "errors.title": "構文エラー",
   // gui

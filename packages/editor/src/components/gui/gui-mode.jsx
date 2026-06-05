@@ -24,7 +24,7 @@ import { MoveStepModal } from "./move-step-modal.jsx";
  */
 export function GuiMode({ src, onChange, readOnly, theme }) {
   const { t } = useT();
-  const inspector = useDragWidth(300, { min: 220, max: 520, edge: "left" });
+  const stepList = useDragWidth(220, { min: 140, max: 480, edge: "right" });
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [showMove, setShowMove] = useState(false);
   const guiModel = useMemo(() => parseGuiModel(src), [src]);
@@ -99,7 +99,7 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
 
   return (
     <div className="sw-gui">
-      <div className="sw-gui-list-pane">
+      <div className="sw-gui-list-pane" style={{ width: stepList.width, flex: "0 0 auto" }}>
         <div className="sw-gui-list-head">
           <span>{t("gui.flow")}</span>
           {!readOnly && (
@@ -122,13 +122,10 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
         className="sw-resizer"
         role="separator"
         aria-orientation="vertical"
-        onMouseDown={inspector.startDrag}
-        onTouchStart={inspector.startDrag}
+        onMouseDown={stepList.startDrag}
+        onTouchStart={stepList.startDrag}
       />
-      <div
-        className="sw-gui-inspector-pane"
-        style={{ width: inspector.width, flex: "0 0 auto" }}
-      >
+      <div className="sw-gui-inspector-pane">
         {isStep ? (
           <StepInspector
             row={inspectorRow}

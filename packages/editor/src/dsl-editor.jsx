@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { PanelLeftOpen } from "lucide-react";
 import { FileEditorProvider } from "./context/file-editor-provider.jsx";
 import { useEditor } from "./context/editor-context.js";
 import { useLivePreview } from "./hooks/use-live-preview.js";
@@ -78,6 +79,7 @@ function DslEditorInner({ options }) {
   const [showHelp, setShowHelp] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [gotoLine, setGotoLine] = useState(null);
+  const [treeVisible, setTreeVisible] = useState(true);
 
   const { svg, errors } = useLivePreview(src, { themeKey, theme });
   const { leftPct, containerRef, onDividerMouseDown } = useSplitPane(
@@ -158,26 +160,42 @@ function DslEditorInner({ options }) {
 
   return (
     <div className="sw-editor">
-      <FolderTree
-        files={files}
-        width={tree.width}
-        activeId={activeDocumentId}
-        dirtyIds={dirtyIds}
-        selectedDir={selectedDir}
-        onSelectDir={(d) => setSelectedDir((cur) => (cur === d ? "" : d))}
-        onOpenFile={openFile}
-        onNewFile={createNewFile}
-        onNewFolder={createNewFolder}
-        canCreate={!readOnly && hostHas(host, "create")}
-        canMkdir={!readOnly && hostHas(host, "mkdir")}
-      />
-      <div
-        className="sw-resizer"
-        role="separator"
-        aria-orientation="vertical"
-        onMouseDown={tree.startDrag}
-        onTouchStart={tree.startDrag}
-      />
+      {treeVisible ? (
+        <>
+          <FolderTree
+            files={files}
+            width={tree.width}
+            activeId={activeDocumentId}
+            dirtyIds={dirtyIds}
+            selectedDir={selectedDir}
+            onSelectDir={(d) => setSelectedDir((cur) => (cur === d ? "" : d))}
+            onOpenFile={openFile}
+            onNewFile={createNewFile}
+            onNewFolder={createNewFolder}
+            canCreate={!readOnly && hostHas(host, "create")}
+            canMkdir={!readOnly && hostHas(host, "mkdir")}
+            onCollapse={() => setTreeVisible(false)}
+          />
+          <div
+            className="sw-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={tree.startDrag}
+            onTouchStart={tree.startDrag}
+          />
+        </>
+      ) : (
+        <div className="sw-tree-collapsed">
+          <button
+            type="button"
+            className="sw-icon-btn"
+            title={t("tree.show")}
+            onClick={() => setTreeVisible(true)}
+          >
+            <PanelLeftOpen size={14} />
+          </button>
+        </div>
+      )}
 
       <div className="sw-main">
         <ActionBar

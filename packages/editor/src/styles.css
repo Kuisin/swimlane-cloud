@@ -105,6 +105,15 @@
   background: var(--sw-bg-alt);
   min-height: 0;
 }
+.sw-tree-collapsed {
+  flex: 0 0 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  border-right: 1px solid var(--sw-border);
+  background: var(--sw-bg-alt);
+}
 .sw-tree-header {
   display: flex;
   align-items: center;
@@ -193,7 +202,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   padding: 8px 12px;
   border-bottom: 1px solid var(--sw-border);
   background: var(--sw-bg);
@@ -223,11 +233,13 @@
 .sw-subbar {
   display: flex;
   align-items: stretch;
+  flex-wrap: nowrap;
   gap: 10px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--sw-border);
   background: var(--sw-bg-alt);
   min-height: 0;
+  overflow-x: auto;
 }
 .sw-mode-toggle {
   display: inline-flex;
@@ -413,7 +425,6 @@
   min-height: 0;
 }
 .sw-gui-list-pane {
-  flex: 1;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--sw-border);
@@ -432,8 +443,8 @@
   color: var(--sw-text-muted);
 }
 .sw-gui-inspector-pane {
-  width: 300px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
   overflow: auto;
   background: var(--sw-bg-alt);
 }
