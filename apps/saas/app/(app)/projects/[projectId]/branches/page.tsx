@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { tipFiles, toggleCommitPublish } from "@/lib/demo-workflow";
 import { ProjectNav, HistoryPanel, useProject } from "../_components";
+import { useT } from "@/i18n";
 
 export default function BranchesPage() {
   const { projectId, projectName, st, setSt, setRole, reset } = useProject();
+  const { t } = useT();
   const [selected, setSelected] = useState<string | null>(null);
 
-  if (!st) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
+  if (!st) return <div className="p-6 text-sm text-neutral-500">{t("loading")}</div>;
 
   const branchNames = Object.keys(st.branches).sort((a, b) => {
     const ord = (n: string) => (n === "main" ? 0 : n === "test" ? 1 : 2);
@@ -29,7 +31,7 @@ export default function BranchesPage() {
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="mx-auto grid max-w-4xl gap-6 p-6 md:grid-cols-[220px_1fr]">
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-neutral-700">Branches</h2>
+            <h2 className="mb-2 text-sm font-semibold text-neutral-700">{t("branches.title")}</h2>
             <ul className="space-y-1">
               {branchNames.map((b) => {
                 const tip = st.branches[b].commits.at(-1);
@@ -61,7 +63,7 @@ export default function BranchesPage() {
           </div>
           <div>
             <h2 className="mb-2 text-sm font-semibold text-neutral-700">
-              History · <span className="font-mono">{view}</span>
+              {t("branches.historyOf", { branch: view })}
             </h2>
             <HistoryPanel
               st={st}
@@ -71,8 +73,8 @@ export default function BranchesPage() {
                   ? (id) => {
                       const c = st.branches.main?.commits.find((x) => x.id === id);
                       const msg = c?.flagged
-                        ? "Unpublish this commit (remove its public link)?"
-                        : "Publish this commit to a public link?";
+                        ? t("branches.confirmUnpublish")
+                        : t("branches.confirmPublish");
                       if (!window.confirm(msg)) return;
                       setSt(toggleCommitPublish(projectId, st, view, id));
                     }

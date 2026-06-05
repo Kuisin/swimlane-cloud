@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { mergePR, closePR, addPRComment } from "@/lib/demo-workflow";
 import { ProjectNav, PrPanel, useProject } from "../_components";
+import { useT } from "@/i18n";
 
 export default function PullsPage() {
   const { projectId, projectName, st, setSt, setRole, reset } = useProject();
+  const { t } = useT();
   const [reviewPR, setReviewPR] = useState<string | null>(null);
 
-  if (!st) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
+  if (!st) return <div className="p-6 text-sm text-neutral-500">{t("loading")}</div>;
 
   const isManager = st.role === "manager";
 
@@ -25,9 +27,9 @@ export default function PullsPage() {
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="mx-auto max-w-3xl p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Pull requests</h2>
+            <h2 className="text-lg font-semibold">{t("pulls.title")}</h2>
             <span className="text-xs text-neutral-500">
-              {isManager ? "You can merge or close PRs." : "Switch to Manager to merge."}
+              {isManager ? t("pulls.managerHint") : t("pulls.memberHint")}
             </span>
           </div>
           <PrPanel
@@ -37,12 +39,13 @@ export default function PullsPage() {
             onReview={(id) => setReviewPR(reviewPR === id ? null : id)}
             onMerge={(id) => {
               const pr = st.prs.find((p) => p.id === id);
-              if (!window.confirm(`Merge this pull request${pr ? ` into ${pr.base}` : ""}?`)) return;
+              const into = pr ? t("pulls.confirmMergeInto", { base: pr.base }) : "";
+              if (!window.confirm(t("pulls.confirmMerge", { into }))) return;
               setSt(mergePR(projectId, st, id));
               setReviewPR(null);
             }}
             onClose={(id) => {
-              if (!window.confirm("Close this pull request without merging?")) return;
+              if (!window.confirm(t("pulls.confirmClose"))) return;
               setSt(closePR(projectId, st, id));
             }}
             onComment={(id, text) => setSt(addPRComment(projectId, st, id, text))}

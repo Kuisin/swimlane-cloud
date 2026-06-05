@@ -1,23 +1,20 @@
+"use client";
+
 import Link from "next/link";
 import { DEMO_PROJECTS } from "@/lib/demo";
+import { useT } from "@/i18n";
 
 export default function DashboardPage() {
+  const { t } = useT();
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
       <div className="mb-2 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <h1 className="text-2xl font-semibold">{t("dashboard.title")}</h1>
         <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-          Demo mode
+          {t("dashboard.demoMode")}
         </span>
       </div>
-      <p className="mb-8 text-sm text-neutral-500">
-        Open a project to try the full workflow: switch between{" "}
-        <b>Manager</b> and <b>Member</b> roles, edit on a <code>tmp-*</code>{" "}
-        branch, checkpoint, open a pull request into <code>test</code> (a
-        Manager merges it), then flag a version and promote it to{" "}
-        <code>main</code>. Everything is saved in your browser — no account or
-        server needed.
-      </p>
+      <p className="mb-8 text-sm text-neutral-500">{t("dashboard.description")}</p>
 
       <ul className="space-y-3">
         {DEMO_PROJECTS.map((p) => (
@@ -33,7 +30,7 @@ export default function DashboardPage() {
               href={`/projects/${p.id}`}
               className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
             >
-              Open
+              {t("dashboard.open")}
             </Link>
           </li>
         ))}

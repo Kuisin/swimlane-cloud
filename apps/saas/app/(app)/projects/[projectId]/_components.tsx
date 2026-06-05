@@ -40,6 +40,7 @@ import {
   type Role,
 } from "@/lib/demo-workflow";
 import { demoProjectName } from "@/lib/demo";
+import { useT, LanguageToggle } from "@/i18n";
 
 /**
  * Shared project state hook: loads the localStorage workflow state, exposes the
@@ -49,6 +50,8 @@ export function useProject() {
   const params = useParams();
   const projectId = String(params.projectId);
   const [st, setSt] = useState<WorkflowState | null>(null);
+  const { t } = useT();
+
   useEffect(() => {
     setSt(loadState(projectId));
   }, [projectId]);
@@ -57,7 +60,7 @@ export function useProject() {
     if (st) setSt(setRoleAction(projectId, st, r));
   };
   const reset = () => {
-    if (typeof window !== "undefined" && !window.confirm("Reset this demo project?")) return;
+    if (typeof window !== "undefined" && !window.confirm(t("confirm.resetDemo"))) return;
     resetDemo(projectId);
     setSt(loadState(projectId));
   };
@@ -78,13 +81,6 @@ export function useProject() {
  * panels and small atoms.
  */
 
-const TABS = [
-  { key: "edit", label: "Edit", href: "edit" },
-  { key: "branches", label: "Branches", href: "branches" },
-  { key: "pulls", label: "Pull Requests", href: "pulls" },
-  { key: "versions", label: "Versions", href: "versions" },
-] as const;
-
 export function ProjectNav({
   projectId,
   projectName,
@@ -100,34 +96,42 @@ export function ProjectNav({
   onRole: (r: Role) => void;
   onReset: () => void;
 }) {
+  const { t } = useT();
+  const TABS = [
+    { key: "edit", label: t("nav.edit"), href: "edit" },
+    { key: "branches", label: t("nav.branches"), href: "branches" },
+    { key: "pulls", label: t("nav.pulls"), href: "pulls" },
+    { key: "versions", label: t("nav.versions"), href: "versions" },
+  ];
   return (
     <header className="shrink-0 border-b border-neutral-200">
       <div className="flex h-14 items-center justify-between px-4">
         <div className="flex items-center gap-3">
           <Link href="/dashboard" className="text-sm text-neutral-500 hover:underline">
-            ← Dashboard
+            {t("nav.dashboard")}
           </Link>
           <h1 className="text-base font-semibold">{projectName}</h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <LanguageToggle />
           <RoleSwitch role={role} onChange={onRole} />
           <button onClick={onReset} className="text-xs text-neutral-400 hover:text-neutral-600">
-            Reset demo
+            {t("nav.resetDemo")}
           </button>
         </div>
       </div>
       <nav className="flex gap-1 px-3">
-        {TABS.map((t) => (
+        {TABS.map((tab) => (
           <Link
-            key={t.key}
-            href={`/projects/${projectId}/${t.href}`}
+            key={tab.key}
+            href={`/projects/${projectId}/${tab.href}`}
             className={`border-b-2 px-3 py-2 text-sm ${
-              active === t.key
+              active === tab.key
                 ? "border-indigo-600 font-medium text-indigo-600"
                 : "border-transparent text-neutral-500 hover:text-neutral-800"
             }`}
           >
-            {t.label}
+            {tab.label}
           </Link>
         ))}
       </nav>
@@ -136,6 +140,7 @@ export function ProjectNav({
 }
 
 export function RoleSwitch({ role, onChange }: { role: Role; onChange: (r: Role) => void }) {
+  const { t } = useT();
   return (
     <div className="flex items-center gap-1 rounded-md border border-neutral-300 p-0.5 text-xs">
       {(["member", "manager"] as Role[]).map((r) => (
@@ -146,7 +151,7 @@ export function RoleSwitch({ role, onChange }: { role: Role; onChange: (r: Role)
             role === r ? "bg-indigo-600 text-white" : "text-neutral-600"
           }`}
         >
-          {r === "manager" ? "Manager" : "Member"}
+          {r === "manager" ? t("nav.manager") : t("nav.member")}
         </button>
       ))}
     </div>
@@ -208,6 +213,7 @@ export function Modal({
   z?: string;
   children: React.ReactNode;
 }) {
+  const { t } = useT();
   return (
     <div
       className={`fixed inset-0 ${z} flex items-end justify-center bg-black/40 sm:items-center`}
@@ -222,7 +228,7 @@ export function Modal({
           <button
             onClick={onClose}
             className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
-            aria-label="Close"
+            aria-label={t("close")}
           >
             <X size={18} />
           </button>
@@ -243,9 +249,10 @@ export function HistoryPanel({
   branch: string;
   onTogglePublish?: (commitId: string) => void;
 }) {
+  const { t } = useT();
   const all = st.branches[branch]?.commits ?? [];
   const [detail, setDetail] = useState<{ commit: Commit; parent: Commit | null } | null>(null);
-  if (all.length === 0) return <Empty>No commits on this branch.</Empty>;
+  if (all.length === 0) return <Empty>{t("history.empty")}</Empty>;
   const view = [...all].reverse();
   return (
     <>
@@ -267,7 +274,7 @@ export function HistoryPanel({
                   <div className="text-xs text-neutral-500">
                     {c.author} · {new Date(c.ts).toLocaleString()}
                     {isTip && (
-                      <span className="ml-2 rounded bg-green-100 px-1 text-green-700">tip</span>
+                      <span className="ml-2 rounded bg-green-100 px-1 text-green-700">{t("history.tip")}</span>
                     )}
                   </div>
                   {c.flagged && c.publicSlug && (
@@ -285,7 +292,7 @@ export function HistoryPanel({
                   {onTogglePublish && (
                     <button
                       onClick={() => onTogglePublish(c.id)}
-                      title={c.flagged ? "Unpublish" : "Publish to a public link"}
+                      title={c.flagged ? t("history.unpublish") : t("history.publishHint")}
                       className={`rounded p-1.5 ${
                         c.flagged
                           ? "text-emerald-600"
@@ -299,7 +306,7 @@ export function HistoryPanel({
                     onClick={() => setDetail({ commit: c, parent })}
                     className="rounded border border-neutral-300 px-2 py-1 text-xs hover:border-indigo-400 hover:text-indigo-600"
                   >
-                    View
+                    {t("history.view")}
                   </button>
                 </div>
               </div>
@@ -331,6 +338,7 @@ function CommitDetailModal({
   parent: Commit | null;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const files = commit.files;
   const prev = parent?.files ?? {};
   const paths = Array.from(new Set([...Object.keys(files), ...Object.keys(prev)]))
@@ -377,11 +385,11 @@ function CommitDetailModal({
                 <button
                   key={m}
                   onClick={() => setMode(m)}
-                  className={`rounded px-3 py-1 capitalize ${
+                  className={`rounded px-3 py-1 ${
                     mode === m ? "bg-neutral-800 text-white" : "text-neutral-500 hover:bg-neutral-100"
                   }`}
                 >
-                  {m}
+                  {t(`commit.mode.${m}`)}
                 </button>
               ))}
             </div>
@@ -394,13 +402,13 @@ function CommitDetailModal({
                 dangerouslySetInnerHTML={{ __html: svg }}
               />
             ) : (
-              <Empty>Could not render this file (parse error or empty).</Empty>
+              <Empty>{t("commit.renderError")}</Empty>
             ))}
           {mode === "diff" &&
             (changed ? (
               <Diff path={path} before={before} after={after} />
             ) : (
-              <Empty>No change to this file in this commit.</Empty>
+              <Empty>{t("commit.noChange")}</Empty>
             ))}
           {mode === "text" && (
             <pre className="overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-3 font-mono text-xs">
@@ -430,14 +438,10 @@ export function PrPanel({
   onClose: (id: string) => void;
   onComment: (id: string, text: string) => void;
 }) {
+  const { t } = useT();
   const reviewing = reviewPR ? st.prs.find((p) => p.id === reviewPR) ?? null : null;
   if (st.prs.length === 0)
-    return (
-      <Empty>
-        No pull requests yet. On the Edit page, open a PR from a tmp-* branch
-        (→ test) or from test (→ main).
-      </Empty>
-    );
+    return <Empty>{t("pr.empty")}</Empty>;
   return (
     <>
     <ul className="space-y-3">
@@ -472,8 +476,10 @@ export function PrPanel({
                 className="text-xs text-indigo-600 hover:underline"
               >
                 {reviewPR === pr.id
-                  ? "Hide files"
-                  : `Review (${changed.length} file${changed.length === 1 ? "" : "s"} changed)`}
+                  ? t("pr.hideFiles")
+                  : changed.length === 1
+                    ? t("pr.reviewFile")
+                    : t("pr.reviewFiles", { n: String(changed.length) })}
               </button>
               {pr.status === "open" && (
                 <div className="ml-auto flex items-center gap-2">
@@ -482,7 +488,7 @@ export function PrPanel({
                       onClick={() => onClose(pr.id)}
                       className="rounded border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-50"
                     >
-                      Close
+                      {t("pr.close")}
                     </button>
                   )}
                   {isManager ? (
@@ -490,10 +496,10 @@ export function PrPanel({
                       onClick={() => onMerge(pr.id)}
                       className="rounded bg-purple-600 px-3 py-1 text-xs font-medium text-white hover:bg-purple-500"
                     >
-                      Merge → {pr.base}
+                      {t("pr.mergeTo", { base: pr.base })}
                     </button>
                   ) : (
-                    <span className="text-xs text-neutral-400">Manager merges</span>
+                    <span className="text-xs text-neutral-400">{t("pr.managerMerges")}</span>
                   )}
                 </div>
               )}
@@ -536,6 +542,7 @@ function PrComments({
   role: string;
   onComment: (id: string, text: string) => void;
 }) {
+  const { t } = useT();
   const [text, setText] = useState("");
   const comments = pr.comments ?? [];
   return (
@@ -560,7 +567,7 @@ function PrComments({
               setText("");
             }
           }}
-          placeholder={`Comment as ${role}…`}
+          placeholder={t("pr.commentAs", { role })}
           className="flex-1 rounded-md border border-neutral-300 px-2 py-1 text-sm"
         />
         <button
@@ -573,7 +580,7 @@ function PrComments({
           disabled={!text.trim()}
           className="rounded-md bg-neutral-800 px-3 py-1 text-xs font-medium text-white disabled:opacity-40"
         >
-          Comment
+          {t("pr.comment")}
         </button>
       </div>
     </div>
@@ -627,8 +634,9 @@ export function VersionPanel({
   onPublish: (id: string) => void;
   onUnpublish: (id: string) => void;
 }) {
+  const { t } = useT();
   if (st.versions.length === 0)
-    return <Empty>No versions yet. A Manager flags one from the test branch above.</Empty>;
+    return <Empty>{t("version.empty")}</Empty>;
   return (
     <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {st.versions.map((v) => (
@@ -646,15 +654,15 @@ export function VersionPanel({
                     onClick={() => onPromote(v.id)}
                     className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500"
                   >
-                    Promote → main
+                    {t("version.promoteTo")}
                   </button>
                 ) : (
-                  <span className="text-xs text-neutral-400">Manager promotes</span>
+                  <span className="text-xs text-neutral-400">{t("version.managerPromotes")}</span>
                 )
               ) : (
                 <>
                   <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
-                    on main
+                    {t("version.onMain")}
                   </span>
                   {v.published ? (
                     <>
@@ -671,7 +679,7 @@ export function VersionPanel({
                           onClick={() => onUnpublish(v.id)}
                           className="text-xs text-neutral-400 hover:text-neutral-600"
                         >
-                          Unpublish
+                          {t("version.unpublish")}
                         </button>
                       )}
                     </>
@@ -680,10 +688,10 @@ export function VersionPanel({
                       onClick={() => onPublish(v.id)}
                       className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
                     >
-                      Publish
+                      {t("version.publish")}
                     </button>
                   ) : (
-                    <span className="text-xs text-neutral-400">not published</span>
+                    <span className="text-xs text-neutral-400">{t("version.notPublished")}</span>
                   )}
                 </>
               )}
@@ -730,6 +738,7 @@ export function MobileView({
   editStep?: number | null;
   onEditStep?: (i: number | null) => void;
 }) {
+  const { t } = useT();
   const paths = Object.keys(files).filter((p) => p.endsWith(".txt")).sort();
   const [pathState, setPathState] = useState(primaryPath(files) ?? paths[0] ?? "");
   const path = pathProp ?? pathState;
@@ -831,7 +840,7 @@ export function MobileView({
               onClick={addStep}
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 py-2.5 text-sm text-neutral-600 hover:border-indigo-400 hover:text-indigo-600"
             >
-              <Plus size={16} /> Add step
+              <Plus size={16} /> {t("mobile.addStep")}
             </button>
           </div>
         )}
@@ -852,7 +861,7 @@ export function MobileView({
         />
       )}
       {showFiles && (
-        <Modal title="Files" onClose={() => setShowFiles(false)}>
+        <Modal title={t("mobile.files")} onClose={() => setShowFiles(false)}>
           <FileList
             paths={paths}
             active={active}
@@ -876,13 +885,14 @@ function FileList({
   active: string;
   onPick: (p: string) => void;
 }) {
+  const { t } = useT();
   const groups: Record<string, string[]> = {};
   for (const p of paths) {
     const dir = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
     (groups[dir] ||= []).push(p);
   }
   const dirs = Object.keys(groups).sort();
-  if (paths.length === 0) return <Empty>No files.</Empty>;
+  if (paths.length === 0) return <Empty>{t("mobile.noFiles")}</Empty>;
   return (
     <div className="space-y-4">
       {dirs.map((dir) => (
@@ -938,6 +948,7 @@ function StepEditModal({
   canMoveUp?: boolean;
   canMoveDown?: boolean;
 }) {
+  const { t } = useT();
   const [role, setRole] = useState(String(row.role ?? ""));
   const [text, setText] = useState(String(row.text ?? ""));
   const [description, setDescription] = useState(String(row.description ?? ""));
@@ -954,14 +965,14 @@ function StepEditModal({
       {onDelete && (
         <button
           onClick={onDelete}
-          title="Delete step"
+          title={t("stepEdit.deleteStep")}
           className="rounded-lg border border-red-200 px-3 py-2 text-red-600 hover:bg-red-50"
         >
           <Trash2 size={16} />
         </button>
       )}
       <button onClick={onClose} className="flex-1 rounded-lg border border-neutral-300 py-2 text-sm">
-        Cancel
+        {t("stepEdit.cancel")}
       </button>
       <button
         onClick={() =>
@@ -977,22 +988,22 @@ function StepEditModal({
         }
         className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
       >
-        Save
+        {t("stepEdit.save")}
       </button>
     </div>
   );
 
   return (
-    <Modal title="Edit step" onClose={onClose} z="z-[60]" footer={footer}>
+    <Modal title={t("stepEdit.title")} onClose={onClose} z="z-[60]" footer={footer}>
       <div className="space-y-3">
         {onMove && (
           <div className="flex items-center justify-between rounded-lg bg-neutral-50 px-3 py-2">
-            <span className="text-xs font-medium text-neutral-500">Move position</span>
+            <span className="text-xs font-medium text-neutral-500">{t("stepEdit.movePosition")}</span>
             <div className="flex gap-2">
               <button
                 onClick={() => onMove("up")}
                 disabled={!canMoveUp}
-                title="Move up"
+                title={t("stepEdit.moveUp")}
                 className="rounded-md border border-neutral-300 bg-white p-1.5 text-neutral-600 hover:border-indigo-400 disabled:opacity-40"
               >
                 <ArrowUp size={16} />
@@ -1000,7 +1011,7 @@ function StepEditModal({
               <button
                 onClick={() => onMove("down")}
                 disabled={!canMoveDown}
-                title="Move down"
+                title={t("stepEdit.moveDown")}
                 className="rounded-md border border-neutral-300 bg-white p-1.5 text-neutral-600 hover:border-indigo-400 disabled:opacity-40"
               >
                 <ArrowDown size={16} />
@@ -1008,46 +1019,46 @@ function StepEditModal({
             </div>
           </div>
         )}
-        <Field label="Role (lane)">
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="sw-mf">
-              {!role && <option value="">(choose a role)</option>}
-              {lanes.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.label || l.id}
-                </option>
-              ))}
-            </select>
+        <Field label={t("stepEdit.role")}>
+          <select value={role} onChange={(e) => setRole(e.target.value)} className="sw-mf">
+            {!role && <option value="">{t("stepEdit.chooseRole")}</option>}
+            {lanes.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label || l.id}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t("stepEdit.text")}>
+          <input value={text} onChange={(e) => setText(e.target.value)} className="sw-mf" />
+        </Field>
+        <Field label={t("stepEdit.description")}>
+          <textarea
+            rows={2}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="sw-mf"
+          />
+        </Field>
+        <Field label={t("stepEdit.remark")}>
+          <textarea
+            rows={2}
+            value={remark}
+            onChange={(e) => setRemark(e.target.value)}
+            className="sw-mf"
+          />
+        </Field>
+        <Field label={t("stepEdit.block")}>
+          <BlockPicker value={blockRef} blocks={blocks} dsl={dsl} onChange={setBlockRef} />
+        </Field>
+        <Field label={t("stepEdit.arrow")}>
+          <ArrowPicker value={arrowLine} onChange={setArrowLine} />
+        </Field>
+        {propList.length > 0 && (
+          <Field label={t("stepEdit.props")}>
+            <PropsPicker value={sel} props={props} dsl={dsl} onChange={setSel} />
           </Field>
-          <Field label="Text">
-            <input value={text} onChange={(e) => setText(e.target.value)} className="sw-mf" />
-          </Field>
-          <Field label="Description">
-            <textarea
-              rows={2}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="sw-mf"
-            />
-          </Field>
-          <Field label="Remark">
-            <textarea
-              rows={2}
-              value={remark}
-              onChange={(e) => setRemark(e.target.value)}
-              className="sw-mf"
-            />
-          </Field>
-          <Field label="Block style">
-            <BlockPicker value={blockRef} blocks={blocks} dsl={dsl} onChange={setBlockRef} />
-          </Field>
-          <Field label="Arrow">
-            <ArrowPicker value={arrowLine} onChange={setArrowLine} />
-          </Field>
-          {propList.length > 0 && (
-            <Field label="Props">
-              <PropsPicker value={sel} props={props} dsl={dsl} onChange={setSel} />
-            </Field>
-          )}
+        )}
       </div>
     </Modal>
   );
@@ -1070,26 +1081,24 @@ export function MobilePrompt({
   onMobile: () => void;
   onStay: () => void;
 }) {
+  const { t } = useT();
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
       <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-semibold">Small screen detected</h2>
-        <p className="mt-1 text-sm text-neutral-600">
-          The full editor is built for wide screens. Switch to a mobile-friendly,
-          read-only view of this diagram?
-        </p>
+        <h2 className="text-lg font-semibold">{t("mobilePrompt.title")}</h2>
+        <p className="mt-1 text-sm text-neutral-600">{t("mobilePrompt.body")}</p>
         <div className="mt-4 flex flex-col gap-2">
           <button
             onClick={onMobile}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
           >
-            <Smartphone size={16} /> Switch to mobile view
+            <Smartphone size={16} /> {t("mobilePrompt.switchMobile")}
           </button>
           <button
             onClick={onStay}
             className="w-full rounded-lg border border-neutral-300 px-4 py-2 text-sm text-neutral-600"
           >
-            Stay in the editor
+            {t("mobilePrompt.stayEditor")}
           </button>
         </div>
       </div>
@@ -1126,7 +1135,6 @@ function PartsPreview({
     }
   }, [dsl, section, id]);
   if (!html) return null;
-  // Let the SVG scale to fit its box (aspect preserved) instead of being clipped.
   const cls = compact
     ? "[&_svg]:h-7 [&_svg]:w-auto [&_svg]:max-w-[140px]"
     : "flex w-full items-center justify-center [&_svg]:h-auto [&_svg]:max-h-32 [&_svg]:max-w-full";
@@ -1230,10 +1238,12 @@ function BlockPicker({
   dsl: string;
   onChange: (v: string) => void;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
-  const current = value ? blocks[value]?.label || value : "(none)";
+  const noneLabel = t("stepEdit.none");
+  const current = value ? blocks[value]?.label || value : noneLabel;
   const opts = [
-    { id: "", label: "(none)" },
+    { id: "", label: noneLabel },
     ...Object.values(blocks).map((b) => ({ id: b.id, label: b.label || b.id })),
   ];
   return (
@@ -1244,7 +1254,7 @@ function BlockPicker({
         onClick={() => setOpen(true)}
       />
       {open && (
-        <PickerSheet title="Block style" onClose={() => setOpen(false)}>
+        <PickerSheet title={t("stepEdit.block")} onClose={() => setOpen(false)}>
           {opts.map((o) => (
             <PickerTile
               key={o.id || "none"}
@@ -1264,17 +1274,28 @@ function BlockPicker({
 }
 
 function ArrowPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
+  const arrowLabel = (v: string) =>
+    v === "solid"
+      ? t("stepEdit.arrow.solid")
+      : v === "dashed"
+        ? t("stepEdit.arrow.dashed")
+        : t("stepEdit.arrow.none");
   return (
     <>
-      <PickerTrigger label={value} preview={<ArrowPreview kind={value} />} onClick={() => setOpen(true)} />
+      <PickerTrigger
+        label={arrowLabel(value)}
+        preview={<ArrowPreview kind={value} />}
+        onClick={() => setOpen(true)}
+      />
       {open && (
-        <PickerSheet title="Arrow" onClose={() => setOpen(false)}>
+        <PickerSheet title={t("stepEdit.arrow")} onClose={() => setOpen(false)}>
           {ARROWS.map((a) => (
             <PickerTile
               key={a}
               selected={a === value}
-              label={a}
+              label={arrowLabel(a)}
               preview={<ArrowPreview kind={a} />}
               onClick={() => {
                 onChange(a);
@@ -1299,17 +1320,18 @@ function PropsPicker({
   dsl: string;
   onChange: (v: Set<string>) => void;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const list = Object.values(props);
   const count = value.size;
   return (
     <>
       <PickerTrigger
-        label={count ? `${count} selected` : "(none)"}
+        label={count ? t("stepEdit.selected", { n: String(count) }) : t("stepEdit.none")}
         onClick={() => setOpen(true)}
       />
       {open && (
-        <PickerSheet title="Props" onClose={() => setOpen(false)}>
+        <PickerSheet title={t("stepEdit.props")} onClose={() => setOpen(false)}>
           {list.map((p) => (
             <PickerTile
               key={p.id}
