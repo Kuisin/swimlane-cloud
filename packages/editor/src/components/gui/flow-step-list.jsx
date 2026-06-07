@@ -60,6 +60,9 @@ export function FlowStepList({ rows, lanes, selectedIndex, lockedRows, canReorde
               if (!draggable(index)) return;
               setDragIndex(index);
               e.dataTransfer.effectAllowed = "move";
+              // Float a clean snapshot of the row under the cursor (taken before
+              // the dragging opacity is applied on the next render).
+              e.dataTransfer.setDragImage?.(e.currentTarget, 16, 12);
             }}
             onDragOver={(e) => {
               if (!validTarget(index)) return;

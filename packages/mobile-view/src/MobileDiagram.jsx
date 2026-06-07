@@ -98,15 +98,15 @@ function makeT(lang) {
  * release it asks the host to move from→to (the host validates the move).
  */
 function useStepDrag(onMoveStep) {
-  const [state, setState] = useState({ from: null, over: null });
+  const [state, setState] = useState({ from: null, over: null, x: 0, y: 0, preview: null });
   const fromRef = useRef(null);
 
-  const start = (e, stepIndex) => {
+  const start = (e, stepIndex, preview) => {
     if (!onMoveStep) return;
     e.preventDefault();
     e.stopPropagation();
     fromRef.current = stepIndex;
-    setState({ from: stepIndex, over: stepIndex });
+    setState({ from: stepIndex, over: stepIndex, x: e.clientX, y: e.clientY, preview });
     document.body.style.userSelect = "none";
 
     const targetAt = (ev) => {
@@ -117,7 +117,7 @@ function useStepDrag(onMoveStep) {
     };
     const move = (ev) => {
       const over = targetAt(ev);
-      setState((s) => (s.over === over ? s : { ...s, over }));
+      setState((s) => ({ ...s, over, x: ev.clientX, y: ev.clientY }));
     };
     const up = (ev) => {
       window.removeEventListener("pointermove", move);
@@ -127,7 +127,7 @@ function useStepDrag(onMoveStep) {
       const from = fromRef.current;
       const to = targetAt(ev);
       fromRef.current = null;
-      setState({ from: null, over: null });
+      setState({ from: null, over: null, x: 0, y: 0, preview: null });
       if (from != null && to != null && to !== from) onMoveStep(from, to);
     };
     window.addEventListener("pointermove", move);
@@ -135,7 +135,35 @@ function useStepDrag(onMoveStep) {
     window.addEventListener("pointercancel", up);
   };
 
-  return { from: state.from, over: state.over, start };
+  return { from: state.from, over: state.over, x: state.x, y: state.y, preview: state.preview, start };
+}
+
+/** The block that floats under the pointer while dragging a step. */
+function DragPreview({ drag }) {
+  if (drag.from == null || !drag.preview) return null;
+  const { text, label, color, textColor } = drag.preview;
+  return (
+    <div
+      className="pointer-events-none fixed z-[100] flex max-w-[320px] items-center gap-2 rounded-xl border-y border-e border-s-4 border-slate-200 bg-white px-3 py-2 shadow-xl"
+      style={{
+        left: drag.x,
+        top: drag.y,
+        borderInlineStartColor: color,
+        transform: "translate(14px, -50%) rotate(-2deg)",
+      }}
+      aria-hidden
+    >
+      {label && (
+        <span
+          className="shrink-0 rounded-full px-[9px] py-0.5 text-[11px] font-semibold leading-[1.6]"
+          style={{ background: color, color: textColor }}
+        >
+          {label}
+        </span>
+      )}
+      <span className="truncate text-[15px] font-semibold">{text}</span>
+    </div>
+  );
 }
 
 /*
@@ -261,6 +289,7 @@ export function MobileDiagram({
           </>
         )}
       </div>
+      <DragPreview drag={drag} />
     </div>
   );
 }
@@ -483,7 +512,14 @@ function StepCard({ node, ctx, hasNext = false }) {
                   className={DRAG_CLS}
                   title={ctx.t("dragStep")}
                   aria-label={ctx.t("dragStep")}
-                  onPointerDown={(e) => ctx.drag.start(e, node.stepIndex)}
+                  onPointerDown={(e) =>
+                    ctx.drag.start(e, node.stepIndex, {
+                      text: node.text || ctx.t("noText"),
+                      label: lane ? truncateFullwidth(lane.label, 4) : null,
+                      color,
+                      textColor: contrastText(color),
+                    })
+                  }
                   onClick={(e) => e.stopPropagation()}
                 >
                   <GripVertical size={16} />
