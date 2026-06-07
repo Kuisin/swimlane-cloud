@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Plus, Settings } from "lucide-react";
+import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import { useT } from "../../i18n.jsx";
 import { useDragWidth } from "../../hooks/use-drag-width.js";
 import { parseGuiModel, applyModelEdit } from "../../lib/gui-model.js";
@@ -16,6 +17,8 @@ import { StepInspector } from "./step-inspector.jsx";
 import { BranchInspector } from "./branch-inspector.jsx";
 import { MoveStepModal } from "./move-step-modal.jsx";
 import { FileSettingsModal } from "./file-settings-modal.jsx";
+import { PreviewPane } from "../preview-pane.jsx";
+import { ErrorList } from "../error-list.jsx";
 
 /**
  * GUI editing surface over the same DSL document. Parses `src` to a GUI model,
@@ -23,12 +26,24 @@ import { FileSettingsModal } from "./file-settings-modal.jsx";
  * `applyModelEdit` (re-parse → mutate row → re-serialize), so the round-trip is
  * lossless and identical to text mode.
  *
- * The step list owns the fixed pixel width (resizable from its right edge);
- * the inspector fills the remaining space so the main split works naturally.
+ * Lays out three independently resizable columns: the step list and the detail
+ * inspector each own a saved pixel width (resizable from their right edge), and
+ * the live preview fills whatever space is left. Widths persist in localStorage.
  */
-export function GuiMode({ src, onChange, readOnly, theme }) {
+export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
   const { t } = useT();
-  const stepList = useDragWidth(260, { min: 180, max: 520, edge: "right" });
+  const stepList = useDragWidth(260, {
+    min: 180,
+    max: 520,
+    edge: "right",
+    storageKey: "sw-editor:gui-steplist-w",
+  });
+  const detail = useDragWidth(360, {
+    min: 240,
+    max: 720,
+    edge: "right",
+    storageKey: "sw-editor:gui-detail-w",
+  });
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [showMove, setShowMove] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -76,14 +91,20 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
 
   /** Move a step row to a specific rows index (drag-drop or "Move to…"). */
   function moveStepTo(from, to) {
+    if (readOnly) return;
     let landed = from;
-    commit((draft) => {
+    const next = applyModelEdit(src, (draft) => {
       const result = moveRow(draft.rows, from, to);
       draft.rows = result.rows;
       landed = result.index;
     });
-    setSelectedIndex(landed);
+    // Reject a move (e.g. an invalid cross-group drop) that adds parse errors.
+    const before = parseDSL(src).errors?.length ?? 0;
+    const after = parseDSL(next).errors?.length ?? 0;
     setShowMove(false);
+    if (after > before) return;
+    onChange(next);
+    setSelectedIndex(landed);
   }
 
   function addStep() {
@@ -103,7 +124,8 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
   const reorder = isStep ? getReorderBounds(rows, saveIndex) : null;
 
   return (
-    <div className="sw-gui">
+    <div className="sw-gui-wrap">
+      <div className="sw-gui">
       <div
         className="sw-gui-list-pane"
         style={{ width: stepList.width, flex: "0 0 auto" }}
@@ -145,7 +167,7 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
       />
       <div
         className="sw-gui-inspector-pane"
-        style={{ flex: 1 }}
+        style={{ width: detail.width, flex: "0 0 auto" }}
       >
         {isStep ? (
           <StepInspector
@@ -173,6 +195,19 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
           <div className="sw-gui-empty">{t("gui.selectRow")}</div>
         )}
       </div>
+      <div
+        className="sw-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        onMouseDown={detail.startDrag}
+        onTouchStart={detail.startDrag}
+      />
+      <div className="sw-gui-preview-pane sw-preview-pane">
+        <PreviewPane svg={svg} hasErrors={errors?.length > 0} />
+      </div>
+      </div>
+
+      <ErrorList errors={errors} onSelectLine={() => {}} />
 
       <MoveStepModal
         open={showMove && isStep && saveIndex >= 0}
@@ -189,6 +224,7 @@ export function GuiMode({ src, onChange, readOnly, theme }) {
         readOnly={readOnly}
         onChange={onChange}
         onClose={() => setShowSettings(false)}
+        theme={theme}
       />
     </div>
   );

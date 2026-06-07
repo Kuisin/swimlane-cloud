@@ -8,15 +8,15 @@ import {
   rowListIndentDepth,
   branchCaseBadgeStyle,
   isStepRow,
-  sameReorderFrame,
 } from "../../lib/flow-rows.js";
 import { useT } from "../../i18n.jsx";
 
 /**
  * Read/select list of flow rows (steps, branches, groups). Nesting indent is
  * derived from branch geometry. Each row shows a color-coded type badge, a lane
- * chip for steps, the localized summary, and a muted meta suffix. Steps can be
- * reordered by drag-and-drop within their branch frame; clicking selects a row.
+ * chip for steps, the localized summary, and a muted meta suffix. A step can be
+ * dragged to any other row — including in and out of groups; the host validates
+ * the move and rejects anything that would break the DSL. Clicking selects.
  */
 export function FlowStepList({ rows, lanes, selectedIndex, lockedRows, canReorder, onReorder, onSelect }) {
   const { t } = useT();
@@ -28,8 +28,9 @@ export function FlowStepList({ rows, lanes, selectedIndex, lockedRows, canReorde
   }
 
   const draggable = (i) => Boolean(canReorder) && isStepRow(rows[i]);
-  const validTarget = (i) =>
-    dragIndex >= 0 && i !== dragIndex && sameReorderFrame(rows, dragIndex, i);
+  // Any other row is a candidate drop point (insert before it). The host move
+  // validates the result, so cross-group drags that would break stay no-ops.
+  const validTarget = (i) => dragIndex >= 0 && i !== dragIndex;
 
   function endDrag() {
     setDragIndex(-1);
@@ -60,6 +61,9 @@ export function FlowStepList({ rows, lanes, selectedIndex, lockedRows, canReorde
               if (!draggable(index)) return;
               setDragIndex(index);
               e.dataTransfer.effectAllowed = "move";
+              // Float a clean snapshot of the row under the cursor (taken before
+              // the dragging opacity is applied on the next render).
+              e.dataTransfer.setDragImage?.(e.currentTarget, 16, 12);
             }}
             onDragOver={(e) => {
               if (!validTarget(index)) return;

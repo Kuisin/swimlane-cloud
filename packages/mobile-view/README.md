@@ -11,7 +11,6 @@ the intended base for a future **mobile editor**.
 
 ```jsx
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
-import "@swimlane-cloud/mobile-view/styles.css";
 
 <MobileDiagram dsl={dslString} />   // or <MobileDiagram model={parsedModel} />
 ```
@@ -31,4 +30,13 @@ loop   {}
 merge  { target }
 ```
 
-Self-contained CSS (`sw-m-` prefixed), no Tailwind dependency.
+## Styling
+The presentation (`MobileDiagram.jsx`) is styled with **Tailwind** utility classes
+and ships no stylesheet. The consuming app must run Tailwind (with Preflight) and
+include this package in its content scan — e.g. in the app's CSS:
+
+```css
+@source "../../../packages/mobile-view/src";
+```
+
+The model layer (`mobile-model.js`) stays pure, framework-agnostic JS.

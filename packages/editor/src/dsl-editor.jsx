@@ -4,6 +4,7 @@ import { useEditor } from "./context/editor-context.js";
 import { useLivePreview } from "./hooks/use-live-preview.js";
 import { useSplitPane } from "./hooks/use-split-pane.js";
 import { useDragWidth } from "./hooks/use-drag-width.js";
+import { usePersistentState } from "./hooks/use-persistent-state.js";
 import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts.js";
 import { hostHas, hostSupportsVersioning } from "./host.js";
 import { LanguageProvider, useT } from "./i18n.jsx";
@@ -75,21 +76,30 @@ function DslEditorInner({ options }) {
     dialog,
   } = editor;
 
-  const [mode, setMode] = useState(options?.initialMode || "text");
+  const [mode, setMode] = usePersistentState(
+    "sw-editor:mode",
+    options?.initialMode || "text",
+  );
   const [selectedDir, setSelectedDir] = useState("");
   const [showHelp, setShowHelp] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [gotoLine, setGotoLine] = useState(null);
-  const [treeCollapsed, setTreeCollapsed] = useState(false);
+  const [treeCollapsed, setTreeCollapsed] = usePersistentState(
+    "sw-editor:tree-collapsed",
+    false,
+    { parse: (v) => v === "true" },
+  );
 
   const { svg, errors } = useLivePreview(src, { themeKey, theme });
   const { leftPct, containerRef, onDividerMouseDown } = useSplitPane(
     options?.initialSplit ?? 52,
+    { storageKey: "sw-editor:split-pct" },
   );
   const tree = useDragWidth(options?.initialTreeWidth ?? 240, {
     min: 160,
     max: 480,
     edge: "right",
+    storageKey: "sw-editor:tree-w",
   });
 
   const counts = useMemo(() => modelCounts(model), [model]);
@@ -332,42 +342,53 @@ function DslEditorInner({ options }) {
           {options?.showLanguageToggle !== false && <LanguageToggle />}
         </div>
 
-        <div className="sw-split" ref={containerRef}>
-          <div className="sw-split-left" style={{ width: `${leftPct}%` }}>
-            {!activeDocument ? (
-              <div className="sw-gui-empty">
-                {isHydrated ? t("gui.openFile") : t("common.loading")}
-              </div>
-            ) : effectiveMode === "gui" ? (
-              <GuiMode
-                src={src}
-                onChange={updateActiveDocumentSrc}
-                readOnly={readOnly}
-                theme={theme}
-              />
-            ) : (
-              <TextEditor
-                value={src}
-                onChange={updateActiveDocumentSrc}
-                readOnly={readOnly}
-                gotoLine={gotoLine}
-              />
-            )}
-            <ErrorList errors={errors} onSelectLine={(line) => setGotoLine(line)} />
-          </div>
-
-          <div
-            className="sw-divider"
-            role="separator"
-            aria-orientation="vertical"
-            onMouseDown={onDividerMouseDown}
-            onTouchStart={onDividerMouseDown}
+        {effectiveMode === "gui" && activeDocument ? (
+          // GUI mode owns a 3-column layout (step list | detail | preview) so
+          // the step list and detail panel each resize independently and the
+          // preview absorbs the slack. Text mode keeps the editor⇄preview split.
+          <GuiMode
+            src={src}
+            onChange={updateActiveDocumentSrc}
+            readOnly={readOnly}
+            theme={theme}
+            svg={svg}
+            errors={errors}
           />
+        ) : (
+          <div className="sw-split" ref={containerRef}>
+            <div className="sw-split-left" style={{ width: `${leftPct}%` }}>
+              {!activeDocument ? (
+                <div className="sw-gui-empty">
+                  {isHydrated ? t("gui.openFile") : t("common.loading")}
+                </div>
+              ) : (
+                <TextEditor
+                  value={src}
+                  onChange={updateActiveDocumentSrc}
+                  readOnly={readOnly}
+                  gotoLine={gotoLine}
+                  theme={theme}
+                />
+              )}
+              <ErrorList errors={errors} onSelectLine={(line) => setGotoLine(line)} />
+            </div>
 
-          <div className="sw-split-right" style={{ width: `${100 - leftPct}%` }}>
-            <PreviewPane svg={svg} hasErrors={errors?.length > 0} />
+            <div
+              className="sw-resizer"
+              role="separator"
+              aria-orientation="vertical"
+              onMouseDown={onDividerMouseDown}
+              onTouchStart={onDividerMouseDown}
+            />
+
+            <div
+              className="sw-split-right sw-preview-pane"
+              style={{ width: `${100 - leftPct}%` }}
+            >
+              <PreviewPane svg={svg} hasErrors={errors?.length > 0} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <HelpModal open={showHelp} onClose={() => setShowHelp(false)} />

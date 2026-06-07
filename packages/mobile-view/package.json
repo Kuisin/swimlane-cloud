@@ -4,11 +4,9 @@
   "description": "Converts the parsed kai-swimlane model into mobile-friendly React components (vertical, card-based). Separate from the SVG renderer and the desktop editor; a base for a future mobile editor.",
   "license": "SEE LICENSE IN README.md",
   "type": "module",
-  "sideEffects": ["*.css"],
   "files": ["src"],
   "exports": {
-    ".": "./src/index.jsx",
-    "./styles.css": "./src/styles.css"
+    ".": "./src/index.jsx"
   },
   "scripts": {
     "test": "vitest run"

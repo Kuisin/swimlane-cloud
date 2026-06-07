@@ -1,7 +1,8 @@
 import { el, join } from "./svg-utils.js";
+import { STEP_SHAPE } from "./diagram-layout.js";
 
 export function renderStepShape({ shape, cx, cy, w, h, fill, stroke }) {
-  const sw = 1.3;
+  const sw = STEP_SHAPE.strokeWidth;
   const common = { fill, stroke, strokeWidth: sw };
 
   if (shape === "rect") {
@@ -11,7 +12,7 @@ export function renderStepShape({ shape, cx, cy, w, h, fill, stroke }) {
     return el("ellipse", { cx, cy, rx: w / 2, ry: h / 2, ...common });
   }
   if (shape === "hex") {
-    const o = 14;
+    const o = STEP_SHAPE.hexChamfer;
     const pts = [
       [cx - w / 2 + o, cy - h / 2],
       [cx + w / 2 - o, cy - h / 2],
@@ -26,7 +27,7 @@ export function renderStepShape({ shape, cx, cy, w, h, fill, stroke }) {
     });
   }
   if (shape === "note") {
-    const fold = 10;
+    const fold = STEP_SHAPE.noteFold;
     const x = cx - w / 2;
     const y2 = cy - h / 2;
     const d = `M ${x} ${y2} L ${x + w - fold} ${y2} L ${x + w} ${y2 + fold} L ${x + w} ${y2 + h} L ${x} ${y2 + h} Z`;
@@ -43,9 +44,16 @@ export function renderStepShape({ shape, cx, cy, w, h, fill, stroke }) {
   if (shape === "subroutine") {
     const x = cx - w / 2;
     const y2 = cy - h / 2;
-    const inset = 10;
+    const inset = STEP_SHAPE.subroutineInset;
     return el("g", {}, [
-      el("rect", { x, y: y2, width: w, height: h, rx: "4", ...common }),
+      el("rect", {
+        x,
+        y: y2,
+        width: w,
+        height: h,
+        rx: String(STEP_SHAPE.subroutineCornerRadius),
+        ...common,
+      }),
       el("line", {
         x1: x + inset,
         y1: y2,

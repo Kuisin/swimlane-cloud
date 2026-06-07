@@ -26,9 +26,21 @@ export default function PublicSharePage() {
     .filter((p) => p.endsWith(".txt"))
     .sort();
   const [path, setPath] = useState("");
+  // Restore the opened file from the URL (?file=) once the entry loads.
   useEffect(() => {
-    if (paths.length && !files[path]) setPath(paths[0]);
+    if (!paths.length) return;
+    const wanted = new URLSearchParams(window.location.search).get("file");
+    if (wanted && files[wanted]) setPath(wanted);
+    else if (!files[path]) setPath(paths[0]);
   }, [entry]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Keep the opened file in the URL so it's shareable/bookmarkable.
+  useEffect(() => {
+    if (!path) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("file") === path) return;
+    params.set("file", path);
+    window.history.replaceState(null, "", `?${params.toString()}`);
+  }, [path]);
 
   const svg = useMemo(() => {
     const src = files[path];

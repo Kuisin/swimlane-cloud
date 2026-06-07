@@ -53,6 +53,16 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
   useEffect(() => void (documentsRef.current = documents), [documents]);
   useEffect(() => void (activeDocumentIdRef.current = activeDocumentId), [activeDocumentId]);
 
+  // Report the active file id so a host can persist it (e.g. in the URL). Kept
+  // in a ref so an inline `options` object doesn't re-fire the notify effect.
+  const onActiveDocumentRef = useRef(options?.onActiveDocument);
+  useEffect(() => {
+    onActiveDocumentRef.current = options?.onActiveDocument;
+  });
+  useEffect(() => {
+    if (activeDocumentId) onActiveDocumentRef.current?.(activeDocumentId);
+  }, [activeDocumentId]);
+
   const activeDocument =
     documents.find((doc) => doc.id === activeDocumentId) || null;
   const src = activeDocument?.src ?? "";
@@ -100,10 +110,13 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
             /* policies are optional */
           }
         }
-        // Auto-open the first file so the editor has content to show.
-        const first = (list || [])[0];
-        if (first && !cancelled) {
-          await openFile(first.id);
+        // Open the host-requested file if it still exists, else the first one,
+        // so the editor always has content to show.
+        const wanted = options?.initialDocumentId;
+        const target =
+          (wanted && (list || []).find((f) => f.id === wanted)) || (list || [])[0];
+        if (target && !cancelled) {
+          await openFile(target.id);
         }
       } catch (err) {
         if (!cancelled) setLoadError(err?.message || String(err));

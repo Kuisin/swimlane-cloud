@@ -36,7 +36,7 @@ docker-compose.yml     # Gitea server stack (Gitea + Postgres + Nginx)
 | DNS | Route 53 | $0.50/zone |
 | Billing | Stripe (managed) | % of revenue |
 
-Gitea is the only service that must be self-hosted (it stores all git repos). Everything else is pay-per-use with no server to operate.
+Gitea is the only service that must be self-hosted (it stores all git repos). Everything else is pay-per-use with no server to operate. Don't want to run EC2? **[Part 1 (Alternative)](#part-1-alternative--gitea-on-flyio)** deploys Gitea on Fly.io (~$5/mo, managed TLS, no servers to patch) instead.
 
 ---
 
@@ -251,6 +251,111 @@ Copy the printed token. Add it to `.env` as `GITEA_ADMIN_TOKEN` (for reference) 
 ```bash
 (crontab -l 2>/dev/null; echo "0 3 1 * * cd /home/ubuntu/swimlane-cloud && docker compose run --rm certbot renew && docker compose restart nginx") | crontab -
 ```
+
+---
+
+## Part 1 (Alternative) — Gitea on Fly.io
+
+Prefer a managed host to operating EC2? [Fly.io](https://fly.io) runs the same Gitea
+container with **built-in TLS and a persistent volume** — no Nginx, no Certbot, no SSL
+cron, nothing to patch. A single shared-CPU machine + 10 GB volume runs ~$5/mo. This
+**replaces all of Part 1 above**; the Amazon S3 / IAM setup is still required because the
+app stores SVG blobs in S3 regardless of where Gitea runs.
+
+A ready-to-edit config lives in [`deploy/fly/fly.toml`](deploy/fly/fly.toml).
+
+### Step 1 — Amazon S3 bucket + app IAM user
+
+Identical to Part 1, **Steps 1–2**, with one change: **skip the EC2 IAM role** (Fly has no
+IAM roles). You only need:
+
+1. The bucket `swimlane-svg-blobs` (Part 1, Step 1).
+2. The `swimlane-app` IAM user + access key with the S3 SVG-blob policy (Part 1, Step 2,
+   "App IAM user"). Its key goes to Vercel in Part 2.
+
+If you want Gitea to send email from Fly, create **SES SMTP credentials** (Part 1, Step 3)
+and add them as Fly secrets in Step 4 below.
+
+### Step 2 — Install flyctl and sign in
+
+```bash
+curl -L https://fly.io/install.sh | sh        # or: brew install flyctl
+fly auth login
+```
+
+### Step 3 — Create the app and its volume
+
+```bash
+cd deploy/fly
+fly apps create swimlane-gitea                # choose your own globally-unique name
+fly volumes create gitea_data --app swimlane-gitea --region iad --size 10
+```
+
+In `fly.toml`, set `app` to your name, `primary_region` to a region near your S3 bucket
+(`iad` ≈ us-east-1), and `GITEA__server__ROOT_URL` to `https://<app>.fly.dev/` (or your
+custom domain — Step 6).
+
+### Step 4 — Set Gitea secrets
+
+```bash
+fly secrets set --app swimlane-gitea \
+  GITEA__security__SECRET_KEY="$(openssl rand -hex 32)" \
+  GITEA__security__INTERNAL_TOKEN="$(openssl rand -hex 32)"
+
+# Optional SES email (from Part 1, Step 3):
+# fly secrets set --app swimlane-gitea \
+#   GITEA__mailer__ENABLED=true GITEA__mailer__PROTOCOL=smtp \
+#   GITEA__mailer__SMTP_ADDR=email-smtp.us-east-1.amazonaws.com GITEA__mailer__SMTP_PORT=587 \
+#   GITEA__mailer__USER=<SES_SMTP_USER> GITEA__mailer__PASSWD=<SES_SMTP_PASSWORD> \
+#   GITEA__mailer__FROM=noreply@yourdomain.com
+```
+
+### Step 5 — Deploy
+
+```bash
+fly deploy --app swimlane-gitea
+```
+
+Gitea is live at `https://<app>.fly.dev`. The `/data` volume persists every repo and the
+SQLite database across deploys and restarts.
+
+### Step 6 — (Optional) Custom domain
+
+```bash
+fly certs add git.yourdomain.com --app swimlane-gitea
+```
+
+Add the DNS records Fly prints (an `A`/`AAAA` to Fly's IPs, or a `CNAME` to
+`<app>.fly.dev`), then point Gitea at it and redeploy:
+
+```bash
+fly secrets set --app swimlane-gitea GITEA__server__ROOT_URL="https://git.yourdomain.com/"
+```
+
+### Step 7 — Create the Gitea bot account
+
+Registration is disabled, so create the admin/bot user and its API token over SSH. The
+official image runs as the `git` user with `GITEA_WORK_DIR=/data`, so run the CLI with
+`su -p git` (the `-p` preserves the `GITEA__*` env so it finds the volume + config):
+
+```bash
+fly ssh console --app swimlane-gitea
+
+# …then, inside the machine:
+su -p git -c "gitea admin user create --admin --username swimlane-bot \
+  --must-change-password=false --password 'unused-bot-uses-token' \
+  --email bot@yourdomain.com"
+
+su -p git -c "gitea admin user generate-access-token \
+  --username swimlane-bot --token-name saas-api --raw"
+```
+
+Copy the printed token. Add it to Vercel as `GITEA_ADMIN_TOKEN`, and set `GITEA_URL` to
+`https://<app>.fly.dev` (or your custom domain) — both in Part 2, Step 3.
+
+> Keep this app at a **single machine**: the volume attaches to one machine only. Don't
+> `fly scale count > 1`. Back up the volume with `fly volumes snapshots` (snapshots are
+> automatic daily; restore with `fly volumes create --snapshot-id`).
 
 ---
 

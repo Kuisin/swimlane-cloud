@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Generate Tailwind classes used by the mobile-view package (a workspace dep,
+   so it lives outside the default content scan). */
+@source "../../../packages/mobile-view/src";
+
 :root {
   --background: #ffffff;
   --foreground: #0a0a0a;
@@ -17,17 +21,3 @@ body {
     "Helvetica Neue", Arial, sans-serif;
 }
 
-/* mobile step-edit modal fields */
-.sw-mf {
-  width: 100%;
-  border: 1px solid #d4d4d8;
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 14px;
-  background: #fff;
-  color: #0f172a;
-}
-.sw-mf:focus {
-  outline: 2px solid #c7d2fe;
-  border-color: #6366f1;
-}
