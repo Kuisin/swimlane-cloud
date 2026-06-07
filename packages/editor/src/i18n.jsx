@@ -123,7 +123,9 @@ export const EN = {
   "move.empty": "No other positions in this branch.",
   "arrow.solid": "solid",
   "arrow.dashed": "dashed",
-  "arrow.none": "none",
+  "arrow.dotted": "dotted",
+  "arrow.longDash": "long dash",
+  "arrow.dashDot": "dash-dot",
   // branch inspector
   "branch.fork": "Parallel (fork)",
   "branch.if": "Branch (if)",
@@ -315,7 +317,9 @@ export const JA = {
   "move.empty": "この分岐内に他の位置はありません。",
   "arrow.solid": "実線",
   "arrow.dashed": "破線",
-  "arrow.none": "なし",
+  "arrow.dotted": "点線",
+  "arrow.longDash": "長破線",
+  "arrow.dashDot": "一点鎖線",
   // branch inspector
   "branch.fork": "並列（フォーク）",
   "branch.if": "分岐（if）",

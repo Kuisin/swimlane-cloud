@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import {
   ArrowDown,
@@ -16,7 +17,12 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { textToSvg, renderPartsPreviewHtml } from "@swimlane-cloud/diagram-converter";
+import {
+  textToSvg,
+  renderPartsPreviewHtml,
+  ARROW_LINE_TYPES,
+  arrowLineDasharray,
+} from "@swimlane-cloud/diagram-converter";
 import { THEMES } from "@swimlane-cloud/diagram-converter/themes";
 import {
   parseGuiModel,
@@ -24,9 +30,9 @@ import {
   extractPartsCode,
   findAdjacentStepIndex,
   moveRow,
+  sameReorderFrame,
 } from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
-import "@swimlane-cloud/mobile-view/styles.css";
 import { FileTree } from "@/components/file-tree";
 import {
   loadState,
@@ -223,18 +229,24 @@ export function Modal({
         className={`flex max-h-[90vh] w-full ${maxW} flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-neutral-200 py-2 pl-4 pr-2">
           <h2 className="text-base font-semibold">{title}</h2>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+            className="-mr-1 rounded-md p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
             aria-label={t("close")}
           >
             <X size={18} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto p-4">{children}</div>
-        {footer && <div className="border-t border-neutral-200 p-4">{footer}</div>}
+        <div className="min-h-0 flex-1 overflow-auto px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {children}
+        </div>
+        {footer && (
+          <div className="border-t border-neutral-200 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -738,7 +750,7 @@ export function MobileView({
   editStep?: number | null;
   onEditStep?: (i: number | null) => void;
 }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const paths = Object.keys(files).filter((p) => p.endsWith(".txt")).sort();
   const [pathState, setPathState] = useState(primaryPath(files) ?? paths[0] ?? "");
   const path = pathProp ?? pathState;
@@ -749,6 +761,7 @@ export function MobileView({
   const editStep = editStepProp !== undefined ? editStepProp : stepState;
   const setEditStep = (i: number | null) => (onEditStep ? onEditStep(i) : setStepState(i));
   const [showFiles, setShowFiles] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const activeDir = active.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "";
 
   useEffect(() => {
@@ -787,15 +800,33 @@ export function MobileView({
     onSave?.(active, next);
   };
 
-  const deleteStep = () => {
-    if (editStep == null) return;
+  const insertStep = (afterStepIndex: number) => {
     const next = applyModelEdit(dsl, (draft) => {
-      const i = nthStepRowIndex(draft.rows, editStep);
+      const i = nthStepRowIndex(draft.rows, afterStepIndex);
+      const insertAt = i >= 0 ? i + 1 : draft.rows.length;
+      draft.rows.splice(insertAt, 0, {
+        kind: "step",
+        role: gui.lanes[0]?.id ?? "",
+        text: "New step",
+      });
+    });
+    setDsl(next);
+    onSave?.(active, next);
+  };
+
+  const deleteStepAt = (stepIndex: number) => {
+    const next = applyModelEdit(dsl, (draft) => {
+      const i = nthStepRowIndex(draft.rows, stepIndex);
       if (i >= 0) draft.rows.splice(i, 1);
     });
     setDsl(next);
     onSave?.(active, next);
-    setEditStep(null);
+    if (editStep === stepIndex) setEditStep(null);
+  };
+
+  const deleteStep = () => {
+    if (editStep == null) return;
+    deleteStepAt(editStep);
   };
 
   const editRowIndex = editStep != null ? nthStepRowIndex(gui.rows, editStep) : -1;
@@ -813,13 +844,29 @@ export function MobileView({
     setEditStep(dir === "up" ? Math.max(0, editStep - 1) : editStep + 1);
   };
 
+  // Drag-reorder from the mobile view: move step `from` → `to` (by step index),
+  // but only within the same branch frame (matches the desktop step list).
+  const moveStepTo = (from: number, to: number) => {
+    let moved = false;
+    const next = applyModelEdit(dsl, (draft) => {
+      const i = nthStepRowIndex(draft.rows, from);
+      const j = nthStepRowIndex(draft.rows, to);
+      if (i < 0 || j < 0 || !sameReorderFrame(draft.rows, i, j)) return;
+      draft.rows = moveRow(draft.rows, i, j).rows;
+      moved = true;
+    });
+    if (!moved) return;
+    setDsl(next);
+    onSave?.(active, next);
+  };
+
   return (
     <div className="flex h-full flex-col bg-neutral-100">
       {paths.length > 0 && (
         <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 bg-white px-3 py-2">
           <button
             onClick={() => setShowFiles(true)}
-            className="flex items-center gap-2 rounded-md border border-neutral-300 px-2.5 py-1 hover:border-indigo-400"
+            className="flex items-center gap-2 rounded-md border border-neutral-300 px-2.5 py-1.5 hover:border-indigo-400"
           >
             <FolderOpen size={15} className="text-neutral-500" />
             <span className="font-mono text-xs">{active.split("/").pop() || "—"}</span>
@@ -831,19 +878,16 @@ export function MobileView({
       <div className="min-h-0 flex-1 overflow-auto">
         <MobileDiagram
           dsl={dsl}
+          lang={lang}
           editable={editable}
           onEditStep={editable ? (i) => setEditStep(i) : undefined}
+          onDeleteStep={editable ? (i) => setPendingDelete(i) : undefined}
+          onInsertStep={editable ? insertStep : undefined}
+          onMoveStep={editable ? moveStepTo : undefined}
+          onAddStep={editable ? addStep : undefined}
+          insertStepLabel={t("mobile.insertStep")}
+          addStepLabel={t("mobile.addStep")}
         />
-        {editable && (
-          <div className="px-3 pb-6">
-            <button
-              onClick={addStep}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 py-2.5 text-sm text-neutral-600 hover:border-indigo-400 hover:text-indigo-600"
-            >
-              <Plus size={16} /> {t("mobile.addStep")}
-            </button>
-          </div>
-        )}
       </div>
       {editing && (
         <StepEditModal
@@ -859,6 +903,35 @@ export function MobileView({
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
         />
+      )}
+      {pendingDelete != null && (
+        <Modal
+          title={t("stepEdit.deleteStep")}
+          onClose={() => setPendingDelete(null)}
+          footer={
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDelete(null)}
+                className="flex-1 rounded-lg border border-neutral-300 py-2.5 text-sm"
+              >
+                {t("stepEdit.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteStepAt(pendingDelete);
+                  setPendingDelete(null);
+                }}
+                className="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-500"
+              >
+                {t("stepEdit.deleteStep")}
+              </button>
+            </div>
+          }
+        >
+          <p className="text-sm text-neutral-600">{t("mobile.confirmDeleteStep")}</p>
+        </Modal>
       )}
       {showFiles && (
         <Modal title={t("mobile.files")} onClose={() => setShowFiles(false)}>
@@ -921,7 +994,19 @@ function FileList({
   );
 }
 
-const ARROWS = ["solid", "dashed", "none"];
+// Arrow stroke options come from the engine so the picker never drifts from
+// what actually renders. i18n keys per type (fallback handled in ArrowPicker).
+const ARROW_LABEL_KEY: Record<string, string> = {
+  solid: "stepEdit.arrow.solid",
+  dashed: "stepEdit.arrow.dashed",
+  dotted: "stepEdit.arrow.dotted",
+  "long-dash": "stepEdit.arrow.longDash",
+  "dash-dot": "stepEdit.arrow.dashDot",
+};
+
+// Shared step-edit field styling. text-base (16px) stops iOS Safari auto-zooming on focus.
+const FIELD_CLASS =
+  "w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-base text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200";
 
 function StepEditModal({
   row,
@@ -966,12 +1051,15 @@ function StepEditModal({
         <button
           onClick={onDelete}
           title={t("stepEdit.deleteStep")}
-          className="rounded-lg border border-red-200 px-3 py-2 text-red-600 hover:bg-red-50"
+          className="rounded-lg border border-red-200 px-3 py-2.5 text-red-600 hover:bg-red-50"
         >
           <Trash2 size={16} />
         </button>
       )}
-      <button onClick={onClose} className="flex-1 rounded-lg border border-neutral-300 py-2 text-sm">
+      <button
+        onClick={onClose}
+        className="flex-1 rounded-lg border border-neutral-300 py-2.5 text-sm"
+      >
         {t("stepEdit.cancel")}
       </button>
       <button
@@ -986,7 +1074,7 @@ function StepEditModal({
             props: [...sel],
           })
         }
-        className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+        className="flex-1 rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
       >
         {t("stepEdit.save")}
       </button>
@@ -1004,7 +1092,7 @@ function StepEditModal({
                 onClick={() => onMove("up")}
                 disabled={!canMoveUp}
                 title={t("stepEdit.moveUp")}
-                className="rounded-md border border-neutral-300 bg-white p-1.5 text-neutral-600 hover:border-indigo-400 disabled:opacity-40"
+                className="rounded-md border border-neutral-300 bg-white p-2 text-neutral-600 hover:border-indigo-400 disabled:opacity-40"
               >
                 <ArrowUp size={16} />
               </button>
@@ -1012,7 +1100,7 @@ function StepEditModal({
                 onClick={() => onMove("down")}
                 disabled={!canMoveDown}
                 title={t("stepEdit.moveDown")}
-                className="rounded-md border border-neutral-300 bg-white p-1.5 text-neutral-600 hover:border-indigo-400 disabled:opacity-40"
+                className="rounded-md border border-neutral-300 bg-white p-2 text-neutral-600 hover:border-indigo-400 disabled:opacity-40"
               >
                 <ArrowDown size={16} />
               </button>
@@ -1020,7 +1108,7 @@ function StepEditModal({
           </div>
         )}
         <Field label={t("stepEdit.role")}>
-          <select value={role} onChange={(e) => setRole(e.target.value)} className="sw-mf">
+          <select value={role} onChange={(e) => setRole(e.target.value)} className={FIELD_CLASS}>
             {!role && <option value="">{t("stepEdit.chooseRole")}</option>}
             {lanes.map((l) => (
               <option key={l.id} value={l.id}>
@@ -1030,14 +1118,14 @@ function StepEditModal({
           </select>
         </Field>
         <Field label={t("stepEdit.text")}>
-          <input value={text} onChange={(e) => setText(e.target.value)} className="sw-mf" />
+          <input value={text} onChange={(e) => setText(e.target.value)} className={FIELD_CLASS} />
         </Field>
         <Field label={t("stepEdit.description")}>
           <textarea
             rows={2}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="sw-mf"
+            className={FIELD_CLASS}
           />
         </Field>
         <Field label={t("stepEdit.remark")}>
@@ -1045,7 +1133,7 @@ function StepEditModal({
             rows={2}
             value={remark}
             onChange={(e) => setRemark(e.target.value)}
-            className="sw-mf"
+            className={FIELD_CLASS}
           />
         </Field>
         <Field label={t("stepEdit.block")}>
@@ -1141,8 +1229,78 @@ function PartsPreview({
   return <div className={cls} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
+function PartsPreviewHover({
+  dsl,
+  section,
+  id,
+  children,
+  className = "",
+}: {
+  dsl: string;
+  section: "block" | "prop";
+  id: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: 0, top: 0 });
+  const html = useMemo(() => {
+    if (!id) return "";
+    try {
+      const code = extractPartsCode(dsl, section, id);
+      if (!code) return "";
+      return renderPartsPreviewHtml(code, THEMES.basic);
+    } catch {
+      return "";
+    }
+  }, [dsl, section, id]);
+
+  useLayoutEffect(() => {
+    if (!anchor || !html || !tipRef.current) return;
+    const rect = tipRef.current.getBoundingClientRect();
+    let left = anchor.x + 12;
+    let top = anchor.y + 12;
+    if (left + rect.width > window.innerWidth - 8) left = Math.max(8, anchor.x - rect.width - 12);
+    if (top + rect.height > window.innerHeight - 8) top = Math.max(8, anchor.y - rect.height - 12);
+    setPos({ left, top });
+  }, [anchor, html]);
+
+  return (
+    <>
+      <span
+        className={`cursor-help ${className}`}
+        onMouseEnter={(e) => setAnchor({ x: e.clientX, y: e.clientY })}
+        onMouseMove={(e) => setAnchor({ x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setAnchor(null)}
+      >
+        {children}
+      </span>
+      {anchor &&
+        html &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={tipRef}
+            className="pointer-events-none fixed z-[100] max-w-[min(280px,calc(100vw-16px))] rounded-lg border border-neutral-200 bg-white p-2 shadow-lg"
+            style={{ left: pos.left, top: pos.top }}
+          >
+            <div className="mb-1.5 font-mono text-[10px] text-neutral-500">
+              {section} · {id}
+            </div>
+            <div
+              className="flex max-h-40 items-center justify-center overflow-auto rounded-md border border-neutral-100 bg-neutral-50 p-2 [&_svg]:h-auto [&_svg]:max-h-32 [&_svg]:max-w-full"
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 function ArrowPreview({ kind }: { kind: string }) {
-  if (kind === "none") return <span className="text-xs text-neutral-400">no connector</span>;
+  const dash = arrowLineDasharray(kind) ?? undefined;
   return (
     <svg width="96" height="14" viewBox="0 0 96 14" aria-hidden>
       <line
@@ -1152,7 +1310,7 @@ function ArrowPreview({ kind }: { kind: string }) {
         y2="7"
         stroke="#475569"
         strokeWidth="2"
-        strokeDasharray={kind === "dashed" ? "7 5" : undefined}
+        strokeDasharray={dash}
       />
       <path d="M84 7 L76 3 L76 11 Z" fill="#475569" />
     </svg>
@@ -1250,7 +1408,13 @@ function BlockPicker({
     <>
       <PickerTrigger
         label={current}
-        preview={value ? <PartsPreview dsl={dsl} section="block" id={value} compact /> : undefined}
+        preview={
+          value ? (
+            <PartsPreviewHover dsl={dsl} section="block" id={value}>
+              <PartsPreview dsl={dsl} section="block" id={value} compact />
+            </PartsPreviewHover>
+          ) : undefined
+        }
         onClick={() => setOpen(true)}
       />
       {open && (
@@ -1260,7 +1424,13 @@ function BlockPicker({
               key={o.id || "none"}
               selected={o.id === value}
               label={o.label}
-              preview={o.id ? <PartsPreview dsl={dsl} section="block" id={o.id} /> : undefined}
+              preview={
+                o.id ? (
+                  <PartsPreviewHover dsl={dsl} section="block" id={o.id}>
+                    <PartsPreview dsl={dsl} section="block" id={o.id} />
+                  </PartsPreviewHover>
+                ) : undefined
+              }
               onClick={() => {
                 onChange(o.id);
                 setOpen(false);
@@ -1276,12 +1446,7 @@ function BlockPicker({
 function ArrowPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
-  const arrowLabel = (v: string) =>
-    v === "solid"
-      ? t("stepEdit.arrow.solid")
-      : v === "dashed"
-        ? t("stepEdit.arrow.dashed")
-        : t("stepEdit.arrow.none");
+  const arrowLabel = (v: string) => t(ARROW_LABEL_KEY[v] ?? "stepEdit.arrow.solid");
   return (
     <>
       <PickerTrigger
@@ -1291,7 +1456,7 @@ function ArrowPicker({ value, onChange }: { value: string; onChange: (v: string)
       />
       {open && (
         <PickerSheet title={t("stepEdit.arrow")} onClose={() => setOpen(false)}>
-          {ARROWS.map((a) => (
+          {ARROW_LINE_TYPES.map((a) => (
             <PickerTile
               key={a}
               selected={a === value}
@@ -1324,12 +1489,35 @@ function PropsPicker({
   const [open, setOpen] = useState(false);
   const list = Object.values(props);
   const count = value.size;
+  const selected = list.filter((p) => value.has(p.id));
   return (
     <>
       <PickerTrigger
         label={count ? t("stepEdit.selected", { n: String(count) }) : t("stepEdit.none")}
+        preview={
+          selected[0] ? (
+            <PartsPreviewHover dsl={dsl} section="prop" id={selected[0].id}>
+              <PartsPreview dsl={dsl} section="prop" id={selected[0].id} compact />
+            </PartsPreviewHover>
+          ) : undefined
+        }
         onClick={() => setOpen(true)}
       />
+      {selected.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {selected.map((p) => (
+            <PartsPreviewHover
+              key={p.id}
+              dsl={dsl}
+              section="prop"
+              id={p.id}
+              className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-mono text-[11px] text-indigo-800"
+            >
+              &lt;{p.id}&gt;
+            </PartsPreviewHover>
+          ))}
+        </div>
+      )}
       {open && (
         <PickerSheet title={t("stepEdit.props")} onClose={() => setOpen(false)}>
           {list.map((p) => (
@@ -1337,7 +1525,11 @@ function PropsPicker({
               key={p.id}
               selected={value.has(p.id)}
               label={p.label || p.id}
-              preview={<PartsPreview dsl={dsl} section="prop" id={p.id} />}
+              preview={
+                <PartsPreviewHover dsl={dsl} section="prop" id={p.id}>
+                  <PartsPreview dsl={dsl} section="prop" id={p.id} />
+                </PartsPreviewHover>
+              }
               onClick={() => {
                 const n = new Set(value);
                 if (n.has(p.id)) n.delete(p.id);

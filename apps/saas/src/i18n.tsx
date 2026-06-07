@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Globe } from "lucide-react";
 
 /**
@@ -132,12 +132,16 @@ export const EN: Record<string, string> = {
   "version.notPublished": "not published",
   // mobile view
   "mobile.addStep": "Add step",
+  "mobile.insertStep": "Insert step",
+  "mobile.confirmDeleteStep": "Delete this step? This cannot be undone.",
   "mobile.files": "Files",
   "mobile.noFiles": "No files.",
   // arrow styles
   "stepEdit.arrow.solid": "solid",
   "stepEdit.arrow.dashed": "dashed",
-  "stepEdit.arrow.none": "none",
+  "stepEdit.arrow.dotted": "dotted",
+  "stepEdit.arrow.longDash": "long dash",
+  "stepEdit.arrow.dashDot": "dash-dot",
   // step edit modal
   "stepEdit.movePosition": "Move position",
   "stepEdit.moveUp": "Move up",
@@ -288,12 +292,16 @@ export const JA: Record<string, string> = {
   "version.notPublished": "未公開",
   // mobile view
   "mobile.addStep": "ステップを追加",
+  "mobile.insertStep": "ステップを挿入",
+  "mobile.confirmDeleteStep": "このステップを削除しますか？元に戻せません。",
   "mobile.files": "ファイル",
   "mobile.noFiles": "ファイルがありません。",
   // arrow styles
   "stepEdit.arrow.solid": "実線",
   "stepEdit.arrow.dashed": "破線",
-  "stepEdit.arrow.none": "なし",
+  "stepEdit.arrow.dotted": "点線",
+  "stepEdit.arrow.longDash": "長破線",
+  "stepEdit.arrow.dashDot": "一点鎖線",
   // step edit modal
   "stepEdit.movePosition": "移動",
   "stepEdit.moveUp": "上へ",
@@ -372,6 +380,10 @@ const LanguageContext = createContext<LangContextValue>({
   t: (key, vars) => tr(EN, key, vars),
 });
 
+function initialLang(defaultLang?: string): string {
+  return defaultLang && DICTS[defaultLang] ? defaultLang : "en";
+}
+
 export function LanguageProvider({
   defaultLang,
   children,
@@ -379,7 +391,12 @@ export function LanguageProvider({
   defaultLang?: string;
   children: React.ReactNode;
 }) {
-  const [lang, setLangState] = useState(() => detectLang(defaultLang));
+  // Match SSR and the first client render; sync from storage after hydration.
+  const [lang, setLangState] = useState(() => initialLang(defaultLang));
+
+  useEffect(() => {
+    setLangState(detectLang(defaultLang));
+  }, [defaultLang]);
 
   function setLang(next: string) {
     setLangState(next);

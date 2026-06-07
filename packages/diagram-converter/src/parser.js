@@ -1,4 +1,5 @@
-import { normalizeArrowLine } from "./arrow-line.js";
+import { normalizeArrowLine, ARROW_LINE_TYPES } from "./arrow-line.js";
+import { getLucideIconNode } from "./render-pure/icon-paths.js";
 import {
   DEFAULT_COLUMN_TITLES,
   DIAGRAM_OPTION_DSL_MAP,
@@ -12,6 +13,18 @@ function parseSectionPropertyLine(text) {
   const m = text.match(/^([a-zA-Z\-]+)\s*:\s*(.+);$/);
   if (m) return { key: m[1].toLowerCase(), val: m[2].trim() };
   if (/^[a-zA-Z\-]+\s*:\s*.+/.test(text)) return { missingSemicolon: true };
+  return null;
+}
+
+/**
+ * An `icon:` value of the form `#name` references a Lucide icon by name. Returns
+ * the name when it isn't one the engine can render (so the caller can flag it);
+ * plain (non-`#`) values are literal text/emoji and are left alone.
+ */
+function unknownIconName(val) {
+  if (typeof val !== "string" || !val.startsWith("#")) return null;
+  const name = val.slice(1).trim();
+  if (name && !getLucideIconNode(name)) return name;
   return null;
 }
 
@@ -286,7 +299,13 @@ export function parseDSL(src) {
           "background-color": "bg",
           icon: "icon",
         };
-        if (map[kv.key]) roles[active][map[kv.key]] = kv.val;
+        if (map[kv.key]) {
+          roles[active][map[kv.key]] = kv.val;
+          const badIcon = kv.key === "icon" ? unknownIconName(kv.val) : null;
+          if (badIcon) {
+            errors.push({ line, text, msg: `unknown icon "${badIcon}" — not a known Lucide icon` });
+          }
+        }
       }
     }
   }
@@ -317,7 +336,13 @@ export function parseDSL(src) {
           icon: "icon",
           label: "label",
         };
-        if (map[kv.key]) blocks[active][map[kv.key]] = kv.val;
+        if (map[kv.key]) {
+          blocks[active][map[kv.key]] = kv.val;
+          const badIcon = kv.key === "icon" ? unknownIconName(kv.val) : null;
+          if (badIcon) {
+            errors.push({ line, text, msg: `unknown icon "${badIcon}" — not a known Lucide icon` });
+          }
+        }
       }
     }
   }
@@ -792,7 +817,7 @@ export function parseDSL(src) {
         errors.push({
           line,
           text,
-          msg: "arrow: must be solid, dashed, or dotted",
+          msg: `arrow: must be one of ${ARROW_LINE_TYPES.join(", ")}`,
         });
         continue;
       }

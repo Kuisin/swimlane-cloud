@@ -12,6 +12,10 @@ declare module "@swimlane-cloud/diagram-converter" {
     options?: { theme?: object; themeKey?: string },
   ): TextToSvgResult;
   export function renderPartsPreviewHtml(code: string, theme: unknown): string;
+  export const ARROW_LINE_TYPES: string[];
+  export function normalizeArrowLine(value: string): string | null;
+  export function arrowLineDasharray(lineType: string): string | null;
+  export function arrowLineStrokeProps(lineType: string): { strokeDasharray?: string };
 }
 
 declare module "@swimlane-cloud/diagram-converter/parser" {
@@ -91,6 +95,7 @@ declare module "@swimlane-cloud/editor" {
     from: number,
     to: number,
   ): { rows: GuiRow[]; index: number };
+  export function sameReorderFrame(rows: GuiRow[], a: number, b: number): boolean;
 }
 
 declare module "@swimlane-cloud/editor/styles.css";
@@ -101,13 +106,18 @@ declare module "@swimlane-cloud/mobile-view" {
   export const MobileDiagram: ComponentType<{
     dsl?: string;
     model?: unknown;
+    lang?: string;
     editable?: boolean;
     onEditStep?: (stepIndex: number) => void;
+    onDeleteStep?: (stepIndex: number) => void;
+    onInsertStep?: (afterStepIndex: number) => void;
+    onMoveStep?: (fromStepIndex: number, toStepIndex: number) => void;
+    onAddStep?: () => void;
+    insertStepLabel?: string;
+    addStepLabel?: string;
   }>;
   export function buildMobileTree(model: unknown): unknown;
   export function dslToMobile(dsl: string): { model: unknown; tree: unknown };
   export function roleColor(lane: unknown): string;
   export function toColor(value: unknown): string | null;
 }
-
-declare module "@swimlane-cloud/mobile-view/styles.css";

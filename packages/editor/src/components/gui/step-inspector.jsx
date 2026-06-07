@@ -1,7 +1,18 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Eye, ListOrdered, Trash2 } from "lucide-react";
+import { ARROW_LINE_TYPES } from "@swimlane-cloud/diagram-converter";
 import { useT } from "../../i18n.jsx";
 import { PartsPreviewPopup } from "./parts-preview-popup.jsx";
+import { PartsPreviewTooltip } from "../parts-preview-tooltip.jsx";
+
+// i18n key per arrow line type (the engine owns the list of types).
+const ARROW_LABEL_KEY = {
+  solid: "arrow.solid",
+  dashed: "arrow.dashed",
+  dotted: "arrow.dotted",
+  "long-dash": "arrow.longDash",
+  "dash-dot": "arrow.dashDot",
+};
 
 /**
  * Inspector for a single step row. Edits role / text / label / desc / remark /
@@ -26,6 +37,7 @@ export function StepInspector({
 }) {
   const { t } = useT();
   const [preview, setPreview] = useState(null); // "block" | "prop" | null
+  const [hoverPreview, setHoverPreview] = useState(null);
 
   if (!row || row.kind !== "step" || row.empty) {
     return <div className="sw-gui-empty">{t("gui.selectStep")}</div>;
@@ -33,11 +45,10 @@ export function StepInspector({
   const set = (key) => (value) => onPatch({ [key]: value });
   const fieldDisabled = readOnly;
 
-  const ARROW_OPTIONS = [
-    { value: "solid", label: t("arrow.solid") },
-    { value: "dashed", label: t("arrow.dashed") },
-    { value: "none", label: t("arrow.none") },
-  ];
+  const ARROW_OPTIONS = ARROW_LINE_TYPES.map((value) => ({
+    value,
+    label: t(ARROW_LABEL_KEY[value] ?? "arrow.solid"),
+  }));
 
   const selectedProps = new Set(row.props || []);
   const toggleProp = (id) => {
@@ -49,6 +60,10 @@ export function StepInspector({
 
   const hasBlocks = Object.values(blocks || {}).length > 0;
   const propList = Object.values(props || {});
+
+  function showHoverPreview(section, id, event) {
+    setHoverPreview({ section, id, anchor: { x: event.clientX, y: event.clientY } });
+  }
 
   return (
     <div className="sw-inspector">
@@ -172,6 +187,16 @@ export function StepInspector({
                 </option>
               ))}
             </select>
+            {row.blockRef ? (
+              <code
+                className="sw-ref-badge"
+                onMouseEnter={(e) => showHoverPreview("block", row.blockRef, e)}
+                onMouseMove={(e) => showHoverPreview("block", row.blockRef, e)}
+                onMouseLeave={() => setHoverPreview(null)}
+              >
+                &lt;{row.blockRef}&gt;
+              </code>
+            ) : null}
             <button
               type="button"
               className="sw-icon-btn"
@@ -232,8 +257,12 @@ export function StepInspector({
                 disabled={fieldDisabled}
                 className={`sw-chip ${selectedProps.has(p.id) ? "sw-chip-on" : ""}`}
                 onClick={() => toggleProp(p.id)}
+                onMouseEnter={(e) => showHoverPreview("prop", p.id, e)}
+                onMouseMove={(e) => showHoverPreview("prop", p.id, e)}
+                onMouseLeave={() => setHoverPreview(null)}
+                title={`<${p.id}>`}
               >
-                {p.label || p.id}
+                &lt;{p.label || p.id}&gt;
               </button>
             ))}
           </div>
@@ -263,6 +292,14 @@ export function StepInspector({
           toggleProp(id);
           setPreview(null);
         }}
+      />
+      <PartsPreviewTooltip
+        open={Boolean(hoverPreview)}
+        section={hoverPreview?.section}
+        src={src}
+        theme={theme}
+        id={hoverPreview?.id}
+        anchor={hoverPreview?.anchor}
       />
     </div>
   );

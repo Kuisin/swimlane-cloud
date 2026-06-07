@@ -169,12 +169,22 @@ export function buildMobileTree(model) {
     }
   }
 
+  // Map each merge-target id (a step with `id:`) to that step's label, so a
+  // mid-flow `merge: <id>` can show where the branch rejoins, not just the id.
+  const mergeTargets = {};
+  for (const row of model.rows || []) {
+    if (row.kind !== "step" || row.empty) continue;
+    const id = (row.mergeId || "").trim();
+    if (id) mergeTargets[id] = (row.name || row.text || "").trim() || id;
+  }
+
   return {
     title: model.title || "",
     lanes: model.lanes || [],
     blocks: model.blocks || {},
     props: model.props || {},
     nodes: root,
+    mergeTargets,
     errors: model.errors || [],
   };
 }

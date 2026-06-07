@@ -30,9 +30,14 @@ import { useT } from "@/i18n";
 
 const VIEW_PREF = "sw-view-mode";
 
+function LoadingFallback() {
+  const { t } = useT();
+  return <div className="p-6 text-sm text-neutral-500">{t("loading")}</div>;
+}
+
 export default function EditPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-neutral-500">Loading…</div>}>
+    <Suspense fallback={<LoadingFallback />}>
       <EditPageInner />
     </Suspense>
   );
@@ -50,6 +55,9 @@ function EditPageInner() {
   const [mFile, setMFile] = useState<string | undefined>(undefined);
   const [mStep, setMStep] = useState<number | null>(null);
   const restored = useRef(false);
+  // Gates the editor/mobile content until URL state is restored, so the editor
+  // doesn't auto-open the first file before `?file=` is applied.
+  const [ready, setReady] = useState(false);
 
   const role = st?.role ?? "member";
   const branch = st && st.branches[st.activeBranch] ? st.activeBranch : "test";
@@ -82,6 +90,7 @@ function EditPageInner() {
       const n = Number(s);
       if (!Number.isNaN(n)) setMStep(n);
     }
+    setReady(true);
   }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -253,7 +262,7 @@ function EditPageInner() {
       )}
 
       <div className="min-h-0 flex-1">
-        {mobile ? (
+        {!ready ? null : mobile ? (
           <MobileView
             files={getWorking(projectId, branch)}
             editable={!readOnly}
@@ -267,7 +276,12 @@ function EditPageInner() {
           <DslEditor
             key={`${branch}:${reload}`}
             host={host}
-            options={{ lang, showLanguageToggle: false }}
+            options={{
+              lang,
+              showLanguageToggle: false,
+              initialDocumentId: mFile,
+              onActiveDocument: setMFile,
+            }}
           />
         )}
       </div>
