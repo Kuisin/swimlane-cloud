@@ -18,6 +18,8 @@ import { useT } from "../i18n.jsx";
  * version are gated on host capability + method presence.
  *
  * `onExport(format)` is called with "txt", "svg", or "png".
+ * `shortcuts` is an optional object with keys like `save`, `saveAll`, `format`
+ * whose values are shortcut label strings (e.g. "⌘S") appended to tooltips.
  */
 export function ActionBar({
   counts,
@@ -31,6 +33,7 @@ export function ActionBar({
   canCheckpoint,
   canVersion,
   hasSvg,
+  shortcuts,
   onSave,
   onSaveAll,
   onNewFile,
@@ -43,6 +46,8 @@ export function ActionBar({
   onFlagVersion,
 }) {
   const { t } = useT();
+  const sc = shortcuts || {};
+  const withShortcut = (label, key) => (key ? `${label} (${key})` : label);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportMenuPos, setExportMenuPos] = useState(null);
   const exportRef = useRef(null);
@@ -76,7 +81,7 @@ export function ActionBar({
           <LayoutTemplate size={14} /> {t("action.templates")}
         </button>
         {mode === "text" && canFormat && (
-          <button type="button" className="sw-btn" onClick={onFormat}>
+          <button type="button" className="sw-btn" onClick={onFormat} title={withShortcut(t("action.format"), sc.format)}>
             <Wand2 size={14} /> {t("action.format")}
           </button>
         )}
@@ -127,7 +132,7 @@ export function ActionBar({
             </div>
           )}
         </div>
-        <button type="button" className="sw-icon-btn" onClick={onOpenHelp} title={t("action.help")}>
+        <button type="button" className="sw-icon-btn" onClick={onOpenHelp} title={withShortcut(t("action.help"), sc.help)}>
           <HelpCircle size={16} />
         </button>
         {canVersion && (
@@ -153,7 +158,7 @@ export function ActionBar({
               className="sw-btn"
               onClick={onSaveAll}
               disabled={!hasAnyUnsavedChanges}
-              title={t("action.saveAll")}
+              title={withShortcut(t("action.saveAll"), sc.saveAll)}
             >
               <SaveAll size={14} /> {t("action.saveAll")}
             </button>
@@ -162,6 +167,7 @@ export function ActionBar({
               className={`sw-btn ${hasUnsavedChanges ? "sw-btn-accent" : ""}`}
               onClick={onSave}
               disabled={!hasUnsavedChanges}
+              title={withShortcut(hasUnsavedChanges ? t("action.saveDirty") : t("action.save"), sc.save)}
             >
               <Save size={14} /> {hasUnsavedChanges ? t("action.saveDirty") : t("action.save")}
             </button>

@@ -4,12 +4,14 @@ import { useEditor } from "./context/editor-context.js";
 import { useLivePreview } from "./hooks/use-live-preview.js";
 import { useSplitPane } from "./hooks/use-split-pane.js";
 import { useDragWidth } from "./hooks/use-drag-width.js";
+import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts.js";
 import { hostHas, hostSupportsVersioning } from "./host.js";
 import { LanguageProvider, useT } from "./i18n.jsx";
 import { formatDsl } from "./lib/format-dsl.js";
 import { canUseGuiEditing } from "./lib/parse-error-policy.js";
 import { mergeSectionTemplate } from "./lib/template-merge.js";
 import { modelCounts } from "./components/model-counts.js";
+import { shortcutLabel } from "./lib/platform.js";
 import { ActionBar } from "./components/action-bar.jsx";
 import { ModeToggle } from "./components/mode-toggle.jsx";
 import { LanguageToggle } from "./components/language-toggle.jsx";
@@ -103,6 +105,52 @@ function DslEditorInner({ options }) {
 
   const guiAllowed = canUseGuiEditing(model.errors, activeParseErrorPolicy);
   const effectiveMode = mode === "gui" && !guiAllowed ? "text" : mode;
+
+  const shortcuts = useMemo(() => ({
+    save: shortcutLabel("s", { mod: true }),
+    saveAll: shortcutLabel("s", { mod: true, shift: true }),
+    format: shortcutLabel("f", { mod: true, shift: true }),
+    help: "?",
+  }), []);
+
+  useKeyboardShortcuts([
+    {
+      key: "s",
+      mod: true,
+      shift: false,
+      enabled: !readOnly && hasUnsavedChanges,
+      handler: () => saveDocuments(),
+    },
+    {
+      key: "s",
+      mod: true,
+      shift: true,
+      enabled: !readOnly && hasAnyUnsavedChanges,
+      handler: () => saveAllDocuments(),
+    },
+    {
+      key: "?",
+      mod: false,
+      // shift is left undefined — "?" already encodes the shift state in e.key
+      handler: () => setShowHelp(true),
+    },
+    {
+      key: "Escape",
+      mod: false,
+      shift: false,
+      handler: () => {
+        if (showHelp) setShowHelp(false);
+        else if (showTemplates) setShowTemplates(false);
+      },
+    },
+    {
+      key: "f",
+      mod: true,
+      shift: true,
+      enabled: effectiveMode === "text" && model.errors.length === 0,
+      handler: handleFormat,
+    },
+  ]);
 
   function handleExport(format) {
     if (typeof document === "undefined") return;
@@ -259,6 +307,7 @@ function DslEditorInner({ options }) {
           canCheckpoint={hostHas(host, "checkpoint")}
           canVersion={hostSupportsVersioning(host) && hostHas(host, "flagNewVersion")}
           hasSvg={Boolean(svg)}
+          shortcuts={shortcuts}
           onSave={() => saveDocuments()}
           onSaveAll={saveAllDocuments}
           onNewFile={() => createNewFile(selectedDir)}
