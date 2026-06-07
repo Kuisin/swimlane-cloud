@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Plus, Settings } from "lucide-react";
+import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import { useT } from "../../i18n.jsx";
 import { useDragWidth } from "../../hooks/use-drag-width.js";
 import { parseGuiModel, applyModelEdit } from "../../lib/gui-model.js";
@@ -90,14 +91,20 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
 
   /** Move a step row to a specific rows index (drag-drop or "Move to…"). */
   function moveStepTo(from, to) {
+    if (readOnly) return;
     let landed = from;
-    commit((draft) => {
+    const next = applyModelEdit(src, (draft) => {
       const result = moveRow(draft.rows, from, to);
       draft.rows = result.rows;
       landed = result.index;
     });
-    setSelectedIndex(landed);
+    // Reject a move (e.g. an invalid cross-group drop) that adds parse errors.
+    const before = parseDSL(src).errors?.length ?? 0;
+    const after = parseDSL(next).errors?.length ?? 0;
     setShowMove(false);
+    if (after > before) return;
+    onChange(next);
+    setSelectedIndex(landed);
   }
 
   function addStep() {
@@ -217,6 +224,7 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
         readOnly={readOnly}
         onChange={onChange}
         onClose={() => setShowSettings(false)}
+        theme={theme}
       />
     </div>
   );

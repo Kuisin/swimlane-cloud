@@ -31,7 +31,7 @@ const BOOL_LABEL_KEYS = {
 /**
  * Modal for editing /page/ and /option/ metadata without switching to text mode.
  */
-export function FileSettingsModal({ open, src, readOnly, onChange, onClose }) {
+export function FileSettingsModal({ open, src, readOnly, onChange, onClose, theme }) {
   const { t } = useT();
   const [tab, setTab] = useState("page");
 
@@ -213,7 +213,14 @@ export function FileSettingsModal({ open, src, readOnly, onChange, onClose }) {
             </div>
           )}
           {["role", "block", "prop"].includes(tab) && (
-            <DefinitionsEditor kind={tab} src={src} readOnly={readOnly} onChange={onChange} />
+            <DefinitionsEditor
+              key={tab}
+              kind={tab}
+              src={src}
+              readOnly={readOnly}
+              onChange={onChange}
+              theme={theme}
+            />
           )}
         </div>
       </div>
