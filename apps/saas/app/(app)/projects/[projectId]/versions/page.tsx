@@ -3,18 +3,20 @@
 import { Tag } from "lucide-react";
 import { flagVersion, promote, publishVersion, unpublishVersion } from "@/lib/demo-workflow";
 import { ProjectNav, VersionPanel, useProject } from "../_components";
+import { useT } from "@/i18n";
 
 export default function VersionsPage() {
   const { projectId, projectName, st, setSt, setRole, reset } = useProject();
+  const { t } = useT();
 
-  if (!st) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
+  if (!st) return <div className="p-6 text-sm text-neutral-500">{t("loading")}</div>;
 
   const isManager = st.role === "manager";
 
   const doFlag = () => {
-    const name = window.prompt("Version name (snapshots the current test branch):", "");
+    const name = window.prompt(t("versions.prompt.name"), "");
     if (!name) return;
-    const note = window.prompt("Note (optional):", "") ?? "";
+    const note = window.prompt(t("versions.prompt.note"), "") ?? "";
     setSt(flagVersion(projectId, st, name, note));
   };
 
@@ -32,21 +34,18 @@ export default function VersionsPage() {
         <div className="mx-auto max-w-4xl p-6">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold">Versions</h2>
-              <p className="text-xs text-neutral-500">
-                Flagged from the <span className="font-mono">test</span> branch; promote to{" "}
-                <span className="font-mono">main</span> to ship.
-              </p>
+              <h2 className="text-lg font-semibold">{t("versions.title")}</h2>
+              <p className="text-xs text-neutral-500">{t("versions.description")}</p>
             </div>
             {isManager ? (
               <button
                 onClick={doFlag}
                 className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
               >
-                <Tag size={15} /> Flag new version
+                <Tag size={15} /> {t("versions.flagNew")}
               </button>
             ) : (
-              <span className="text-xs text-neutral-400">Switch to Manager to flag a version</span>
+              <span className="text-xs text-neutral-400">{t("versions.managerHint")}</span>
             )}
           </div>
           <VersionPanel

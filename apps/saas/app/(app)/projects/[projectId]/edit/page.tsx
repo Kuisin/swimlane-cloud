@@ -26,6 +26,7 @@ import {
   isMobileDevice,
   useProject,
 } from "../_components";
+import { useT } from "@/i18n";
 
 const VIEW_PREF = "sw-view-mode";
 
@@ -39,13 +40,13 @@ export default function EditPage() {
 
 function EditPageInner() {
   const { projectId, projectName, st, setSt, setRole, reset } = useProject();
+  const { t, lang } = useT();
   const router = useRouter();
   const sp = useSearchParams();
 
   const [reload, setReload] = useState(0);
   const [mobile, setMobile] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
-  // Mobile open-file + editing-block, persisted to the URL so reloads restore.
   const [mFile, setMFile] = useState<string | undefined>(undefined);
   const [mStep, setMStep] = useState<number | null>(null);
   const restored = useRef(false);
@@ -59,7 +60,6 @@ function EditPageInner() {
     [projectId, branch, readOnly, reload],
   );
 
-  // Restore state from the URL once the workflow state has loaded.
   useEffect(() => {
     if (!st || restored.current) return;
     restored.current = true;
@@ -84,7 +84,6 @@ function EditPageInner() {
     }
   }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep the URL in sync with branch / view / open file / editing block.
   useEffect(() => {
     if (!restored.current) return;
     const params = new URLSearchParams(sp.toString());
@@ -97,7 +96,6 @@ function EditPageInner() {
     router.replace(`?${params.toString()}`, { scroll: false });
   }, [branch, mobile, mFile, mStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Warn before leaving/reloading with uncommitted changes on the active branch.
   const dirty = st ? isBranchDirty(projectId, st, branch) : false;
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -127,7 +125,7 @@ function EditPageInner() {
     });
   };
 
-  if (!st) return <div className="p-6 text-sm text-neutral-500">Loading…</div>;
+  if (!st) return <div className="p-6 text-sm text-neutral-500">{t("loading")}</div>;
 
   const onTmp = branch.startsWith("tmp-");
   const locked = isLocked(st, branch);
@@ -138,13 +136,13 @@ function EditPageInner() {
   });
 
   const doStartEdit = () => {
-    const name = window.prompt("Name this edit (creates a tmp-* branch from test):", "tweak");
+    const name = window.prompt(t("edit.prompt.startEdit"), t("edit.prompt.startEditDefault"));
     if (!name) return;
     setSt(startEdit(projectId, st, name));
     setReload((r) => r + 1);
   };
   const doCheckpoint = () => {
-    const msg = window.prompt("Checkpoint message:", "Update diagram");
+    const msg = window.prompt(t("edit.prompt.checkpoint"), t("edit.prompt.checkpointDefault"));
     if (msg === null) return;
     setSt(checkpoint(projectId, st, branch, msg));
   };
@@ -152,21 +150,24 @@ function EditPageInner() {
   const canOpenPR = prBase !== null && !locked;
   const doOpenPR = () => {
     if (!prBase) return;
-    const title = window.prompt("Pull request title:", `Merge ${branch} into ${prBase}`);
+    const title = window.prompt(
+      t("edit.prompt.prTitle"),
+      t("edit.prompt.prTitleDefault", { branch, prBase }),
+    );
     if (title === null) return;
     setSt(openPR(projectId, st, branch, title));
-    window.alert(`Pull request opened (${branch} → ${prBase}). A Manager reviews and merges it.`);
+    window.alert(t("edit.prompt.prOpened", { branch, base: prBase }));
   };
 
   const statusLabel = onMain
-    ? "production · read-only"
+    ? t("edit.status.production")
     : locked
-      ? "locked · PR open"
+      ? t("edit.status.locked")
       : branch === "test"
         ? role === "manager"
-          ? "integration"
-          : "integration · read-only"
-        : "edit branch";
+          ? t("edit.status.integration")
+          : t("edit.status.integrationReadonly")
+        : t("edit.status.editBranch");
 
   return (
     <div className="flex h-screen flex-col">
@@ -195,52 +196,57 @@ function EditPageInner() {
         <Badge>{statusLabel}</Badge>
         <div className="mx-1 h-5 w-px bg-neutral-300" />
         <Action onClick={doStartEdit}>
-          <Plus size={14} /> Start edit
+          <Plus size={14} /> {t("edit.startEdit")}
         </Action>
         <Action onClick={doCheckpoint} disabled={readOnly} title={lockReason ?? undefined}>
-          <Check size={14} /> Checkpoint
+          <Check size={14} /> {t("edit.checkpoint")}
         </Action>
         <Action
           onClick={doOpenPR}
           disabled={!canOpenPR}
           title={
             prBase === null
-              ? "Open a PR from a tmp-* branch (→ test) or from test (→ main)"
+              ? t("edit.prompt.openPrHint")
               : locked
-                ? "A pull request is already open for this branch"
+                ? t("edit.prompt.prAlreadyOpen")
                 : undefined
           }
         >
-          <GitPullRequest size={14} /> {prBase ? `Open PR → ${prBase}` : "Open PR"}
+          <GitPullRequest size={14} />{" "}
+          {prBase ? t("edit.openPrTo", { base: prBase }) : t("edit.openPr")}
         </Action>
         <Action onClick={toggleView}>
           {mobile ? (
             <>
-              <Monitor size={14} /> Editor
+              <Monitor size={14} /> {t("edit.editor")}
             </>
           ) : (
             <>
-              <Smartphone size={14} /> Mobile
+              <Smartphone size={14} /> {t("edit.mobile")}
             </>
           )}
         </Action>
         <span className="ml-auto inline-flex items-center gap-2 text-xs text-neutral-500">
-          {dirty && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">unsaved</span>}
-          <b>{role === "manager" ? "Manager" : "Member"}</b>
+          {dirty && (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">
+              {t("edit.unsaved")}
+            </span>
+          )}
+          <b>{role === "manager" ? t("nav.manager") : t("nav.member")}</b>
         </span>
       </div>
 
       {readOnly && (
         <div className="flex shrink-0 items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           <span className="inline-flex items-center gap-1.5">
-            <Lock size={14} /> Read-only: {lockReason}.
+            <Lock size={14} /> {t("edit.readonly", { reason: lockReason ?? "" })}
           </span>
           {!onMain && !locked && (
             <button
               onClick={doStartEdit}
               className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-500"
             >
-              <Plus size={13} /> Start an edit branch
+              <Plus size={13} /> {t("edit.startEditBranch")}
             </button>
           )}
         </div>
@@ -258,7 +264,7 @@ function EditPageInner() {
             onEditStep={setMStep}
           />
         ) : (
-          <DslEditor key={`${branch}:${reload}`} host={host} />
+          <DslEditor key={`${branch}:${reload}`} host={host} options={{ lang }} />
         )}
       </div>
 
