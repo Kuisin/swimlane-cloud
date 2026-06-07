@@ -264,7 +264,11 @@ function EditPageInner() {
             onEditStep={setMStep}
           />
         ) : (
-          <DslEditor key={`${branch}:${reload}`} host={host} options={{ lang }} />
+          <DslEditor
+            key={`${branch}:${reload}`}
+            host={host}
+            options={{ lang, showLanguageToggle: false }}
+          />
         )}
       </div>
 

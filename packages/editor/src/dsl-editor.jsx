@@ -329,7 +329,7 @@ function DslEditorInner({ options }) {
             onSelect={setActiveDocumentId}
             onClose={closeDocumentTab}
           />
-          <LanguageToggle />
+          {options?.showLanguageToggle !== false && <LanguageToggle />}
         </div>
 
         <div className="sw-split" ref={containerRef}>

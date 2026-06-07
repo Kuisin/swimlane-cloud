@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 /**
  * Lightweight i18n for the editor surface. Two languages ship today — English
@@ -434,6 +434,10 @@ const LanguageContext = createContext({
  */
 export function LanguageProvider({ defaultLang, children }) {
   const [lang, setLang] = useState(() => detectLang(defaultLang));
+  // Follow a controlled language (e.g. the host app's toggle) when it changes.
+  useEffect(() => {
+    if (defaultLang && DICTS[defaultLang]) setLang(defaultLang);
+  }, [defaultLang]);
   const value = useMemo(() => {
     const dict = DICTS[lang] || EN;
     return { lang, setLang, t: (key, vars) => tr(dict, key, vars) };
