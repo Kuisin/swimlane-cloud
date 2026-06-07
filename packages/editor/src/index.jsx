@@ -30,7 +30,12 @@ export {
 export { buildFolderTree } from "./lib/folder-tree.js";
 export { parseGuiModel, applyModelEdit } from "./lib/gui-model.js";
 export { extractPartsCode } from "./lib/parts-extract.js";
-export { findAdjacentStepIndex, moveRow, sameReorderFrame } from "./lib/flow-rows.js";
+export {
+  findAdjacentStepIndex,
+  moveRow,
+  sameReorderFrame,
+  getFrameStepIndices,
+} from "./lib/flow-rows.js";
 
 // i18n (English + Japanese). Consumers can seed the language via
 // <DslEditor options={{ lang: "ja" }} /> or read/switch it with useT().

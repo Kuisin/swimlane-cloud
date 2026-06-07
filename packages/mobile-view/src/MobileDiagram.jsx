@@ -97,45 +97,54 @@ function makeT(lang) {
  * and hovered `stepIndex` via the `data-step-index` attribute on step cards; on
  * release it asks the host to move from→to (the host validates the move).
  */
+/**
+ * Find the insertion point nearest the pointer: the step card whose top half the
+ * pointer is in (insert *before* it), else the end. Returns the target step index
+ * to insert before (`to: null` = end) plus the indicator's screen rect. Driven by
+ * the live card geometry, so it's robust to releasing on a connector/gap.
+ */
+function computeDrop(clientY) {
+  const cards = [...document.querySelectorAll("[data-step-index]")];
+  if (!cards.length) return null;
+  for (const card of cards) {
+    const r = card.getBoundingClientRect();
+    if (clientY < r.top + r.height / 2) {
+      return { to: Number(card.dataset.stepIndex), top: r.top - 3, left: r.left, width: r.width };
+    }
+  }
+  const last = cards[cards.length - 1].getBoundingClientRect();
+  return { to: null, top: last.bottom + 3, left: last.left, width: last.width };
+}
+
 function useStepDrag(onMoveStep) {
-  const [state, setState] = useState({ from: null, over: null, x: 0, y: 0, preview: null });
-  const fromRef = useRef(null);
+  const [state, setState] = useState({ from: null, x: 0, y: 0, preview: null, drop: null });
 
   const start = (e, stepIndex, preview) => {
     if (!onMoveStep) return;
     e.preventDefault();
     e.stopPropagation();
-    fromRef.current = stepIndex;
-    setState({ from: stepIndex, over: stepIndex, x: e.clientX, y: e.clientY, preview });
     document.body.style.userSelect = "none";
+    setState({ from: stepIndex, x: e.clientX, y: e.clientY, preview, drop: computeDrop(e.clientY) });
 
-    const targetAt = (ev) => {
-      const el = document
-        .elementFromPoint(ev.clientX, ev.clientY)
-        ?.closest("[data-step-index]");
-      return el ? Number(el.getAttribute("data-step-index")) : null;
-    };
     const move = (ev) => {
-      const over = targetAt(ev);
-      setState((s) => ({ ...s, over, x: ev.clientX, y: ev.clientY }));
+      const drop = computeDrop(ev.clientY);
+      setState((s) => ({ ...s, x: ev.clientX, y: ev.clientY, drop }));
     };
     const up = (ev) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
       document.body.style.userSelect = "";
-      const from = fromRef.current;
-      const to = targetAt(ev);
-      fromRef.current = null;
-      setState({ from: null, over: null, x: 0, y: 0, preview: null });
-      if (from != null && to != null && to !== from) onMoveStep(from, to);
+      const drop = computeDrop(ev.clientY);
+      setState({ from: null, x: 0, y: 0, preview: null, drop: null });
+      if (drop && drop.to !== stepIndex) onMoveStep(stepIndex, drop.to);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
   };
 
-  return { from: state.from, over: state.over, x: state.x, y: state.y, preview: state.preview, start };
+  return { from: state.from, x: state.x, y: state.y, preview: state.preview, drop: state.drop, start };
 }
 
 /** The block that floats under the pointer while dragging a step. */
@@ -162,6 +171,20 @@ function DragPreview({ drag }) {
         </span>
       )}
       <span className="truncate text-[15px] font-semibold">{text}</span>
+    </div>
+  );
+}
+
+/** Real-time line showing where the dragged step will land. */
+function DropIndicator({ drag }) {
+  if (drag.from == null || !drag.drop) return null;
+  return (
+    <div
+      className="pointer-events-none fixed z-[90] h-0.5 -translate-y-1/2 rounded-full bg-indigo-500"
+      style={{ left: drag.drop.left, top: drag.drop.top, width: drag.drop.width }}
+      aria-hidden
+    >
+      <span className="absolute -left-1 top-1/2 size-2 -translate-y-1/2 rounded-full bg-indigo-500" />
     </div>
   );
 }
@@ -289,6 +312,7 @@ export function MobileDiagram({
           </>
         )}
       </div>
+      <DropIndicator drag={drag} />
       <DragPreview drag={drag} />
     </div>
   );
@@ -456,18 +480,14 @@ function StepCard({ node, ctx, hasNext = false }) {
     node.description || node.remark || node.props?.length > 0 || block;
   const showInsert = open && ctx.editable && ctx.onInsertStep;
   const isDragging = ctx.drag?.from === node.stepIndex;
-  const isOver =
-    ctx.drag?.from != null &&
-    ctx.drag.over === node.stepIndex &&
-    ctx.drag.from !== node.stepIndex;
 
   return (
     <>
       <div
         data-step-index={node.stepIndex}
         className={`cursor-pointer rounded-xl border-y border-e border-s-4 border-slate-200 bg-white p-2 transition-shadow duration-200 hover:shadow-md ${
-          isDragging ? "opacity-50" : ""
-        } ${isOver ? "ring-2 ring-indigo-400" : ""}`}
+          isDragging ? "opacity-40" : ""
+        }`}
         style={{ borderInlineStartColor: color }}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}

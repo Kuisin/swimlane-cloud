@@ -31,6 +31,7 @@ import {
   findAdjacentStepIndex,
   moveRow,
   sameReorderFrame,
+  getFrameStepIndices,
 } from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import { FileTree } from "@/components/file-tree";
@@ -844,14 +845,25 @@ export function MobileView({
     setEditStep(dir === "up" ? Math.max(0, editStep - 1) : editStep + 1);
   };
 
-  // Drag-reorder from the mobile view: move step `from` → `to` (by step index),
-  // but only within the same branch frame (matches the desktop step list).
-  const moveStepTo = (from: number, to: number) => {
+  // Drag-reorder from the mobile view: move step `from` to be inserted *before*
+  // step `to` (a step index), or to the end when `to` is null. Only within the
+  // same branch frame (matches the desktop step list).
+  const moveStepTo = (from: number, to: number | null) => {
     let moved = false;
     const next = applyModelEdit(dsl, (draft) => {
       const i = nthStepRowIndex(draft.rows, from);
-      const j = nthStepRowIndex(draft.rows, to);
-      if (i < 0 || j < 0 || !sameReorderFrame(draft.rows, i, j)) return;
+      if (i < 0) return;
+      let j: number;
+      if (to == null) {
+        // Drop at the end: land after the last step sharing this frame.
+        const frame = getFrameStepIndices(draft.rows, i);
+        const last = frame[frame.length - 1];
+        if (last == null) return;
+        j = last + 1;
+      } else {
+        j = nthStepRowIndex(draft.rows, to);
+        if (j < 0 || !sameReorderFrame(draft.rows, i, j)) return;
+      }
       draft.rows = moveRow(draft.rows, i, j).rows;
       moved = true;
     });
