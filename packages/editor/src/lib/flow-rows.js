@@ -148,7 +148,7 @@ export function getStepReorderFrame(rows, rowIndex) {
 }
 
 function isReorderableStep(row) {
-  return row?.kind === "step" && !row.empty && row.role;
+  return row?.kind === "step" && !row.empty && Boolean(row.role);
 }
 
 function getStepReorderBounds(rows, rowIndex) {
