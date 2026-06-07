@@ -97,6 +97,7 @@ declare module "@swimlane-cloud/editor" {
   ): { rows: GuiRow[]; index: number };
   export function sameReorderFrame(rows: GuiRow[], a: number, b: number): boolean;
   export function getFrameStepIndices(rows: GuiRow[], rowIndex: number): number[];
+  export function serializeDSL(model: { rows: GuiRow[]; [key: string]: unknown }): string;
 }
 
 declare module "@swimlane-cloud/editor/styles.css";
@@ -112,7 +113,7 @@ declare module "@swimlane-cloud/mobile-view" {
     onEditStep?: (stepIndex: number) => void;
     onDeleteStep?: (stepIndex: number) => void;
     onInsertStep?: (afterStepIndex: number) => void;
-    onMoveStep?: (fromStepIndex: number, toStepIndex: number | null) => void;
+    onMoveStep?: (fromRow: number, toRow: number) => void;
     onAddStep?: () => void;
     insertStepLabel?: string;
     addStepLabel?: string;

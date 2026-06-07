@@ -112,6 +112,37 @@ describe("section vs sub-branch groups", () => {
   });
 });
 
+describe("row-index annotations (drag drop targets)", () => {
+  // rows: 0 step S1, 1 step S2, 2 groupStart, 3 step G1, 4 groupEnd, 5 step S3
+  const DSL2 = `@kai-swimlane
+/role/
+<a: Alice>
+/line/
+[a: S1]
+[a: S2]
+section (Box)
+[a: G1]
+end-section
+[a: S3]
+@end
+`;
+  const { tree } = dslToMobile(DSL2);
+
+  it("annotates step rowIndex and group start/end rows", () => {
+    const [s1, s2, group, s3] = tree.nodes;
+    expect(s1).toMatchObject({ type: "step", text: "S1", rowIndex: 0 });
+    expect(s2).toMatchObject({ type: "step", text: "S2", rowIndex: 1 });
+    expect(group).toMatchObject({ type: "group", startRow: 2, endRow: 4 });
+    expect(group.children[0]).toMatchObject({ type: "step", text: "G1", rowIndex: 3 });
+    expect(s3).toMatchObject({ type: "step", text: "S3", rowIndex: 5 });
+  });
+
+  it("exposes container end rows for the trailing drop gap", () => {
+    expect(tree.rootEndRow).toBe(6); // past the last flow row
+    expect(tree.nodes[2].endRow).toBe(4); // before the group's end marker
+  });
+});
+
 describe("toColor", () => {
   it("maps names and hex, rejects junk", () => {
     expect(toColor("blue")).toBe("#2563eb");

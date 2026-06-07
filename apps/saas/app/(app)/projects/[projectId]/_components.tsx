@@ -24,14 +24,15 @@ import {
   arrowLineDasharray,
 } from "@swimlane-cloud/diagram-converter";
 import { THEMES } from "@swimlane-cloud/diagram-converter/themes";
+import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import {
   parseGuiModel,
   applyModelEdit,
   extractPartsCode,
   findAdjacentStepIndex,
   moveRow,
-  sameReorderFrame,
-  getFrameStepIndices,
+  serializeDSL,
+  type GuiRow,
 } from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import { FileTree } from "@/components/file-tree";
@@ -845,29 +846,21 @@ export function MobileView({
     setEditStep(dir === "up" ? Math.max(0, editStep - 1) : editStep + 1);
   };
 
-  // Drag-reorder from the mobile view: move step `from` to be inserted *before*
-  // step `to` (a step index), or to the end when `to` is null. Only within the
-  // same branch frame (matches the desktop step list).
-  const moveStepTo = (from: number, to: number | null) => {
-    let moved = false;
-    const next = applyModelEdit(dsl, (draft) => {
-      const i = nthStepRowIndex(draft.rows, from);
-      if (i < 0) return;
-      let j: number;
-      if (to == null) {
-        // Drop at the end: land after the last step sharing this frame.
-        const frame = getFrameStepIndices(draft.rows, i);
-        const last = frame[frame.length - 1];
-        if (last == null) return;
-        j = last + 1;
-      } else {
-        j = nthStepRowIndex(draft.rows, to);
-        if (j < 0 || !sameReorderFrame(draft.rows, i, j)) return;
-      }
-      draft.rows = moveRow(draft.rows, i, j).rows;
-      moved = true;
-    });
-    if (!moved) return;
+  // Drag-reorder from the mobile view. `fromRow`/`toRow` are raw `model.rows`
+  // indices (the mobile tree exposes them), so a step can be inserted at any gap
+  // — including before/after/between groups, across group boundaries. The move
+  // is on the raw model (same parse the mobile uses) and is rejected if it would
+  // introduce new parse errors.
+  const moveStepRows = (fromRow: number, toRow: number) => {
+    const model = parseDSL(dsl) as unknown as { rows: GuiRow[]; errors?: unknown[] };
+    const rows = model.rows;
+    if (fromRow < 0 || fromRow >= rows.length || rows[fromRow]?.kind !== "step") return;
+    if (toRow === fromRow) return;
+    const before = model.errors?.length ?? 0;
+    const movedRows = moveRow(rows, fromRow, toRow).rows;
+    const next = serializeDSL({ ...model, rows: movedRows });
+    const after = (parseDSL(next) as unknown as { errors?: unknown[] }).errors?.length ?? 0;
+    if (after > before) return; // don't apply a move that breaks the DSL
     setDsl(next);
     onSave?.(active, next);
   };
@@ -895,7 +888,7 @@ export function MobileView({
           onEditStep={editable ? (i) => setEditStep(i) : undefined}
           onDeleteStep={editable ? (i) => setPendingDelete(i) : undefined}
           onInsertStep={editable ? insertStep : undefined}
-          onMoveStep={editable ? moveStepTo : undefined}
+          onMoveStep={editable ? moveStepRows : undefined}
           onAddStep={editable ? addStep : undefined}
           insertStepLabel={t("mobile.insertStep")}
           addStepLabel={t("mobile.addStep")}

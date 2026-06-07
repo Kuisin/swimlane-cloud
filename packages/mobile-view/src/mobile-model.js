@@ -70,10 +70,11 @@ export function truncateFullwidth(s, max = 4) {
   return out;
 }
 
-function stepNode(row, stepIndex) {
+function stepNode(row, stepIndex, rowIndex) {
   return {
     type: "step",
     stepIndex,
+    rowIndex,
     role: row.role || null,
     text: (row.name || row.text || "").trim(),
     description: (row.description || "").trim(),
@@ -85,34 +86,41 @@ function stepNode(row, stepIndex) {
   };
 }
 
-/** Build the nested node tree from a parsed model. */
+/**
+ * Build the nested node tree. Every container (root, group, case) carries an
+ * `endRow` and every node a start row index, so a drag can resolve any drop gap
+ * — including before/after groups — to a row insertion point in `model.rows`.
+ */
 export function buildMobileTree(model) {
-  const root = [];
-  const stack = [{ container: root, branch: null }];
+  const rows = model.rows || [];
+  const root = { children: [], endRow: rows.length };
+  const stack = [{ node: root, branch: null, case: null }];
   const top = () => stack[stack.length - 1];
   let stepCounter = 0;
 
   const push = (node) => {
     const f = top();
-    if (f.branch && !f.container) {
+    if (f.branch && !f.case) {
       // step before any explicit case → implicit default case
-      const c = { type: "case", label: "", color: null, children: [] };
+      const c = { type: "case", label: "", color: null, children: [], endRow: undefined };
       f.branch.cases.push(c);
-      f.container = c.children;
+      f.case = c;
+      f.node = c;
     }
-    (f.container || root).push(node);
+    f.node.children.push(node);
   };
 
-  for (const row of model.rows || []) {
+  for (let ri = 0; ri < rows.length; ri++) {
+    const row = rows[ri];
     switch (row.kind) {
       case "step":
-        if (!row.empty) push(stepNode(row, stepCounter++));
+        if (!row.empty) push(stepNode(row, stepCounter++, ri));
         break;
       case "branchLoop":
-        push({ type: "loop" });
+        push({ type: "loop", rowIndex: ri });
         break;
       case "branchMerge":
-        push({ type: "merge", target: (row.mergeTarget || "").trim() });
+        push({ type: "merge", target: (row.mergeTarget || "").trim(), rowIndex: ri });
         break;
       case "branchStart": {
         const branch = {
@@ -120,6 +128,8 @@ export function buildMobileTree(model) {
           parallel: !!row.parallel,
           cond: (row.cond || "").trim(),
           cases: [],
+          startRow: ri,
+          endRow: undefined,
         };
         push(branch);
         const first = {
@@ -127,28 +137,38 @@ export function buildMobileTree(model) {
           label: (row.firstCase || "").trim(),
           color: row.branchColor || null,
           children: [],
+          endRow: undefined,
         };
         branch.cases.push(first);
-        stack.push({ branch, container: first.children });
+        stack.push({ node: first, branch, case: first });
         break;
       }
       case "branchCase": {
         const f = top();
         if (f.branch) {
+          if (f.case) f.case.endRow = ri;
           const c = {
             type: "case",
             label: (row.label || "").trim(),
             color: row.branchColor || null,
             children: [],
+            endRow: undefined,
           };
           f.branch.cases.push(c);
-          f.container = c.children;
+          f.case = c;
+          f.node = c;
         }
         break;
       }
-      case "branchEnd":
-        if (top().branch) stack.pop();
+      case "branchEnd": {
+        const f = top();
+        if (f.branch) {
+          if (f.case) f.case.endRow = ri;
+          f.branch.endRow = ri;
+          stack.pop();
+        }
         break;
+      }
       case "groupStart": {
         const g = {
           type: "group",
@@ -156,13 +176,19 @@ export function buildMobileTree(model) {
           name: (row.sectionName || "").trim(),
           color: row.sectionColor || null,
           children: [],
+          startRow: ri,
+          endRow: undefined,
         };
         push(g);
-        stack.push({ container: g.children, branch: null });
+        stack.push({ node: g, branch: null, case: null });
         break;
       }
       case "groupEnd":
-        if (stack.length > 1) stack.pop();
+        if (stack.length > 1) {
+          const f = top();
+          if (f.node?.type === "group") f.node.endRow = ri;
+          stack.pop();
+        }
         break;
       default:
         break;
@@ -183,7 +209,8 @@ export function buildMobileTree(model) {
     lanes: model.lanes || [],
     blocks: model.blocks || {},
     props: model.props || {},
-    nodes: root,
+    nodes: root.children,
+    rootEndRow: root.endRow,
     mergeTargets,
     errors: model.errors || [],
   };

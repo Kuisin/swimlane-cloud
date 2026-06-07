@@ -97,34 +97,45 @@ function makeT(lang) {
  * and hovered `stepIndex` via the `data-step-index` attribute on step cards; on
  * release it asks the host to move from→to (the host validates the move).
  */
+/** Row index to insert a step *before* for the gap above a node. */
+function nodeStartRow(node) {
+  return node.type === "branch" || node.type === "group" ? node.startRow : node.rowIndex;
+}
+
 /**
- * Find the insertion point nearest the pointer: the step card whose top half the
- * pointer is in (insert *before* it), else the end. Returns the target step index
- * to insert before (`to: null` = end) plus the indicator's screen rect. Driven by
- * the live card geometry, so it's robust to releasing on a connector/gap.
+ * Resolve the pointer to an insertion gap. Every gap (before each node + the end
+ * of each container, at every nesting level) is a thin `data-drop-row` marker
+ * holding the `model.rows` index to insert before. We pick the gap nearest the
+ * pointer, so a step can land anywhere — including before/after/between groups.
  */
 function computeDrop(clientY) {
-  const cards = [...document.querySelectorAll("[data-step-index]")];
-  if (!cards.length) return null;
-  for (const card of cards) {
-    const r = card.getBoundingClientRect();
-    if (clientY < r.top + r.height / 2) {
-      return { to: Number(card.dataset.stepIndex), top: r.top - 3, left: r.left, width: r.width };
+  const marks = [...document.querySelectorAll("[data-drop-row]")];
+  if (!marks.length) return null;
+  const pts = marks.map((m) => {
+    const r = m.getBoundingClientRect();
+    return { row: Number(m.dataset.dropRow), y: r.top, left: r.left, width: r.width };
+  });
+  for (let i = 0; i < pts.length; i++) {
+    const cur = pts[i];
+    const next = pts[i + 1];
+    if (!next || clientY < next.y) {
+      const pick = next && clientY >= (cur.y + next.y) / 2 ? next : cur;
+      return { to: pick.row, top: pick.y, left: pick.left, width: pick.width };
     }
   }
-  const last = cards[cards.length - 1].getBoundingClientRect();
-  return { to: null, top: last.bottom + 3, left: last.left, width: last.width };
+  const last = pts[pts.length - 1];
+  return { to: last.row, top: last.y, left: last.left, width: last.width };
 }
 
 function useStepDrag(onMoveStep) {
   const [state, setState] = useState({ from: null, x: 0, y: 0, preview: null, drop: null });
 
-  const start = (e, stepIndex, preview) => {
+  const start = (e, rowIndex, preview) => {
     if (!onMoveStep) return;
     e.preventDefault();
     e.stopPropagation();
     document.body.style.userSelect = "none";
-    setState({ from: stepIndex, x: e.clientX, y: e.clientY, preview, drop: computeDrop(e.clientY) });
+    setState({ from: rowIndex, x: e.clientX, y: e.clientY, preview, drop: computeDrop(e.clientY) });
 
     const move = (ev) => {
       const drop = computeDrop(ev.clientY);
@@ -137,7 +148,7 @@ function useStepDrag(onMoveStep) {
       document.body.style.userSelect = "";
       const drop = computeDrop(ev.clientY);
       setState({ from: null, x: 0, y: 0, preview: null, drop: null });
-      if (drop && drop.to !== stepIndex) onMoveStep(stepIndex, drop.to);
+      if (drop && drop.to !== rowIndex) onMoveStep(rowIndex, drop.to);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -300,7 +311,7 @@ export function MobileDiagram({
           </div>
         ) : (
           <>
-            <NodeList nodes={tree.nodes} ctx={ctx} />
+            <NodeList nodes={tree.nodes} ctx={ctx} endRow={tree.rootEndRow} />
             {editable && onAddStep && (
               <>
                 {tree.nodes.length > 0 && <FlowConnector />}
@@ -318,14 +329,17 @@ export function MobileDiagram({
   );
 }
 
-function NodeList({ nodes, ctx }) {
+function NodeList({ nodes, ctx, endRow }) {
+  const dnd = Boolean(ctx.onMoveStep);
   return (
     <div className="flex flex-col">
       {nodes.map((n, i) => (
         <div key={i} className="flex flex-col">
+          {dnd && <div data-drop-row={nodeStartRow(n)} className="h-0" aria-hidden />}
           <Node node={n} ctx={ctx} hasNext={i < nodes.length - 1} />
         </div>
       ))}
+      {dnd && endRow != null && <div data-drop-row={endRow} className="h-0" aria-hidden />}
     </div>
   );
 }
@@ -479,12 +493,11 @@ function StepCard({ node, ctx, hasNext = false }) {
   const hasDetail =
     node.description || node.remark || node.props?.length > 0 || block;
   const showInsert = open && ctx.editable && ctx.onInsertStep;
-  const isDragging = ctx.drag?.from === node.stepIndex;
+  const isDragging = ctx.drag?.from === node.rowIndex;
 
   return (
     <>
       <div
-        data-step-index={node.stepIndex}
         className={`cursor-pointer rounded-xl border-y border-e border-s-4 border-slate-200 bg-white p-2 transition-shadow duration-200 hover:shadow-md ${
           isDragging ? "opacity-40" : ""
         }`}
@@ -533,7 +546,7 @@ function StepCard({ node, ctx, hasNext = false }) {
                   title={ctx.t("dragStep")}
                   aria-label={ctx.t("dragStep")}
                   onPointerDown={(e) =>
-                    ctx.drag.start(e, node.stepIndex, {
+                    ctx.drag.start(e, node.rowIndex, {
                       text: node.text || ctx.t("noText"),
                       label: lane ? truncateFullwidth(lane.label, 4) : null,
                       color,
@@ -653,7 +666,7 @@ function BranchCard({ node, ctx }) {
                 {caseLabel(node, c, i, ctx.t)}
               </div>
               {c.children.length > 0 ? (
-                <NodeList nodes={c.children} ctx={ctx} />
+                <NodeList nodes={c.children} ctx={ctx} endRow={c.endRow} />
               ) : (
                 <div className={EMPTY_SM_CLS}>{ctx.t("emptyBlock")}</div>
               )}
@@ -699,7 +712,7 @@ function GroupCard({ node, ctx }) {
       </button>
       {open &&
         (node.children.length > 0 ? (
-          <NodeList nodes={node.children} ctx={ctx} />
+          <NodeList nodes={node.children} ctx={ctx} endRow={node.endRow} />
         ) : (
           <div className={EMPTY_SM_CLS}>{ctx.t("emptyBlock")}</div>
         ))}
