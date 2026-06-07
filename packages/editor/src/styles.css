@@ -1229,6 +1229,46 @@
   flex-direction: column;
   gap: 12px;
 }
+/* role / block / prop definition editor */
+.sw-defs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sw-def-card {
+  border: 1px solid var(--sw-border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--sw-bg-alt);
+}
+.sw-def-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.sw-def-id {
+  font-family: var(--sw-mono);
+  font-size: 12px;
+  color: var(--sw-accent);
+}
+.sw-def-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.sw-def-color {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sw-def-swatch {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--sw-border-strong);
+}
 .sw-settings-row3 {
   display: flex;
   gap: 8px;

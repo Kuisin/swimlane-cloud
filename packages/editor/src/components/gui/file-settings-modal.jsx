@@ -4,6 +4,7 @@ import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import { DEFAULT_COLUMN_TITLES } from "@swimlane-cloud/diagram-converter/diagram-options";
 import { useT } from "../../i18n.jsx";
 import { applyModelEdit } from "../../lib/gui-model.js";
+import { DefinitionsEditor } from "./definitions-editor.jsx";
 
 const BOOL_OPTIONS = [
   "showLeftGutter",
@@ -100,6 +101,16 @@ export function FileSettingsModal({ open, src, readOnly, onChange, onClose }) {
           >
             {t("settings.optionTab")}
           </button>
+          {["role", "block", "prop"].map((k) => (
+            <button
+              key={k}
+              type="button"
+              className={`sw-tpl-tab ${tab === k ? "sw-tpl-tab-active" : ""}`}
+              onClick={() => setTab(k)}
+            >
+              {t(`settings.${k}Tab`)}
+            </button>
+          ))}
         </div>
         <div className="sw-modal-body">
           {tab === "page" && (
@@ -200,6 +211,9 @@ export function FileSettingsModal({ open, src, readOnly, onChange, onClose }) {
                 </div>
               )}
             </div>
+          )}
+          {["role", "block", "prop"].includes(tab) && (
+            <DefinitionsEditor kind={tab} src={src} readOnly={readOnly} onChange={onChange} />
           )}
         </div>
       </div>
