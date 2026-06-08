@@ -21,6 +21,20 @@ export default function PublicSharePage() {
     setEntry(getPublished(slug));
   }, [slug]);
 
+  // Block copy-oriented keyboard shortcuts (Ctrl/Cmd + C, A, S, P, U) and F12.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (["c", "a", "s", "p", "u"].includes(e.key.toLowerCase())) {
+          e.preventDefault();
+        }
+      }
+      if (e.key === "F12") e.preventDefault();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
   const files = entry?.files ?? {};
   const paths = Object.keys(files)
     .filter((p) => p.endsWith(".txt"))
@@ -68,16 +82,22 @@ export default function PublicSharePage() {
   }
 
   const dsl = files[path] ?? entry.dsl;
+  const showDsl = entry.shareMode === "svg_and_dsl";
 
   return (
-    <main className="mx-auto flex h-screen max-w-5xl flex-col px-4 py-6">
+    // select-none + onContextMenu prevent casual text selection and right-click copy.
+    // print:hidden hides diagram content from print/PDF export.
+    <main
+      className="mx-auto flex h-screen max-w-5xl select-none flex-col px-4 py-6"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <header className="mb-4 shrink-0">
         <div className="text-xs uppercase tracking-wide text-neutral-400">Published</div>
         <h1 className="text-2xl font-semibold">{entry.name}</h1>
         {entry.note && <p className="text-sm text-neutral-500">{entry.note}</p>}
       </header>
 
-      <div className="flex min-h-0 flex-1 gap-4">
+      <div className="flex min-h-0 flex-1 gap-4 print:hidden">
         {paths.length > 0 && (
           <aside className="w-48 shrink-0 overflow-auto rounded-lg border border-neutral-200 p-2">
             <FileTree paths={paths} active={path} onPick={setPath} />
@@ -85,26 +105,29 @@ export default function PublicSharePage() {
         )}
         <section className="min-w-0 flex-1 overflow-auto">
           {svg ? (
+            // pointer-events-none prevents drag-to-desktop and SVG interaction.
             <div
-              className="rounded-lg border border-neutral-200 bg-white p-4 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+              className="pointer-events-none rounded-lg border border-neutral-200 bg-white p-4 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
               dangerouslySetInnerHTML={{ __html: svg }}
             />
           ) : (
             <p className="text-sm text-neutral-500">No rendered diagram.</p>
           )}
-          <details className="mt-4">
-            <summary className="cursor-pointer text-sm font-medium text-neutral-600">
-              View DSL source
-            </summary>
-            <pre className="mt-2 overflow-auto rounded-md bg-neutral-50 p-4 font-mono text-xs text-neutral-700">
-              {dsl}
-            </pre>
-          </details>
+          {showDsl && dsl && (
+            <details className="mt-4">
+              <summary className="cursor-pointer text-sm font-medium text-neutral-600">
+                View DSL source
+              </summary>
+              <pre className="mt-2 overflow-auto rounded-md bg-neutral-50 p-4 font-mono text-xs text-neutral-700">
+                {dsl}
+              </pre>
+            </details>
+          )}
         </section>
       </div>
 
       <p className="mt-4 shrink-0 text-xs text-neutral-400">
-        Shared read-only via Swimlane Cloud (demo).
+        Shared read-only via Swimlane Cloud (demo). Content is protected.
       </p>
     </main>
   );

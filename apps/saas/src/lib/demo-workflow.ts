@@ -68,6 +68,7 @@ export interface PublishedEntry {
   dsl: string;
   files: Files;
   ts: number;
+  shareMode?: "svg_only" | "svg_and_dsl";
 }
 export interface WorkflowState {
   role: Role;
@@ -559,6 +560,7 @@ export function publishVersion(
   pid: string,
   st: WorkflowState,
   versionId: string,
+  shareMode: "svg_only" | "svg_and_dsl" = "svg_only",
 ): WorkflowState {
   const v = st.versions.find((x) => x.id === versionId);
   if (!v || !v.promoted) return st;
@@ -575,6 +577,7 @@ export function publishVersion(
     dsl: pp ? v.files[pp] : "",
     files: { ...v.files },
     ts: now(),
+    shareMode,
   };
   savePublished(map);
   const next = {
