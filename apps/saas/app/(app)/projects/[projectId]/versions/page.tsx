@@ -52,7 +52,7 @@ export default function VersionsPage() {
             st={st}
             isManager={isManager}
             onPromote={(id) => setSt(promote(projectId, st, id))}
-            onPublish={(id) => setSt(publishVersion(projectId, st, id))}
+            onPublish={(id, shareMode) => setSt(publishVersion(projectId, st, id, shareMode))}
             onUnpublish={(id) => setSt(unpublishVersion(projectId, st, id))}
           />
         </div>

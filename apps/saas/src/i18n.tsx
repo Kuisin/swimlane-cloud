@@ -130,6 +130,7 @@ export const EN: Record<string, string> = {
   "version.publish": "Publish",
   "version.unpublish": "Unpublish",
   "version.notPublished": "not published",
+  "version.includeDsl": "Include DSL source",
   // mobile view
   "mobile.addStep": "Add step",
   "mobile.insertStep": "Insert step",
@@ -290,6 +291,7 @@ export const JA: Record<string, string> = {
   "version.publish": "公開",
   "version.unpublish": "非公開にする",
   "version.notPublished": "未公開",
+  "version.includeDsl": "DSL ソースを含める",
   // mobile view
   "mobile.addStep": "ステップを追加",
   "mobile.insertStep": "ステップを挿入",

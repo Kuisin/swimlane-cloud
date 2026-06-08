@@ -645,10 +645,11 @@ export function VersionPanel({
   st: WorkflowState;
   isManager: boolean;
   onPromote: (id: string) => void;
-  onPublish: (id: string) => void;
+  onPublish: (id: string, shareMode: "svg_only" | "svg_and_dsl") => void;
   onUnpublish: (id: string) => void;
 }) {
   const { t } = useT();
+  const [dslEnabled, setDslEnabled] = useState<Record<string, boolean>>({});
   if (st.versions.length === 0)
     return <Empty>{t("version.empty")}</Empty>;
   return (
@@ -698,12 +699,27 @@ export function VersionPanel({
                       )}
                     </>
                   ) : isManager ? (
-                    <button
-                      onClick={() => onPublish(v.id)}
-                      className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
-                    >
-                      {t("version.publish")}
-                    </button>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <label className="flex cursor-pointer items-center gap-1.5 text-xs text-neutral-500">
+                        <input
+                          type="checkbox"
+                          className="h-3 w-3"
+                          checked={dslEnabled[v.id] ?? false}
+                          onChange={(e) =>
+                            setDslEnabled((prev) => ({ ...prev, [v.id]: e.target.checked }))
+                          }
+                        />
+                        {t("version.includeDsl")}
+                      </label>
+                      <button
+                        onClick={() =>
+                          onPublish(v.id, dslEnabled[v.id] ? "svg_and_dsl" : "svg_only")
+                        }
+                        className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
+                      >
+                        {t("version.publish")}
+                      </button>
+                    </div>
                   ) : (
                     <span className="text-xs text-neutral-400">{t("version.notPublished")}</span>
                   )}
