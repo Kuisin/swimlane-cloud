@@ -319,7 +319,9 @@ function serializeLineRows(rows) {
     }
 
     if (row.kind === "step") {
-      if (depth === 0 && prevKind === "step" && !row.empty) {
+      // Blank line between consecutive steps for readability — at every depth,
+      // not just the top level (steps nested in branches/sections too).
+      if (prevKind === "step" && !row.empty) {
         pushBlankLine(out);
       }
       serializeStepLines(out, row, depth);
