@@ -4,16 +4,22 @@ import { extractDefIds } from "../lib/parts-extract.js";
 import { PartsPreviewTooltip } from "./parts-preview-tooltip.jsx";
 
 /**
- * Plain <textarea> editor with a syntax-highlighted overlay. (Monaco/CodeMirror
- * are not installed in this package.) The coloured <pre> sits *on top* of a
- * transparent-text textarea and is click-through (`pointer-events: none`), so
- * the textarea below stays the editing surface. Only `<block>` / `<prop>` ref
- * tokens opt back into pointer events so they can show a design-preview tooltip
- * on hover — the same native-hover approach the GUI inspector badges use.
+ * Plain <textarea> editor with a syntax-highlighted overlay and a line-number
+ * gutter. (Monaco/CodeMirror are not installed in this package.) The coloured
+ * <pre> sits *on top* of a transparent-text textarea and is click-through, so
+ * the textarea below stays the editing surface; only `<block>`/`<prop>` ref
+ * tokens opt back into pointer events to show a design preview on hover.
+ *
+ * The editor does NOT soft-wrap (`white-space: pre`, `wrap="off"`): long lines
+ * scroll horizontally instead. This keeps the two layers perfectly aligned —
+ * soft-wrap made the textarea (which reserves a scrollbar) wrap a few px earlier
+ * than the overlay, drifting the colours on wrapped lines — and keeps one line
+ * number per logical line.
  */
 export function TextEditor({ value, onChange, readOnly, gotoLine, theme }) {
   const ref = useRef(null);
   const preRef = useRef(null);
+  const gutterRef = useRef(null);
   const [hoverPreview, setHoverPreview] = useState(null);
   // While the mouse button is down, make ref spans click-through so a drag
   // selection passes cleanly through them to the textarea below.
@@ -50,31 +56,27 @@ export function TextEditor({ value, onChange, readOnly, gotoLine, theme }) {
     return map;
   }, [value]);
 
-  // DEBUG: how many hoverable block/prop refs were found in this document.
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[ref-hover] block/prop ids:", [...refSections.keys()]);
-  }, [refSections]);
+  const lineCount = useMemo(() => value.split("\n").length, [value]);
 
-  // Keep the (top) <pre> scrolled in lockstep with the (bottom) textarea.
+  // Keep the (top) <pre> and the gutter scrolled in lockstep with the textarea.
   const syncScroll = useCallback(() => {
-    if (preRef.current && ref.current) {
-      preRef.current.scrollTop = ref.current.scrollTop;
-      preRef.current.scrollLeft = ref.current.scrollLeft;
+    const ta = ref.current;
+    if (!ta) return;
+    if (preRef.current) {
+      preRef.current.scrollTop = ta.scrollTop;
+      preRef.current.scrollLeft = ta.scrollLeft;
     }
+    if (gutterRef.current) gutterRef.current.scrollTop = ta.scrollTop;
   }, []);
 
   // Forward wheel over an interactive ref span to the textarea below so the
   // editor still scrolls when the pointer is on a `<ref>`.
-  const forwardWheel = useCallback(
-    (e) => {
-      const el = ref.current;
-      if (!el) return;
-      el.scrollTop += e.deltaY;
-      el.scrollLeft += e.deltaX;
-    },
-    [],
-  );
+  const forwardWheel = useCallback((e) => {
+    const el = ref.current;
+    if (!el) return;
+    el.scrollTop += e.deltaY;
+    el.scrollLeft += e.deltaX;
+  }, []);
 
   const highlighted = useMemo(() => {
     const lines = value.split("\n");
@@ -88,16 +90,11 @@ export function TextEditor({ value, onChange, readOnly, gotoLine, theme }) {
             if (section) {
               const show = (e) =>
                 setHoverPreview({ id, section, anchor: { x: e.clientX, y: e.clientY } });
-              const onEnter = (e) => {
-                // eslint-disable-next-line no-console
-                console.log("[ref-hover] hover triggered:", section, id);
-                show(e);
-              };
               return (
                 <span
                   key={j}
                   className="sw-syn-ref sw-syn-ref-link"
-                  onMouseEnter={onEnter}
+                  onMouseEnter={show}
                   onMouseMove={show}
                   onMouseLeave={clearHoverPreview}
                   onWheel={forwardWheel}
@@ -118,29 +115,45 @@ export function TextEditor({ value, onChange, readOnly, gotoLine, theme }) {
     ));
   }, [value, refSections, clearHoverPreview, forwardWheel]);
 
+  const lineNumbers = useMemo(
+    () =>
+      Array.from({ length: lineCount }, (_, i) => (
+        <div key={i} className="sw-code-lineno">
+          {i + 1}
+        </div>
+      )),
+    [lineCount],
+  );
+
   return (
     <div className="sw-code">
-      <textarea
-        ref={ref}
-        className="sw-code-layer sw-code-input"
-        spellCheck={false}
-        readOnly={readOnly}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onScroll={syncScroll}
-        onMouseDown={() => {
-          setSelecting(true);
-          clearHoverPreview();
-        }}
-        aria-label="DSL source"
-      />
-      <pre
-        className={`sw-code-layer sw-code-highlight${selecting ? " sw-code-selecting" : ""}`}
-        ref={preRef}
-        aria-hidden
-      >
-        {highlighted}
-      </pre>
+      <div className="sw-code-gutter" ref={gutterRef} aria-hidden>
+        <div className="sw-code-gutter-inner">{lineNumbers}</div>
+      </div>
+      <div className="sw-code-area">
+        <pre
+          className={`sw-code-layer sw-code-highlight${selecting ? " sw-code-selecting" : ""}`}
+          ref={preRef}
+          aria-hidden
+        >
+          {highlighted}
+        </pre>
+        <textarea
+          ref={ref}
+          className="sw-code-layer sw-code-input"
+          spellCheck={false}
+          wrap="off"
+          readOnly={readOnly}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onScroll={syncScroll}
+          onMouseDown={() => {
+            setSelecting(true);
+            clearHoverPreview();
+          }}
+          aria-label="DSL source"
+        />
+      </div>
       <PartsPreviewTooltip
         open={Boolean(hoverPreview)}
         section={hoverPreview?.section}

@@ -196,6 +196,7 @@ export const EN = {
   "parts.none": "No designs defined yet.",
   // dialogs
   "dlg.cannotFormat": "Cannot format: fix parse errors first.",
+  "dlg.pngFailed": "Could not export PNG from this diagram.",
   "dlg.checkpointMsg": "Checkpoint message (optional)",
   "dlg.versionName": "Version name",
   "dlg.versionFail": "Could not flag version.",
@@ -412,6 +413,7 @@ export const JA = {
   "parts.none": "デザインがまだ定義されていません。",
   // dialogs
   "dlg.cannotFormat": "整形できません：先に構文エラーを修正してください。",
+  "dlg.pngFailed": "この図のPNG書き出しに失敗しました。",
   "dlg.checkpointMsg": "チェックポイントのメッセージ（任意）",
   "dlg.versionName": "バージョン名",
   "dlg.versionFail": "バージョンを登録できませんでした。",

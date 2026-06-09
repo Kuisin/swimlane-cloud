@@ -166,74 +166,96 @@ function DslEditorInner({ options }) {
     if (typeof document === "undefined") return;
     const baseName = activeDocument?.name || "diagram";
 
-    if (format === "svg") {
-      if (!svg) return;
-      const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+    const triggerDownload = (blob, ext) => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = baseName + ".svg";
+      a.download = `${baseName}.${ext}`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+
+    if (format === "txt") {
+      triggerDownload(new Blob([src], { type: "text/plain;charset=utf-8" }), "txt");
+      return;
+    }
+
+    if (!svg) return;
+
+    // The live SVG uses style="width:100%;height:auto", which (a) leaves an
+    // <img> with no intrinsic size → a blank/cropped PNG, and (b) can render
+    // oddly when the .svg is opened standalone. Pin explicit pixel dimensions
+    // (from the viewBox) on both the style and the width/height attributes.
+    const vb = /viewBox="\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)/.exec(svg);
+    const w = vb ? Math.round(parseFloat(vb[1])) : 0;
+    const h = vb ? Math.round(parseFloat(vb[2])) : 0;
+    let outSvg = svg;
+    if (w > 0 && h > 0) {
+      outSvg = svg.replace(/<svg\b[^>]*>/, (tag) => {
+        let t = tag.replace(/\swidth="[^"]*"/i, "").replace(/\sheight="[^"]*"/i, "");
+        if (/style="/i.test(t)) {
+          t = t.replace(/style="([^"]*)"/i, (_m, st) => {
+            const cleaned = st
+              .replace(/width\s*:\s*[^;"]*;?/i, "")
+              .replace(/height\s*:\s*[^;"]*;?/i, "");
+            return `style="width:${w}px;height:${h}px;${cleaned}"`;
+          });
+        }
+        return t.replace(/<svg\b/, `<svg width="${w}" height="${h}"`);
+      });
+    }
+
+    if (format === "svg") {
+      triggerDownload(new Blob([outSvg], { type: "image/svg+xml;charset=utf-8" }), "svg");
       return;
     }
 
     if (format === "png") {
-      if (!svg) return;
-      // Parse viewBox to get the intrinsic SVG dimensions.
-      // SVG uses width:"100%"/height:"auto" which causes naturalWidth/Height
-      // to be unreliable when loaded as an <img>, leading to cropped exports.
-      const parser = new DOMParser();
-      const svgDoc = parser.parseFromString(svg, "image/svg+xml");
-      const svgEl = svgDoc.documentElement;
-      const viewBox = svgEl.getAttribute("viewBox");
-      let svgW = 0, svgH = 0;
-      if (viewBox) {
-        const parts = viewBox.trim().split(/[\s,]+/);
-        svgW = parseFloat(parts[2]) || 0;
-        svgH = parseFloat(parts[3]) || 0;
-      }
-      if (svgW > 0 && svgH > 0) {
-        svgEl.setAttribute("width", String(svgW));
-        svgEl.setAttribute("height", String(svgH));
-      }
-      const serializer = new XMLSerializer();
-      const svgString = serializer.serializeToString(svgEl);
+      // A blob URL is reliable across browsers for SVG → <img> → canvas; an SVG
+      // data URL fails to load in Safari, which is why PNG export was breaking.
+      const svgUrl = URL.createObjectURL(
+        new Blob([outSvg], { type: "image/svg+xml;charset=utf-8" }),
+      );
       const img = new Image();
-      const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-      const svgUrl = URL.createObjectURL(svgBlob);
       img.onload = () => {
-        const scale = 2;
-        const w = svgW || img.naturalWidth;
-        const h = svgH || img.naturalHeight;
+        const baseW = w || img.naturalWidth || 800;
+        const baseH = h || img.naturalHeight || 600;
+        // Browsers cap canvas size (Safari rasterizes nothing past ~16.7M px of
+        // area / 8k per side, returning a blank canvas + null toBlob). A fixed
+        // 2x scale blows that on large diagrams — which is why a small diagram
+        // exports but a big one fails. Pick the largest scale up to 2x that
+        // still fits, so large diagrams downscale gracefully instead of going
+        // blank. crisp on small diagrams, never blank on big ones.
+        const MAX_DIM = 8192;
+        const MAX_AREA = 16777216; // 4096^2 — Safari's ceiling
+        let scale = Math.min(2, MAX_DIM / baseW, MAX_DIM / baseH);
+        scale = Math.min(scale, Math.sqrt(MAX_AREA / (baseW * baseH)));
+        if (!(scale > 0) || !Number.isFinite(scale)) scale = 1;
+        const cw = Math.max(1, Math.floor(baseW * scale));
+        const ch = Math.max(1, Math.floor(baseH * scale));
         const canvas = document.createElement("canvas");
-        canvas.width = w * scale;
-        canvas.height = h * scale;
+        canvas.width = cw;
+        canvas.height = ch;
         const ctx = canvas.getContext("2d");
-        ctx.scale(scale, scale);
-        ctx.drawImage(img, 0, 0, w, h);
+        ctx.drawImage(img, 0, 0, cw, ch);
         URL.revokeObjectURL(svgUrl);
-        canvas.toBlob((blob) => {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = baseName + ".png";
-          a.click();
-          URL.revokeObjectURL(url);
-        }, "image/png");
+        try {
+          canvas.toBlob((blob) => {
+            if (blob) triggerDownload(blob, "png");
+            else dialog.alert(t("dlg.pngFailed"));
+          }, "image/png");
+        } catch {
+          dialog.alert(t("dlg.pngFailed"));
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(svgUrl);
+        dialog.alert(t("dlg.pngFailed"));
       };
       img.src = svgUrl;
-      return;
     }
-
-    // default: txt
-    const blob = new Blob([src], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = baseName + ".txt";
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   async function handleFormat() {
