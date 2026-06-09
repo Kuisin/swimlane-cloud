@@ -16,6 +16,7 @@ export {
 } from "./diagram-layout.js";
 export { renderStepShape, StepShape } from "./step-shape.js";
 export { renderBlockIcon, BlockIcon } from "./block-icon.js";
+export { LUCIDE_ICON_NODES, getLucideIconNode } from "./icon-paths.js";
 export { renderPartsPreviewHtml } from "./parts-preview-static.js";
 export { renderTemplatePartsPreviewHtml } from "./template-parts-preview.js";
 export { textToSvg } from "./text-to-svg.js";

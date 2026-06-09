@@ -5,6 +5,7 @@ import { renderPartsPreviewHtml } from "@swimlane-cloud/diagram-converter";
 import { THEMES } from "@swimlane-cloud/diagram-converter/themes";
 import { applyModelEdit } from "../../lib/gui-model.js";
 import { useT } from "../../i18n.jsx";
+import { IconField, ColorField, IconGlyph } from "./icon-color-pickers.jsx";
 
 const SHAPES = ["rect", "rounded", "hex", "ellipse", "cloud", "note", "subroutine", "arrow-down"];
 
@@ -13,7 +14,7 @@ const FIELDS = {
     { key: "label", type: "text" },
     { key: "bg", type: "color" },
     { key: "textColor", type: "color" },
-    { key: "icon", type: "text", ph: "#user" },
+    { key: "icon", type: "icon", ph: "#user" },
   ],
   block: [
     { key: "label", type: "text" },
@@ -21,7 +22,7 @@ const FIELDS = {
     { key: "bg", type: "color" },
     { key: "textColor", type: "color" },
     { key: "borderColor", type: "color" },
-    { key: "icon", type: "text", ph: "#settings" },
+    { key: "icon", type: "icon", ph: "#settings" },
   ],
   prop: [
     { key: "label", type: "text" },
@@ -99,6 +100,7 @@ function Preview({ kind, entry, theme }) {
           color: cssColor(entry.textColor) === "transparent" ? "var(--sw-text)" : cssColor(entry.textColor),
         }}
       >
+        {entry.icon && <IconGlyph name={entry.icon} size={13} />}
         {entry.label || entry.id}
       </span>
     );
@@ -194,17 +196,18 @@ export function DefinitionsEditor({ kind, src, readOnly, onChange, theme }) {
                     ))}
                   </select>
                 ) : f.type === "color" ? (
-                  <span className="sw-def-color">
-                    <span className="sw-def-swatch" style={{ background: cssColor(e[f.key]) }} />
-                    <input
-                      type="text"
-                      className="sw-input"
-                      value={e[f.key] || ""}
-                      placeholder="#dbeafe / blue"
-                      disabled={readOnly}
-                      onChange={(ev) => setField(e.id, f.key, ev.target.value)}
-                    />
-                  </span>
+                  <ColorField
+                    value={e[f.key]}
+                    readOnly={readOnly}
+                    onChange={(v) => setField(e.id, f.key, v)}
+                  />
+                ) : f.type === "icon" ? (
+                  <IconField
+                    value={e[f.key]}
+                    placeholder={f.ph}
+                    readOnly={readOnly}
+                    onChange={(v) => setField(e.id, f.key, v)}
+                  />
                 ) : (
                   <input
                     type={f.type === "number" ? "number" : "text"}
