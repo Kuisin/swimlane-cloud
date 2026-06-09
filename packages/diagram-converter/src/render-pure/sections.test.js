@@ -21,7 +21,9 @@ function sectionBoxCount(svg) {
  * the serialized SVG since attributes are written in declaration order).
  */
 function sectionBoxXValues(svg) {
-  return [...svg.matchAll(/<rect[^>]*x="([\d.]+)"[^>]*stroke-dasharray="6 4"/g)].map(
+  // Anchor on `<rect x="…"` (x is the first attribute) — `[^>]*x=` would greedily
+  // capture the later `rx="8"` corner radius instead of the real x position.
+  return [...svg.matchAll(/<rect x="([\d.]+)"[^>]*stroke-dasharray="6 4"/g)].map(
     (m) => +m[1],
   );
 }

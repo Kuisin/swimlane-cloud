@@ -250,6 +250,9 @@ function renderDiagramSvg({
     mergeNodeW,
     mergeNodeH,
     sectionInset,
+    outerLanePad,
+    sectionEdgeInset,
+    sectionNestStep,
     hitTargetPad,
     hitTargetDecisionPad,
     hitTargetMergePad,
@@ -836,14 +839,36 @@ function renderDiagramSvg({
     const extentWidth = edges ? edges.max - edges.min + laneContentPad * 2 : 0;
     return Math.max(headerWidth, maxStepWidth, extentWidth);
   });
+  // Deepest section nesting in the whole diagram. Each level insets the section
+  // border by sectionNestStep, so the outer lanes must reserve that much extra
+  // room (plus the base padding) to keep the innermost border off the arrows.
+  let maxSectionDepth = 0;
+  {
+    let depth = 0;
+    for (const row of rows) {
+      if (row.kind === "groupStart" && groupModeOf(row) === "section") {
+        depth++;
+        if (depth > maxSectionDepth) maxSectionDepth = depth;
+      } else if (row.kind === "groupEnd" && depth > 0) {
+        depth--;
+      }
+    }
+  }
+  const hasSections = maxSectionDepth > 0;
+  // Padding added to the left of the first lane and the right of the last lane.
+  // Scales with nesting depth so deeply-nested section borders + the side rails
+  // never collide.
+  const outerPad = hasSections
+    ? outerLanePad + sectionEdgeInset + maxSectionDepth * sectionNestStep
+    : 0;
   const laneOffsets = [];
-  let laneCursor = xPad + leftGutter;
+  let laneCursor = xPad + leftGutter + outerPad;
   laneWidths.forEach((w, idx) => {
     laneOffsets[idx] = laneCursor;
     laneCursor += w;
   });
-  const rightGutterX = laneCursor;
-  const width = laneCursor + rightGutter + xPad;
+  const rightGutterX = laneCursor + outerPad;
+  const width = rightGutterX + rightGutter + xPad;
   const baseBottomPadding = baseBottomPaddingBase + pageFooterPad;
   function stepRowBounds(rowIndex) {
     const row = rows[rowIndex];
@@ -2149,9 +2174,10 @@ function renderDiagramSvg({
           if (ek > i) sectionNestDepth++;
         }
       }
-      const nestInset = sectionNestDepth * 8;
-      const boxX = laneX(0) + 8 + nestInset;
-      const boxW = laneWidths.reduce((sum, w) => sum + w, 0) - 16 - nestInset * 2;
+      const nestInset = sectionNestDepth * sectionNestStep;
+      const boxX = laneX(0) + sectionEdgeInset + nestInset;
+      const boxW =
+        laneWidths.reduce((sum, w) => sum + w, 0) - sectionEdgeInset * 2 - nestInset * 2;
       const style = row.sectionColor && BRANCH_COLOR_STYLES[row.sectionColor] ? BRANCH_COLOR_STYLES[row.sectionColor] : { stroke: theme.stroke, bg: theme.branchBg };
       const label = (row.sectionName || "Section").trim() || "Section";
       return /* @__PURE__ */ h("g", { key: `section-${row.id}` }, /* @__PURE__ */ h(

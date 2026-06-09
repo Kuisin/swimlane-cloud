@@ -77,6 +77,15 @@ export const DIAGRAM_LAYOUT = {
   rowH: 80,
   laneContentPad: 15,
   sectionInset: 5,
+  // Horizontal padding reserved on the outermost lanes so step/branch content
+  // and the side-routed arrows don't crowd the gutter dividers or sit on top of
+  // a section's left/right border.
+  outerLanePad: 26,
+  // Gap from the lane-grid edge to the *outermost* section border, and the extra
+  // inset added per nesting level. Sized so the arrow rails (which route at the
+  // grid edge) clear the border, and nested sections stay visually distinct.
+  sectionEdgeInset: 18,
+  sectionNestStep: 12,
 
   // Left / right gutter text
   descWrapCols: 28,
