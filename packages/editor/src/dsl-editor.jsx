@@ -220,14 +220,25 @@ function DslEditorInner({ options }) {
       );
       const img = new Image();
       img.onload = () => {
-        const scale = 2;
-        const cw = w || img.naturalWidth || 800;
-        const ch = h || img.naturalHeight || 600;
+        const baseW = w || img.naturalWidth || 800;
+        const baseH = h || img.naturalHeight || 600;
+        // Browsers cap canvas size (Safari rasterizes nothing past ~16.7M px of
+        // area / 8k per side, returning a blank canvas + null toBlob). A fixed
+        // 2x scale blows that on large diagrams — which is why a small diagram
+        // exports but a big one fails. Pick the largest scale up to 2x that
+        // still fits, so large diagrams downscale gracefully instead of going
+        // blank. crisp on small diagrams, never blank on big ones.
+        const MAX_DIM = 8192;
+        const MAX_AREA = 16777216; // 4096^2 — Safari's ceiling
+        let scale = Math.min(2, MAX_DIM / baseW, MAX_DIM / baseH);
+        scale = Math.min(scale, Math.sqrt(MAX_AREA / (baseW * baseH)));
+        if (!(scale > 0) || !Number.isFinite(scale)) scale = 1;
+        const cw = Math.max(1, Math.floor(baseW * scale));
+        const ch = Math.max(1, Math.floor(baseH * scale));
         const canvas = document.createElement("canvas");
-        canvas.width = cw * scale;
-        canvas.height = ch * scale;
+        canvas.width = cw;
+        canvas.height = ch;
         const ctx = canvas.getContext("2d");
-        ctx.scale(scale, scale);
         ctx.drawImage(img, 0, 0, cw, ch);
         URL.revokeObjectURL(svgUrl);
         try {

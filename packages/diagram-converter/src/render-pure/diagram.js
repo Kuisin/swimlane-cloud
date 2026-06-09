@@ -1516,7 +1516,9 @@ function renderDiagramSvg({
   }
   const swimlaneDividerX1 = xPad;
   const swimlaneDividerX2 = (lanes.length > 0 ? laneX(lanes.length - 1) + laneWidth(lanes.length - 1) : 0) + rightGutter;
-  return /* @__PURE__ */ h(
+  // Coerce the branded markup back to a plain string at the public boundary so
+  // consumers (React state, `Boolean(svg)`, file export) see a normal string.
+  return String(/* @__PURE__ */ h(
     "svg",
     {
       viewBox: `0 0 ${width} ${height}`,
@@ -2716,7 +2718,7 @@ function renderDiagramSvg({
         height
       }
     )
-  );
+  ));
 }
 export { renderDiagramSvg };
 export { BRANCH_COLOR_STYLES } from "./diagram-layout.js";

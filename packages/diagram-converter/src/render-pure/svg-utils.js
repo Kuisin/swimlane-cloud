@@ -1,12 +1,33 @@
 /** @typedef {string | number | boolean | null | undefined | SvgNode | SvgNode[]} SvgNode */
 
 /**
- * Escape text for SVG/HTML text nodes and attribute values.
+ * Branded string marking already-serialized markup, so `join()` can escape
+ * plain-text children (which may contain `<`, `>`, `&` — e.g. an ABAP
+ * `SY-SUBRC <> 0` label) while passing rendered elements through untouched.
+ * Extends String so it coerces transparently in template literals, regexes,
+ * `.replace`, `innerHTML`, etc.
+ */
+class Raw extends String {}
+
+/** @param {string} value */
+export function raw(value) {
+  return new Raw(value);
+}
+
+/** @param {unknown} value */
+export function isRaw(value) {
+  return value instanceof Raw;
+}
+
+/**
+ * Escape text for SVG/HTML text nodes and attribute values. Idempotent: an
+ * already-escaped entity (`&lt;`, `&amp;`, `&#10;` …) is left intact, so it is
+ * safe to run twice (call sites that pre-escape + the central `join` escape).
  * @param {unknown} value
  */
 export function escapeText(value) {
   return String(value ?? "")
-    .replace(/&/g, "&amp;")
+    .replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
@@ -83,21 +104,28 @@ export function el(tag, attrs = {}, children = "") {
     }
     parts.push(` ${attrName}="${escapeAttr(rawValue)}"`);
   }
-  const childStr = join(Array.isArray(children) ? children : [children]);
+  const childStr = String(join(Array.isArray(children) ? children : [children]));
   if (!childStr && /^(?:path|rect|circle|ellipse|line|polygon|polyline|use|image|text|tspan|title)$/.test(tag)) {
-    return `${parts.join("")} />`;
+    return raw(`${parts.join("")} />`);
   }
-  return `${parts.join("")}>${childStr}</${tag}>`;
+  return raw(`${parts.join("")}>${childStr}</${tag}>`);
 }
 
 /**
+ * Serialize a tree of children to a markup string. Rendered elements (branded
+ * `Raw` by `el`/`h`) pass through verbatim; everything else is plain text and
+ * is escaped, so user content containing `<`, `>`, `&` produces valid XML
+ * (and a PNG/SVG export that actually loads). Returns a `Raw`.
  * @param {SvgNode | SvgNode[]} nodes
  */
 export function join(nodes) {
-  return (Array.isArray(nodes) ? nodes : [nodes])
-    .flat(Infinity)
-    .filter((node) => node != null && node !== false)
-    .join("");
+  return raw(
+    (Array.isArray(nodes) ? nodes : [nodes])
+      .flat(Infinity)
+      .filter((node) => node != null && node !== false)
+      .map((node) => (node instanceof Raw ? node.toString() : escapeText(node)))
+      .join(""),
+  );
 }
 
 /** Fragment marker for JSX factory output. */
