@@ -356,11 +356,36 @@
 
 /* ---- syntax-highlighted text editor (overlay technique) ---- */
 .sw-code {
-  position: relative;
+  display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
   background: var(--sw-bg);
+}
+/* Line-number gutter: scroll-synced vertically with the textarea (set in JS),
+   never horizontally. Same line-height/padding as the code so numbers align. */
+.sw-code-gutter {
+  flex-shrink: 0;
+  overflow: hidden;
+  text-align: right;
+  border-right: 1px solid var(--sw-border);
+  background: var(--sw-bg-alt);
+  user-select: none;
+}
+.sw-code-gutter-inner {
+  padding: 12px 8px;
+}
+.sw-code-lineno {
+  font-family: var(--sw-code);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--sw-text-faint);
+  min-width: 1.5rem;
+}
+.sw-code-area {
+  position: relative;
+  flex: 1;
+  min-width: 0;
 }
 .sw-code-layer {
   position: absolute;
@@ -373,9 +398,9 @@
   line-height: 1.6;
   tab-size: 2;
   border: 0;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  word-break: break-word;
+  /* No soft-wrap: long lines scroll horizontally. This keeps the overlay and
+     the textarea wrapping identically (i.e. not at all) so colours never drift. */
+  white-space: pre;
 }
 /* Highlight layer sits on top (click-through) so ref tokens can opt into hover;
    the textarea below remains the editing surface and shows the caret/selection

@@ -196,33 +196,44 @@ function DslEditorInner({ options }) {
       if (svgW > 0 && svgH > 0) {
         svgEl.setAttribute("width", String(svgW));
         svgEl.setAttribute("height", String(svgH));
+        // The live SVG carries style="width:100%;height:auto", which overrides
+        // the width/height attributes and leaves the <img> with no intrinsic
+        // size (→ a blank/wrong PNG). Pin the style to explicit pixels.
+        svgEl.style.width = `${svgW}px`;
+        svgEl.style.height = `${svgH}px`;
       }
-      const serializer = new XMLSerializer();
-      const svgString = serializer.serializeToString(svgEl);
+      const svgString = new XMLSerializer().serializeToString(svgEl);
+      // A data URL is more reliable than a blob URL for SVG → <img> → canvas.
+      const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
       const img = new Image();
-      const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-      const svgUrl = URL.createObjectURL(svgBlob);
       img.onload = () => {
         const scale = 2;
-        const w = svgW || img.naturalWidth;
-        const h = svgH || img.naturalHeight;
+        const w = svgW || img.naturalWidth || 600;
+        const h = svgH || img.naturalHeight || 400;
         const canvas = document.createElement("canvas");
         canvas.width = w * scale;
         canvas.height = h * scale;
         const ctx = canvas.getContext("2d");
         ctx.scale(scale, scale);
         ctx.drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(svgUrl);
-        canvas.toBlob((blob) => {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = baseName + ".png";
-          a.click();
-          URL.revokeObjectURL(url);
-        }, "image/png");
+        try {
+          canvas.toBlob((blob) => {
+            if (!blob) return;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = baseName + ".png";
+            a.click();
+            URL.revokeObjectURL(url);
+          }, "image/png");
+        } catch {
+          /* tainted canvas — should not happen for self-contained SVG */
+        }
       };
-      img.src = svgUrl;
+      img.onerror = () => {
+        dialog.alert(t("dlg.pngFailed"));
+      };
+      img.src = dataUrl;
       return;
     }
 
