@@ -1,6 +1,6 @@
 /** Shared branch row geometry (parser, diagram, GUI). */
 
-import { isInsideGroup } from "./group-rows.js";
+import { isInsideBranchGroup } from "./group-rows.js";
 
 export function findBranchEndIndex(rows, startIndex) {
   const start = rows[startIndex];
@@ -97,7 +97,7 @@ export function findNextFlowStepAfterBranchEnd(rows, branchStartIndex, afterRowI
       }
       continue;
     }
-    if (row.kind === "step" && !row.empty && row.role && !isInsideGroup(rows, j)) {
+    if (row.kind === "step" && !row.empty && row.role && !isInsideBranchGroup(rows, j)) {
       const stepParent = findEnclosingBranchStart(rows, j);
       if (stepParent === branchParent) return j;
     }

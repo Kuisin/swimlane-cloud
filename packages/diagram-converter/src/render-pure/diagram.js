@@ -2140,8 +2140,16 @@ function renderDiagramSvg({
       if (endIdx < 0 || lanes.length === 0) return null;
       const yTop = rowMeta[i]?.y ?? 0;
       const yEnd = rowMeta[endIdx]?.y ?? yTop;
-      const boxX = laneX(0) + 8;
-      const boxW = laneWidths.reduce((sum, w) => sum + w, 0) - 16;
+      let sectionNestDepth = 0;
+      for (let k = 0; k < i; k++) {
+        if (rows[k].kind === "groupStart" && groupModeOf(rows[k]) === "section") {
+          const ek = findGroupEndIndex(rows, k);
+          if (ek > i) sectionNestDepth++;
+        }
+      }
+      const nestInset = sectionNestDepth * 8;
+      const boxX = laneX(0) + 8 + nestInset;
+      const boxW = laneWidths.reduce((sum, w) => sum + w, 0) - 16 - nestInset * 2;
       const style = row.sectionColor && BRANCH_COLOR_STYLES[row.sectionColor] ? BRANCH_COLOR_STYLES[row.sectionColor] : { stroke: theme.stroke, bg: theme.branchBg };
       const label = (row.sectionName || "Section").trim() || "Section";
       return /* @__PURE__ */ h("g", { key: `section-${row.id}` }, /* @__PURE__ */ h(
