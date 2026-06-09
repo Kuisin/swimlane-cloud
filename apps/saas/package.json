@@ -1,6 +1,6 @@
 {
   "name": "@swimlane-cloud/saas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DSL Management SaaS (Next.js App Router): embeds @swimlane-cloud/editor, git-backed via Gitea, Supabase, Stripe.",
   "private": true,
   "scripts": {

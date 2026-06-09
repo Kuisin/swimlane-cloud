@@ -1333,3 +1333,57 @@
 .sw-settings-bool:hover {
   background: var(--sw-bg-sunken);
 }
+
+/* ---- split add-block button ---- */
+.sw-add-block-wrap {
+  display: inline-flex;
+  align-items: stretch;
+}
+.sw-add-block-main {
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+}
+.sw-add-block-chevron {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 6px;
+  border: 1px solid var(--sw-border-strong);
+  border-left: 1px solid var(--sw-border);
+  border-radius: 0 6px 6px 0;
+  background: var(--sw-bg);
+  color: var(--sw-text-muted);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.sw-add-block-chevron:hover:not(:disabled) {
+  background: var(--sw-bg-sunken);
+  color: var(--sw-text);
+}
+.sw-add-block-menu {
+  position: fixed;
+  z-index: 9999;
+  background: var(--sw-bg);
+  border: 1px solid var(--sw-border-strong);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 4px 0;
+  min-width: 160px;
+}
+.sw-add-block-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  color: var(--sw-text);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.sw-add-block-item:hover {
+  background: var(--sw-bg-sunken);
+}

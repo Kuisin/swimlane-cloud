@@ -1,6 +1,6 @@
 {
   "name": "@swimlane-cloud/editor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shared DSL editor surface (GUI + text modes, live preview, folder tree, document model). Storage-agnostic via the EditorHost contract. Consumed identically by web, desktop, and SaaS.",
   "license": "SEE LICENSE IN README.md",
   "type": "module",

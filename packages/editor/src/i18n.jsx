@@ -91,6 +91,11 @@ export const EN = {
   // gui
   "gui.flow": "Flow",
   "gui.addStep": "Add step",
+  "gui.addBlock": "Add block",
+  "gui.addIf": "If branch",
+  "gui.addFork": "Parallel fork",
+  "gui.addSection": "Section",
+  "gui.addBranch": "Sub-branch",
   "gui.selectRow": "Select a row to edit it.",
   "gui.selectStep": "Select a step to edit it.",
   "gui.noRows": "No flow rows yet. Add a step below.",
@@ -302,6 +307,11 @@ export const JA = {
   // gui
   "gui.flow": "フロー",
   "gui.addStep": "ステップを追加",
+  "gui.addBlock": "ブロックを追加",
+  "gui.addIf": "条件分岐（if）",
+  "gui.addFork": "並行処理（fork）",
+  "gui.addSection": "枠（section）",
+  "gui.addBranch": "支線（branch）",
   "gui.selectRow": "編集する行を選択してください。",
   "gui.selectStep": "編集するステップを選択してください。",
   "gui.noRows": "フロー行がまだありません。下からステップを追加してください。",

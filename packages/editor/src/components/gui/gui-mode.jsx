@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Plus, Settings } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Plus, Settings } from "lucide-react";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import { useT } from "../../i18n.jsx";
 import { useDragWidth } from "../../hooks/use-drag-width.js";
@@ -47,6 +47,9 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [showMove, setShowMove] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [dropOpen, setDropOpen] = useState(false);
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0 });
+  const chevronRef = useRef(null);
   const guiModel = useMemo(() => parseGuiModel(src), [src]);
   const rows = guiModel.rows;
   const lockedRows = useMemo(
@@ -120,6 +123,81 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
     });
   }
 
+  function makeId() {
+    return Math.random().toString(36).slice(2, 10);
+  }
+
+  function addIfBranch() {
+    setDropOpen(false);
+    const id = makeId();
+    commit((draft) => {
+      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
+      draft.rows.splice(
+        insertAt,
+        0,
+        { kind: "branchStart", id, cond: "Condition", firstCase: "Case 1", parallel: false, branchColor: null, depth: 0 },
+        { kind: "branchCase", id, label: "else", parallel: false, branchColor: null, depth: 0 },
+        { kind: "branchEnd", id, parallel: false, depth: 0 },
+      );
+    });
+  }
+
+  function addFork() {
+    setDropOpen(false);
+    const id = makeId();
+    commit((draft) => {
+      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
+      draft.rows.splice(
+        insertAt,
+        0,
+        { kind: "branchStart", id, parallel: true, branchColor: null, depth: 0 },
+        { kind: "branchCase", id, parallel: true, branchColor: null, depth: 0 },
+        { kind: "branchEnd", id, parallel: true, depth: 0 },
+      );
+    });
+  }
+
+  function addSection() {
+    setDropOpen(false);
+    const id = makeId();
+    commit((draft) => {
+      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
+      draft.rows.splice(
+        insertAt,
+        0,
+        { kind: "groupStart", id, groupMode: "section", sectionName: "", depth: 0 },
+        { kind: "groupEnd", id, groupMode: "section", depth: 0 },
+      );
+    });
+  }
+
+  function addSubBranch() {
+    setDropOpen(false);
+    const id = makeId();
+    commit((draft) => {
+      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
+      draft.rows.splice(
+        insertAt,
+        0,
+        { kind: "groupStart", id, groupMode: "branch", sectionName: "", depth: 0 },
+        { kind: "groupEnd", id, groupMode: "branch", depth: 0 },
+      );
+    });
+  }
+
+  function openDrop() {
+    const rect = chevronRef.current?.getBoundingClientRect();
+    if (rect) setDropPos({ top: rect.bottom + 2, left: rect.left });
+    setDropOpen(true);
+  }
+
+  useEffect(() => {
+    if (!dropOpen) return;
+    function close() { setDropOpen(false); }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [dropOpen]);
+
   const isStep = inspectorRow?.kind === "step" && !inspectorRow.empty;
   const reorder = isStep ? getReorderBounds(rows, saveIndex) : null;
 
@@ -134,9 +212,44 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
           <span>{t("gui.flow")}</span>
           <div className="sw-gui-list-actions">
             {!readOnly && (
-              <button type="button" className="sw-btn sw-btn-sm" onClick={addStep}>
-                <Plus size={13} /> {t("gui.addStep")}
-              </button>
+              <div className="sw-add-block-wrap">
+                <button
+                  type="button"
+                  className="sw-btn sw-btn-sm sw-add-block-main"
+                  onClick={addStep}
+                >
+                  <Plus size={13} /> {t("gui.addStep")}
+                </button>
+                <button
+                  type="button"
+                  ref={chevronRef}
+                  className="sw-add-block-chevron"
+                  title={t("gui.addBlock")}
+                  onClick={(e) => { e.stopPropagation(); openDrop(); }}
+                >
+                  <ChevronDown size={12} />
+                </button>
+                {dropOpen && (
+                  <div
+                    className="sw-add-block-menu"
+                    style={{ top: dropPos.top, left: dropPos.left }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <button type="button" className="sw-add-block-item" onClick={addIfBranch}>
+                      {t("gui.addIf")}
+                    </button>
+                    <button type="button" className="sw-add-block-item" onClick={addFork}>
+                      {t("gui.addFork")}
+                    </button>
+                    <button type="button" className="sw-add-block-item" onClick={addSection}>
+                      {t("gui.addSection")}
+                    </button>
+                    <button type="button" className="sw-add-block-item" onClick={addSubBranch}>
+                      {t("gui.addBranch")}
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
             <button
               type="button"
