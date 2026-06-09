@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Plus, Settings } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Plus, Settings } from "lucide-react";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import { useT } from "../../i18n.jsx";
 import { useDragWidth } from "../../hooks/use-drag-width.js";
@@ -47,6 +47,20 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [showMove, setShowMove] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [blockMenuOpen, setBlockMenuOpen] = useState(false);
+  const [blockMenuPos, setBlockMenuPos] = useState(null);
+  const blockMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!blockMenuOpen) return;
+    function handleClick(e) {
+      if (blockMenuRef.current && !blockMenuRef.current.contains(e.target)) {
+        setBlockMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [blockMenuOpen]);
   const guiModel = useMemo(() => parseGuiModel(src), [src]);
   const rows = guiModel.rows;
   const lockedRows = useMemo(
@@ -120,6 +134,61 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
     });
   }
 
+  function newBranchId() {
+    return Math.random().toString(36).slice(2, 8);
+  }
+
+  function addIfBranch() {
+    const id = newBranchId();
+    commit((draft) => {
+      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
+      draft.rows.splice(
+        insertAt, 0,
+        { kind: "branchStart", id, cond: "condition" },
+        { kind: "branchCase", id, label: "Case 1" },
+        { kind: "branchCase", id, label: "else" },
+        { kind: "branchEnd", id },
+      );
+    });
+    setBlockMenuOpen(false);
+  }
+
+  function addFork() {
+    const id = newBranchId();
+    commit((draft) => {
+      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
+      draft.rows.splice(
+        insertAt, 0,
+        { kind: "branchStart", id, parallel: true },
+        { kind: "branchCase", id, parallel: true },
+        { kind: "branchCase", id, parallel: true },
+        { kind: "branchEnd", id, parallel: true },
+      );
+    });
+    setBlockMenuOpen(false);
+  }
+
+  function addSection() {
+    const id = newBranchId();
+    commit((draft) => {
+      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
+      draft.rows.splice(
+        insertAt, 0,
+        { kind: "groupStart", id, groupMode: "section", sectionName: "" },
+        { kind: "groupEnd", id, groupMode: "section" },
+      );
+    });
+    setBlockMenuOpen(false);
+  }
+
+  function handleBlockMenuToggle() {
+    if (!blockMenuOpen && blockMenuRef.current) {
+      const rect = blockMenuRef.current.getBoundingClientRect();
+      setBlockMenuPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setBlockMenuOpen((v) => !v);
+  }
+
   const isStep = inspectorRow?.kind === "step" && !inspectorRow.empty;
   const reorder = isStep ? getReorderBounds(rows, saveIndex) : null;
 
@@ -134,9 +203,37 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
           <span>{t("gui.flow")}</span>
           <div className="sw-gui-list-actions">
             {!readOnly && (
-              <button type="button" className="sw-btn sw-btn-sm" onClick={addStep}>
-                <Plus size={13} /> {t("gui.addStep")}
-              </button>
+              <div className="sw-add-block-wrap" ref={blockMenuRef}>
+                <div className="sw-add-block-btn">
+                  <button type="button" className="sw-add-block-main sw-btn sw-btn-sm" onClick={addStep}>
+                    <Plus size={13} /> {t("gui.addStep")}
+                  </button>
+                  <button
+                    type="button"
+                    className="sw-add-block-caret sw-btn sw-btn-sm"
+                    onClick={handleBlockMenuToggle}
+                    title={t("gui.addBlock")}
+                  >
+                    <ChevronDown size={12} />
+                  </button>
+                </div>
+                {blockMenuOpen && blockMenuPos && (
+                  <div
+                    className="sw-add-block-menu"
+                    style={{ position: "fixed", top: blockMenuPos.top, left: blockMenuPos.left }}
+                  >
+                    <button type="button" className="sw-add-block-item" onClick={addIfBranch}>
+                      {t("gui.addIfBranch")}
+                    </button>
+                    <button type="button" className="sw-add-block-item" onClick={addFork}>
+                      {t("gui.addFork")}
+                    </button>
+                    <button type="button" className="sw-add-block-item" onClick={addSection}>
+                      {t("gui.addSection")}
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
             <button
               type="button"

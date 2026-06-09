@@ -1217,6 +1217,49 @@
   font-size: 12px;
 }
 
+/* ---- add-block split button ---- */
+.sw-add-block-wrap {
+  position: relative;
+}
+.sw-add-block-btn {
+  display: inline-flex;
+}
+.sw-add-block-main.sw-btn {
+  border-radius: 6px 0 0 6px;
+  border-right: none;
+}
+.sw-add-block-caret.sw-btn {
+  border-radius: 0 6px 6px 0;
+  padding-left: 7px;
+  padding-right: 7px;
+}
+.sw-add-block-menu {
+  min-width: 160px;
+  background: var(--sw-bg);
+  border: 1px solid var(--sw-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  z-index: 9999;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sw-add-block-item {
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  color: var(--sw-text);
+  cursor: pointer;
+}
+.sw-add-block-item:hover {
+  background: var(--sw-bg-sunken);
+}
+
 /* ---- file settings modal ---- */
 .sw-settings-tabs {
   display: flex;
