@@ -376,7 +376,8 @@ function renderDiagramSvg({
       row.description,
       gutterTextBandTopY + (titleText ? gutterTitleLineH : 0),
       rowIndex,
-      heightWithProps
+      heightWithProps,
+      27
     ) : 0;
     const remarkExtra = rightGutterVisible ? gutterTextExtraHeight(row.remark, gutterTextBandTopY, rowIndex, heightWithProps, remarkWrapCols) : 0;
     return heightWithProps + Math.max(descExtra, remarkExtra);
@@ -1605,7 +1606,7 @@ function renderDiagramSvg({
         fontSize: "13",
         fontWeight: "700"
       },
-      truncate(page.leftTitle.trim(), 22)
+      truncateToColumns(page.leftTitle.trim(), 21)
     ), page.leftSubtitle?.trim() && /* @__PURE__ */ h(
       "text",
       {
@@ -1616,7 +1617,7 @@ function renderDiagramSvg({
         fontFamily: "'Noto Sans JP',sans-serif",
         fontSize: "11"
       },
-      truncate(page.leftSubtitle.trim(), 26)
+      truncateToColumns(page.leftSubtitle.trim(), 25)
     ), /* @__PURE__ */ h(
       "line",
       {
@@ -1661,11 +1662,11 @@ function renderDiagramSvg({
           fontWeight: "600"
         },
         prefix,
-        truncate(titleText, 28)
+        truncateToColumns(titleText, 21)
       ), r.description?.trim() && (() => {
         const visualLines = wrapDescriptionToVisualLines(
           r.description.trim(),
-          28
+          27
         );
         const descY = yRow + gutterTextBaselineY + (titleText ? gutterTitleLineH : 0);
         const descX = gutterInnerPad + xPad;
@@ -1721,7 +1722,7 @@ function renderDiagramSvg({
         fontSize: "13",
         fontWeight: "700"
       },
-      truncate(page.rightTitle.trim(), 24)
+      truncateToColumns(page.rightTitle.trim(), 17)
     ), page.rightSubtitle?.trim() && /* @__PURE__ */ h(
       "text",
       {
@@ -1732,7 +1733,7 @@ function renderDiagramSvg({
         fontFamily: "'Noto Sans JP',sans-serif",
         fontSize: "11"
       },
-      truncate(page.rightSubtitle.trim(), 28)
+      truncateToColumns(page.rightSubtitle.trim(), 20)
     ), /* @__PURE__ */ h(
       "line",
       {
