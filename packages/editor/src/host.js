@@ -43,6 +43,9 @@
  * @property {(opts: {message?: string, files?: {id: string, dsl: string}[]}) => Promise<void>} [checkpoint]
  * @property {(id: string, dsl: string) => Promise<void>} create
  * @property {(dirPath: string) => Promise<void>} [mkdir]
+ * @property {(id: string) => Promise<void>} [delete]
+ * @property {(dirPath: string) => Promise<void>} [rmdir]
+ * @property {(fromId: string, toId: string) => Promise<void>} [rename]
  * @property {(cb: (e: WatchEvent) => void) => (() => void)} [watch]
  * @property {(commitSha: string, opts: {name: string, note?: string}) => Promise<void>} [flagNewVersion]
  * @property {(section: TemplateSection) => Promise<SectionTemplate[]>} [listSectionTemplates]

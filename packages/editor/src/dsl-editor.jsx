@@ -71,6 +71,9 @@ function DslEditorInner({ options }) {
     saveAllDocuments,
     createNewFile,
     createNewFolder,
+    deleteFile,
+    deleteFolder,
+    moveFile,
     checkpoint,
     policies,
     dialog,
@@ -312,8 +315,13 @@ function DslEditorInner({ options }) {
         onOpenFile={openFile}
         onNewFile={createNewFile}
         onNewFolder={createNewFolder}
+        onDeleteFile={deleteFile}
+        onDeleteFolder={deleteFolder}
+        onMoveFile={moveFile}
         canCreate={!readOnly && hostHas(host, "create")}
         canMkdir={!readOnly && hostHas(host, "mkdir")}
+        canDelete={!readOnly && hostHas(host, "delete")}
+        canMove={!readOnly && hostHas(host, "rename")}
         onToggleCollapse={() => setTreeCollapsed((v) => !v)}
       />
       {!treeCollapsed && (

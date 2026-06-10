@@ -342,6 +342,86 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     setActiveDocumentIdState(relPath);
   }
 
+  async function deleteFile(fileId) {
+    if (readOnly || !hostHas(host, "delete")) return;
+    const name = fileId.split("/").pop();
+    const ok = await dialog.confirm(
+      `Delete "${name}"? This cannot be undone.`,
+    );
+    if (!ok) return;
+    try {
+      await host.delete(fileId);
+      setDocuments((cur) => cur.filter((d) => d.id !== fileId));
+      setOpenDocumentIds((cur) => {
+        const next = cur.filter((id) => id !== fileId);
+        setActiveDocumentIdState((curId) =>
+          curId === fileId ? (next[next.length - 1] ?? null) : curId,
+        );
+        return next;
+      });
+      await refreshFileList();
+    } catch (err) {
+      await dialog.alert(err?.message || "Could not delete the file.");
+    }
+  }
+
+  async function deleteFolder(dirPath) {
+    if (readOnly || !hostHas(host, "delete")) return;
+    const name = dirPath.split("/").pop();
+    const ok = await dialog.confirm(
+      `Delete folder "${name}" and all files inside? This cannot be undone.`,
+    );
+    if (!ok) return;
+    const toDelete = files.filter(
+      (f) => f.id === dirPath || f.id.startsWith(dirPath + "/"),
+    );
+    try {
+      if (hostHas(host, "rmdir")) {
+        await host.rmdir(dirPath);
+      } else {
+        for (const f of toDelete) await host.delete(f.id);
+      }
+      const deletedIds = new Set(toDelete.map((f) => f.id));
+      setDocuments((cur) => cur.filter((d) => !deletedIds.has(d.id)));
+      setOpenDocumentIds((cur) => {
+        const next = cur.filter((id) => !deletedIds.has(id));
+        setActiveDocumentIdState((curId) =>
+          deletedIds.has(curId) ? (next[next.length - 1] ?? null) : curId,
+        );
+        return next;
+      });
+      await refreshFileList();
+    } catch (err) {
+      await dialog.alert(err?.message || "Could not delete the folder.");
+    }
+  }
+
+  async function moveFile(fromId, toId) {
+    if (readOnly || !hostHas(host, "rename")) return;
+    if (fromId === toId) return;
+    if (files.some((f) => f.id === toId)) {
+      const name = toId.split("/").pop();
+      await dialog.alert(`A file named "${name}" already exists there.`);
+      return;
+    }
+    try {
+      await host.rename(fromId, toId);
+      const newName = toId.split("/").pop();
+      setDocuments((cur) =>
+        cur.map((d) =>
+          d.id === fromId ? { ...d, id: toId, name: newName } : d,
+        ),
+      );
+      setOpenDocumentIds((cur) =>
+        cur.map((id) => (id === fromId ? toId : id)),
+      );
+      setActiveDocumentIdState((curId) => (curId === fromId ? toId : curId));
+      await refreshFileList();
+    } catch (err) {
+      await dialog.alert(err?.message || "Could not move the file.");
+    }
+  }
+
   async function createNewFolder(parentDir = "") {
     if (readOnly || !hostHas(host, "mkdir")) return;
     const entered = await dialog.prompt(
@@ -412,6 +492,9 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     saveAllDocuments,
     createNewFile,
     createNewFolder,
+    deleteFile,
+    deleteFolder,
+    moveFile,
     checkpoint,
     policies,
     dialog,
