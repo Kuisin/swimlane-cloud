@@ -1605,7 +1605,7 @@ function renderDiagramSvg({
         fontSize: "13",
         fontWeight: "700"
       },
-      truncate(page.leftTitle.trim(), 22)
+      truncateToColumns(page.leftTitle.trim(), 22)
     ), page.leftSubtitle?.trim() && /* @__PURE__ */ h(
       "text",
       {
@@ -1616,7 +1616,7 @@ function renderDiagramSvg({
         fontFamily: "'Noto Sans JP',sans-serif",
         fontSize: "11"
       },
-      truncate(page.leftSubtitle.trim(), 26)
+      truncateToColumns(page.leftSubtitle.trim(), 26)
     ), /* @__PURE__ */ h(
       "line",
       {
@@ -1661,7 +1661,7 @@ function renderDiagramSvg({
           fontWeight: "600"
         },
         prefix,
-        truncate(titleText, 28)
+        truncateToColumns(titleText, 22)
       ), r.description?.trim() && (() => {
         const visualLines = wrapDescriptionToVisualLines(
           r.description.trim(),
@@ -1721,7 +1721,7 @@ function renderDiagramSvg({
         fontSize: "13",
         fontWeight: "700"
       },
-      truncate(page.rightTitle.trim(), 24)
+      truncateToColumns(page.rightTitle.trim(), 17)
     ), page.rightSubtitle?.trim() && /* @__PURE__ */ h(
       "text",
       {
@@ -1732,7 +1732,7 @@ function renderDiagramSvg({
         fontFamily: "'Noto Sans JP',sans-serif",
         fontSize: "11"
       },
-      truncate(page.rightSubtitle.trim(), 28)
+      truncateToColumns(page.rightSubtitle.trim(), 20)
     ), /* @__PURE__ */ h(
       "line",
       {
