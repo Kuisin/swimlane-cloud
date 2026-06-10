@@ -1,0 +1,29 @@
+{
+  "name": "@swimlane-cloud/share",
+  "version": "0.1.0",
+  "description": "Static diagram sharing: drop kai-swimlane .txt files into content/, share files or folders via unguessable tokened URLs. Viewers get the SVG diagram or the mobile card view.",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "links": "node scripts/print-links.mjs"
+  },
+  "dependencies": {
+    "@swimlane-cloud/diagram-converter": "workspace:*",
+    "@swimlane-cloud/mobile-view": "workspace:*",
+    "lucide-react": "^0.469.0",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -113,27 +113,31 @@ export function ProjectNav({
   ];
   return (
     <header className="shrink-0 border-b border-neutral-200">
-      <div className="flex h-14 items-center justify-between px-4">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="text-sm text-neutral-500 hover:underline">
+      {/* Wraps on phones (name truncates) instead of forcing horizontal page scroll. */}
+      <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-1.5 sm:h-14 sm:px-4 sm:py-0">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <Link href="/dashboard" className="shrink-0 text-sm text-neutral-500 hover:underline">
             {t("nav.dashboard")}
           </Link>
-          <h1 className="text-base font-semibold">{projectName}</h1>
+          <h1 className="truncate text-base font-semibold">{projectName}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <LanguageToggle />
           <RoleSwitch role={role} onChange={onRole} />
-          <button onClick={onReset} className="text-xs text-neutral-400 hover:text-neutral-600">
+          <button
+            onClick={onReset}
+            className="whitespace-nowrap text-xs text-neutral-400 hover:text-neutral-600"
+          >
             {t("nav.resetDemo")}
           </button>
         </div>
       </div>
-      <nav className="flex gap-1 px-3">
+      <nav className="flex gap-1 overflow-x-auto px-3">
         {TABS.map((tab) => (
           <Link
             key={tab.key}
             href={`/projects/${projectId}/${tab.href}`}
-            className={`border-b-2 px-3 py-2 text-sm ${
+            className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm ${
               active === tab.key
                 ? "border-indigo-600 font-medium text-indigo-600"
                 : "border-transparent text-neutral-500 hover:text-neutral-800"
@@ -182,7 +186,7 @@ export function Action({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-sm hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-neutral-300 disabled:hover:text-neutral-400"
+      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-sm hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-neutral-300 disabled:hover:text-neutral-400"
     >
       {children}
     </button>

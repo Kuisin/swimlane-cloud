@@ -189,7 +189,9 @@ function EditPageInner() {
         onReset={reset}
       />
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-sm">
+      {/* One compact row that scrolls horizontally on phones (wrapping stacked the
+          buttons three rows tall above the mobile cards); wraps normally on sm+. */}
+      <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-sm sm:flex-wrap sm:overflow-x-visible [&>*]:shrink-0">
         <select
           value={branch}
           onChange={(e) => setSt(setActiveBranch(projectId, st, e.target.value))}
