@@ -1,4 +1,4 @@
-import { truncate, truncateToColumns, wrapDescriptionToVisualLines, wrapTextToDisplayColumns } from "../utils.js";
+import { stringDisplayColumnWidth, truncate, truncateToColumns, wrapDescriptionToVisualLines, wrapTextToDisplayColumns } from "../utils.js";
 import { buildStepRowDisplayInfo } from "../parser.js";
 import {
   findNextFlowStepAfterBranchEnd,
@@ -23,7 +23,45 @@ import {
   FORK_GATEWAY_RADIUS,
   blockMaxTextCols,
   decisionDiamondWidth,
+  gutterTextCols,
 } from "./diagram-layout.js";
+/**
+ * Wrapped multi-line gutter body text (step description / remark): one tspan
+ * per visual line, with nested tspans for bold/italic/strike style runs.
+ */
+function GutterBodyText({ x, y, text, wrapCols, fill, opacity }) {
+  const visualLines = wrapDescriptionToVisualLines(text, wrapCols);
+  return /* @__PURE__ */ h(
+    "text",
+    {
+      x,
+      y,
+      fill,
+      opacity,
+      fontFamily: "'Noto Sans JP',sans-serif",
+      fontSize: String(DIAGRAM_LAYOUT.gutterBodyFontSize),
+      fontWeight: "400"
+    },
+    visualLines.map((runs, li) => /* @__PURE__ */ h(
+      "tspan",
+      {
+        key: li,
+        x,
+        dy: li === 0 ? 0 : DIAGRAM_LAYOUT.descriptionLineHeight
+      },
+      runs.map((run, ri) => /* @__PURE__ */ h(
+        "tspan",
+        {
+          key: ri,
+          fontWeight: run.bold ? "600" : "400",
+          fontStyle: run.italic ? "italic" : "normal",
+          textDecoration: run.strike ? "line-through" : "none"
+        },
+        run.text
+      ))
+    ))
+  );
+}
 function PageTriColumnText({ y, width, xPad, left, center, right, fill, fontSize = DIAGRAM_LAYOUT.triColumnFontSize }) {
   const fontFamily = DIAGRAM_LAYOUT.fontFamily;
   return /* @__PURE__ */ h(Fragment, null, left?.trim() && /* @__PURE__ */ h(
@@ -213,7 +251,6 @@ function renderDiagramSvg({
     xPad,
     leftGutterWidth,
     rightGutterWidth,
-    descWrapCols: DESC_WRAP_COLS,
     remarkWrapColsMin,
     headerH,
     rowH,
@@ -293,9 +330,10 @@ function renderDiagramSvg({
   );
   const rightGutterVisible = showRightGutter && hasRemarks;
   const rightGutter = rightGutterVisible ? rightGutterWidth : 0;
+  const descWrapCols = gutterTextCols(leftGutterWidth, L.gutterBodyFontSize);
   const remarkWrapCols = Math.max(
     remarkWrapColsMin,
-    Math.round(DESC_WRAP_COLS * rightGutter / leftGutterWidth)
+    gutterTextCols(rightGutterWidth, L.gutterBodyFontSize)
   );
   const propExtraWPerProps = docGapX;
   const propRowExtraHPerProps = docGapY;
@@ -354,7 +392,7 @@ function renderDiagramSvg({
     });
     return acc;
   }
-  function gutterTextExtraHeight(text, startOffset, rowIndex, heightWithProps, maxCols = DESC_WRAP_COLS) {
+  function gutterTextExtraHeight(text, startOffset, rowIndex, heightWithProps, maxCols = descWrapCols) {
     const t = (text || "").trim();
     if (!t) return 0;
     const visualLines = wrapDescriptionToVisualLines(t, maxCols);
@@ -1627,10 +1665,10 @@ function renderDiagramSvg({
         y: topPad + 30,
         fill: theme.title,
         fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: "13",
+        fontSize: String(L.gutterHeaderTitleFontSize),
         fontWeight: "700"
       },
-      truncate(page.leftTitle.trim(), 22)
+      truncateToColumns(page.leftTitle.trim(), gutterTextCols(leftGutterWidth, L.gutterHeaderTitleFontSize))
     ), page.leftSubtitle?.trim() && /* @__PURE__ */ h(
       "text",
       {
@@ -1639,9 +1677,9 @@ function renderDiagramSvg({
         fill: theme.laneText || theme.title,
         opacity: "0.7",
         fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: "11"
+        fontSize: String(L.gutterHeaderSubtitleFontSize)
       },
-      truncate(page.leftSubtitle.trim(), 26)
+      truncateToColumns(page.leftSubtitle.trim(), gutterTextCols(leftGutterWidth, L.gutterHeaderSubtitleFontSize))
     ), /* @__PURE__ */ h(
       "line",
       {
@@ -1675,6 +1713,7 @@ function renderDiagramSvg({
       const hasNum = d && !d.skipped && d.displayIndex != null;
       const prefix = hasNum ? `${d.displayIndex}. ` : "";
       if (!titleText && !r.description) return null;
+      const titleCols = gutterTextCols(leftGutterWidth, L.gutterStepTitleFontSize) - stringDisplayColumnWidth(prefix);
       return /* @__PURE__ */ h("g", { key: `step-left-${i}` }, titleText && /* @__PURE__ */ h(
         "text",
         {
@@ -1682,49 +1721,19 @@ function renderDiagramSvg({
           y: yRow + gutterTextBaselineY,
           fill: theme.title,
           fontFamily: "'Noto Sans JP',sans-serif",
-          fontSize: "12",
+          fontSize: String(L.gutterStepTitleFontSize),
           fontWeight: "600"
         },
         prefix,
-        truncate(titleText, 28)
-      ), r.description?.trim() && (() => {
-        const visualLines = wrapDescriptionToVisualLines(
-          r.description.trim(),
-          28
-        );
-        const descY = yRow + gutterTextBaselineY + (titleText ? gutterTitleLineH : 0);
-        const descX = gutterInnerPad + xPad;
-        return /* @__PURE__ */ h(
-          "text",
-          {
-            x: descX,
-            y: descY,
-            fill: theme.laneText || theme.title,
-            opacity: "0.78",
-            fontFamily: "'Noto Sans JP',sans-serif",
-            fontSize: "10",
-            fontWeight: "400"
-          },
-          visualLines.map((runs, li) => /* @__PURE__ */ h(
-            "tspan",
-            {
-              key: li,
-              x: descX,
-              dy: li === 0 ? 0 : descriptionLineHeight
-            },
-            runs.map((run, ri) => /* @__PURE__ */ h(
-              "tspan",
-              {
-                key: ri,
-                fontWeight: run.bold ? "600" : "400",
-                fontStyle: run.italic ? "italic" : "normal",
-                textDecoration: run.strike ? "line-through" : "none"
-              },
-              run.text
-            ))
-          ))
-        );
-      })());
+        truncateToColumns(titleText, titleCols)
+      ), r.description?.trim() && /* @__PURE__ */ h(GutterBodyText, {
+        x: gutterInnerPad + xPad,
+        y: yRow + gutterTextBaselineY + (titleText ? gutterTitleLineH : 0),
+        text: r.description.trim(),
+        wrapCols: descWrapCols,
+        fill: theme.laneText || theme.title,
+        opacity: "0.78"
+      }));
     })),
     rightGutterVisible && /* @__PURE__ */ h(Fragment, null, /* @__PURE__ */ h(
       "rect",
@@ -1743,10 +1752,10 @@ function renderDiagramSvg({
         y: topPad + 30,
         fill: theme.title,
         fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: "13",
+        fontSize: String(L.gutterHeaderTitleFontSize),
         fontWeight: "700"
       },
-      truncate(page.rightTitle.trim(), 24)
+      truncateToColumns(page.rightTitle.trim(), gutterTextCols(rightGutterWidth, L.gutterHeaderTitleFontSize))
     ), page.rightSubtitle?.trim() && /* @__PURE__ */ h(
       "text",
       {
@@ -1755,9 +1764,9 @@ function renderDiagramSvg({
         fill: theme.laneText || theme.title,
         opacity: "0.7",
         fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: "11"
+        fontSize: String(L.gutterHeaderSubtitleFontSize)
       },
-      truncate(page.rightSubtitle.trim(), 28)
+      truncateToColumns(page.rightSubtitle.trim(), gutterTextCols(rightGutterWidth, L.gutterHeaderSubtitleFontSize))
     ), /* @__PURE__ */ h(
       "line",
       {
@@ -1787,39 +1796,15 @@ function renderDiagramSvg({
       if (yRow == null) return null;
       const remark = (r.remark || "").trim();
       if (!remark) return null;
-      const visualLines = wrapDescriptionToVisualLines(remark, remarkWrapCols);
-      const rx = rightGutterX + gutterInnerPad;
-      return /* @__PURE__ */ h(
-        "text",
-        {
-          key: `step-remark-${i}`,
-          x: rx,
-          y: yRow + gutterTextBaselineY,
-          fill: theme.laneText || theme.title,
-          opacity: "0.85",
-          fontFamily: "'Noto Sans JP',sans-serif",
-          fontSize: "10",
-          fontWeight: "400"
-        },
-        visualLines.map((runs, li) => /* @__PURE__ */ h(
-          "tspan",
-          {
-            key: li,
-            x: rx,
-            dy: li === 0 ? 0 : descriptionLineHeight
-          },
-          runs.map((run, ri) => /* @__PURE__ */ h(
-            "tspan",
-            {
-              key: ri,
-              fontWeight: run.bold ? "600" : "400",
-              fontStyle: run.italic ? "italic" : "normal",
-              textDecoration: run.strike ? "line-through" : "none"
-            },
-            run.text
-          ))
-        ))
-      );
+      return /* @__PURE__ */ h(GutterBodyText, {
+        key: `step-remark-${i}`,
+        x: rightGutterX + gutterInnerPad,
+        y: yRow + gutterTextBaselineY,
+        text: remark,
+        wrapCols: remarkWrapCols,
+        fill: theme.laneText || theme.title,
+        opacity: "0.85"
+      });
     })),
     lanes.map((lane, i) => {
       const x = laneX(i);

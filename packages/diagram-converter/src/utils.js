@@ -46,9 +46,11 @@ function isFullWidthCodePoint(cp) {
   );
 }
 
-// Proportional ASCII glyphs whose width is far from the 0.5em average.
+// Proportional ASCII glyphs whose width is far from the lowercase average.
 const NARROW_CHARS = new Set([..."iIljftr.,:;'`!|()[]{}/\\ -"]);
 const WIDE_CHARS = new Set([..."mwMW@%"]);
+// Uppercase and digits render wider than lowercase in Noto Sans (~0.6em vs ~0.55em).
+const UPPER_DIGIT_CHARS = new Set([..."ABCDEFGHJKLNOPQRSTUVXYZ0123456789"]);
 
 /**
  * Approximate the rendered width of a single character in "columns", where one
@@ -63,7 +65,8 @@ export function charDisplayColumnWidth(ch) {
   if (isFullWidthCodePoint(cp)) return 1;
   if (NARROW_CHARS.has(ch)) return 0.3;
   if (WIDE_CHARS.has(ch)) return 0.78;
-  return 0.5; // ASCII default and other proportional half-width scripts
+  if (UPPER_DIGIT_CHARS.has(ch)) return 0.6;
+  return 0.55; // lowercase ASCII average and other proportional half-width scripts
 }
 
 export function stringDisplayColumnWidth(s) {

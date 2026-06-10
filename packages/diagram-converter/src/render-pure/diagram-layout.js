@@ -88,13 +88,16 @@ export const DIAGRAM_LAYOUT = {
   sectionNestStep: 12,
 
   // Left / right gutter text
-  descWrapCols: 28,
   remarkWrapColsMin: 8,
   descriptionLineHeight: 14,
   descriptionBottomPad: 10,
   gutterTextBaselineY: 30,
   gutterTitleLineH: 20,
   gutterTextBandTopY: 20,
+  gutterHeaderTitleFontSize: 13,
+  gutterHeaderSubtitleFontSize: 11,
+  gutterStepTitleFontSize: 12,
+  gutterBodyFontSize: 10,
 
   // Step blocks & props
   stepBoxH: 44,
@@ -187,6 +190,16 @@ export const DIAGRAM_LAYOUT = {
   fontFamily: "'Noto Sans JP','Noto Sans',sans-serif",
   decisionFontFamily: "'Noto Sans JP',sans-serif",
 };
+
+/**
+ * Display-column budget for text inside a gutter of `gutterWidth` px: the
+ * usable width after inner padding on both sides, divided by the font size
+ * (one column = one full-width CJK cell = 1em at that font size).
+ */
+export function gutterTextCols(gutterWidth, fontSize) {
+  const { gutterInnerPad } = DIAGRAM_LAYOUT;
+  return Math.max(1, Math.floor((gutterWidth - 2 * gutterInnerPad) / fontSize));
+}
 
 export function blockMaxTextCols(shape, hasIcon) {
   const factor = BLOCK_SHAPE_WIDTH_FACTOR[shape] ?? 1;
