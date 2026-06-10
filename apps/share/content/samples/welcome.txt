@@ -1,0 +1,26 @@
+@kai-swimlane
+/title/
+Welcome to Swimlane Share
+/option/
+show-left-gutter: true;
+show-right-gutter: true;
+/role/
+<you>
+label: You;
+background-color: #dbeafe;
+<share>
+label: Swimlane Share;
+background-color: #dcfce7;
+/line/
+[you: Drop .txt files into content/]
+desc: Organize them with folders however you like.;
+[share: Generates tokened links]
+remark: Links are unguessable without the secret.;
+if (Share what?) is (One file) than #blue
+  [you: Send the /d/ link]
+else
+  [you: Send the /f/ folder link]
+endif
+[share: Anyone with the link views it]
+remark: Diagram or mobile view — switch any time.;
+@end
