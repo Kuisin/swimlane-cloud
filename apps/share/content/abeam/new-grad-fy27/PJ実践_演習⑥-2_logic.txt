@@ -1,325 +1,349 @@
 @kai-swimlane
 
 /page/
-description: ```
-APサーバー上の会計伝票ファイルを読み込み、
-
-同一参照伝票番号(XBLNR)単位で会計伝票を組み立てて BAPI で登録する。
-
-重複履歴・BAPIエラー・履歴登録エラーは一覧に集約し、最後に帳票出力する。
-```;
-header-left: Z_00_TGLR0600_2;
-header-center: 会計伝票登録（演習6-②）;
-header-right: ABAP Logic Flow;
-footer-left: 入力: P_FILE（論理ファイル）;
-footer-center: 出力: 件数ヘッダ / エラー一覧;
-footer-right: Upload → Check → Post → History;
+description: ファイル読込 → 検証 → BAPI登録 → 結果報告 の典型的なバッチ処理パターン;
+header-left: 研修資料;
+header-center: 会計伝票登録プログラム;
+header-right: v1.0;
+footer-center: 1 / 1;
+footer-right: 2026-06-10;
 
 /title/
-会計伝票登録フロー（APサーバアップロード → BAPI転記 → 履歴登録）
+会計伝票一括登録プログラム 処理フロー
 
 /option/
-show-left-gutter: true;
 show-right-gutter: true;
-show-header: true;
-show-footer: true;
-show-description: true;
-show-step-block-captions: true;
-merge-at-previous-block: true;
-left-title: 手順;
-left-subtitle: 処理内容;
-right-title: 実装メモ;
-right-subtitle: FORM / FM / BAPI;
+left-title: 手続き;
+left-subtitle: 説明;
+right-title: 備考;
+right-subtitle: 研修ポイント;
 
 /role/
 
-<role_program>
-label: ABAPプログラム;
+<role_user>
+label: ユーザー;
 text-color: #1e293b;
 background-color: #ffffff;
-icon: #settings;
+icon: #user;
 
-<role_file>
-label: APサーバファイル;
-text-color: #92400e;
-background-color: #fffbeb;
-icon: #file-text;
+<role_prog>
+label: 登録プログラム;
+text-color: #0d47a1;
+background-color: #e3f2fd;
+icon: #wrench;
 
 <role_bapi>
-label: SAP BAPI;
-text-color: #3730a3;
-background-color: #eef2ff;
-icon: #database;
+label: SAP標準(BAPI);
+text-color: #4a148c;
+background-color: #f3e5f5;
+icon: #zap;
 
-<role_history>
-label: 履歴テーブル;
-text-color: #166534;
-background-color: #f0fdf4;
+<role_db>
+label: データベース;
+text-color: #1b5e20;
+background-color: #e8f5e9;
 icon: #database;
-
-<role_output>
-label: 帳票出力;
-text-color: #075985;
-background-color: #f0f9ff;
-icon: #send;
 
 /block/
 
-<block_neutral>
-background-color: #f8fafc;
-text-color: #334155;
-border-color: #64748b;
+<block_start>
+background-color: #e8f5e9;
+text-color: #1b5e20;
+border-color: #388e3c;
+shape: ellipse;
+icon: #flag;
+
+<block_end>
+background-color: #e8f5e9;
+text-color: #1b5e20;
+border-color: #388e3c;
+shape: ellipse;
+icon: #check;
+
+<block_proc>
+background-color: #e3f2fd;
+text-color: #0d47a1;
+border-color: #1976d2;
 shape: rounded;
+icon: #clipboard;
 
-<block_apply>
-background-color: #dbeafe;
-text-color: #1e40af;
-border-color: #2563eb;
-shape: rounded;
-icon: #zap;
-
-<block_system>
-background-color: #e0e7ff;
-text-color: #3730a3;
-border-color: #4f46e5;
-shape: rect;
-icon: #database;
-
-<block_approve>
-background-color: #dcfce7;
-text-color: #166534;
-border-color: #16a34a;
-shape: rounded;
-icon: #circle-check;
-
-<block_condition>
-background-color: #f3e8ff;
-text-color: #6b21a8;
-border-color: #9333ea;
+<block_judge>
+background-color: #fff3e0;
+text-color: #e65100;
+border-color: #f57c00;
 shape: hex;
 icon: #git-branch;
 
-<block_reject>
-background-color: #fee2e2;
-text-color: #991b1b;
-border-color: #dc2626;
-shape: hex;
-icon: #alert-triangle;
+<block_system>
+background-color: #f3e5f5;
+text-color: #4a148c;
+border-color: #7b1fa2;
+shape: rect;
+icon: #database;
+
+<block_error>
+background-color: #fce4ec;
+text-color: #880e4f;
+border-color: #c2185b;
+shape: rounded;
+icon: #x;
 
 /prop/
 
-<INPUT_FILE>
+<INFILE>
 label: 入力ファイル;
 side: right;
-background-color: #f8fafc;
-border-color: #94a3b8;
-text-color: #334155;
-title: APサーバー上の論理ファイル/物理ファイル;
+background-color: #f1f5f9;
+border-color: #64748b;
+text-color: #0f172a;
+title: タブ区切り9項目（会社コード〜テキスト）のサーバーファイル;
+max-chars: 10;
 
-<BAPI_DOC>
-label: BAPIデータ;
-side: right;
-background-color: #eef2ff;
-border-color: #4f46e5;
-text-color: #3730a3;
-title: DOCUMENTHEADER / ACCOUNTGL / CURRENCYAMOUNT;
-
-<HISTORY>
-label: 履歴;
+<ITAB>
+label: 内部テーブル;
 side: left;
-background-color: #f0fdf4;
-border-color: #16a34a;
-text-color: #166534;
-title: ZTR0500 履歴管理データ;
+background-color: #e3f2fd;
+border-color: #1976d2;
+text-color: #0d47a1;
+title: 読み込んだ明細を保持する作業用の表;
+max-chars: 10;
 
-<RETURN_MSG>
-label: RETURN;
-side: left;
-background-color: #fff7ed;
-border-color: #ea580c;
-text-color: #9a3412;
-title: BAPIRET2 の返却メッセージ;
-
-<ERROR_LIST>
-label: エラー一覧;
+<ZTRH>
+label: 履歴ZTR0500;
 side: right;
-background-color: #fee2e2;
-border-color: #dc2626;
-text-color: #991b1b;
-title: G_TAB_LIST へ蓄積されるエラー明細;
+background-color: #e8f5e9;
+border-color: #388e3c;
+text-color: #1b5e20;
+title: 登録済み伝票の履歴テーブル（二重登録防止用）;
+max-chars: 10;
 
-<REPORT>
-label: 帳票;
+<ERRL>
+label: エラーリスト;
 side: right;
-background-color: #f0f9ff;
-border-color: #0284c7;
-text-color: #075985;
-title: F_WRITE_HEAD / F_WRITE_LIST の出力;
+background-color: #fce4ec;
+border-color: #c2185b;
+text-color: #880e4f;
+title: 登録失敗・重複伝票の一覧;
+max-chars: 10;
 
-<AUDIT>
-label: 監査証跡;
+<RESULT>
+label: 結果リスト;
 side: left;
-background-color: #fff7ed;
-border-color: #ea580c;
-text-color: #9a3412;
-title: 件数・メッセージ・履歴登録結果;
+background-color: #f1f5f9;
+border-color: #64748b;
+text-color: #0f172a;
+title: 処理件数・成功件数・エラー件数の集計画面;
+max-chars: 10;
 
 /line/
 
-section (初期化・アップロード) #blue
-  [role_program: 初期化処理を行う] <block_neutral>
-  label: F_INIT;
-  desc: 内部テーブル、BAPI用ワーク、フラグ、件数カウンタを初期化する;
-  remark: FORM F_INIT;
+section (ステップ1 初期化) #green
+  [role_user: プログラム起動] <block_start>
+  label: プログラム起動;
+  desc: 選択画面で論理ファイル名を指定して実行する;
 
-  [role_program: 論理ファイルから物理フルパスを取得する] <block_apply>
-  label: ファイル名解決;
-  desc: パラメータ P_FILE を使い、FILE_GET_NAME で G_FILE_NAME を取得する;
-  remark: FORM F_CALL_FILE_GET_NAME / FILE_GET_NAME;
-  props: INPUT_FILE;
+  [role_prog: 変数を初期化] <block_proc>
+  label: 初期化処理;
+  desc: すべての変数・テーブル・フラグを空にし、前回の値が残らないようにする;
+end-section
+section (ステップ2 ファイルの場所を特定) #blue
+  [role_prog: パスへ変換] <block_proc>
+  label: 論理ファイル名変換;
+  desc: 選択画面の論理ファイル名をサーバー上の実際のパスに変換する;
+  props: INFILE;
 
-  [role_file: サーバーファイルをオープンする] <block_system>
-  label: F_FILE_OPEN;
-  remark: OPEN DATASET ... FOR INPUT IN TEXT MODE;
-  props: INPUT_FILE;
+  [role_prog: 変換結果を確認] <block_judge>
+  label: 変換成否判定;
+  desc: パス変換が成功したかを確認する;
 
-if (オープン成功?) is (いいえ) than #red
-  [role_program: S021 を表示してリスト処理を終了する] <block_reject>
-  label: オープン失敗;
-  desc: SY-SUBRC <> 0 の場合、読み込み失敗メッセージを出して終了する;
-  props: ERROR_LIST;
-  merge: finish_error;
+if (変換結果) is (失敗) than #red
+  [role_prog: 変換エラー終了] <block_error>
+  label: 変換エラー終了;
+  desc: エラーメッセージを出力して処理を打ち切る;
+  merge: prog_end;
 
-else
-  [role_file: ファイルを1行ずつ読み込む] <block_system>
-  label: F_FILE_READ;
-  desc: READ DATASET を EOF まで繰り返し、1行ずつワーク領域へ取得する;
-  remark: SY-SUBRC = 0/4/OTHERS を判定;
+elseif (成功) than #green
+  [role_prog: ファイルを開く] <block_proc>
+  label: ファイルオープン;
+  desc: 変換したパスでサーバー上のファイルを開く;
+endif
+end-section
+section (ステップ3 ファイルアップロード) #blue
+  [role_prog: 開封結果を確認] <block_judge>
+  label: オープン成否判定;
+  desc: ファイルが正常に開けたかを確認する;
 
-  [role_program: タブ区切りで分割して内部テーブルへ格納する] <block_system>
-  label: G_TAB_UPLOAD 作成;
-  desc: BUKRS, BLART, BUDAT, BLDAT, XBLNR, BSCHL, HKONT, DMBTR, SGTXT に SPLIT して APPEND する;
-  props: INPUT_FILE,AUDIT;
+if (オープン) is (失敗) than #red
+  [role_prog: 開封エラー終了] <block_error>
+  label: オープンエラー終了;
+  desc: ファイルが開けないためエラー終了する;
+  merge: prog_end;
 
-  [role_file: サーバーファイルをクローズする] <block_system>
-  label: F_FILE_CLOSE;
-  remark: FORM F_FILE_CLOSE;
+elseif (成功) than #green
+  [role_prog: 1行を読み込む] <block_proc>
+  label: 先頭行の読込;
+  desc: ファイルの読み込みを開始する;
+endif
+  [role_prog: 末尾かを判定] <block_judge>
+  label: ファイル末尾判定;
+  desc: 最終行まで読み終えたかを確認する;
 
-  [role_program: 読込件数を確認する] <block_neutral>
-  label: 件数チェック;
-  desc: DESCRIBE TABLE で G_CNT_ALL を設定する;
-  props: AUDIT;
-  if (読込件数) is (0件) than #red
-    [role_program: S020 を表示しエラーフラグをONにして終了する] <block_reject>
-    label: データなし;
-    desc: ファイルにデータが無い場合は主処理へ進まない;
-    props: ERROR_LIST;
-    merge: finish_error;
+if (ファイル末尾) is (未到達) than #blue
+  [role_prog: 分割して追加] <block_proc>
+  label: 行分割・テーブル追加;
+  desc: タブ区切りで「会社コード〜テキスト」の9項目に分割し内部テーブルへ追加;
+  props: ITAB;
 
-  else
-    [role_program: 伝票登録処理へ進む] <block_approve>
-    label: アップロード完了;
-    remark: G_FLG_ERR が未設定のまま次工程へ;
+  [role_prog: 次の行を読込] <block_proc>
+  label: 次行読込;
+  desc: 続きの行を読み込み、末尾判定へ戻る;
+  [loop]
+
+elseif (到達) than #green
+  [role_prog: ファイルを閉じる] <block_proc>
+  label: ファイルクローズ;
+  desc: 読込が完了したのでファイルを閉じる;
+endif
+  [role_prog: 件数を確認] <block_judge>
+  label: 読込件数チェック;
+  desc: 内部テーブルに読み込んだ件数を数える;
+
+if (読込件数) is (0件) than #red
+  [role_prog: 終了メッセージ] <block_error>
+  label: 0件終了;
+  desc: 処理対象がないためメッセージを出して終了する;
+  merge: prog_end;
+
+elseif (1件以上) than #green
+  [role_prog: データを並べ替え] <block_proc>
+  label: 伝票キーでソート;
+  desc: 会社コード→伝票タイプ→転記日付→伝票日付→参照伝票番号の順に並べ替え;
+  remark: ```
+① 明細のグループ化
+
+ファイルは明細単位、登録は伝票単位。並べ替えて「伝票の切り替わり」を検知する発想が肝（AT NEW / AT END OF）。
+  ```;
+  props: ITAB;
+endif
+end-section
+section (ステップ4 伝票登録 メイン処理) #purple
+  [role_prog: 残伝票を判定] <block_judge>
+  label: 伝票ループ判定;
+  desc: 未処理の伝票が残っているかを確認し、1伝票ずつ処理する;
+
+if (未処理の伝票) is (あり) than #blue
+  [role_prog: フラグを初期化] <block_proc>
+  label: 新伝票の開始;
+  desc: 新しい伝票の先頭明細でフラグを初期化し、伝票件数を+1する;
+
+  [role_prog: 重複を照会] <block_judge>
+  label: 二重登録チェック;
+  desc: 履歴テーブルZTR0500に同じ伝票が登録済みでないか確認する;
+  remark: ```
+② 二重登録防止
+
+登録前に必ず履歴テーブルをチェックし、同じ伝票を2回登録しない。
+  ```;
+  props: ZTRH;
+  if (履歴テーブル) is (登録済) than #red
+    [role_prog: エラー一覧追加] <block_error>
+    label: 重複エラー追加;
+    desc: エラーリストへ追加し、この伝票の残り明細はスキップする;
+    props: ERRL;
+    merge: clear_tab;
+
+  elseif (未登録) than #green
+    [role_prog: BAPIデータ作成] <block_proc>
+    label: ヘッダ・第1明細作成;
+    desc: 明細番号を1にして、ヘッダ情報と第1明細のBAPI用データを作る;
   endif
-endif
-end-section
-section (会計伝票登録) #purple
-  [role_program: アップロード明細を伝票キー順にソートする] <block_neutral>
-  label: 前処理;
-  desc: BUKRS, BLART, BUDAT, BLDAT, XBLNR の昇順で並べ、同一伝票をまとめる;
-  remark: SORT G_TAB_UPLOAD ASCENDING BY ...;
 
-  [role_program: 同一 XBLNR 単位で明細を取りまとめる] <block_apply>
-  label: F_BAPI;
-  desc: 先頭明細では件数加算・履歴確認・ヘッダ作成、2明細目以降は明細のみを追加する;
-  remark: AT NEW / AT END OF XBLNR を利用;
+  [role_prog: 明細有無を判定] <block_judge>
+  label: 同一伝票の明細判定;
+  desc: 同じ伝票に続きの明細があるかを確認する;
+  if (続きの明細) is (あり) than #blue
+    [role_prog: 明細を追加] <block_proc>
+    label: 明細データ追加;
+    desc: 明細番号を+1して追加。転記キー50（貸方）なら金額をマイナスにする;
+    [loop]
 
-  [role_history: 履歴テーブル ZTR0500 を参照して重複を確認する] <block_system>
-  label: F_CHECK_ZTR0500;
-  desc: 会社コード(BUKRS)と参照伝票番号(XBLNR)の組み合わせで既存履歴を確認する;
-  remark: SELECT SINGLE ... FROM ZTR0500;
-  props: HISTORY;
-
-if (履歴重複?) is (あり) than #red
-  [role_program: エラー一覧へ追加し、その伝票の登録をスキップする] <block_reject>
-  label: 重複エラー;
-  desc: S024 をメッセージ変数へ入れ、F_SET_LIST で G_TAB_LIST に追加する;
-  props: ERROR_LIST,HISTORY;
-  merge: next_document;
-
-else
-  [role_bapi: BAPIヘッダと明細テーブルを作成する] <block_system>
-  label: BAPIデータ組立;
-  desc: 第1明細で DOCUMENTHEADER を作成し、全明細で ITEMNO_ACC・勘定科目・金額を設定する。貸方(50)は金額をマイナスにする;
-  remark: F_CREATE_BAPI_HEAD / F_CREATE_BAPI_ITEM;
-  props: BAPI_DOC;
-
-  [role_bapi: 伝票末尾で BAPI_ACC_DOCUMENT_POST を実行する] <block_system>
-  label: 伝票登録;
-  desc: 同一伝票の最終明細到達時に BAPI を実行し、RETURN テーブルを取得する;
-  remark: FORM F_CALL_FUNC;
-  props: BAPI_DOC,RETURN_MSG;
-  if (BAPI返却結果) is (エラーあり) than #red
-    [role_program: RETURN の E/A メッセージを一覧化してロールバックする] <block_reject>
-    label: BAPIエラー;
-    desc: 各 RETURN をメッセージ化して F_SET_LIST に追加し、BAPI_TRANSACTION_ROLLBACK を実行する;
-    props: RETURN_MSG,ERROR_LIST;
-
-  else
-    [role_bapi: BAPIトランザクションをコミットする] <block_approve>
-    label: COMMIT;
-    remark: BAPI_TRANSACTION_COMMIT;
-
-    [role_history: 履歴管理テーブルへ登録する] <block_system>
-    label: F_INSERT_ZTR0500;
-    desc: 汎用モジュール Z_TGL_00 で BUKRS と XBLNR を履歴テーブルへ登録する;
-    remark: 成功時は G_CNT_SUCC を加算;
-    props: HISTORY,AUDIT;
-    if (履歴登録) is (失敗) than #red
-      [role_program: エラーメッセージを一覧へ追加する] <block_reject>
-      label: 履歴登録失敗;
-      desc: FM の SY-MSG* を整形して F_SET_LIST に追加する;
-      props: ERROR_LIST,HISTORY;
-
-    else
-      [role_program: 成功件数を更新する] <block_approve>
-      label: 成功カウント;
-      desc: 文書履歴登録が成功した伝票を成功件数として計上する;
-      props: AUDIT;
-    endif
+  elseif (なし＝最終明細) than #green
+    [role_bapi: BAPIで登録] <block_system>
+    label: BAPI呼び出し;
+    desc: SAP標準の登録機能を呼び出して伝票を登録する;
   endif
+
+  [role_prog: 結果を確認] <block_judge>
+  label: BAPI結果判定;
+  desc: 返ってきた結果メッセージにエラーがあるかを確認する;
+  remark: ```
+③ オール・オア・ナッシング
+
+一部だけ登録される中途半端な状態を許さず、成功なら全部確定、失敗なら全部取り消す。
+  ```;
+  if (BAPI結果) is (エラーなし) than #green
+    [role_bapi: COMMIT実行] <block_system>
+    label: COMMIT（確定）;
+    desc: 伝票登録を確定する;
+
+    [role_db: 履歴へ登録] <block_proc>
+    label: 履歴テーブル登録;
+    desc: 履歴テーブルZTR0500へ登録済み伝票として記録する;
+    props: ZTRH;
+
+    [role_prog: 成功件数を加算] <block_proc>
+    label: 成功件数+1;
+    desc: 成功件数カウンタを加算する;
+
+  elseif (エラーあり) than #red
+    [role_bapi: ROLLBACK実行] <block_system>
+    label: ROLLBACK（取消）;
+    desc: 登録をすべて取り消す;
+
+    [role_prog: エラー件数を加算] <block_error>
+    label: エラーリスト追加;
+    desc: エラーリストへ追加し、エラー件数を+1する;
+    props: ERRL;
+  endif
+
+  [role_prog: 明細表をクリア] <block_proc>
+  id: clear_tab;
+  label: 明細テーブル初期化;
+  desc: 次の伝票の処理に備えて明細テーブルを空にし、ループ先頭へ戻る;
+  [loop]
+
+elseif (なし) than #green
+  [role_prog: ループを終了] <block_proc>
+  label: 全伝票処理完了;
+  desc: すべての伝票を処理し終えたためループを抜ける;
 endif
-  [role_program: 次の伝票へ進む] <block_neutral>
-  id: next_document;
-  label: 次伝票へ;
-  desc: 同一伝票分の処理を終えたら、次の XBLNR グループへ進む;
-  skip;
 end-section
-section (帳票出力) #green
-  [role_program: 一覧ヘッダを出力する] <block_neutral>
-  label: F_WRITE_HEAD;
-  desc: プログラムID、日付、ユーザ、処理件数、成功件数、エラー件数、入力ファイルを表示する;
-  remark: TOP-OF-PAGE / FORM F_WRITE_HEAD;
-  props: REPORT,AUDIT;
+section (ステップ5 結果リスト出力) #green
+  [role_prog: 結果件数を表示] <block_proc>
+  label: ヘッダ部の件数表示;
+  desc: 処理件数・成功件数・エラー件数・レコード件数・入力ファイル名を表示;
+  props: RESULT;
 
-  [role_output: エラー一覧を出力する] <block_system>
-  label: F_WRITE_LIST;
-  desc: エラーがある場合のみ、会社コード・伝票タイプ・日付・参照伝票番号・メッセージを明細出力する;
-  remark: G_TAB_LIST が初期なら件数のみ表示;
-  props: REPORT,ERROR_LIST;
+  [role_prog: エラー有無判定] <block_judge>
+  label: エラー件数チェック;
+  desc: エラーが1件でもあるかを確認する;
 
-if (終了状態) is (エラー終了) than #red
-  [role_output: エラー内容を確認して終了] <block_reject>
-  id: finish_error;
-  label: エラー終了;
-  desc: ファイルオープン失敗、データ0件、重複、BAPIエラー、履歴登録エラーを含む;
+if (エラー件数) is (あり) than #red
+  [role_prog: エラー一覧を表示] <block_error>
+  label: エラー伝票一覧表示;
+  desc: 会社コード・伝票タイプ・日付・参照番号・エラーメッセージを一覧表示;
+  props: ERRL;
 
-else
-  [role_output: 正常終了] <block_approve>
-  id: finish_success;
-  label: 正常終了;
-  desc: 会計伝票登録と履歴登録が完了し、一覧出力まで終了した状態;
+elseif (0件) than #green
+  [role_prog: 件数のみで終了] <block_proc>
+  label: 正常終了表示;
+  desc: エラーがないため件数表示のみで終了する;
 endif
 end-section
+
+[role_prog: 処理終了] <block_end>
+id: prog_end;
+label: プログラム終了;
+desc: すべての処理を完了して終了する;
 
 @end
