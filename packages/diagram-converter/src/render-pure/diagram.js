@@ -1,4 +1,4 @@
-import { truncate, truncateToColumns, wrapDescriptionToVisualLines, wrapTextToDisplayColumns } from "../utils.js";
+import { stringDisplayColumnWidth, truncate, truncateToColumns, wrapDescriptionToVisualLines, wrapTextToDisplayColumns } from "../utils.js";
 import { buildStepRowDisplayInfo } from "../parser.js";
 import {
   findNextFlowStepAfterBranchEnd,
@@ -23,7 +23,45 @@ import {
   FORK_GATEWAY_RADIUS,
   blockMaxTextCols,
   decisionDiamondWidth,
+  gutterTextCols,
 } from "./diagram-layout.js";
+/**
+ * Wrapped multi-line gutter body text (step description / remark): one tspan
+ * per visual line, with nested tspans for bold/italic/strike style runs.
+ */
+function GutterBodyText({ x, y, text, wrapCols, fill, opacity }) {
+  const visualLines = wrapDescriptionToVisualLines(text, wrapCols);
+  return /* @__PURE__ */ h(
+    "text",
+    {
+      x,
+      y,
+      fill,
+      opacity,
+      fontFamily: "'Noto Sans JP',sans-serif",
+      fontSize: String(DIAGRAM_LAYOUT.gutterBodyFontSize),
+      fontWeight: "400"
+    },
+    visualLines.map((runs, li) => /* @__PURE__ */ h(
+      "tspan",
+      {
+        key: li,
+        x,
+        dy: li === 0 ? 0 : DIAGRAM_LAYOUT.descriptionLineHeight
+      },
+      runs.map((run, ri) => /* @__PURE__ */ h(
+        "tspan",
+        {
+          key: ri,
+          fontWeight: run.bold ? "600" : "400",
+          fontStyle: run.italic ? "italic" : "normal",
+          textDecoration: run.strike ? "line-through" : "none"
+        },
+        run.text
+      ))
+    ))
+  );
+}
 function PageTriColumnText({ y, width, xPad, left, center, right, fill, fontSize = DIAGRAM_LAYOUT.triColumnFontSize }) {
   const fontFamily = DIAGRAM_LAYOUT.fontFamily;
   return /* @__PURE__ */ h(Fragment, null, left?.trim() && /* @__PURE__ */ h(
@@ -213,7 +251,6 @@ function renderDiagramSvg({
     xPad,
     leftGutterWidth,
     rightGutterWidth,
-    descWrapCols: DESC_WRAP_COLS,
     remarkWrapColsMin,
     headerH,
     rowH,
@@ -250,6 +287,9 @@ function renderDiagramSvg({
     mergeNodeW,
     mergeNodeH,
     sectionInset,
+    outerLanePad,
+    sectionEdgeInset,
+    sectionNestStep,
     hitTargetPad,
     hitTargetDecisionPad,
     hitTargetMergePad,
@@ -290,9 +330,10 @@ function renderDiagramSvg({
   );
   const rightGutterVisible = showRightGutter && hasRemarks;
   const rightGutter = rightGutterVisible ? rightGutterWidth : 0;
+  const descWrapCols = gutterTextCols(leftGutterWidth, L.gutterBodyFontSize);
   const remarkWrapCols = Math.max(
     remarkWrapColsMin,
-    Math.round(DESC_WRAP_COLS * rightGutter / leftGutterWidth)
+    gutterTextCols(rightGutterWidth, L.gutterBodyFontSize)
   );
   const propExtraWPerProps = docGapX;
   const propRowExtraHPerProps = docGapY;
@@ -351,7 +392,7 @@ function renderDiagramSvg({
     });
     return acc;
   }
-  function gutterTextExtraHeight(text, startOffset, rowIndex, heightWithProps, maxCols = DESC_WRAP_COLS) {
+  function gutterTextExtraHeight(text, startOffset, rowIndex, heightWithProps, maxCols = descWrapCols) {
     const t = (text || "").trim();
     if (!t) return 0;
     const visualLines = wrapDescriptionToVisualLines(t, maxCols);
@@ -836,14 +877,36 @@ function renderDiagramSvg({
     const extentWidth = edges ? edges.max - edges.min + laneContentPad * 2 : 0;
     return Math.max(headerWidth, maxStepWidth, extentWidth);
   });
+  // Deepest section nesting in the whole diagram. Each level insets the section
+  // border by sectionNestStep, so the outer lanes must reserve that much extra
+  // room (plus the base padding) to keep the innermost border off the arrows.
+  let maxSectionDepth = 0;
+  {
+    let depth = 0;
+    for (const row of rows) {
+      if (row.kind === "groupStart" && groupModeOf(row) === "section") {
+        depth++;
+        if (depth > maxSectionDepth) maxSectionDepth = depth;
+      } else if (row.kind === "groupEnd" && depth > 0) {
+        depth--;
+      }
+    }
+  }
+  const hasSections = maxSectionDepth > 0;
+  // Padding added to the left of the first lane and the right of the last lane.
+  // Scales with nesting depth so deeply-nested section borders + the side rails
+  // never collide.
+  const outerPad = hasSections
+    ? outerLanePad + sectionEdgeInset + maxSectionDepth * sectionNestStep
+    : 0;
   const laneOffsets = [];
-  let laneCursor = xPad + leftGutter;
+  let laneCursor = xPad + leftGutter + outerPad;
   laneWidths.forEach((w, idx) => {
     laneOffsets[idx] = laneCursor;
     laneCursor += w;
   });
-  const rightGutterX = laneCursor;
-  const width = laneCursor + rightGutter + xPad;
+  const rightGutterX = laneCursor + outerPad;
+  const width = rightGutterX + rightGutter + xPad;
   const baseBottomPadding = baseBottomPaddingBase + pageFooterPad;
   function stepRowBounds(rowIndex) {
     const row = rows[rowIndex];
@@ -1515,7 +1578,8 @@ function renderDiagramSvg({
     });
   }
   const swimlaneDividerX1 = xPad;
-  const swimlaneDividerX2 = (lanes.length > 0 ? laneX(lanes.length - 1) + laneWidth(lanes.length - 1) : 0) + rightGutter;
+  const swimlaneDividerX2 =
+    (lanes.length > 0 ? laneX(lanes.length - 1) + laneWidth(lanes.length - 1) + outerPad : 0) + rightGutter;
   // Coerce the branded markup back to a plain string at the public boundary so
   // consumers (React state, `Boolean(svg)`, file export) see a normal string.
   return String(/* @__PURE__ */ h(
@@ -1602,10 +1666,10 @@ function renderDiagramSvg({
         y: topPad + 30,
         fill: theme.title,
         fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: "13",
+        fontSize: String(L.gutterHeaderTitleFontSize),
         fontWeight: "700"
       },
-      truncate(page.leftTitle.trim(), 22)
+      truncateToColumns(page.leftTitle.trim(), gutterTextCols(leftGutterWidth, L.gutterHeaderTitleFontSize))
     ), page.leftSubtitle?.trim() && /* @__PURE__ */ h(
       "text",
       {
@@ -1614,9 +1678,9 @@ function renderDiagramSvg({
         fill: theme.laneText || theme.title,
         opacity: "0.7",
         fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: "11"
+        fontSize: String(L.gutterHeaderSubtitleFontSize)
       },
-      truncate(page.leftSubtitle.trim(), 26)
+      truncateToColumns(page.leftSubtitle.trim(), gutterTextCols(leftGutterWidth, L.gutterHeaderSubtitleFontSize))
     ), /* @__PURE__ */ h(
       "line",
       {
@@ -1650,6 +1714,7 @@ function renderDiagramSvg({
       const hasNum = d && !d.skipped && d.displayIndex != null;
       const prefix = hasNum ? `${d.displayIndex}. ` : "";
       if (!titleText && !r.description) return null;
+      const titleCols = gutterTextCols(leftGutterWidth, L.gutterStepTitleFontSize) - stringDisplayColumnWidth(prefix);
       return /* @__PURE__ */ h("g", { key: `step-left-${i}` }, titleText && /* @__PURE__ */ h(
         "text",
         {
@@ -1657,49 +1722,19 @@ function renderDiagramSvg({
           y: yRow + gutterTextBaselineY,
           fill: theme.title,
           fontFamily: "'Noto Sans JP',sans-serif",
-          fontSize: "12",
+          fontSize: String(L.gutterStepTitleFontSize),
           fontWeight: "600"
         },
         prefix,
-        truncate(titleText, 28)
-      ), r.description?.trim() && (() => {
-        const visualLines = wrapDescriptionToVisualLines(
-          r.description.trim(),
-          28
-        );
-        const descY = yRow + gutterTextBaselineY + (titleText ? gutterTitleLineH : 0);
-        const descX = gutterInnerPad + xPad;
-        return /* @__PURE__ */ h(
-          "text",
-          {
-            x: descX,
-            y: descY,
-            fill: theme.laneText || theme.title,
-            opacity: "0.78",
-            fontFamily: "'Noto Sans JP',sans-serif",
-            fontSize: "10",
-            fontWeight: "400"
-          },
-          visualLines.map((runs, li) => /* @__PURE__ */ h(
-            "tspan",
-            {
-              key: li,
-              x: descX,
-              dy: li === 0 ? 0 : descriptionLineHeight
-            },
-            runs.map((run, ri) => /* @__PURE__ */ h(
-              "tspan",
-              {
-                key: ri,
-                fontWeight: run.bold ? "600" : "400",
-                fontStyle: run.italic ? "italic" : "normal",
-                textDecoration: run.strike ? "line-through" : "none"
-              },
-              run.text
-            ))
-          ))
-        );
-      })());
+        truncateToColumns(titleText, titleCols)
+      ), r.description?.trim() && /* @__PURE__ */ h(GutterBodyText, {
+        x: gutterInnerPad + xPad,
+        y: yRow + gutterTextBaselineY + (titleText ? gutterTitleLineH : 0),
+        text: r.description.trim(),
+        wrapCols: descWrapCols,
+        fill: theme.laneText || theme.title,
+        opacity: "0.78"
+      }));
     })),
     rightGutterVisible && /* @__PURE__ */ h(Fragment, null, /* @__PURE__ */ h(
       "rect",
@@ -1718,10 +1753,10 @@ function renderDiagramSvg({
         y: topPad + 30,
         fill: theme.title,
         fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: "13",
+        fontSize: String(L.gutterHeaderTitleFontSize),
         fontWeight: "700"
       },
-      truncate(page.rightTitle.trim(), 24)
+      truncateToColumns(page.rightTitle.trim(), gutterTextCols(rightGutterWidth, L.gutterHeaderTitleFontSize))
     ), page.rightSubtitle?.trim() && /* @__PURE__ */ h(
       "text",
       {
@@ -1730,9 +1765,9 @@ function renderDiagramSvg({
         fill: theme.laneText || theme.title,
         opacity: "0.7",
         fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: "11"
+        fontSize: String(L.gutterHeaderSubtitleFontSize)
       },
-      truncate(page.rightSubtitle.trim(), 28)
+      truncateToColumns(page.rightSubtitle.trim(), gutterTextCols(rightGutterWidth, L.gutterHeaderSubtitleFontSize))
     ), /* @__PURE__ */ h(
       "line",
       {
@@ -1762,43 +1797,26 @@ function renderDiagramSvg({
       if (yRow == null) return null;
       const remark = (r.remark || "").trim();
       if (!remark) return null;
-      const visualLines = wrapDescriptionToVisualLines(remark, remarkWrapCols);
-      const rx = rightGutterX + gutterInnerPad;
-      return /* @__PURE__ */ h(
-        "text",
-        {
-          key: `step-remark-${i}`,
-          x: rx,
-          y: yRow + gutterTextBaselineY,
-          fill: theme.laneText || theme.title,
-          opacity: "0.85",
-          fontFamily: "'Noto Sans JP',sans-serif",
-          fontSize: "10",
-          fontWeight: "400"
-        },
-        visualLines.map((runs, li) => /* @__PURE__ */ h(
-          "tspan",
-          {
-            key: li,
-            x: rx,
-            dy: li === 0 ? 0 : descriptionLineHeight
-          },
-          runs.map((run, ri) => /* @__PURE__ */ h(
-            "tspan",
-            {
-              key: ri,
-              fontWeight: run.bold ? "600" : "400",
-              fontStyle: run.italic ? "italic" : "normal",
-              textDecoration: run.strike ? "line-through" : "none"
-            },
-            run.text
-          ))
-        ))
-      );
+      return /* @__PURE__ */ h(GutterBodyText, {
+        key: `step-remark-${i}`,
+        x: rightGutterX + gutterInnerPad,
+        y: yRow + gutterTextBaselineY,
+        text: remark,
+        wrapCols: remarkWrapCols,
+        fill: theme.laneText || theme.title,
+        opacity: "0.85"
+      });
     })),
     lanes.map((lane, i) => {
-      const x = laneX(i);
-      const currentLaneW = laneWidth(i);
+      // The outermost lanes also paint the outer padding band (reserved for
+      // section borders / side rails) so no unfilled gap is left between the
+      // lane grid and the gutters. Content geometry (laneX/laneWidth) is
+      // unchanged — this only widens what the first/last lane paint.
+      const x = laneX(i) - (i === 0 ? outerPad : 0);
+      const currentLaneW =
+        laneWidth(i) +
+        (i === 0 ? outerPad : 0) +
+        (i === lanes.length - 1 ? outerPad : 0);
       const bg = lane.bg || theme.laneFills[i % theme.laneFills.length];
       const txt = lane.textColor || theme.laneText;
       return /* @__PURE__ */ h("g", { key: `lane-${i}` }, /* @__PURE__ */ h(
@@ -1884,9 +1902,9 @@ function renderDiagramSvg({
     lanes.length > 0 && /* @__PURE__ */ h(Fragment, null, /* @__PURE__ */ h(
       "rect",
       {
-        x: laneX(0),
+        x: laneX(0) - outerPad,
         y: topPad,
-        width: laneWidths.reduce((sum, w) => sum + w, 0),
+        width: laneWidths.reduce((sum, w) => sum + w, 0) + outerPad * 2,
         height: height - topPad - gridBottomPad,
         fill: "none",
         stroke: theme.stroke,
@@ -2149,9 +2167,16 @@ function renderDiagramSvg({
           if (ek > i) sectionNestDepth++;
         }
       }
-      const nestInset = sectionNestDepth * 8;
-      const boxX = laneX(0) + 8 + nestInset;
-      const boxW = laneWidths.reduce((sum, w) => sum + w, 0) - 16 - nestInset * 2;
+      const nestInset = sectionNestDepth * sectionNestStep;
+      // Inset from the *painted* grid edge (the outermost lanes also paint the
+      // outerPad band), so the box spans the visible lanes with the designed
+      // sectionEdgeInset margin and still clears the side rails by outerPad.
+      const boxX = laneX(0) - outerPad + sectionEdgeInset + nestInset;
+      const boxW =
+        laneWidths.reduce((sum, w) => sum + w, 0) +
+        outerPad * 2 -
+        sectionEdgeInset * 2 -
+        nestInset * 2;
       const style = row.sectionColor && BRANCH_COLOR_STYLES[row.sectionColor] ? BRANCH_COLOR_STYLES[row.sectionColor] : { stroke: theme.stroke, bg: theme.branchBg };
       const label = (row.sectionName || "Section").trim() || "Section";
       return /* @__PURE__ */ h("g", { key: `section-${row.id}` }, /* @__PURE__ */ h(

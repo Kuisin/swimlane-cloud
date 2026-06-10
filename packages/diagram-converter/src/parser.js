@@ -1,5 +1,6 @@
 import { normalizeArrowLine, ARROW_LINE_TYPES } from "./arrow-line.js";
 import { getLucideIconNode } from "./render-pure/icon-paths.js";
+import { BLOCK_SHAPE_WIDTH_FACTOR, BRANCH_COLOR_STYLES } from "./render-pure/diagram-layout.js";
 import {
   DEFAULT_COLUMN_TITLES,
   DIAGRAM_OPTION_DSL_MAP,
@@ -192,10 +193,11 @@ export function parseDSL(src) {
 
   let startIdx = -1;
   let endIdx = allLines.length;
+  let foundEnd = false;
   for (let i = 0; i < allLines.length; i++) {
     const t = allLines[i].trim();
     if (t === "@kai-swimlane") { startIdx = i; continue; }
-    if (t === "@end" && startIdx >= 0) { endIdx = i; break; }
+    if (t === "@end" && startIdx >= 0) { endIdx = i; foundEnd = true; break; }
   }
   if (startIdx < 0) {
     return {
@@ -208,6 +210,14 @@ export function parseDSL(src) {
       props: {},
       errors: [{ line: 1, text: "", msg: "@kai-swimlane marker not found" }],
     };
+  }
+
+  if (!foundEnd) {
+    errors.push({
+      line: allLines.length,
+      text: allLines[allLines.length - 1] ?? "",
+      msg: "missing @end marker",
+    });
   }
 
   const lines = allLines.slice(startIdx + 1, endIdx);
@@ -284,7 +294,16 @@ export function parseDSL(src) {
       const m = t.match(/^<([^>]+)>$/);
       if (m) {
         active = m[1].trim();
-        if (!roles[active]) roles[active] = { id: active };
+        if (!active) {
+          errors.push({ line, text, msg: "definition id must not be empty" });
+          active = null;
+          continue;
+        }
+        if (roles[active]) {
+          errors.push({ line, text, msg: `duplicate role definition <${active}>` });
+        } else {
+          roles[active] = { id: active };
+        }
         continue;
       }
       const kv = parseSectionPropertyLine(t);
@@ -292,20 +311,28 @@ export function parseDSL(src) {
         errors.push({ line, text, msg: "property line must end with ';'" });
         continue;
       }
-      if (kv && active) {
-        const map = {
-          label: "label",
-          "text-color": "textColor",
-          "background-color": "bg",
-          icon: "icon",
-        };
-        if (map[kv.key]) {
-          roles[active][map[kv.key]] = kv.val;
-          const badIcon = kv.key === "icon" ? unknownIconName(kv.val) : null;
-          if (badIcon) {
-            errors.push({ line, text, msg: `unknown icon "${badIcon}" — not a known Lucide icon` });
-          }
-        }
+      if (!kv) {
+        errors.push({ line, text, msg: "unrecognized /role/ line" });
+        continue;
+      }
+      if (!active) {
+        errors.push({ line, text, msg: "property line must follow a <id> definition" });
+        continue;
+      }
+      const map = {
+        label: "label",
+        "text-color": "textColor",
+        "background-color": "bg",
+        icon: "icon",
+      };
+      if (!map[kv.key]) {
+        errors.push({ line, text, msg: `unknown /role/ key: ${kv.key}` });
+        continue;
+      }
+      roles[active][map[kv.key]] = kv.val;
+      const badIcon = kv.key === "icon" ? unknownIconName(kv.val) : null;
+      if (badIcon) {
+        errors.push({ line, text, msg: `unknown icon "${badIcon}" — not a known Lucide icon` });
       }
     }
   }
@@ -319,7 +346,16 @@ export function parseDSL(src) {
       const m = t.match(/^<([^>]+)>$/);
       if (m) {
         active = m[1].trim();
-        if (!blocks[active]) blocks[active] = { id: active };
+        if (!active) {
+          errors.push({ line, text, msg: "definition id must not be empty" });
+          active = null;
+          continue;
+        }
+        if (blocks[active]) {
+          errors.push({ line, text, msg: `duplicate block definition <${active}>` });
+        } else {
+          blocks[active] = { id: active };
+        }
         continue;
       }
       const kv = parseSectionPropertyLine(t);
@@ -327,22 +363,38 @@ export function parseDSL(src) {
         errors.push({ line, text, msg: "property line must end with ';'" });
         continue;
       }
-      if (kv && active) {
-        const map = {
-          "background-color": "bg",
-          "text-color": "textColor",
-          "border-color": "borderColor",
-          shape: "shape",
-          icon: "icon",
-          label: "label",
-        };
-        if (map[kv.key]) {
-          blocks[active][map[kv.key]] = kv.val;
-          const badIcon = kv.key === "icon" ? unknownIconName(kv.val) : null;
-          if (badIcon) {
-            errors.push({ line, text, msg: `unknown icon "${badIcon}" — not a known Lucide icon` });
-          }
-        }
+      if (!kv) {
+        errors.push({ line, text, msg: "unrecognized /block/ line" });
+        continue;
+      }
+      if (!active) {
+        errors.push({ line, text, msg: "property line must follow a <id> definition" });
+        continue;
+      }
+      const map = {
+        "background-color": "bg",
+        "text-color": "textColor",
+        "border-color": "borderColor",
+        shape: "shape",
+        icon: "icon",
+        label: "label",
+      };
+      if (!map[kv.key]) {
+        errors.push({ line, text, msg: `unknown /block/ key: ${kv.key}` });
+        continue;
+      }
+      if (kv.key === "shape" && !BLOCK_SHAPE_WIDTH_FACTOR[kv.val.toLowerCase()]) {
+        errors.push({
+          line,
+          text,
+          msg: `unknown shape "${kv.val}" — use one of ${Object.keys(BLOCK_SHAPE_WIDTH_FACTOR).join(", ")}`,
+        });
+        continue;
+      }
+      blocks[active][map[kv.key]] = kv.val;
+      const badIcon = kv.key === "icon" ? unknownIconName(kv.val) : null;
+      if (badIcon) {
+        errors.push({ line, text, msg: `unknown icon "${badIcon}" — not a known Lucide icon` });
       }
     }
   }
@@ -356,8 +408,16 @@ export function parseDSL(src) {
       const m = t.match(/^<([^>]+)>$/);
       if (m) {
         active = m[1].trim();
-        if (!props[active])
+        if (!active) {
+          errors.push({ line, text, msg: "definition id must not be empty" });
+          active = null;
+          continue;
+        }
+        if (props[active]) {
+          errors.push({ line, text, msg: `duplicate prop definition <${active}>` });
+        } else {
           props[active] = { id: active, label: active, side: "right" };
+        }
         continue;
       }
       const kv = parseSectionPropertyLine(t);
@@ -365,27 +425,45 @@ export function parseDSL(src) {
         errors.push({ line, text, msg: "property line must end with ';'" });
         continue;
       }
-      if (kv && active) {
-        const propMap = {
-          label: "label",
-          side: "side",
-          "background-color": "bg",
-          "border-color": "borderColor",
-          "text-color": "textColor",
-          title: "title",
-          hint: "title",
-          "max-chars": "maxChars",
-        };
-        const field = propMap[kv.key];
-        if (field === "label") props[active].label = kv.val;
-        else if (field === "side") {
-          const side = kv.val.toLowerCase();
-          props[active].side = side === "left" ? "left" : "right";
-        } else if (field === "maxChars") {
-          const n = parseInt(kv.val, 10);
-          if (!Number.isNaN(n) && n > 0) props[active].maxChars = n;
-        } else if (field) props[active][field] = kv.val;
+      if (!kv) {
+        errors.push({ line, text, msg: "unrecognized /prop/ line" });
+        continue;
       }
+      if (!active) {
+        errors.push({ line, text, msg: "property line must follow a <id> definition" });
+        continue;
+      }
+      const propMap = {
+        label: "label",
+        side: "side",
+        "background-color": "bg",
+        "border-color": "borderColor",
+        "text-color": "textColor",
+        title: "title",
+        hint: "title",
+        "max-chars": "maxChars",
+      };
+      const field = propMap[kv.key];
+      if (!field) {
+        errors.push({ line, text, msg: `unknown /prop/ key: ${kv.key}` });
+        continue;
+      }
+      if (field === "label") props[active].label = kv.val;
+      else if (field === "side") {
+        const side = kv.val.toLowerCase();
+        if (side !== "left" && side !== "right") {
+          errors.push({ line, text, msg: `side: must be left or right (got "${kv.val}")` });
+          continue;
+        }
+        props[active].side = side;
+      } else if (field === "maxChars") {
+        const n = parseInt(kv.val, 10);
+        if (Number.isNaN(n) || n <= 0 || !/^\d+$/.test(kv.val.trim())) {
+          errors.push({ line, text, msg: `max-chars: must be a positive integer (got "${kv.val}")` });
+          continue;
+        }
+        props[active].maxChars = n;
+      } else props[active][field] = kv.val;
     }
   }
 
@@ -446,6 +524,19 @@ export function parseDSL(src) {
     rows.push(row);
   }
 
+  /** Validate a `#color` token against the named branch/section palette. */
+  function checkColorToken(token, line, text) {
+    if (!token) return;
+    const c = token.trim().toLowerCase();
+    if (!BRANCH_COLOR_STYLES[c]) {
+      errors.push({
+        line,
+        text,
+        msg: `unknown color "#${c}" — use one of ${Object.keys(BRANCH_COLOR_STYLES).join(", ")}`,
+      });
+    }
+  }
+
   function appendLineToRow(rowIndex, line) {
     if (rowIndex < 0 || rowIndex >= rows.length) return;
     const row = rows[rowIndex];
@@ -473,6 +564,7 @@ export function parseDSL(src) {
 
     let m = u.match(/^if\s*\((.+?)\)\s*is\s*\((.+?)\)\s*than(?:\s+#([A-Za-z]+))?$/i);
     if (m) {
+      checkColorToken(m[3], line, text);
       branchCounter++;
       const id = branchCounter;
       const depth = branchMarkerDepth();
@@ -492,6 +584,7 @@ export function parseDSL(src) {
     }
     m = u.match(/^elseif\s*\((.+?)\)\s*than(?:\s+#([A-Za-z]+))?$/i);
     if (m) {
+      checkColorToken(m[2], line, text);
       const top = stack[stack.length - 1];
       if (!top || top.type !== "if") {
         errors.push({ line, text, msg: "elseif without if" });
@@ -540,6 +633,7 @@ export function parseDSL(src) {
     /** Parallel split: `fork` opens, `and` adds a concurrent path, `endfork` joins. */
     m = u.match(/^fork(?:\s+#([A-Za-z]+))?$/i);
     if (m) {
+      checkColorToken(m[1], line, text);
       branchCounter++;
       const id = branchCounter;
       const depth = branchMarkerDepth();
@@ -560,6 +654,7 @@ export function parseDSL(src) {
     }
     m = u.match(/^and(?:\s+#([A-Za-z]+))?$/i);
     if (m) {
+      checkColorToken(m[1], line, text);
       const top = stack[stack.length - 1];
       if (!top || top.type !== "fork") {
         errors.push({ line, text, msg: "and without fork" });
@@ -600,6 +695,7 @@ export function parseDSL(src) {
      *                close. No box is drawn.
      */
     const openGroup = (groupMode, name, colorToken) => {
+      checkColorToken(colorToken, line, text);
       groupCounter++;
       const id = groupCounter;
       const depth = groupMarkerDepth();
@@ -931,6 +1027,18 @@ export function parseDSL(src) {
       line: lineNum,
       text: openText,
       msg: "unclosed section (missing end-section)",
+    });
+  }
+
+  /** Every if/fork still open at the end of /line/ is missing its closer. */
+  for (const open of stack) {
+    const openRow = rows.find((r) => r.kind === "branchStart" && r.id === open.id);
+    const lineNum = openRow?.dslLines?.[0];
+    const openText = sections.line.find((l) => l.line === lineNum)?.text;
+    errors.push({
+      line: lineNum,
+      text: openText,
+      msg: open.type === "fork" ? "unclosed fork (missing endfork)" : "unclosed if (missing endif)",
     });
   }
 

@@ -77,15 +77,27 @@ export const DIAGRAM_LAYOUT = {
   rowH: 80,
   laneContentPad: 15,
   sectionInset: 5,
+  // Horizontal padding reserved on the outermost lanes so step/branch content
+  // and the side-routed arrows don't crowd the gutter dividers or sit on top of
+  // a section's left/right border.
+  outerLanePad: 26,
+  // Gap from the lane-grid edge to the *outermost* section border, and the extra
+  // inset added per nesting level. Sized so the arrow rails (which route at the
+  // grid edge) clear the border, and nested sections stay visually distinct.
+  sectionEdgeInset: 18,
+  sectionNestStep: 12,
 
   // Left / right gutter text
-  descWrapCols: 28,
   remarkWrapColsMin: 8,
   descriptionLineHeight: 14,
   descriptionBottomPad: 10,
   gutterTextBaselineY: 30,
   gutterTitleLineH: 20,
   gutterTextBandTopY: 20,
+  gutterHeaderTitleFontSize: 13,
+  gutterHeaderSubtitleFontSize: 11,
+  gutterStepTitleFontSize: 12,
+  gutterBodyFontSize: 10,
 
   // Step blocks & props
   stepBoxH: 44,
@@ -178,6 +190,16 @@ export const DIAGRAM_LAYOUT = {
   fontFamily: "'Noto Sans JP','Noto Sans',sans-serif",
   decisionFontFamily: "'Noto Sans JP',sans-serif",
 };
+
+/**
+ * Display-column budget for text inside a gutter of `gutterWidth` px: the
+ * usable width after inner padding on both sides, divided by the font size
+ * (one column = one full-width CJK cell = 1em at that font size).
+ */
+export function gutterTextCols(gutterWidth, fontSize) {
+  const { gutterInnerPad } = DIAGRAM_LAYOUT;
+  return Math.max(1, Math.floor((gutterWidth - 2 * gutterInnerPad) / fontSize));
+}
 
 export function blockMaxTextCols(shape, hasIcon) {
   const factor = BLOCK_SHAPE_WIDTH_FACTOR[shape] ?? 1;

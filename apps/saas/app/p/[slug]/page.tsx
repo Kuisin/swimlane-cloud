@@ -2,9 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { Monitor, Smartphone } from "lucide-react";
 import { textToSvg } from "@swimlane-cloud/diagram-converter";
+import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import { getPublished, type PublishedEntry } from "@/lib/demo-workflow";
 import { FileTree } from "@/components/file-tree";
+
+type ShareView = "diagram" | "mobile";
 
 /**
  * Public share page (demo). Reads a published commit/version from the local
@@ -56,6 +60,24 @@ export default function PublicSharePage() {
     window.history.replaceState(null, "", `?${params.toString()}`);
   }, [path]);
 
+  // Diagram (SVG) vs mobile (vertical card) view. Defaults to mobile on
+  // narrow screens; an explicit ?view= in the URL wins so links keep their look.
+  const [view, setView] = useState<ShareView>("diagram");
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("view");
+    if (wanted === "mobile" || wanted === "diagram") setView(wanted);
+    else if (window.matchMedia("(max-width: 640px)").matches) setView("mobile");
+  }, []);
+  // Keep the chosen view in the URL so it's shareable/bookmarkable.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if ((params.get("view") ?? "diagram") === view) return;
+    if (view === "diagram") params.delete("view");
+    else params.set("view", view);
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [view]);
+
   const svg = useMemo(() => {
     const src = files[path];
     if (src) {
@@ -83,6 +105,10 @@ export default function PublicSharePage() {
 
   const dsl = files[path] ?? entry.dsl;
   const showDsl = entry.shareMode === "svg_and_dsl";
+  // Mobile mode renders from the DSL source; entries published without it
+  // (SVG-only) can only show the diagram view.
+  const canMobile = Boolean(dsl);
+  const showMobile = view === "mobile" && canMobile;
 
   return (
     // select-none + onContextMenu prevent casual text selection and right-click copy.
@@ -91,10 +117,32 @@ export default function PublicSharePage() {
       className="mx-auto flex h-screen max-w-5xl select-none flex-col px-4 py-6"
       onContextMenu={(e) => e.preventDefault()}
     >
-      <header className="mb-4 shrink-0">
-        <div className="text-xs uppercase tracking-wide text-neutral-400">Published</div>
-        <h1 className="text-2xl font-semibold">{entry.name}</h1>
-        {entry.note && <p className="text-sm text-neutral-500">{entry.note}</p>}
+      <header className="mb-4 flex shrink-0 items-start justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-neutral-400">Published</div>
+          <h1 className="text-2xl font-semibold">{entry.name}</h1>
+          {entry.note && <p className="text-sm text-neutral-500">{entry.note}</p>}
+        </div>
+        {canMobile && (
+          <div
+            className="flex shrink-0 overflow-hidden rounded-md border border-neutral-300 text-xs"
+            role="group"
+            aria-label="View mode"
+          >
+            <ViewButton
+              active={!showMobile}
+              onClick={() => setView("diagram")}
+              icon={<Monitor size={13} aria-hidden />}
+              label="Diagram"
+            />
+            <ViewButton
+              active={showMobile}
+              onClick={() => setView("mobile")}
+              icon={<Smartphone size={13} aria-hidden />}
+              label="Mobile"
+            />
+          </div>
+        )}
       </header>
 
       <div className="flex min-h-0 flex-1 gap-4 print:hidden">
@@ -104,7 +152,14 @@ export default function PublicSharePage() {
           </aside>
         )}
         <section className="min-w-0 flex-1 overflow-auto">
-          {svg ? (
+          {showMobile ? (
+            // Mobile cards stay interactive (tap to expand) — read-only, no
+            // edit callbacks — so no pointer-events-none here; select-none and
+            // the context-menu block on <main> still apply.
+            <div className="mx-auto max-w-md rounded-lg border border-neutral-200 bg-white p-3">
+              <MobileDiagram dsl={dsl} />
+            </div>
+          ) : svg ? (
             // pointer-events-none prevents drag-to-desktop and SVG interaction.
             <div
               className="pointer-events-none rounded-lg border border-neutral-200 bg-white p-4 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
@@ -130,6 +185,34 @@ export default function PublicSharePage() {
         Shared read-only via Swimlane Cloud (demo). Content is protected.
       </p>
     </main>
+  );
+}
+
+function ViewButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex items-center gap-1.5 px-2.5 py-1.5 font-medium ${
+        active
+          ? "bg-neutral-900 text-white"
+          : "bg-white text-neutral-600 hover:bg-neutral-50"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 

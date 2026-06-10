@@ -93,7 +93,7 @@ icon: #check;
 <gate>
 border-color: #c2410c;
 shape: hex;
-icon: #shield;
+icon: #shield-check;
 
 <job>
 shape: subroutine;
@@ -338,9 +338,15 @@ Expense Approval
 show-left-gutter: true;
 show-right-gutter: true;
 /role/
-<emp: Employee> #blue
-<mgr: Manager> #orange
-<fin: Finance> #green
+<emp>
+label: Employee;
+background-color: #dbeafe;
+<mgr>
+label: Manager;
+background-color: #ffedd5;
+<fin>
+label: Finance;
+background-color: #dcfce7;
 /line/
 [emp: Submit expense]
 if (amount over limit?) is (yes) than
@@ -359,9 +365,15 @@ Hiring Pipeline
 show-left-gutter: true;
 show-right-gutter: true;
 /role/
-<rec: Recruiter> #blue
-<hm: Hiring Manager> #orange
-<cand: Candidate> #green
+<rec>
+label: Recruiter;
+background-color: #dbeafe;
+<hm>
+label: Hiring Manager;
+background-color: #ffedd5;
+<cand>
+label: Candidate;
+background-color: #dcfce7;
 /line/
 [rec: Screen applicants]
 [hm: Phone interview]
@@ -381,7 +393,7 @@ const SEEDS: Record<string, Record<string, string>> = {
 export function demoSeed(projectId: string): Record<string, string> {
   return (
     SEEDS[projectId] ?? {
-      "untitled.txt": `@kai-swimlane\n/title/\nUntitled\n/role/\n<role01: Team> #blue\n/line/\n[role01: Start]\n[role01: Done]\n@end\n`,
+      "untitled.txt": `@kai-swimlane\n/title/\nUntitled\n/role/\n<role01>\nlabel: Team;\nbackground-color: #dbeafe;\n/line/\n[role01: Start]\n[role01: Done]\n@end\n`,
     }
   );
 }

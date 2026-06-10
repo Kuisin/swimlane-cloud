@@ -155,7 +155,7 @@ const SAMPLE_HIRING = `@kai-swimlane
 label: 採用担当;
 text-color: #7c2d12;
 background-color: #fff7ed;
-icon: #briefcase;
+icon: #user;
 
 /block/
 
