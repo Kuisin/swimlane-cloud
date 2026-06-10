@@ -16,10 +16,11 @@ import { PartsPreviewTooltip } from "./parts-preview-tooltip.jsx";
  * than the overlay, drifting the colours on wrapped lines — and keeps one line
  * number per logical line.
  */
-export function TextEditor({ value, onChange, readOnly, gotoLine, theme }) {
+export function TextEditor({ value, onChange, readOnly, gotoLine, theme, errors }) {
   const ref = useRef(null);
   const preRef = useRef(null);
   const gutterRef = useRef(null);
+  const errorLayerRef = useRef(null);
   const [hoverPreview, setHoverPreview] = useState(null);
   // While the mouse button is down, make ref spans click-through so a drag
   // selection passes cleanly through them to the textarea below.
@@ -58,6 +59,16 @@ export function TextEditor({ value, onChange, readOnly, gotoLine, theme }) {
 
   const lineCount = useMemo(() => value.split("\n").length, [value]);
 
+  // 1-based line numbers that have at least one parse error.
+  const errorLines = useMemo(() => {
+    const set = new Set();
+    for (const err of errors || []) {
+      const line = Number(err?.line);
+      if (Number.isInteger(line) && line >= 1 && line <= lineCount) set.add(line);
+    }
+    return set;
+  }, [errors, lineCount]);
+
   // Keep the (top) <pre> and the gutter scrolled in lockstep with the textarea.
   const syncScroll = useCallback(() => {
     const ta = ref.current;
@@ -67,7 +78,14 @@ export function TextEditor({ value, onChange, readOnly, gotoLine, theme }) {
       preRef.current.scrollLeft = ta.scrollLeft;
     }
     if (gutterRef.current) gutterRef.current.scrollTop = ta.scrollTop;
+    if (errorLayerRef.current) errorLayerRef.current.scrollTop = ta.scrollTop;
   }, []);
+
+  // The error layer mounts/unmounts with the first/last error, so re-sync its
+  // scroll position whenever the error set changes.
+  useEffect(() => {
+    syncScroll();
+  }, [errorLines, syncScroll]);
 
   // Forward wheel over an interactive ref span to the textarea below so the
   // editor still scrolls when the pointer is on a `<ref>`.
@@ -118,11 +136,14 @@ export function TextEditor({ value, onChange, readOnly, gotoLine, theme }) {
   const lineNumbers = useMemo(
     () =>
       Array.from({ length: lineCount }, (_, i) => (
-        <div key={i} className="sw-code-lineno">
+        <div
+          key={i}
+          className={`sw-code-lineno${errorLines.has(i + 1) ? " sw-code-lineno-error" : ""}`}
+        >
           {i + 1}
         </div>
       )),
-    [lineCount],
+    [lineCount, errorLines],
   );
 
   return (
@@ -131,6 +152,19 @@ export function TextEditor({ value, onChange, readOnly, gotoLine, theme }) {
         <div className="sw-code-gutter-inner">{lineNumbers}</div>
       </div>
       <div className="sw-code-area">
+        {errorLines.size > 0 && (
+          <div className="sw-code-layer sw-code-error-layer" ref={errorLayerRef} aria-hidden>
+            <div className="sw-code-error-layer-inner" style={{ height: `${lineCount * 1.6}em` }}>
+              {[...errorLines].map((line) => (
+                <div
+                  key={line}
+                  className="sw-code-error-line"
+                  style={{ top: `${(line - 1) * 1.6}em` }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
         <pre
           className={`sw-code-layer sw-code-highlight${selecting ? " sw-code-selecting" : ""}`}
           ref={preRef}

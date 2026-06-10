@@ -390,6 +390,7 @@ function DslEditorInner({ options }) {
                   readOnly={readOnly}
                   gotoLine={gotoLine}
                   theme={theme}
+                  errors={errors}
                 />
               )}
               <ErrorList errors={errors} onSelectLine={(line) => setGotoLine(line)} />

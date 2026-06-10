@@ -421,6 +421,29 @@
   background: transparent;
   caret-color: var(--sw-text);
 }
+/* Parse-error line backgrounds: a scroll-synced stripe layer behind the
+   transparent textarea. Stripes are positioned in em so they track the code
+   line-height (1.6) exactly. */
+.sw-code-error-layer {
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.sw-code-error-layer-inner {
+  position: relative;
+}
+.sw-code-error-line {
+  position: absolute;
+  /* Bleed across the layer's 14px horizontal padding for a full-width stripe. */
+  left: -14px;
+  right: -14px;
+  height: 1.6em;
+  background: rgba(239, 68, 68, 0.13);
+}
+.sw-code-lineno-error {
+  color: var(--sw-danger);
+  font-weight: 700;
+}
 /* Block/prop refs opt back into pointer events to show a preview on hover. */
 .sw-syn-ref-link {
   pointer-events: auto;
