@@ -44,6 +44,8 @@ export const EN = {
   "tree.noFiles": "No files",
   "tree.collapse": "Collapse files",
   "tree.expand": "Expand files",
+  "tree.deleteFile": "Delete file",
+  "tree.deleteFolder": "Delete folder",
   // file settings
   "file.settings": "Settings",
   "settings.title": "File settings",
@@ -261,6 +263,8 @@ export const JA = {
   "tree.noFiles": "ファイルなし",
   "tree.collapse": "ツリーを折りたたむ",
   "tree.expand": "ツリーを展開",
+  "tree.deleteFile": "ファイルを削除",
+  "tree.deleteFolder": "フォルダを削除",
   // file settings
   "file.settings": "設定",
   "settings.title": "ファイル設定",

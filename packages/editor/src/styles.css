@@ -181,6 +181,8 @@
   color: var(--sw-text-muted);
 }
 .sw-tree-label {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -190,8 +192,40 @@
   height: 7px;
   border-radius: 50%;
   background: var(--sw-amber);
-  margin-left: auto;
   flex-shrink: 0;
+}
+.sw-tree-item-del {
+  display: none;
+  border: none;
+  background: transparent;
+  padding: 1px 2px;
+  cursor: pointer;
+  color: var(--sw-text-muted);
+  border-radius: 3px;
+  flex-shrink: 0;
+  line-height: 0;
+}
+.sw-tree-item-del:hover {
+  color: var(--sw-danger);
+  background: var(--sw-bg-sunken);
+}
+.sw-tree-folder:hover .sw-tree-item-del,
+.sw-tree-file:hover .sw-tree-item-del {
+  display: inline-flex;
+  align-items: center;
+}
+.sw-tree-drag-over {
+  outline: 2px solid var(--sw-accent);
+  outline-offset: -2px;
+  border-radius: 3px;
+  background: var(--sw-accent-bg) !important;
+}
+.sw-tree-file[draggable="true"] {
+  cursor: grab;
+}
+.sw-tree-file[draggable="true"]:active {
+  cursor: grabbing;
+  opacity: 0.6;
 }
 
 /* ---- main column ---- */
