@@ -365,5 +365,14 @@ end-section
     expect(+gridBox.x + +gridBox.width).toBe(+rightGutterBox.x);
     // The first lane's background tint also covers the outer padding band.
     expect(rects.some((r) => +r.x === gridLeft && r.opacity === "0.12")).toBe(true);
+    // The section box is inset sectionEdgeInset from the *painted* grid edge
+    // on both sides, so it spans the visible lanes (not just the content area).
+    const { sectionEdgeInset } = DIAGRAM_LAYOUT;
+    const sectionBox = rects.find((r) => r["stroke-dasharray"] === "6 4");
+    expect(sectionBox).toBeTruthy();
+    expect(+sectionBox.x).toBe(+gridBox.x + sectionEdgeInset);
+    expect(+sectionBox.x + +sectionBox.width).toBe(
+      +gridBox.x + +gridBox.width - sectionEdgeInset,
+    );
   });
 });

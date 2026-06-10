@@ -2168,9 +2168,15 @@ function renderDiagramSvg({
         }
       }
       const nestInset = sectionNestDepth * sectionNestStep;
-      const boxX = laneX(0) + sectionEdgeInset + nestInset;
+      // Inset from the *painted* grid edge (the outermost lanes also paint the
+      // outerPad band), so the box spans the visible lanes with the designed
+      // sectionEdgeInset margin and still clears the side rails by outerPad.
+      const boxX = laneX(0) - outerPad + sectionEdgeInset + nestInset;
       const boxW =
-        laneWidths.reduce((sum, w) => sum + w, 0) - sectionEdgeInset * 2 - nestInset * 2;
+        laneWidths.reduce((sum, w) => sum + w, 0) +
+        outerPad * 2 -
+        sectionEdgeInset * 2 -
+        nestInset * 2;
       const style = row.sectionColor && BRANCH_COLOR_STYLES[row.sectionColor] ? BRANCH_COLOR_STYLES[row.sectionColor] : { stroke: theme.stroke, bg: theme.branchBg };
       const label = (row.sectionName || "Section").trim() || "Section";
       return /* @__PURE__ */ h("g", { key: `section-${row.id}` }, /* @__PURE__ */ h(
