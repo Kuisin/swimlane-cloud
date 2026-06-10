@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseDSL } from "../parser.js";
 import { THEMES } from "../themes.js";
 import { renderDiagramSvg } from "./diagram.js";
+import { DIAGRAM_LAYOUT } from "./diagram-layout.js";
 import { findGroupEndIndex } from "../group-rows.js";
 
 const theme = THEMES.basic;
@@ -326,5 +327,43 @@ end-section
 @end`);
     // A dashed connector must appear.
     expect((svgDashed.match(/stroke-dasharray="6 3"/g) || []).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("paints the lane grid flush against both gutters when sections reserve outer padding", () => {
+    const svg = render(`@kai-swimlane
+/page/
+right-title: 備考;
+/role/
+<a>
+label: A;
+<b>
+label: B;
+/line/
+section (S1)
+  [a: 手順1]
+  remark: 備考あり;
+  [b: 手順2]
+end-section
+@end`);
+    const rects = [...svg.matchAll(/<rect ([^>]*?)\/?>/g)].map((m) => {
+      const attrs = {};
+      for (const a of m[1].matchAll(/([a-zA-Z-]+)="([^"]*)"/g)) attrs[a[1]] = a[2];
+      return attrs;
+    });
+    const { xPad, leftGutterWidth, rightGutterWidth } = DIAGRAM_LAYOUT;
+    const gridLeft = xPad + leftGutterWidth;
+    // The lane-grid border must start where the left gutter ends…
+    const gridBox = rects.find(
+      (r) => r.fill === "none" && !r["stroke-dasharray"] && +r.x === gridLeft,
+    );
+    expect(gridBox).toBeTruthy();
+    // …and end where the right (remark) gutter begins: no unpainted band.
+    const rightGutterBox = rects.find(
+      (r) => r.fill === "none" && +r.width === rightGutterWidth,
+    );
+    expect(rightGutterBox).toBeTruthy();
+    expect(+gridBox.x + +gridBox.width).toBe(+rightGutterBox.x);
+    // The first lane's background tint also covers the outer padding band.
+    expect(rects.some((r) => +r.x === gridLeft && r.opacity === "0.12")).toBe(true);
   });
 });

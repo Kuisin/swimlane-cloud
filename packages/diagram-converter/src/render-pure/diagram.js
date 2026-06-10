@@ -1578,7 +1578,8 @@ function renderDiagramSvg({
     });
   }
   const swimlaneDividerX1 = xPad;
-  const swimlaneDividerX2 = (lanes.length > 0 ? laneX(lanes.length - 1) + laneWidth(lanes.length - 1) : 0) + rightGutter;
+  const swimlaneDividerX2 =
+    (lanes.length > 0 ? laneX(lanes.length - 1) + laneWidth(lanes.length - 1) + outerPad : 0) + rightGutter;
   // Coerce the branded markup back to a plain string at the public boundary so
   // consumers (React state, `Boolean(svg)`, file export) see a normal string.
   return String(/* @__PURE__ */ h(
@@ -1807,8 +1808,15 @@ function renderDiagramSvg({
       });
     })),
     lanes.map((lane, i) => {
-      const x = laneX(i);
-      const currentLaneW = laneWidth(i);
+      // The outermost lanes also paint the outer padding band (reserved for
+      // section borders / side rails) so no unfilled gap is left between the
+      // lane grid and the gutters. Content geometry (laneX/laneWidth) is
+      // unchanged — this only widens what the first/last lane paint.
+      const x = laneX(i) - (i === 0 ? outerPad : 0);
+      const currentLaneW =
+        laneWidth(i) +
+        (i === 0 ? outerPad : 0) +
+        (i === lanes.length - 1 ? outerPad : 0);
       const bg = lane.bg || theme.laneFills[i % theme.laneFills.length];
       const txt = lane.textColor || theme.laneText;
       return /* @__PURE__ */ h("g", { key: `lane-${i}` }, /* @__PURE__ */ h(
@@ -1894,9 +1902,9 @@ function renderDiagramSvg({
     lanes.length > 0 && /* @__PURE__ */ h(Fragment, null, /* @__PURE__ */ h(
       "rect",
       {
-        x: laneX(0),
+        x: laneX(0) - outerPad,
         y: topPad,
-        width: laneWidths.reduce((sum, w) => sum + w, 0),
+        width: laneWidths.reduce((sum, w) => sum + w, 0) + outerPad * 2,
         height: height - topPad - gridBottomPad,
         fill: "none",
         stroke: theme.stroke,
