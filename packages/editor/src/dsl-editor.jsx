@@ -212,9 +212,10 @@ function DslEditorInner({ options }) {
       return;
     }
 
-    if (format === "png") {
+    if (format === "png" || format === "png-hd") {
       // A blob URL is reliable across browsers for SVG → <img> → canvas; an SVG
       // data URL fails to load in Safari, which is why PNG export was breaking.
+      const targetScale = format === "png-hd" ? 4 : 2;
       const svgUrl = URL.createObjectURL(
         new Blob([outSvg], { type: "image/svg+xml;charset=utf-8" }),
       );
@@ -223,14 +224,17 @@ function DslEditorInner({ options }) {
         const baseW = w || img.naturalWidth || 800;
         const baseH = h || img.naturalHeight || 600;
         // Browsers cap canvas size (Safari rasterizes nothing past ~16.7M px of
-        // area / 8k per side, returning a blank canvas + null toBlob). A fixed
-        // 2x scale blows that on large diagrams — which is why a small diagram
-        // exports but a big one fails. Pick the largest scale up to 2x that
-        // still fits, so large diagrams downscale gracefully instead of going
-        // blank. crisp on small diagrams, never blank on big ones.
-        const MAX_DIM = 8192;
-        const MAX_AREA = 16777216; // 4096^2 — Safari's ceiling
-        let scale = Math.min(2, MAX_DIM / baseW, MAX_DIM / baseH);
+        // area / 8k per side, returning a blank canvas + null toBlob; Chrome/
+        // Firefox go much higher). A fixed scale blows that on large diagrams —
+        // which is why a small diagram exports but a big one fails. Pick the
+        // largest scale up to the target that still fits, so large diagrams
+        // downscale gracefully instead of going blank.
+        const isSafari =
+          typeof navigator !== "undefined" &&
+          /^((?!chrome|chromium|android).)*safari/i.test(navigator.userAgent);
+        const MAX_DIM = isSafari ? 8192 : 16384;
+        const MAX_AREA = isSafari ? 16777216 : 268435456; // 4096² / 16384²
+        let scale = Math.min(targetScale, MAX_DIM / baseW, MAX_DIM / baseH);
         scale = Math.min(scale, Math.sqrt(MAX_AREA / (baseW * baseH)));
         if (!(scale > 0) || !Number.isFinite(scale)) scale = 1;
         const cw = Math.max(1, Math.floor(baseW * scale));

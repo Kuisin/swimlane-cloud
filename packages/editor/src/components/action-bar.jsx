@@ -17,7 +17,8 @@ import { useT } from "../i18n.jsx";
  * / Help are always shown when the host supports them; Checkpoint / Flag new
  * version are gated on host capability + method presence.
  *
- * `onExport(format)` is called with "txt", "svg", or "png".
+ * `onExport(format)` is called with "txt", "svg", "png", or "png-hd"
+ * (PNG at a higher pixel scale for print/zoom).
  * `shortcuts` is an optional object with keys like `save`, `saveAll`, `format`
  * whose values are shortcut label strings (e.g. "⌘S") appended to tooltips.
  */
@@ -128,6 +129,14 @@ export function ActionBar({
                 onClick={() => { onExport("png"); setExportOpen(false); }}
               >
                 {t("action.exportPng")}
+              </button>
+              <button
+                type="button"
+                className="sw-export-item"
+                disabled={!hasSvg}
+                onClick={() => { onExport("png-hd"); setExportOpen(false); }}
+              >
+                {t("action.exportPngHd")}
               </button>
             </div>
           )}
