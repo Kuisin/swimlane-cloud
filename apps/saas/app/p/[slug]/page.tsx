@@ -114,13 +114,13 @@ export default function PublicSharePage() {
     // select-none + onContextMenu prevent casual text selection and right-click copy.
     // print:hidden hides diagram content from print/PDF export.
     <main
-      className="mx-auto flex h-screen max-w-5xl select-none flex-col px-4 py-6"
+      className="mx-auto flex h-screen max-w-5xl select-none flex-col px-3 py-4 sm:px-4 sm:py-6"
       onContextMenu={(e) => e.preventDefault()}
     >
-      <header className="mb-4 flex shrink-0 items-start justify-between gap-3">
-        <div>
+      <header className="mb-3 flex shrink-0 items-start justify-between gap-3 sm:mb-4">
+        <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-neutral-400">Published</div>
-          <h1 className="text-2xl font-semibold">{entry.name}</h1>
+          <h1 className="truncate text-xl font-semibold sm:text-2xl">{entry.name}</h1>
           {entry.note && <p className="text-sm text-neutral-500">{entry.note}</p>}
         </div>
         {canMobile && (
@@ -145,9 +145,11 @@ export default function PublicSharePage() {
         )}
       </header>
 
-      <div className="flex min-h-0 flex-1 gap-4 print:hidden">
+      {/* Sidebar + content side-by-side on sm+; stacked (tree above, capped
+          height) on phones so the diagram keeps the width. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row sm:gap-4 print:hidden">
         {paths.length > 0 && (
-          <aside className="w-48 shrink-0 overflow-auto rounded-lg border border-neutral-200 p-2">
+          <aside className="max-h-36 w-full shrink-0 overflow-auto rounded-lg border border-neutral-200 p-2 sm:max-h-none sm:w-48">
             <FileTree paths={paths} active={path} onPick={setPath} />
           </aside>
         )}
