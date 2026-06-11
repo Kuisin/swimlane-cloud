@@ -43,6 +43,16 @@ export default function PublicSharePage() {
   const paths = Object.keys(files)
     .filter((p) => p.endsWith(".txt"))
     .sort();
+  const titles = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const [p, content] of Object.entries(files)) {
+      if (content && p.endsWith(".txt")) {
+        const t = extractTitle(content);
+        if (t) map[p] = t;
+      }
+    }
+    return map;
+  }, [files]); // eslint-disable-line react-hooks/exhaustive-deps
   const [path, setPath] = useState("");
   // Restore the opened file from the URL (?file=) once the entry loads.
   useEffect(() => {
@@ -150,7 +160,7 @@ export default function PublicSharePage() {
       <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row sm:gap-4 print:hidden">
         {paths.length > 0 && (
           <aside className="max-h-36 w-full shrink-0 overflow-auto rounded-lg border border-neutral-200 p-2 sm:max-h-none sm:w-48">
-            <FileTree paths={paths} active={path} onPick={setPath} />
+            <FileTree paths={paths} active={path} onPick={setPath} titleOf={(id) => titles[id]} />
           </aside>
         )}
         <section className="min-w-0 flex-1 overflow-auto">
@@ -188,6 +198,21 @@ export default function PublicSharePage() {
       </p>
     </main>
   );
+}
+
+function extractTitle(dsl: string): string {
+  const lines = dsl.split("\n");
+  let inTitle = false;
+  const parts: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (t === "/title/") { inTitle = true; continue; }
+    if (inTitle) {
+      if (t.startsWith("/") || t === "@end") break;
+      if (t) parts.push(t);
+    }
+  }
+  return parts.join(" ");
 }
 
 function ViewButton({

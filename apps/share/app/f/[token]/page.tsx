@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { textToSvg } from "@swimlane-cloud/diagram-converter";
 import { DiagramViewer } from "@/components/diagram-viewer";
 import {
+  extractTitle,
   fileName,
   filesInFolder,
   folderName,
@@ -34,6 +35,15 @@ export default async function SharedFolderPage({
   const active = file && files.includes(file) ? file : files[0];
   const dsl = readDiagram(`${folderRel}/${active}`);
 
+  const titles: Record<string, string> = {};
+  for (const f of files) {
+    const content = f === active ? dsl : readDiagram(`${folderRel}/${f}`);
+    if (content) {
+      const t = extractTitle(content);
+      if (t) titles[f] = t;
+    }
+  }
+
   let svg: string | null = null;
   if (dsl != null) {
     try {
@@ -55,26 +65,39 @@ export default async function SharedFolderPage({
       <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
         <aside className="max-h-40 w-full shrink-0 overflow-auto rounded-lg border border-neutral-200 bg-white p-2 sm:max-h-[75vh] sm:w-56">
           <ul className="space-y-0.5">
-            {files.map((f) => (
-              <li key={f}>
-                <Link
-                  href={`?file=${encodeURIComponent(f)}${viewQs}`}
-                  className={`block truncate rounded px-2 py-1 text-sm ${
-                    f === active
-                      ? "bg-indigo-50 font-medium text-indigo-700"
-                      : "text-neutral-600 hover:bg-neutral-50"
-                  }`}
-                  title={f}
-                >
-                  {fileName(f)}
-                  {f.includes("/") && (
-                    <span className="ml-1 text-xs text-neutral-400">
-                      {f.slice(0, f.lastIndexOf("/"))}
-                    </span>
-                  )}
-                </Link>
-              </li>
-            ))}
+            {files.map((f) => {
+              const title = titles[f];
+              const name = fileName(f);
+              const folder = f.includes("/") ? f.slice(0, f.lastIndexOf("/")) : null;
+              const isActive = f === active;
+              const subtitle = title
+                ? [name, folder].filter(Boolean).join(" · ")
+                : folder ?? null;
+              return (
+                <li key={f}>
+                  <Link
+                    href={`?file=${encodeURIComponent(f)}${viewQs}`}
+                    className={`block rounded px-2 py-1.5 ${
+                      isActive
+                        ? "bg-indigo-50 text-indigo-700"
+                        : "text-neutral-600 hover:bg-neutral-50"
+                    }`}
+                    title={f}
+                  >
+                    <div className={`truncate text-sm ${isActive ? "font-medium" : ""}`}>
+                      {title || name}
+                    </div>
+                    {subtitle && (
+                      <div className={`mt-0.5 truncate text-xs ${
+                        isActive ? "text-indigo-400" : "text-neutral-400"
+                      }`}>
+                        {subtitle}
+                      </div>
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </aside>
 

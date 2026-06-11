@@ -13,16 +13,18 @@ export function FileTree({
   active,
   onPick,
   statusOf,
+  titleOf,
 }: {
   paths: string[];
   active: string;
   onPick: (id: string) => void;
   statusOf?: (id: string) => "added" | "removed" | "changed" | "same";
+  titleOf?: (id: string) => string | undefined;
 }) {
   const tree = buildFolderTree(paths.map((p) => ({ id: p, name: p.split("/").pop() ?? p })));
   return (
     <div className="text-sm">
-      <TreeNode node={tree} depth={0} active={active} onPick={onPick} statusOf={statusOf} isRoot />
+      <TreeNode node={tree} depth={0} active={active} onPick={onPick} statusOf={statusOf} titleOf={titleOf} isRoot />
     </div>
   );
 }
@@ -33,6 +35,7 @@ function TreeNode({
   active,
   onPick,
   statusOf,
+  titleOf,
   isRoot,
 }: {
   node: FolderTreeNode;
@@ -40,6 +43,7 @@ function TreeNode({
   active: string;
   onPick: (id: string) => void;
   statusOf?: (id: string) => "added" | "removed" | "changed" | "same";
+  titleOf?: (id: string) => string | undefined;
   isRoot?: boolean;
 }) {
   return (
@@ -61,6 +65,7 @@ function TreeNode({
           active={active}
           onPick={onPick}
           statusOf={statusOf}
+          titleOf={titleOf}
         />
       ))}
       {node.files.map((f) => {
@@ -73,17 +78,28 @@ function TreeNode({
               : status === "changed"
                 ? "text-amber-700"
                 : "text-neutral-700";
+        const isActive = f.id === active;
+        const title = titleOf?.(f.id);
         return (
           <button
             key={f.id}
             onClick={() => onPick(f.id)}
             style={{ paddingLeft: (isRoot ? 0 : depth + 1) * 12 + 16 }}
-            className={`flex w-full items-center gap-1.5 rounded py-1 pr-2 text-left ${
-              f.id === active ? "bg-indigo-50 font-medium text-indigo-700" : `hover:bg-neutral-100 ${color}`
+            className={`flex w-full items-start gap-1.5 rounded py-1 pr-2 text-left ${
+              isActive ? "bg-indigo-50 font-medium text-indigo-700" : `hover:bg-neutral-100 ${color}`
             }`}
           >
-            <FileText size={14} className="shrink-0" />
-            <span className="truncate">{f.name}</span>
+            <FileText size={14} className="mt-0.5 shrink-0" />
+            <span className="min-w-0 flex-1 overflow-hidden">
+              <span className="block truncate">{title || f.name}</span>
+              {title && (
+                <span className={`block truncate text-xs font-normal ${
+                  isActive ? "text-indigo-400" : "text-neutral-400"
+                }`}>
+                  {f.name}
+                </span>
+              )}
+            </span>
           </button>
         );
       })}
