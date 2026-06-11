@@ -9,14 +9,14 @@ APサーバー上の会計伝票ファイルを読み込み、
 重複履歴・BAPIエラー・履歴登録エラーは一覧に集約し、最後に帳票出力する。
 ```;
 header-left: Z_00_TGLR0600_2;
-header-center: 会計伝票登録（演習6-②）;
-header-right: ABAP Logic Flow;
+header-center: 会計伝票登録（演習６－２）;
+header-right: ABAP Flow;
 footer-left: 入力: P_FILE（論理ファイル）;
 footer-center: 出力: 件数ヘッダ / エラー一覧;
 footer-right: Upload → Check → Post → History;
 
 /title/
-会計伝票登録フロー（APサーバアップロード → BAPI転記 → 履歴登録）
+会計伝票登録 - プログラム（演習６－２）
 
 /option/
 show-left-gutter: true;

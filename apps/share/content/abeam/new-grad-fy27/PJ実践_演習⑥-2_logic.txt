@@ -2,14 +2,14 @@
 
 /page/
 description: ファイル読込 → 検証 → BAPI登録 → 結果報告 の典型的なバッチ処理パターン;
-header-left: 研修資料;
-header-center: 会計伝票登録プログラム;
-header-right: v1.0;
+header-left: Z_00_TGLR0600_2;
+header-center: 会計伝票登録（演習６－２）;
+header-right: Logic Flow;
 footer-center: 1 / 1;
 footer-right: 2026-06-10;
 
 /title/
-会計伝票一括登録プログラム 処理フロー
+会計伝票登録 - 処理の流れ（演習６－２）
 
 /option/
 show-right-gutter: true;
