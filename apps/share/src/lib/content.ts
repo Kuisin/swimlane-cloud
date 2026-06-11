@@ -110,3 +110,19 @@ export function folderName(folderRel: string): string {
 export function fileName(relPath: string): string {
   return (relPath.split("/").pop() || relPath).replace(/\.txt$/, "");
 }
+
+/** Extract the title from the /title/ section of a kai-swimlane DSL string. */
+export function extractTitle(dsl: string): string {
+  const lines = dsl.split("\n");
+  let inTitle = false;
+  const parts: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (t === "/title/") { inTitle = true; continue; }
+    if (inTitle) {
+      if (t.startsWith("/") || t === "@end") break;
+      if (t) parts.push(t);
+    }
+  }
+  return parts.join(" ");
+}
