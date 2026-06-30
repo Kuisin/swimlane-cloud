@@ -1,16 +1,18 @@
-import { Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useT } from "../../i18n.jsx";
 
 const BRANCH_COLORS = ["", "blue", "green", "red", "orange", "purple", "gray", "black"];
 
 /** Inspector for branch/case/group rows (condition, case label, accent color). */
-export function BranchInspector({ row, onPatch, onDelete, readOnly }) {
+export function BranchInspector({ row, onPatch, onDelete, onAddCase, readOnly }) {
   const { t } = useT();
   if (!row) return <div className="sw-gui-empty">{t("gui.selectRow")}</div>;
 
   const isStart = row.kind === "branchStart";
   const isCase = row.kind === "branchCase";
   const isGroup = row.kind === "groupStart";
+  const canAddCase = (isStart || isCase) && !isGroup;
+  const addCaseLabel = row.parallel ? t("branch.addPath") : t("branch.addCase");
 
   return (
     <div className="sw-inspector">
@@ -21,11 +23,23 @@ export function BranchInspector({ row, onPatch, onDelete, readOnly }) {
           {isGroup && (row.groupMode === "section" ? t("branch.section") : t("branch.subbranch"))}
           {!isStart && !isCase && !isGroup && t("branch.row")}
         </h3>
-        {!readOnly && onDelete && (
-          <button type="button" className="sw-icon-btn sw-icon-danger" onClick={onDelete} title={t("common.delete")}>
-            <Trash2 size={14} />
-          </button>
-        )}
+        <div className="sw-inspector-tools">
+          {!readOnly && canAddCase && onAddCase && (
+            <button
+              type="button"
+              className="sw-btn sw-btn-sm"
+              onClick={onAddCase}
+              title={addCaseLabel}
+            >
+              <Plus size={12} /> {addCaseLabel}
+            </button>
+          )}
+          {!readOnly && onDelete && (
+            <button type="button" className="sw-icon-btn sw-icon-danger" onClick={onDelete} title={t("common.delete")}>
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       {isStart && !row.parallel && (
@@ -41,7 +55,7 @@ export function BranchInspector({ row, onPatch, onDelete, readOnly }) {
         </label>
       )}
 
-      {isCase && !row.parallel && !/^else$/i.test((row.label || "").trim()) && (
+      {isCase && !row.parallel && (
         <label className="sw-field">
           <span className="sw-field-label">{t("branch.caseLabel")}</span>
           <input
@@ -49,6 +63,7 @@ export function BranchInspector({ row, onPatch, onDelete, readOnly }) {
             className="sw-input"
             value={row.label || ""}
             disabled={readOnly}
+            placeholder={t("branch.elsePlaceholder")}
             onChange={(e) => onPatch({ label: e.target.value })}
           />
         </label>

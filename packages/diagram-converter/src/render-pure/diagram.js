@@ -99,15 +99,15 @@ function PageTriColumnText({ y, width, xPad, left, center, right, fill, fontSize
     right.trim()
   ));
 }
-function RowSelectionHighlight({ x, y, w, h: h2 }) {
-  return /* @__PURE__ */ h2(
+function RowSelectionHighlight({ x, y, w, h: height }) {
+  return /* @__PURE__ */ h(
     "rect",
     {
       "data-export-hide": true,
       x,
       y,
       width: w,
-      height: h2,
+      height,
       fill: DIAGRAM_LAYOUT.selectionFill,
       fillOpacity: DIAGRAM_LAYOUT.selectionFillOpacity,
       stroke: DIAGRAM_LAYOUT.selectionFill,
@@ -117,15 +117,16 @@ function RowSelectionHighlight({ x, y, w, h: h2 }) {
     }
   );
 }
-function RowHitTarget({ rowIndex, x, y, w, h: h2, selected, onSelect }) {
-  return /* @__PURE__ */ h2(
+function RowHitTarget({ rowIndex, x, y, w, h: height, selected, onSelect }) {
+  return /* @__PURE__ */ h(
     "rect",
     {
       "data-export-hide": true,
+      "data-row-index": rowIndex,
       x,
       y,
       width: w,
-      height: h2,
+      height,
       fill: "transparent",
       pointerEvents: "all",
       cursor: "pointer",
@@ -144,6 +145,7 @@ function PathHitTarget({ rowIndex, d, onSelect }) {
     "path",
     {
       "data-export-hide": true,
+      "data-row-index": rowIndex,
       d,
       fill: "none",
       stroke: "transparent",
