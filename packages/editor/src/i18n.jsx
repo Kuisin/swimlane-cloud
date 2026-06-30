@@ -167,9 +167,14 @@ export const EN = {
   "branch.row": "Row",
   "branch.condition": "Condition",
   "branch.caseLabel": "Case label",
+  "branch.elsePlaceholder": 'Type "else" for catch-all',
+  "branch.addCase": "Add case",
+  "branch.addPath": "Add path",
   "branch.name": "Name",
   "branch.accent": "Accent color",
   "branch.default": "(default)",
+  // gui – add block dropdown
+  "gui.addSwitch": "Switch / multi-case",
   // color
   "color.presets": "presets…",
   // preview
@@ -331,6 +336,7 @@ export const JA = {
   "gui.addFork": "並行処理（fork）",
   "gui.addSection": "枠（section）",
   "gui.addBranch": "支線（branch）",
+  "gui.addSwitch": "スイッチ／多分岐",
   "gui.selectRow": "編集する行を選択してください。",
   "gui.selectStep": "編集するステップを選択してください。",
   "gui.noRows": "フロー行がまだありません。下からステップを追加してください。",
@@ -393,6 +399,9 @@ export const JA = {
   "branch.row": "行",
   "branch.condition": "条件",
   "branch.caseLabel": "ケースのラベル",
+  "branch.elsePlaceholder": "「else」と入力するとデフォルトケースになります",
+  "branch.addCase": "ケースを追加",
+  "branch.addPath": "パスを追加",
   "branch.name": "名前",
   "branch.accent": "アクセントカラー",
   "branch.default": "（デフォルト）",

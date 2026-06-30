@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Plus, Settings } from "lucide-react";
+import { renderDiagramSvg } from "@swimlane-cloud/diagram-converter";
+import { resolveDiagramOptions } from "@swimlane-cloud/diagram-converter/diagram-options";
+import { THEMES } from "@swimlane-cloud/diagram-converter/themes";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import { useT } from "../../i18n.jsx";
 import { useDragWidth } from "../../hooks/use-drag-width.js";
 import { parseGuiModel, applyModelEdit } from "../../lib/gui-model.js";
 import {
   findAdjacentStepIndex,
+  findBranchEndIndex,
   getReorderBounds,
   resolveInspectorTarget,
   swapStepRows,
@@ -56,6 +60,22 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
     () => buildLockedGuiRowIndices(rows, guiModel.errors),
     [rows, guiModel.errors],
   );
+
+  const interactiveSvg = useMemo(() => {
+    if (!guiModel) return null;
+    try {
+      const opts = resolveDiagramOptions(guiModel.options);
+      return renderDiagramSvg({
+        model: guiModel,
+        theme: theme ?? THEMES.basic,
+        ...opts,
+        interactive: true,
+        selectedRowIndex: selectedIndex >= 0 ? selectedIndex : null,
+      });
+    } catch {
+      return null;
+    }
+  }, [guiModel, theme, selectedIndex]);
 
   const target = resolveInspectorTarget(rows, selectedIndex);
   const inspectorRow = target.inspectorRow;
@@ -157,6 +177,46 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
     });
   }
 
+  function addSwitch() {
+    setDropOpen(false);
+    const id = makeId();
+    commit((draft) => {
+      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
+      draft.rows.splice(
+        insertAt,
+        0,
+        { kind: "branchStart", id, cond: "", firstCase: "Case A", parallel: false, branchColor: null, depth: 0 },
+        { kind: "branchCase", id, label: "Case B", parallel: false, branchColor: null, depth: 0 },
+        { kind: "branchCase", id, label: "else", parallel: false, branchColor: null, depth: 0 },
+        { kind: "branchEnd", id, parallel: false, depth: 0 },
+      );
+    });
+  }
+
+  function addCaseToBranch() {
+    const row = rows[saveIndex];
+    if (!row || !["branchStart", "branchCase"].includes(row.kind)) return;
+    const branchId = row.id;
+    const isParallel = Boolean(row.parallel);
+    commit((draft) => {
+      const startIdx = draft.rows.findIndex(
+        (r) => r.kind === "branchStart" && r.id === branchId,
+      );
+      if (startIdx < 0) return;
+      const endIdx = findBranchEndIndex(draft.rows, startIdx);
+      if (endIdx < 0) return;
+      // Insert immediately before branchEnd so the new case is the last one.
+      draft.rows.splice(endIdx, 0, {
+        kind: "branchCase",
+        id: branchId,
+        label: isParallel ? "" : "New case",
+        parallel: isParallel,
+        branchColor: null,
+        depth: 0,
+      });
+    });
+  }
+
   function addSection() {
     setDropOpen(false);
     const id = makeId();
@@ -238,6 +298,9 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
                     <button type="button" className="sw-add-block-item" onClick={addIfBranch}>
                       {t("gui.addIf")}
                     </button>
+                    <button type="button" className="sw-add-block-item" onClick={addSwitch}>
+                      {t("gui.addSwitch")}
+                    </button>
                     <button type="button" className="sw-add-block-item" onClick={addFork}>
                       {t("gui.addFork")}
                     </button>
@@ -303,6 +366,12 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
             readOnly={readOnly}
             onPatch={patchRow}
             onDelete={deleteRow}
+            onAddCase={
+              !readOnly &&
+              ["branchStart", "branchCase"].includes(inspectorRow?.kind)
+                ? addCaseToBranch
+                : undefined
+            }
           />
         ) : (
           <div className="sw-gui-empty">{t("gui.selectRow")}</div>
@@ -316,7 +385,11 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
         onTouchStart={detail.startDrag}
       />
       <div className="sw-gui-preview-pane sw-preview-pane">
-        <PreviewPane svg={svg} hasErrors={errors?.length > 0} />
+        <PreviewPane
+          svg={interactiveSvg ?? svg}
+          hasErrors={errors?.length > 0}
+          onRowClick={!readOnly ? setSelectedIndex : undefined}
+        />
       </div>
       </div>
 
