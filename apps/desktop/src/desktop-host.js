@@ -43,6 +43,12 @@ export const desktopHost = {
     await api().makeDir(dir);
   },
 
+  delete: (id) => api().deleteFile(id),
+
+  rmdir: (dirPath) => api().deleteFolder(dirPath),
+
+  rename: (fromId, toId) => api().renameFile(fromId, toId),
+
   // chokidar file-changed events arrive as { name, content, eventType };
   // adapt to the EditorHost watch shape { id, dsl, type }.
   watch: (cb) => {

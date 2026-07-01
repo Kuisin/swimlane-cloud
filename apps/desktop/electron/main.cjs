@@ -248,6 +248,26 @@ ipcMain.handle("make-dir", async (_event, relPath) => {
   return { ok: true };
 });
 
+ipcMain.handle("delete-file", async (_event, relPath) => {
+  const absPath = resolveTxtPath(relPath);
+  fs.unlinkSync(absPath);
+  return { ok: true };
+});
+
+ipcMain.handle("delete-folder", async (_event, relPath) => {
+  const absPath = resolveTxtPath(relPath);
+  fs.rmSync(absPath, { recursive: true, force: true });
+  return { ok: true };
+});
+
+ipcMain.handle("rename-file", async (_event, fromPath, toPath) => {
+  const absFrom = resolveTxtPath(fromPath);
+  const absTo = resolveTxtPath(toPath);
+  fs.mkdirSync(path.dirname(absTo), { recursive: true });
+  fs.renameSync(absFrom, absTo);
+  return { ok: true };
+});
+
 ipcMain.handle("get-opened-folder", async () => openedFolderPath);
 
 ipcMain.on("watch-folder", (_event, folderPath) => {

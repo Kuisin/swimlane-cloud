@@ -304,6 +304,45 @@ export const browserHost = {
     notifyWatchers({ id: null, dsl: null, type: "change" });
   },
 
+  async delete(id) {
+    const files = readFiles();
+    if (!Object.prototype.hasOwnProperty.call(files, id)) {
+      throw new Error(`File not found: ${id}`);
+    }
+    delete files[id];
+    writeFiles(files);
+    notifyWatchers({ id, dsl: null, type: "unlink" });
+  },
+
+  async rmdir(dirPath) {
+    const prefix = dirPath.replace(/\/+$/, "") + "/";
+    const files = readFiles();
+    const toDelete = Object.keys(files).filter(
+      (k) => k === dirPath || k.startsWith(prefix),
+    );
+    for (const k of toDelete) delete files[k];
+    writeFiles(files);
+    const dirs = readDirs().filter((d) => d !== dirPath && !d.startsWith(prefix));
+    writeDirs(dirs);
+    for (const k of toDelete) notifyWatchers({ id: k, dsl: null, type: "unlink" });
+    notifyWatchers({ id: null, dsl: null, type: "change" });
+  },
+
+  async rename(fromId, toId) {
+    const files = readFiles();
+    if (!Object.prototype.hasOwnProperty.call(files, fromId)) {
+      throw new Error(`File not found: ${fromId}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(files, toId)) {
+      throw new Error(`File already exists: ${toId}`);
+    }
+    files[toId] = { ...files[fromId], mtime: Date.now() };
+    delete files[fromId];
+    writeFiles(files);
+    notifyWatchers({ id: fromId, dsl: null, type: "unlink" });
+    notifyWatchers({ id: toId, dsl: files[toId].content, type: "add" });
+  },
+
   watch(cb) {
     watchers.add(cb);
     return () => watchers.delete(cb);

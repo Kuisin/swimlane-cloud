@@ -916,6 +916,18 @@
   font-size: 12px;
   color: var(--sw-text-muted);
 }
+.sw-help-code {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: var(--sw-editor-bg, #0f172a);
+  color: var(--sw-accent);
+  border-radius: 6px;
+  font-family: var(--sw-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+}
 
 /* ---- templates ---- */
 .sw-tpl-tabs {

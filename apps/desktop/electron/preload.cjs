@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld("api", {
   createTxtFile: (relPath, content) =>
     ipcRenderer.invoke("create-txt-file", relPath, content),
   makeDir: (relPath) => ipcRenderer.invoke("make-dir", relPath),
+  deleteFile: (relPath) => ipcRenderer.invoke("delete-file", relPath),
+  deleteFolder: (relPath) => ipcRenderer.invoke("delete-folder", relPath),
+  renameFile: (fromPath, toPath) => ipcRenderer.invoke("rename-file", fromPath, toPath),
   getOpenedFolder: () => ipcRenderer.invoke("get-opened-folder"),
   watchFolder: (folderPath) => ipcRenderer.send("watch-folder", folderPath),
   stopWatch: () => ipcRenderer.send("stop-watch"),
