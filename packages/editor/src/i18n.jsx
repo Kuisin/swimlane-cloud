@@ -192,6 +192,23 @@ export const EN = {
   "help.prop": "Side annotations attached to steps via props: a,b;.",
   "help.line":
     "The flow. [role: text] steps, if / elseif / else / endif, fork / and / endfork, branch / end-branch, section / end-section, merge: id;, [loop].",
+  "help.icon": "#name for a Lucide icon (e.g. #check, #zap), or any plain character/emoji.",
+  "help.comment":
+    "Lines starting with // or *** are comments. Inside /line/ they're kept attached to the next line on format.",
+  "help.loop": "End a case with [loop] to route back to the same if's condition instead of endif.",
+  "help.section":
+    "Wraps steps in a dashed box for visual grouping only — the main flow is unchanged.",
+  "help.branch":
+    "Splits off a side path from the main flow; only the last step merges back, into whatever follows end-branch.",
+  "help.merge":
+    "Ends a case by jumping forward to a downstream step's id: instead of the endif diamond.",
+  "help.arrow": "Sets the line style (solid / dashed / dotted) of the connector right after this step.",
+  "help.templatesTitle": "Reusable role / block / prop snippets",
+  "help.templatesHint":
+    "Starter IDs and properties to copy into /role/, /block/, /prop/. Project-backed catalogs (with previews) are available from the Templates toolbar button when the host supports them.",
+  "help.tplRoleTitle": "Common lanes",
+  "help.tplBlockTitle": "Common step styles",
+  "help.tplPropTitle": "Common side chips",
   // template panel
   "tpl.title": "Section templates",
   "tpl.forced":
@@ -422,6 +439,25 @@ export const JA = {
   "help.prop": "ステップに付ける注釈。props: a,b; で付与します。",
   "help.line":
     "フロー本体。[role: text] のステップ、if / elseif / else / endif、fork / and / endfork、branch / end-branch、section / end-section、merge: id;、[loop]。",
+  "help.icon":
+    "#名前 で Lucide アイコンを指定（例：#check、#zap）。# 無しは文字・絵文字としてそのまま表示。",
+  "help.comment":
+    "// または *** で始まる行はコメントです。/line/ 内では整形しても直後の行に付いたまま保持されます。",
+  "help.loop":
+    "ケースの末尾に [loop] を置くと、endif ではなく同じ if の条件へ戻る矢印になります。",
+  "help.section":
+    "本流の流れは変えず、関連ステップを点線ボックスで視覚的に囲うだけの枠です。",
+  "help.branch":
+    "本流から分岐する支線です。末尾のステップだけが end-branch 直後のブロックへ合流します。",
+  "help.merge":
+    "ケースの末尾で endif の合流ダイヤモンドを使わず、下流の id: へ直接前方合流します。",
+  "help.arrow": "このステップの直後に描く矢印の線種（実線／破線／点線）を指定します。",
+  "help.templatesTitle": "再利用できる role / block / prop の例",
+  "help.templatesHint":
+    "/role/・/block/・/prop/ にそのまま貼り付けられる ID とプロパティの例です。プロジェクト管理のテンプレートカタログ（プレビュー付き）は、ホストが対応していればツールバーの「テンプレート」から利用できます。",
+  "help.tplRoleTitle": "よく使うレーン",
+  "help.tplBlockTitle": "よく使うステップの見た目",
+  "help.tplPropTitle": "よく使う側面チップ",
   // template panel
   "tpl.title": "セクションテンプレート",
   "tpl.forced":
