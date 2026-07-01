@@ -185,7 +185,7 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
       draft.rows.splice(
         insertAt,
         0,
-        { kind: "branchStart", id, cond: "", firstCase: "Case A", parallel: false, branchColor: null, depth: 0 },
+        { kind: "branchStart", id, cond: "Condition", firstCase: "Case A", parallel: false, branchColor: null, depth: 0 },
         { kind: "branchCase", id, label: "Case B", parallel: false, branchColor: null, depth: 0 },
         { kind: "branchCase", id, label: "else", parallel: false, branchColor: null, depth: 0 },
         { kind: "branchEnd", id, parallel: false, depth: 0 },
