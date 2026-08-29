@@ -1,6 +1,6 @@
 {
   "name": "@swimlane-cloud/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Electron desktop shell that mounts @swimlane-cloud/editor over a local-filesystem host. Open a folder of .txt DSL files, edit with live preview, save back to disk.",
   "private": true,
   "main": "electron/main.cjs",

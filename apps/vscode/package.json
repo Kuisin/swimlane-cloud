@@ -2,7 +2,7 @@
   "name": "swimlane-diagrams",
   "displayName": "Swimlane Diagrams",
   "description": "Edit kai-swimlane .txt diagrams in VS Code with live preview, backed by your own git history and GitHub for review and release.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "swimlane-cloud",
   "private": true,
   "license": "SEE LICENSE IN README.md",

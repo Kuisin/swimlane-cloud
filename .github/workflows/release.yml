@@ -85,6 +85,15 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: List built artifacts
+        run: ls -lh artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.event.inputs.version || github.ref_name }}
+          path: artifacts/*
+          retention-days: 30
+
       - name: Resolve version
         id: v
         run: |
@@ -93,7 +102,22 @@ jobs:
 
       # Creates the release in the downloads repo, then regenerates the whole
       # Pages site from the manifest so every previous version keeps its page.
+      # Publishing writes to a different repository, so GITHUB_TOKEN cannot do
+      # it. Without RELEASES_TOKEN the build artifacts are still produced and
+      # downloadable from this run, and `tools/release/publish.mjs` can be run
+      # against them from a workstation.
+      - name: Check for the cross-repo token
+        id: token
+        run: |
+          if [ -n "${{ secrets.RELEASES_TOKEN }}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::RELEASES_TOKEN is not set; artifacts were built but not published."
+          fi
+
       - name: Publish release and rebuild the download site
+        if: steps.token.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
