@@ -6,6 +6,61 @@ See [`plan.md`](plan.md) for full architecture and build order.
 
 ---
 
+## Downloads
+
+Built artifacts are published to a **separate public repository**,
+[Kuisin/swimlane-downloads](https://github.com/Kuisin/swimlane-downloads). They cannot live here:
+release assets from a private repository always require authentication, so a download link from this
+repo would 404 for everyone.
+
+**<https://kuisin.github.io/swimlane-downloads/>**
+
+| URL                   | What it is                                                 |
+| --------------------- | ---------------------------------------------------------- |
+| `/`                   | Latest version, with the visitor's platform surfaced first |
+| `/v/<version>/`       | A permanent page for one release                           |
+| `/latest/<platform>/` | Stable redirect to the newest build for that platform      |
+| `/versions.json`      | Machine-readable manifest                                  |
+
+Download URLs embed their version, so there is no stable filename to hard-code. Scripts should
+resolve one from the manifest:
+
+```bash
+curl -fsSL https://kuisin.github.io/swimlane-downloads/versions.json \
+  | jq -r '.versions[0].assets["mac-arm64"].url'
+```
+
+Platform keys: `mac-arm64`, `mac-x64`, `win-x64`, `vsix`.
+
+### Cutting a release
+
+Tag this repository and CI does the rest:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+`.github/workflows/release.yml` builds the macOS dmgs, the Windows installer and the `.vsix`, creates
+the release in the downloads repo, and regenerates the Pages site from `versions.json` so every
+previous version keeps its page. It needs a `RELEASES_TOKEN` secret — a PAT with `repo` scope on the
+downloads repo, since `GITHUB_TOKEN` cannot write across repositories.
+
+To publish from a workstation instead:
+
+```bash
+node tools/release/publish.mjs --version 0.2.0 --assets <dir-of-artifacts> [--dry-run]
+```
+
+**Desktop builds are ad-hoc signed, not notarized.** `apps/desktop/build/adhoc-sign.cjs` runs as an
+`afterPack` hook and re-signs the repackaged bundle. This is not cosmetic: electron-builder rewrites
+the app bundle, which invalidates the linker signature Electron's binaries ship with, and a bundle
+whose signature no longer matches its contents is reported by macOS as **"the application is damaged
+and can't be opened"** — a dialog that right-click → Open cannot bypass. The hook fails the build if
+`codesign --verify` does not pass.
+
+Users still see an unidentified-developer prompt (right-click → Open on macOS, More info → Run anyway
+on Windows) until the app is signed with an Apple Developer ID and notarized.
+
 ## Repository layout
 
 ```
@@ -26,15 +81,15 @@ docker-compose.yml     # Gitea server stack (Gitea + Postgres + Nginx)
 
 ## Infrastructure overview
 
-| What | Where | Est. cost |
-|---|---|---|
-| Gitea + Postgres + Nginx | EC2 t3.small (Docker Compose) | ~$15/mo |
-| Next.js SaaS app | Vercel | free → ~$20/mo |
-| SVG blob storage | S3 | ~$0.023/GB |
-| Transactional email | SES | $0.10/1 000 emails |
-| Auth + app database | Supabase (managed) | free tier |
-| DNS | Route 53 | $0.50/zone |
-| Billing | Stripe (managed) | % of revenue |
+| What                     | Where                         | Est. cost          |
+| ------------------------ | ----------------------------- | ------------------ |
+| Gitea + Postgres + Nginx | EC2 t3.small (Docker Compose) | ~$15/mo            |
+| Next.js SaaS app         | Vercel                        | free → ~$20/mo     |
+| SVG blob storage         | S3                            | ~$0.023/GB         |
+| Transactional email      | SES                           | $0.10/1 000 emails |
+| Auth + app database      | Supabase (managed)            | free tier          |
+| DNS                      | Route 53                      | $0.50/zone         |
+| Billing                  | Stripe (managed)              | % of revenue       |
 
 Gitea is the only service that must be self-hosted (it stores all git repos). Everything else is pay-per-use with no server to operate. Don't want to run EC2? **[Part 1 (Alternative)](#part-1-alternative--gitea-on-flyio)** deploys Gitea on Fly.io (~$5/mo, managed TLS, no servers to patch) instead.
 
@@ -64,11 +119,13 @@ SVG blobs (canonical diagram renders) go to S3 — no storage server needed.
 ```json
 {
   "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": "ses:SendRawEmail",
-    "Resource": "*"
-  }]
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "ses:SendRawEmail",
+      "Resource": "*"
+    }
+  ]
 }
 ```
 
@@ -129,11 +186,11 @@ Skip if you don't need email. Gitea and the app will run without it.
 5. **Storage:** 30 GB gp3. Add a CloudWatch alarm on disk at 80% — git repos grow over time.
 6. **Security group** — inbound rules only:
 
-   | Port | Protocol | Source    | Purpose              |
-   |------|----------|-----------|----------------------|
+   | Port | Protocol | Source    | Purpose                                   |
+   | ---- | -------- | --------- | ----------------------------------------- |
    | 22   | TCP      | Your IP   | SSH (remove after setup; use SSM instead) |
-   | 80   | TCP      | 0.0.0.0/0 | HTTP (Let's Encrypt challenge) |
-   | 443  | TCP      | 0.0.0.0/0 | HTTPS (Gitea)        |
+   | 80   | TCP      | 0.0.0.0/0 | HTTP (Let's Encrypt challenge)            |
+   | 443  | TCP      | 0.0.0.0/0 | HTTPS (Gitea)                             |
 
 7. Launch, then **allocate and associate an Elastic IP**:
    - EC2 → Elastic IPs → Allocate → Associate → select your instance.
@@ -144,9 +201,9 @@ Skip if you don't need email. Gitea and the app will run without it.
 
 In Route 53, create one **A record**:
 
-| Name                  | Type | Value          |
-|-----------------------|------|----------------|
-| `git.yourdomain.com`  | A    | `<Elastic IP>` |
+| Name                 | Type | Value          |
+| -------------------- | ---- | -------------- |
+| `git.yourdomain.com` | A    | `<Elastic IP>` |
 
 Wait a few minutes for propagation before continuing.
 
@@ -184,17 +241,17 @@ cp .env.example .env
 nano .env
 ```
 
-| Variable | How to get it |
-|---|---|
-| `GITEA_DOMAIN` | e.g. `git.yourdomain.com` |
-| `CERTBOT_EMAIL` | Your email for Let's Encrypt expiry notices |
-| `GITEA_DB_PASSWORD` | `openssl rand -hex 20` |
-| `GITEA_SECRET_KEY` | `openssl rand -hex 32` |
-| `GITEA_INTERNAL_TOKEN` | `openssl rand -hex 32` |
-| `AWS_REGION` | Region from Step 1 |
-| `GITEA_MAILER_ENABLED` | `true` if SES is set up; leave `false` otherwise |
-| `GITEA_SES_FROM` | Verified SES sender address |
-| `SES_SMTP_USER` / `SES_SMTP_PASSWORD` | SES SMTP credentials from Step 3 |
+| Variable                              | How to get it                                    |
+| ------------------------------------- | ------------------------------------------------ |
+| `GITEA_DOMAIN`                        | e.g. `git.yourdomain.com`                        |
+| `CERTBOT_EMAIL`                       | Your email for Let's Encrypt expiry notices      |
+| `GITEA_DB_PASSWORD`                   | `openssl rand -hex 20`                           |
+| `GITEA_SECRET_KEY`                    | `openssl rand -hex 32`                           |
+| `GITEA_INTERNAL_TOKEN`                | `openssl rand -hex 32`                           |
+| `AWS_REGION`                          | Region from Step 1                               |
+| `GITEA_MAILER_ENABLED`                | `true` if SES is set up; leave `false` otherwise |
+| `GITEA_SES_FROM`                      | Verified SES sender address                      |
+| `SES_SMTP_USER` / `SES_SMTP_PASSWORD` | SES SMTP credentials from Step 3                 |
 
 ---
 
@@ -386,24 +443,24 @@ Or use the Vercel dashboard: New Project → Import from GitHub → select this 
 
 Copy `.env.vercel.example` and fill in each value in **Vercel → Project → Settings → Environment Variables**:
 
-| Variable | Value |
-|---|---|
-| `NEXTAUTH_URL` | `https://app.yourdomain.com` |
-| `APP_URL` | `https://app.yourdomain.com` |
-| `GITEA_URL` | `https://git.yourdomain.com` |
-| `GITEA_ADMIN_TOKEN` | Token from Part 1, Step 10 |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API |
-| `AWS_REGION` | Region from Part 1, Step 1 |
-| `AWS_ACCESS_KEY_ID` | IAM user key from Part 1, Step 2 |
-| `AWS_SECRET_ACCESS_KEY` | IAM user secret from Part 1, Step 2 |
-| `S3_SVG_BUCKET` | `swimlane-svg-blobs` |
-| `SES_FROM_EMAIL` | Verified SES sender |
-| `NEXTAUTH_SECRET` | `openssl rand -hex 32` |
-| `STRIPE_SECRET_KEY` | Stripe → Developers → API keys |
-| `STRIPE_WEBHOOK_SECRET` | Stripe → Webhooks |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe → Developers → API keys |
+| Variable                             | Value                               |
+| ------------------------------------ | ----------------------------------- |
+| `NEXTAUTH_URL`                       | `https://app.yourdomain.com`        |
+| `APP_URL`                            | `https://app.yourdomain.com`        |
+| `GITEA_URL`                          | `https://git.yourdomain.com`        |
+| `GITEA_ADMIN_TOKEN`                  | Token from Part 1, Step 10          |
+| `NEXT_PUBLIC_SUPABASE_URL`           | Supabase → Settings → API           |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`      | Supabase → Settings → API           |
+| `SUPABASE_SERVICE_ROLE_KEY`          | Supabase → Settings → API           |
+| `AWS_REGION`                         | Region from Part 1, Step 1          |
+| `AWS_ACCESS_KEY_ID`                  | IAM user key from Part 1, Step 2    |
+| `AWS_SECRET_ACCESS_KEY`              | IAM user secret from Part 1, Step 2 |
+| `S3_SVG_BUCKET`                      | `swimlane-svg-blobs`                |
+| `SES_FROM_EMAIL`                     | Verified SES sender                 |
+| `NEXTAUTH_SECRET`                    | `openssl rand -hex 32`              |
+| `STRIPE_SECRET_KEY`                  | Stripe → Developers → API keys      |
+| `STRIPE_WEBHOOK_SECRET`              | Stripe → Webhooks                   |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe → Developers → API keys      |
 
 ---
 
@@ -418,6 +475,7 @@ In Route 53, create a **CNAME record** pointing `app.yourdomain.com` to the valu
 ### Step 5 — Register the Stripe webhook
 
 In the Stripe dashboard → Webhooks → Add endpoint:
+
 - URL: `https://app.yourdomain.com/api/billing/webhook`
 - Events: `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
 

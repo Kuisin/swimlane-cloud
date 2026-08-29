@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, e.g. 0.2.0"
+        required: true
+
+# The downloads repo is a different repository, so GITHUB_TOKEN (scoped to this
+# one) cannot write to it. Set RELEASES_TOKEN to a PAT with `repo` scope on
+# Kuisin/swimlane-downloads.
+env:
+  DOWNLOADS_REPO: Kuisin/swimlane-downloads
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            script: build:mac
+            artifact: mac
+          - os: windows-latest
+            script: build:win
+            artifact: win
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.20.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      # Unsigned on purpose: signing needs an Apple Developer ID and an
+      # Authenticode certificate. The downloads page tells users what to expect.
+      - name: Build desktop app
+        run: pnpm --filter @swimlane-cloud/desktop ${{ matrix.script }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.artifact }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.exe
+          if-no-files-found: error
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.20.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter swimlane-diagrams build
+
+      - name: Package .vsix
+        working-directory: apps/vscode
+        run: >
+          ../../node_modules/.bin/vsce package --no-dependencies
+          --out ../../swimlane-diagrams-${{ github.event.inputs.version || github.ref_name }}.vsix
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: "*.vsix"
+          if-no-files-found: error
+
+  publish:
+    needs: [desktop, extension]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Resolve version
+        id: v
+        run: |
+          RAW="${{ github.event.inputs.version || github.ref_name }}"
+          echo "version=${RAW#v}" >> "$GITHUB_OUTPUT"
+
+      # Creates the release in the downloads repo, then regenerates the whole
+      # Pages site from the manifest so every previous version keeps its page.
+      - name: Publish release and rebuild the download site
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          node tools/release/publish.mjs \
+            --version "${{ steps.v.outputs.version }}" \
+            --assets artifacts \
+            --repo "$DOWNLOADS_REPO" \
+            --notes "${{ github.event.head_commit.message || format('Swimlane {0}', steps.v.outputs.version) }}"

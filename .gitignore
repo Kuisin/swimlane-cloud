@@ -7,7 +7,9 @@ dist/
 dist-electron/
 build/
 out/
-release/
+# electron-builder output. Anchored so it does not also swallow tools/release,
+# which is source.
+/apps/*/release/
 .next/
 .vercel/
 .turbo/

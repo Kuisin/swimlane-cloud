@@ -10,17 +10,34 @@
     "node": ">=20"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "electron", "sharp"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "electron",
+      "sharp"
+    ]
   },
   "scripts": {
+    "build": "pnpm -r build",
     "build:engine": "pnpm --filter @swimlane-cloud/diagram-converter build",
     "build:editor": "pnpm --filter @swimlane-cloud/editor build",
     "build:desktop": "pnpm --filter @swimlane-cloud/desktop build",
     "build:web": "pnpm --filter @swimlane-cloud/web build",
     "build:saas": "pnpm --filter @swimlane-cloud/saas build",
+    "build:share": "pnpm --filter @swimlane-cloud/share build",
+    "build:hub": "pnpm --filter @swimlane-cloud/hub build",
+    "build:vscode": "pnpm --filter swimlane-diagrams build",
     "dev:web": "pnpm --filter @swimlane-cloud/web dev",
     "dev:desktop": "pnpm --filter @swimlane-cloud/desktop dev",
     "dev:saas": "pnpm --filter @swimlane-cloud/saas dev",
-    "test": "pnpm -r test"
+    "dev:share": "pnpm --filter @swimlane-cloud/share dev",
+    "dev:hub": "pnpm --filter @swimlane-cloud/hub dev",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "format": "pnpm -r format",
+    "format:check": "pnpm -r format:check"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.9.2",
+    "prettier": "^3.9.6"
   }
 }
