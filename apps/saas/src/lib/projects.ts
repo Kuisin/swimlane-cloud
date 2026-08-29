@@ -6,6 +6,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiError } from "./api";
 import { getServiceSupabase } from "./supabase/server";
 import {
+  INTEGRATION_BRANCH,
+  isIntegrationBranch,
+  isProdBranch,
+  isTmpBranch,
+} from "@swimlane-cloud/github-client";
+import {
   type PolicyEntry,
   type TemplateRow,
   type TemplateSection,
@@ -51,7 +57,10 @@ export async function resolveActiveBranch(
   projectId: string,
   requested?: string | null,
 ): Promise<string> {
-  if (requested && (requested === "main" || requested === "test" || requested.startsWith("tmp-"))) {
+  if (
+    requested &&
+    (isProdBranch(requested) || isIntegrationBranch(requested) || isTmpBranch(requested))
+  ) {
     return requested;
   }
   const supabase = getServiceSupabase();
@@ -63,7 +72,7 @@ export async function resolveActiveBranch(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data?.branch_name as string | undefined) ?? "test";
+  return (data?.branch_name as string | undefined) ?? INTEGRATION_BRANCH;
 }
 
 export interface ProjectTemplates {
@@ -144,17 +153,12 @@ export async function requireUser(): Promise<{ id: string; email?: string }> {
   return { id: user.id, email: user.email ?? undefined };
 }
 
-/** A simple slugify used for tags / public slugs / branch names. */
-export function slugify(input: string): string {
-  return (
-    input
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 60) || "untitled"
-  );
-}
+/**
+ * Re-exported from the shared branch model so the SaaS, the hub and the VS Code
+ * extension cannot generate different branch names for the same input.
+ * Verified equivalent to the previous local implementation.
+ */
+export { slugify } from "@swimlane-cloud/github-client";
 
 /** Random url-safe slug for public sharing. */
 export function randomSlug(len = 10): string {
