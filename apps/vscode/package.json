@@ -70,6 +70,11 @@
           "type": "string",
           "default": "main",
           "description": "Production branch. Releases are tagged here; it is never a direct edit target."
+        },
+        "swimlane.hubUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Base URL of a Swimlane Hub deployment, e.g. https://hub.example.com. When set, a pull request opened from here offers a link that renders its diagram changes visually for review."
         }
       }
     }

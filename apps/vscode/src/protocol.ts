@@ -45,7 +45,7 @@ export interface ResponseMessage {
 /** Pushed from the host, unsolicited. */
 export interface EventMessage {
   kind: "event";
-  event: "fileChanged" | "status";
+  event: "fileChanged" | "status" | "reload";
   payload: unknown;
 }
 
@@ -64,4 +64,20 @@ export interface StatusPayload {
   trusted: boolean;
   /** Present when the workspace is not a usable git repo. */
   gitProblem: string | null;
+  /**
+   * Whether writes are permitted right now. False on the production branch, on
+   * the integration branch, on a detached HEAD, in an untrusted workspace, and
+   * anywhere outside a `tmp-*` edit branch. The editor mounts read-only when
+   * this is false, and the extension refuses write RPCs regardless — the UI
+   * gate is a courtesy, not the enforcement.
+   */
+  editable: boolean;
+  /** Why editing is unavailable, shown to the user. */
+  editableReason: string | null;
+  /**
+   * Folder this edit is scoped to, relative to the workspace root. Only files
+   * beneath it are listed or writable, so an edit started for one area cannot
+   * accidentally touch another.
+   */
+  scope: string | null;
 }

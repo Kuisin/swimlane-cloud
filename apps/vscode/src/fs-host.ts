@@ -28,15 +28,58 @@ export class FsHost {
   private readonly decoder = new TextDecoder();
   private readonly encoder = new TextEncoder();
 
+  /**
+   * Folder the current edit is confined to, relative to the workspace root.
+   * Null means the whole diagrams root. Narrowing this is what stops an edit
+   * started for one area from touching files elsewhere by accident.
+   */
+  private scope: string | null = null;
+
   constructor(
     private readonly workspaceRoot: vscode.Uri,
     /** Diagrams subfolder, or "" for the whole workspace. */
     private readonly diagramsRoot: string,
   ) {}
 
+  setScope(scope: string | null): void {
+    this.scope = scope ? scope.replace(/^\/+|\/+$/g, "") || null : null;
+  }
+
+  getScope(): string | null {
+    return this.scope;
+  }
+
+  /** The effective prefix: the edit scope when set, otherwise the diagrams root. */
+  private get prefix(): string {
+    const base = this.scope ?? this.diagramsRoot;
+    return base ? `${base.replace(/\/+$/, "")}/` : "";
+  }
+
+  /**
+   * Enforced on every path-taking method rather than only on listing: a write
+   * must be refused even when the id did not come from `list()`.
+   */
+  private assertInScope(id: string): void {
+    const p = this.prefix;
+    if (p && !id.startsWith(p)) {
+      throw new Error(
+        `"${id}" is outside this edit's folder (${this.scope ?? this.diagramsRoot}). ` +
+          "Start a new edit for that folder to change it.",
+      );
+    }
+  }
+
   /** POSIX path relative to the workspace root — the `id` the editor uses. */
   private uri(id: string): vscode.Uri {
     if (id.startsWith("/") || id.includes("\\")) throw new Error(`Invalid diagram id "${id}".`);
+    // Reject `.` and `..` outright rather than normalising them. The scope
+    // check below compares strings, while Uri.joinPath resolves `..` — so
+    // "diagrams/ops/../hr/b.txt" would satisfy a "diagrams/ops" scope and then
+    // be written to hr/, defeating the whole point of scoping an edit.
+    if (id.split("/").some((seg) => seg === ".." || seg === "." || seg === "")) {
+      throw new Error(`Invalid diagram id "${id}".`);
+    }
+    this.assertInScope(id);
     const uri = vscode.Uri.joinPath(this.workspaceRoot, ...id.split("/"));
     assertInside(this.workspaceRoot, uri);
     return uri;
@@ -48,8 +91,7 @@ export class FsHost {
 
   /** `findFiles` honours files.exclude / search.exclude for free. */
   async list(): Promise<FileRef[]> {
-    const prefix = this.diagramsRoot ? `${this.diagramsRoot.replace(/\/+$/, "")}/` : "";
-    const pattern = new vscode.RelativePattern(this.workspaceRoot, `${prefix}**/*.txt`);
+    const pattern = new vscode.RelativePattern(this.workspaceRoot, `${this.prefix}**/*.txt`);
     const uris = await vscode.workspace.findFiles(pattern, "**/node_modules/**", 5000);
 
     const refs = await Promise.all(
@@ -123,6 +165,8 @@ export class FsHost {
   watch(
     cb: (e: { id: string; dsl: string | null; type: "add" | "change" | "unlink" }) => void,
   ): vscode.Disposable {
+    // Watches the whole diagrams root rather than the narrower edit scope: a
+    // file appearing outside the scope should still refresh the tree.
     const prefix = this.diagramsRoot ? `${this.diagramsRoot.replace(/\/+$/, "")}/` : "";
     const watcher = vscode.workspace.createFileSystemWatcher(
       new vscode.RelativePattern(this.workspaceRoot, `${prefix}**/*.txt`),

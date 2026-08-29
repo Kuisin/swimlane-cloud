@@ -1,11 +1,8 @@
 import * as vscode from "vscode";
 import {
-  INTEGRATION_BRANCH,
-  PROD_BRANCH,
   createPullsApi,
   createRestClient,
   isTmpBranch,
-  isWritableBranch,
   parseRemoteUrl,
   parseRepoConfig,
   tmpBranchName,
@@ -15,14 +12,17 @@ import { Git, NotWritableError } from "./git/git-cli";
 import { Repository } from "./git/repository";
 import { pushBranch } from "./git/push";
 import { findGitPath } from "./git-api";
+import { branchExists, resolveBranches, type BranchConfig } from "./git/branches";
 import { webviewHtml } from "./webview-panel";
 import { peekSession, requireSession } from "./session";
 import type { HostMethod, RequestMessage, StatusPayload } from "./protocol";
 
 let panel: vscode.WebviewPanel | undefined;
 let log: vscode.OutputChannel;
+let extensionContext: vscode.ExtensionContext;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  extensionContext = context;
   log = vscode.window.createOutputChannel("Swimlane Git");
   context.subscriptions.push(log);
 
@@ -34,7 +34,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("swimlane.showLog", () => log.show()),
     vscode.commands.registerCommand("swimlane.open", () => openEditor(context, git)),
     vscode.commands.registerCommand("swimlane.checkpoint", () => checkpointCommand(git)),
-    vscode.commands.registerCommand("swimlane.startEdit", () => startEdit(git)),
+    vscode.commands.registerCommand("swimlane.startEdit", () => startEdit(git, context)),
     vscode.commands.registerCommand("swimlane.publish", () => publish(git)),
   );
 
@@ -54,6 +54,18 @@ interface Context {
   host: FsHost;
   repo: Repository | null;
   diagramsRoot: string;
+  /** Resolved from .swimlane.json, settings, then the repository itself. */
+  branches: BranchConfig;
+}
+
+/**
+ * Which branches may receive a checkpoint. Built from the resolved config
+ * rather than the shared constants, so a repo using `develop` as its
+ * integration branch is not told it is on the wrong branch.
+ */
+function writableBranchPolicy(branches: BranchConfig): (branch: string) => boolean {
+  return (branch) =>
+    branch !== branches.production && (isTmpBranch(branch) || branch === branches.integration);
 }
 
 async function resolveContext(git: Git): Promise<Context | null> {
@@ -63,7 +75,13 @@ async function resolveContext(git: Git): Promise<Context | null> {
     return null;
   }
 
-  const diagramsRoot = await readDiagramsRoot(folder);
+  const repoConfig = await readRepoConfig(folder);
+  const diagramsRoot =
+    repoConfig?.diagramsRoot ||
+    vscode.workspace
+      .getConfiguration("swimlane")
+      .get<string>("diagramsRoot", "")
+      .replace(/^\/+|\/+$/g, "");
   const host = new FsHost(folder.uri, diagramsRoot);
 
   // Resolve the repository root from the workspace folder itself. A diagrams
@@ -72,24 +90,25 @@ async function resolveContext(git: Git): Promise<Context | null> {
   const top = await git.toplevel(folder.uri.fsPath);
   const repo = top ? new Repository(git, top, log) : null;
 
-  return { folder, host, repo, diagramsRoot };
+  const branches = await resolveBranches(git, top ?? folder.uri.fsPath, repoConfig);
+  return { folder, host, repo, diagramsRoot, branches };
 }
 
-/** `.swimlane.json` wins over the VS Code setting: it is versioned with the content. */
-async function readDiagramsRoot(folder: vscode.WorkspaceFolder): Promise<string> {
+/**
+ * `.swimlane.json` from the workspace root. Versioned with the content, so it
+ * wins over per-user settings and is shared by everyone on the repo.
+ */
+async function readRepoConfig(
+  folder: vscode.WorkspaceFolder,
+): Promise<{ diagramsRoot: string; integrationBranch: string } | null> {
   try {
     const raw = await vscode.workspace.fs.readFile(
       vscode.Uri.joinPath(folder.uri, ".swimlane.json"),
     );
-    const config = parseRepoConfig(new TextDecoder().decode(raw));
-    if (config.diagramsRoot) return config.diagramsRoot;
+    return parseRepoConfig(new TextDecoder().decode(raw));
   } catch {
-    /* no repo config, fall through to the setting */
+    return null;
   }
-  return vscode.workspace
-    .getConfiguration("swimlane")
-    .get<string>("diagramsRoot", "")
-    .replace(/^\/+|\/+$/g, "");
 }
 
 // ── the webview ──────────────────────────────────────────────────────────────
@@ -102,6 +121,11 @@ async function openEditor(context: vscode.ExtensionContext, git: Git): Promise<v
     panel.reveal();
     return;
   }
+
+  // Reopening on an edit branch resumes that branch's scope rather than
+  // silently widening the view back to every diagram.
+  const branch = ctx.repo ? await git.currentBranch(ctx.repo.root) : null;
+  if (branch) ctx.host.setScope(recallScope(context, branch));
 
   panel = vscode.window.createWebviewPanel(
     "swimlane.editor",
@@ -137,30 +161,88 @@ async function openEditor(context: vscode.ExtensionContext, git: Git): Promise<v
   });
 }
 
-async function status(git: Git, ctx: Context): Promise<StatusPayload> {
-  if (!ctx.repo) {
+/** Methods that mutate the workspace or the repository. */
+const WRITE_METHODS = new Set([
+  "writeDraft",
+  "writeDraftMany",
+  "create",
+  "mkdir",
+  "delete",
+  "rmdir",
+  "rename",
+  "checkpoint",
+  "flagNewVersion",
+]);
+
+/**
+ * Whether editing is permitted right now, and why not.
+ *
+ * Editing is confined to `tmp-*` branches. The production and integration
+ * branches are shared, so an accidental save on one is a change other people
+ * receive without review — the whole point of the branch model. Viewing is
+ * always allowed; only writes are gated.
+ */
+async function editability(
+  git: Git,
+  ctx: Context,
+): Promise<{ editable: boolean; reason: string | null }> {
+  if (!vscode.workspace.isTrusted) {
     return {
-      branch: null,
-      dirty: 0,
-      trusted: vscode.workspace.isTrusted,
-      gitProblem: "Not a git repository",
+      editable: false,
+      reason: "This workspace is not trusted, so git operations are disabled.",
     };
   }
+  if (!ctx.repo) return { editable: false, reason: "This workspace is not a git repository." };
+
+  const branch = await git.currentBranch(ctx.repo.root);
+  if (!branch) return { editable: false, reason: "HEAD is detached. Check out an edit branch." };
+
+  if (!isTmpBranch(branch)) {
+    return {
+      editable: false,
+      reason: `"${branch}" is not an edit branch. Run "Swimlane: Start Edit" to create one.`,
+    };
+  }
+  return { editable: true, reason: null };
+}
+
+async function status(git: Git, ctx: Context): Promise<StatusPayload> {
+  const base = {
+    trusted: vscode.workspace.isTrusted,
+    scope: ctx.host.getScope(),
+  };
+
+  if (!ctx.repo) {
+    return {
+      ...base,
+      branch: null,
+      dirty: 0,
+      gitProblem: "Not a git repository",
+      editable: false,
+      editableReason: "This workspace is not a git repository.",
+    };
+  }
+
   try {
     const branch = await git.currentBranch(ctx.repo.root);
     const { staged, dirty } = await git.status(ctx.repo.root);
+    const { editable, reason } = await editability(git, ctx);
     return {
+      ...base,
       branch,
       dirty: new Set([...staged, ...dirty]).size,
-      trusted: vscode.workspace.isTrusted,
       gitProblem: branch ? null : "Detached HEAD",
+      editable,
+      editableReason: reason,
     };
   } catch (err) {
     return {
+      ...base,
       branch: null,
       dirty: 0,
-      trusted: vscode.workspace.isTrusted,
       gitProblem: err instanceof Error ? err.message : "git unavailable",
+      editable: false,
+      editableReason: "git is unavailable in this workspace.",
     };
   }
 }
@@ -195,6 +277,14 @@ async function dispatch(
 ): Promise<unknown> {
   const { host } = ctx;
   const s = (i: number) => String(args[i]);
+
+  // Enforced here, not only in the webview. The read-only editor is a courtesy
+  // to the user; this is what actually prevents a write landing on a shared
+  // branch, and it holds even if the webview is stale or bypassed.
+  if (WRITE_METHODS.has(method)) {
+    const { editable, reason } = await editability(git, ctx);
+    if (!editable) throw new Error(reason ?? "Editing is not available here.");
+  }
 
   switch (method) {
     case "root":
@@ -298,10 +388,10 @@ async function checkpointCommand(git: Git): Promise<void> {
 async function checkpoint(git: Git, ctx: Context, message?: string): Promise<void> {
   if (!ctx.repo) throw new NotWritableError("This workspace is not a git repository.");
 
-  const check = await ctx.repo.assertWritable(isWritableBranch);
+  const check = await ctx.repo.assertWritable(writableBranchPolicy(ctx.branches));
   if (!check.ok) {
     if (check.wrongBranch) {
-      await offerEditBranch(git, ctx, check.branch ?? "");
+      await offerEditBranch(git, ctx, check.branch ?? "", extensionContext);
       return;
     }
     throw new NotWritableError(check.reason ?? "Cannot write to this repository.");
@@ -340,9 +430,14 @@ async function checkpoint(git: Git, ctx: Context, message?: string): Promise<voi
  * switching branches. Explicit confirmation, and the repository layer refuses
  * if anything outside the diagrams folder is dirty. Never a stash.
  */
-async function offerEditBranch(git: Git, ctx: Context, currentBranch: string): Promise<void> {
+async function offerEditBranch(
+  git: Git,
+  ctx: Context,
+  currentBranch: string,
+  context: vscode.ExtensionContext,
+): Promise<void> {
   const choice = await vscode.window.showWarningMessage(
-    `"${currentBranch}" is not an edit branch. Diagrams are edited on a tmp-* branch cut from "${INTEGRATION_BRANCH}".`,
+    `"${currentBranch}" is not an edit branch. Diagrams are edited on a tmp-* branch cut from "${ctx.branches.integration}".`,
     { modal: true },
     "Start an edit branch",
     "Open Source Control",
@@ -351,45 +446,184 @@ async function offerEditBranch(git: Git, ctx: Context, currentBranch: string): P
     await vscode.commands.executeCommand("workbench.view.scm");
     return;
   }
-  if (choice === "Start an edit branch") await startEdit(git);
+  if (choice === "Start an edit branch") await startEdit(git, context);
 }
 
-async function startEdit(git: Git): Promise<void> {
+/**
+ * The edit scope is remembered per branch, so reopening the editor later
+ * resumes the same narrowed view rather than silently widening to everything.
+ */
+const scopeKey = (branch: string) => `swimlane.scope:${branch}`;
+
+/** Narrow the live host and remember the choice for this branch. */
+function applyScope(
+  ctx: Context,
+  branch: string,
+  scope: string | null,
+  context: vscode.ExtensionContext,
+): void {
+  ctx.host.setScope(scope);
+  rememberScope(context, branch, scope);
+  log.appendLine(`edit scope for ${branch}: ${scope ?? "(everything)"}`);
+  // The webview's file tree is already rendered, so tell it to reload.
+  void panel?.webview.postMessage({ kind: "event", event: "reload", payload: null });
+}
+
+function rememberScope(
+  context: vscode.ExtensionContext,
+  branch: string,
+  scope: string | null,
+): void {
+  void context.workspaceState.update(scopeKey(branch), scope);
+}
+
+function recallScope(context: vscode.ExtensionContext, branch: string): string | null {
+  return context.workspaceState.get<string | null>(scopeKey(branch), null);
+}
+
+/**
+ * Ask which folder this edit covers.
+ *
+ * Scoping is the difference between "I am changing the onboarding diagrams" and
+ * "every diagram in the repo is open for editing". Narrowing it up front means
+ * a stray save cannot land somewhere the author never intended to touch.
+ */
+async function pickScope(host: FsHost, diagramsRoot: string): Promise<string | null | undefined> {
+  const files = await host.list();
+  const folders = new Set<string>();
+  for (const f of files) {
+    const parts = f.id.split("/");
+    for (let i = 1; i < parts.length; i++) folders.add(parts.slice(0, i).join("/"));
+  }
+
+  const root = diagramsRoot || "the whole workspace";
+  const items: Array<vscode.QuickPickItem & { scope: string | null }> = [
+    {
+      label: "$(folder-opened) Everything",
+      description: root,
+      detail: `All ${files.length} diagram(s)`,
+      scope: null,
+    },
+    ...[...folders].sort().map((dir) => ({
+      label: `$(folder) ${dir}`,
+      detail: `${files.filter((f) => f.id.startsWith(`${dir}/`)).length} diagram(s)`,
+      scope: dir,
+    })),
+  ];
+
+  const picked = await vscode.window.showQuickPick(items, {
+    title: "Which folder does this edit cover?",
+    placeHolder: "Only diagrams in this folder will be editable",
+    ignoreFocusOut: true,
+  });
+  // undefined = cancelled, null = deliberately everything.
+  return picked === undefined ? undefined : picked.scope;
+}
+
+/**
+ * Start an edit: create `tmp-<user>-<slug>` from the integration branch.
+ *
+ * Every failure here is diagnosed specifically. An earlier version wrapped the
+ * whole thing in one catch that assumed "the integration branch is missing",
+ * which misreported an already-existing branch and offered a recovery that
+ * could not work — `git branch test main` fails in a repo whose default branch
+ * is `master`.
+ */
+async function startEdit(git: Git, context: vscode.ExtensionContext): Promise<void> {
   const ctx = await resolveContext(git);
   if (!ctx?.repo) {
     void vscode.window.showErrorMessage("This workspace is not a git repository.");
     return;
   }
+  const { repo, branches } = ctx;
+
+  if (!vscode.workspace.isTrusted) {
+    void vscode.window.showErrorMessage(
+      "This workspace is not trusted, so git operations are disabled. Creating a branch and committing run the repository's hooks.",
+    );
+    return;
+  }
+
+  // The integration branch usually does not exist in an arbitrary repository.
+  // Offer to create it from whatever this repo actually uses as production —
+  // never from a hardcoded `main`.
+  if (!(await branchExists(git, repo.root, branches.integration))) {
+    if (!(await branchExists(git, repo.root, branches.production))) {
+      void vscode.window.showErrorMessage(
+        `Neither "${branches.integration}" nor "${branches.production}" exists in this repository. ` +
+          `Set swimlane.productionBranch to the branch releases are cut from.`,
+      );
+      return;
+    }
+    const create = await vscode.window.showInformationMessage(
+      `This repository has no "${branches.integration}" branch. Diagrams are edited on branches cut from it.`,
+      { modal: true, detail: `It will be created from "${branches.production}".` },
+      `Create "${branches.integration}"`,
+    );
+    if (!create) return;
+    try {
+      await git.run(["branch", branches.integration, branches.production], { cwd: repo.root });
+      log.appendLine(`created ${branches.integration} from ${branches.production}`);
+    } catch (err) {
+      void vscode.window.showErrorMessage(
+        `Could not create "${branches.integration}": ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+  }
 
   const name = await vscode.window.showInputBox({
     prompt: "What are you changing?",
     placeHolder: "expense approval",
+    validateInput: (v) => (v.trim() ? null : "Give the edit a short name."),
   });
   if (!name) return;
+
+  // Choose the folder BEFORE creating the branch: if the user backs out here,
+  // no branch has been created and nothing needs undoing.
+  const scope = await pickScope(ctx.host, ctx.diagramsRoot);
+  if (scope === undefined) return;
 
   const session = await peekSession();
   const branch = tmpBranchName(session?.account.label ?? "local", name);
 
-  try {
-    await ctx.repo.startEditBranch(branch, INTEGRATION_BRANCH, ctx.diagramsRoot);
-    void vscode.window.showInformationMessage(`Now editing on ${branch}.`);
-  } catch (err) {
-    if (err instanceof NotWritableError) {
-      void vscode.window.showErrorMessage(err.message, "Open Source Control").then((a) => {
-        if (a) void vscode.commands.executeCommand("workbench.view.scm");
-      });
+  // Re-running Start Edit with the same name is ordinary, not an error.
+  if (await branchExists(git, repo.root, branch)) {
+    const current = await git.currentBranch(repo.root);
+    if (current === branch) {
+      void vscode.window.showInformationMessage(`Already editing on ${branch}.`);
       return;
     }
-    // The integration branch may simply not exist yet, which is the normal
-    // state of an arbitrary GitHub repository.
-    const create = await vscode.window.showWarningMessage(
-      `Could not branch from "${INTEGRATION_BRANCH}". Create it from "${PROD_BRANCH}"?`,
-      { modal: true },
-      "Create it",
+    const swap = await vscode.window.showInformationMessage(
+      `"${branch}" already exists.`,
+      { modal: true, detail: "Switch to it and continue that edit?" },
+      "Switch to it",
     );
-    if (create !== "Create it") return;
-    await git.run(["branch", INTEGRATION_BRANCH, PROD_BRANCH], { cwd: ctx.repo.root });
-    await ctx.repo.startEditBranch(branch, INTEGRATION_BRANCH, ctx.diagramsRoot);
+    if (!swap) return;
+    try {
+      await git.run(["switch", branch], { cwd: repo.root });
+      applyScope(ctx, branch, recallScope(context, branch), context);
+      void vscode.window.showInformationMessage(`Now editing on ${branch}.`);
+    } catch (err) {
+      void vscode.window.showErrorMessage(
+        `Could not switch to ${branch}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return;
+  }
+
+  try {
+    await repo.startEditBranch(branch, branches.integration, ctx.diagramsRoot);
+    applyScope(ctx, branch, scope, context);
+    void vscode.window.showInformationMessage(
+      `Now editing on ${branch}${scope ? ` — scoped to ${scope}` : ""}.`,
+    );
+  } catch (err) {
+    // startEditBranch refuses when unrelated work is dirty; that message is
+    // already actionable and must not be replaced with a guess.
+    const message = err instanceof Error ? err.message : String(err);
+    const action = await vscode.window.showErrorMessage(message, "Open Source Control");
+    if (action) await vscode.commands.executeCommand("workbench.view.scm");
   }
 }
 
@@ -471,15 +705,29 @@ async function publish(git: Git): Promise<void> {
     // only ever target the integration branch.
     (await pulls.createPullRequest({
       head: branch,
-      base: INTEGRATION_BRANCH,
+      base: ctx.branches.integration,
       title: `Update diagrams (${branch})`,
     }));
 
+  // A unified diff of DSL source is close to unreadable for a reviewer who did
+  // not write it, so offer the visual review page when a hub is configured.
+  const hub = vscode.workspace
+    .getConfiguration("swimlane")
+    .get<string>("hubUrl", "")
+    .replace(/\/+$/, "");
+  const actions = ["Open on GitHub", ...(hub ? ["Review diagrams"] : [])];
+
   const open = await vscode.window.showInformationMessage(
     `Pull request #${pull.number} ${existing[0] ? "updated" : "opened"}.`,
-    "Open on GitHub",
+    ...actions,
   );
-  if (open) await vscode.env.openExternal(vscode.Uri.parse(pull.htmlUrl));
+  if (open === "Open on GitHub") {
+    await vscode.env.openExternal(vscode.Uri.parse(pull.htmlUrl));
+  } else if (open === "Review diagrams") {
+    await vscode.env.openExternal(
+      vscode.Uri.parse(`${hub}/${parsed.owner}/${parsed.repo}/pull/${pull.number}`),
+    );
+  }
 }
 
 /**
@@ -500,15 +748,15 @@ async function release(git: Git, ctx: Context, name: string): Promise<void> {
 
   const rest = createRestClient({ getToken: () => session.accessToken });
   const prod = await rest.request<{ object: { sha: string } }>(
-    `/repos/${parsed.owner}/${parsed.repo}/git/ref/heads/${PROD_BRANCH}`,
+    `/repos/${parsed.owner}/${parsed.repo}/git/ref/heads/${ctx.branches.production}`,
   );
 
   await rest.request(`/repos/${parsed.owner}/${parsed.repo}/releases`, {
     method: "POST",
-    body: { tag_name: name, name, target_commitish: PROD_BRANCH },
+    body: { tag_name: name, name, target_commitish: ctx.branches.production },
   });
 
   void vscode.window.showInformationMessage(
-    `Released ${name} at ${prod.object.sha.slice(0, 7)} on ${PROD_BRANCH}.`,
+    `Released ${name} at ${prod.object.sha.slice(0, 7)} on ${ctx.branches.production}.`,
   );
 }

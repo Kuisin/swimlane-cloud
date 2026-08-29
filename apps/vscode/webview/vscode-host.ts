@@ -15,6 +15,7 @@ type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
 const pending = new Map<number, Pending>();
 const fileWatchers = new Set<(e: FileChangedPayload) => void>();
 const statusWatchers = new Set<(s: unknown) => void>();
+const reloadWatchers = new Set<() => void>();
 let nextId = 1;
 
 window.addEventListener("message", (event: MessageEvent<HostMessage>) => {
@@ -25,6 +26,7 @@ window.addEventListener("message", (event: MessageEvent<HostMessage>) => {
     if (msg.event === "fileChanged")
       fileWatchers.forEach((cb) => cb(msg.payload as FileChangedPayload));
     if (msg.event === "status") statusWatchers.forEach((cb) => cb(msg.payload));
+    if (msg.event === "reload") reloadWatchers.forEach((cb) => cb());
     return;
   }
 
@@ -43,9 +45,18 @@ function call<M extends HostMethod>(method: M, ...args: HostCalls[M]): Promise<u
   });
 }
 
+export function onReload(cb: () => void): () => void {
+  reloadWatchers.add(cb);
+  return () => reloadWatchers.delete(cb);
+}
+
 export function onStatus(cb: (s: unknown) => void): () => void {
   statusWatchers.add(cb);
   return () => statusWatchers.delete(cb);
+}
+
+export function createVscodeHost(readOnly: boolean) {
+  return { ...vscodeHost, capabilities: { readOnly, versioning: true } };
 }
 
 export const vscodeHost = {

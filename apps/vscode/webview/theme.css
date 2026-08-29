@@ -94,3 +94,8 @@ body,
 .sw-vscode-problem {
   color: var(--vscode-editorWarning-foreground);
 }
+
+.sw-vscode-scope {
+  font-family: var(--vscode-editor-font-family, monospace);
+  color: var(--vscode-charts-purple, var(--vscode-textLink-foreground));
+}
