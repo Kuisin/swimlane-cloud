@@ -8,9 +8,11 @@ dist-electron/
 build/
 !apps/desktop/build/
 out/
-# electron-builder output. Anchored so it does not also swallow tools/release,
-# which is source.
-/apps/*/release/
+# electron-builder output, and nothing else. Named exactly rather than as a
+# bare `release/`, which previously swallowed both tools/release and the hub's
+# /api/repo/.../release route — a directory called "release" is far more often
+# source than build output.
+/apps/desktop/release/
 .next/
 .vercel/
 .turbo/
