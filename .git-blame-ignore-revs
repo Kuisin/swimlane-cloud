@@ -1,10 +1,9 @@
 # Revisions to skip when running `git blame`.
 #
-# Add the repo-wide Prettier reformat commit's full sha below once it is
-# committed. That commit touches ~107 files without changing behaviour, so
-# leaving it in blame would attribute every line in the repo to the formatter.
-#
 # Enable locally with:
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
 #
 # GitHub honours this file automatically.
+
+# style: adopt Prettier across the repo — 102 files, formatting only.
+8c60371481267bf14acf76ff0da6f033629e5071
