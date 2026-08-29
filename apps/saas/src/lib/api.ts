@@ -22,10 +22,7 @@ export function withApi(handler: Handler): Handler {
       return await handler(req, ctx);
     } catch (err) {
       if (err instanceof ApiError) {
-        return NextResponse.json(
-          { error: err.message },
-          { status: err.status },
-        );
+        return NextResponse.json({ error: err.message }, { status: err.status });
       }
       const message = err instanceof Error ? err.message : "Internal error";
       // Surface config errors (missing env) as 500 with a useful message.
@@ -40,9 +37,7 @@ export function json<T>(data: T, status = 200): NextResponse {
 }
 
 /** Parse the JSON body, throwing a 400 ApiError on malformed input. */
-export async function readJson<T = Record<string, unknown>>(
-  req: Request,
-): Promise<T> {
+export async function readJson<T = Record<string, unknown>>(req: Request): Promise<T> {
   try {
     return (await req.json()) as T;
   } catch {

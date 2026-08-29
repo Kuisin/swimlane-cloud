@@ -35,7 +35,12 @@ export function BranchInspector({ row, onPatch, onDelete, onAddCase, readOnly })
             </button>
           )}
           {!readOnly && onDelete && (
-            <button type="button" className="sw-icon-btn sw-icon-danger" onClick={onDelete} title={t("common.delete")}>
+            <button
+              type="button"
+              className="sw-icon-btn sw-icon-danger"
+              onClick={onDelete}
+              title={t("common.delete")}
+            >
               <Trash2 size={14} />
             </button>
           )}
@@ -90,7 +95,11 @@ export function BranchInspector({ row, onPatch, onDelete, onAddCase, readOnly })
             value={(isGroup ? row.sectionColor : row.branchColor) || ""}
             disabled={readOnly}
             onChange={(e) =>
-              onPatch(isGroup ? { sectionColor: e.target.value || null } : { branchColor: e.target.value || null })
+              onPatch(
+                isGroup
+                  ? { sectionColor: e.target.value || null }
+                  : { branchColor: e.target.value || null },
+              )
             }
           >
             {BRANCH_COLORS.map((c) => (

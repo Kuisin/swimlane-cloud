@@ -4,11 +4,9 @@ contextBridge.exposeInMainWorld("api", {
   selectFolder: () => ipcRenderer.invoke("select-folder"),
   readTxtFiles: (folderPath) => ipcRenderer.invoke("read-txt-files", folderPath),
   readFile: (relPath) => ipcRenderer.invoke("read-file", relPath),
-  writeTxtFile: (relPath, content) =>
-    ipcRenderer.invoke("write-txt-file", relPath, content),
+  writeTxtFile: (relPath, content) => ipcRenderer.invoke("write-txt-file", relPath, content),
   writeTxtFiles: (updates) => ipcRenderer.invoke("write-txt-files", updates),
-  createTxtFile: (relPath, content) =>
-    ipcRenderer.invoke("create-txt-file", relPath, content),
+  createTxtFile: (relPath, content) => ipcRenderer.invoke("create-txt-file", relPath, content),
   makeDir: (relPath) => ipcRenderer.invoke("make-dir", relPath),
   deleteFile: (relPath) => ipcRenderer.invoke("delete-file", relPath),
   deleteFolder: (relPath) => ipcRenderer.invoke("delete-folder", relPath),

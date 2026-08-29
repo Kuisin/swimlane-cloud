@@ -38,8 +38,8 @@ export default async function LinksPage({
       <h1 className="text-2xl font-semibold">Share links</h1>
       {!hasRealSecret() && (
         <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          SHARE_TOKEN_SECRET is not set — these are predictable dev tokens. Set
-          the env var before sharing anything.
+          SHARE_TOKEN_SECRET is not set — these are predictable dev tokens. Set the env var before
+          sharing anything.
         </p>
       )}
 
@@ -48,10 +48,11 @@ export default async function LinksPage({
       </h2>
       <LinkTable rows={folders.map((f) => [f, `/f/${folderToken(f)}`])} empty="No folders yet." />
 
-      <h2 className="mt-6 text-sm font-semibold uppercase tracking-wide text-neutral-400">
-        Files
-      </h2>
-      <LinkTable rows={files.map((f) => [f, `/d/${fileToken(f)}`])} empty="No .txt files in content/ yet." />
+      <h2 className="mt-6 text-sm font-semibold uppercase tracking-wide text-neutral-400">Files</h2>
+      <LinkTable
+        rows={files.map((f) => [f, `/d/${fileToken(f)}`])}
+        empty="No .txt files in content/ yet."
+      />
     </main>
   );
 }
@@ -61,7 +62,10 @@ function LinkTable({ rows, empty }: { rows: [string, string][]; empty: string })
   return (
     <ul className="mt-2 divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white">
       {rows.map(([label, href]) => (
-        <li key={href} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+        <li
+          key={href}
+          className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+        >
           <span className="font-mono text-neutral-700">{label}</span>
           <a className="font-mono text-indigo-600 hover:underline" href={href}>
             {href}

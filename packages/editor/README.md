@@ -33,7 +33,7 @@ language programmatically:
 import { useT, LanguageProvider, LANGUAGES } from "@swimlane-cloud/editor";
 
 function Toolbar() {
-  const { t, lang, setLang } = useT();  // inside a <DslEditor> (provider is built in)
+  const { t, lang, setLang } = useT(); // inside a <DslEditor> (provider is built in)
   return <span>{t("action.save")}</span>;
 }
 ```
@@ -50,7 +50,7 @@ The editor mounts a full surface:
   via `host.read`; switching away from a dirty tab prompts to discard.
 - **Resizable panels** — drag the folder-tree edge, the editor/preview divider,
   and (in GUI mode) the inspector edge.
-- **Mode toggle** — GUI ⇄ Text over the *same* DSL document, with a loss-free
+- **Mode toggle** — GUI ⇄ Text over the _same_ DSL document, with a loss-free
   round trip through the serializer. If the text has parse errors, GUI mode is
   disabled and the error list is shown (non-blocking).
 - **Action bar** — Save / Save all / New file / New folder / Export (.txt) /
@@ -73,44 +73,56 @@ The editor mounts a full surface:
 adapter that implements only the required four works fully (read/edit/save/new).
 
 ```ts
-interface FileRef { id: string; name: string; mtime?: number }
+interface FileRef {
+  id: string;
+  name: string;
+  mtime?: number;
+}
 
 interface EditorHost {
   // --- required ---
-  list(): Promise<FileRef[]>;                       // all files (flat, POSIX ids)
-  read(id: string): Promise<string>;                // file contents
+  list(): Promise<FileRef[]>; // all files (flat, POSIX ids)
+  read(id: string): Promise<string>; // file contents
   writeDraft(id: string, dsl: string): Promise<void>;
   create(id: string, dsl: string): Promise<void>;
 
   // --- optional ---
   root?(): Promise<string | null>;
   writeDraftMany?(updates: { id: string; dsl: string }[]): Promise<void>; // "Save all"
-  mkdir?(dirPath: string): Promise<void>;           // "New folder"
-  watch?(cb: (e: { id: string; dsl: string | null; type: "add"|"change"|"unlink" }) => void): () => void;
+  mkdir?(dirPath: string): Promise<void>; // "New folder"
+  watch?(
+    cb: (e: { id: string; dsl: string | null; type: "add" | "change" | "unlink" }) => void,
+  ): () => void;
   checkpoint?(opts: { message?: string; files?: { id: string; dsl: string }[] }): Promise<void>;
   flagNewVersion?(commitSha: string, opts: { name: string; note?: string }): Promise<void>;
-  listSectionTemplates?(section: "page"|"option"|"role"|"block"|"prop"):
-    Promise<{ slug: string; name: string; body: string; isDefault?: boolean }[]>;
-  getTemplatePolicies?(): Promise<Record<string, {
-    mode: "optional" | "default" | "forced";
-    forcedTemplateId?: string;
-    forcedBody?: string;
-  }>>;
+  listSectionTemplates?(
+    section: "page" | "option" | "role" | "block" | "prop",
+  ): Promise<{ slug: string; name: string; body: string; isDefault?: boolean }[]>;
+  getTemplatePolicies?(): Promise<
+    Record<
+      string,
+      {
+        mode: "optional" | "default" | "forced";
+        forcedTemplateId?: string;
+        forcedBody?: string;
+      }
+    >
+  >;
   capabilities?: { readOnly?: boolean; versioning?: boolean };
 }
 ```
 
 ### Capability gating
 
-| Feature | Shown when |
-| --- | --- |
-| New folder | `host.mkdir` present |
-| Save all | always (falls back to looped `writeDraft` if `writeDraftMany` absent) |
-| Checkpoint | `host.checkpoint` present |
-| Flag version | `capabilities.versioning` **and** `host.flagNewVersion` present |
-| Templates | always (panel reports "not provided" if `listSectionTemplates` absent) |
+| Feature             | Shown when                                                             |
+| ------------------- | ---------------------------------------------------------------------- |
+| New folder          | `host.mkdir` present                                                   |
+| Save all            | always (falls back to looped `writeDraft` if `writeDraftMany` absent)  |
+| Checkpoint          | `host.checkpoint` present                                              |
+| Flag version        | `capabilities.versioning` **and** `host.flagNewVersion` present        |
+| Templates           | always (panel reports "not provided" if `listSectionTemplates` absent) |
 | Forced section lock | `getTemplatePolicies()` returns `{ mode: "forced" }` → insert disabled |
-| Read-only | `capabilities.readOnly` disables all editing/persistence |
+| Read-only           | `capabilities.readOnly` disables all editing/persistence               |
 
 External edits delivered through `host.watch` are merged into non-dirty open
 documents and refresh the file list.
@@ -140,4 +152,7 @@ prefixed stylesheet (no Tailwind dependency).
   because the engine's public API is parse/render only. They round-trip
   losslessly with the engine's `parseDSL`; keep them in sync if the engine's row
   model changes.
+
+```
+
 ```

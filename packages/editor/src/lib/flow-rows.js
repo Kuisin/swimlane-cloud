@@ -25,11 +25,7 @@ export function normalizeBranchRows(rows) {
   const out = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    if (
-      row.kind === "branchStart" &&
-      !row.parallel &&
-      (row.firstCase || "").trim()
-    ) {
+    if (row.kind === "branchStart" && !row.parallel && (row.firstCase || "").trim()) {
       const firstCase = row.firstCase.trim();
       const next = rows[i + 1];
       const alreadySplit =
@@ -83,9 +79,7 @@ export function normalizeBranchDepths(rows) {
       if (row.kind === "branchCase" && row.id === branchId) {
         out[j] = { ...row, depth: caseDepth, parallel: isParallel };
       } else if (
-        (row.kind === "step" ||
-          row.kind === "branchLoop" ||
-          row.kind === "branchMerge") &&
+        (row.kind === "step" || row.kind === "branchLoop" || row.kind === "branchMerge") &&
         (row.depth ?? 0) < bodyDepth
       ) {
         out[j] = { ...row, depth: bodyDepth };
@@ -142,8 +136,7 @@ export function rowListIndentDepth(rows, rowIndex) {
 export function getStepReorderFrame(rows, rowIndex) {
   const branchStart = findEnclosingBranchStart(rows, rowIndex);
   const frameStart = branchStart >= 0 ? branchStart : 0;
-  const frameEnd =
-    branchStart >= 0 ? findBranchEndIndex(rows, branchStart) : rows.length - 1;
+  const frameEnd = branchStart >= 0 ? findBranchEndIndex(rows, branchStart) : rows.length - 1;
   return { frameStart, frameEnd: frameEnd >= 0 ? frameEnd : rows.length - 1 };
 }
 
@@ -282,12 +275,22 @@ function laneLabel(lanes, roleId, t = defaultT) {
 }
 
 const NAMED_LANE_COLORS = {
-  blue: "#2563eb", green: "#16a34a", red: "#dc2626", orange: "#ea580c",
-  purple: "#7c3aed", gray: "#6b7280", grey: "#6b7280", black: "#111827",
-  teal: "#0d9488", yellow: "#ca8a04", pink: "#db2777",
+  blue: "#2563eb",
+  green: "#16a34a",
+  red: "#dc2626",
+  orange: "#ea580c",
+  purple: "#7c3aed",
+  gray: "#6b7280",
+  grey: "#6b7280",
+  black: "#111827",
+  teal: "#0d9488",
+  yellow: "#ca8a04",
+  pink: "#db2777",
 };
 function laneColorHex(value, roleId) {
-  const k = String(value || "").trim().toLowerCase();
+  const k = String(value || "")
+    .trim()
+    .toLowerCase();
   if (NAMED_LANE_COLORS[k]) return NAMED_LANE_COLORS[k];
   if (/^#?[0-9a-fA-F]{3,8}$/.test(value || "")) return value.startsWith("#") ? value : `#${value}`;
   let h = 0;
@@ -298,7 +301,11 @@ function contrastText(color) {
   const hsl = String(color).match(/hsl\(\s*\d+\s+\d+%\s+(\d+)%/);
   if (hsl) return Number(hsl[1]) > 62 ? "#111827" : "#ffffff";
   let hex = String(color).replace("#", "");
-  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+  if (hex.length === 3)
+    hex = hex
+      .split("")
+      .map((c) => c + c)
+      .join("");
   if (!/^[0-9a-fA-F]{6}$/.test(hex)) return "#ffffff";
   const r = parseInt(hex.slice(0, 2), 16);
   const g = parseInt(hex.slice(2, 4), 16);
@@ -352,7 +359,9 @@ export function rowBadgeLabel(row, t = defaultT) {
     case "groupStart":
       return (row.groupMode ?? "branch") === "branch" ? t("badge.branch") : t("badge.section");
     case "groupEnd":
-      return (row.groupMode ?? "branch") === "branch" ? t("badge.endBranch") : t("badge.endSection");
+      return (row.groupMode ?? "branch") === "branch"
+        ? t("badge.endBranch")
+        : t("badge.endSection");
     default:
       return t("badge.row");
   }
@@ -415,7 +424,9 @@ export function rowSummaryText(row, lanes, t = defaultT) {
     case "groupStart":
       return (row.groupMode ?? "branch") === "branch" ? t("flow.subbranch") : t("flow.sectionBox");
     case "groupEnd":
-      return (row.groupMode ?? "branch") === "branch" ? t("flow.endSubbranch") : t("flow.endSection");
+      return (row.groupMode ?? "branch") === "branch"
+        ? t("flow.endSubbranch")
+        : t("flow.endSection");
     default:
       return "";
   }

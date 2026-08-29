@@ -58,11 +58,7 @@ function App() {
         >
           <Upload size={14} /> Import
         </button>
-        <button
-          type="button"
-          className="web-topbar__btn"
-          onClick={handleDownloadAll}
-        >
+        <button type="button" className="web-topbar__btn" onClick={handleDownloadAll}>
           <Download size={14} /> Download all
         </button>
         <input

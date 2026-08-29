@@ -12,16 +12,18 @@ the intended base for a future **mobile editor**.
 ```jsx
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 
-<MobileDiagram dsl={dslString} />   // or <MobileDiagram model={parsedModel} />
+<MobileDiagram dsl={dslString} />; // or <MobileDiagram model={parsedModel} />
 ```
 
 ## Exports
+
 - `MobileDiagram` — the React component (read-only for now).
 - `buildMobileTree(model)` — flat parsed model → nested `{ title, lanes, nodes }`.
 - `dslToMobile(dsl)` — `{ model, tree }` convenience.
 - `roleColor(lane)` / `toColor(value)` — color helpers.
 
 ## Node shape (from `buildMobileTree`)
+
 ```
 step   { role, text, description, remark, props[], blockRef, arrowLine, mergeId }
 branch { parallel, cond, cases: [{ label, color, children[] }] }
@@ -31,6 +33,7 @@ merge  { target }
 ```
 
 ## Styling
+
 The presentation (`MobileDiagram.jsx`) is styled with **Tailwind** utility classes
 and ships no stylesheet. The consuming app must run Tailwind (with Preflight) and
 include this package in its content scan — e.g. in the app's CSS:

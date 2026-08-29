@@ -202,7 +202,8 @@ export const EN = {
     "Splits off a side path from the main flow; only the last step merges back, into whatever follows end-branch.",
   "help.merge":
     "Ends a case by jumping forward to a downstream step's id: instead of the endif diamond.",
-  "help.arrow": "Sets the line style (solid / dashed / dotted) of the connector right after this step.",
+  "help.arrow":
+    "Sets the line style (solid / dashed / dotted) of the connector right after this step.",
   "help.templatesTitle": "Reusable role / block / prop snippets",
   "help.templatesHint":
     "Starter IDs and properties to copy into /role/, /block/, /prop/. Project-backed catalogs (with previews) are available from the Templates toolbar button when the host supports them.",
@@ -443,10 +444,8 @@ export const JA = {
     "#名前 で Lucide アイコンを指定（例：#check、#zap）。# 無しは文字・絵文字としてそのまま表示。",
   "help.comment":
     "// または *** で始まる行はコメントです。/line/ 内では整形しても直後の行に付いたまま保持されます。",
-  "help.loop":
-    "ケースの末尾に [loop] を置くと、endif ではなく同じ if の条件へ戻る矢印になります。",
-  "help.section":
-    "本流の流れは変えず、関連ステップを点線ボックスで視覚的に囲うだけの枠です。",
+  "help.loop": "ケースの末尾に [loop] を置くと、endif ではなく同じ if の条件へ戻る矢印になります。",
+  "help.section": "本流の流れは変えず、関連ステップを点線ボックスで視覚的に囲うだけの枠です。",
   "help.branch":
     "本流から分岐する支線です。末尾のステップだけが end-branch 直後のブロックへ合流します。",
   "help.merge":
@@ -555,9 +554,7 @@ export function LanguageProvider({ defaultLang, children }) {
     const dict = DICTS[lang] || EN;
     return { lang, setLang, t: (key, vars) => tr(dict, key, vars) };
   }, [lang]);
-  return (
-    <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>
-  );
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 
 export function useT() {

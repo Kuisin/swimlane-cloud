@@ -30,7 +30,9 @@ export function isBlankTxtContent(content) {
 }
 
 export function normalizeTxtForCompare(content) {
-  return String(content ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return String(content ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
 }
 
 /** Whether the document differs from what is persisted. */
@@ -77,7 +79,9 @@ export function suggestNewTxtFileName(existingRelPaths, dir = "") {
 
 /** Normalize a user-entered name to a relative `.txt` path (POSIX). */
 export function normalizeNewTxtRelPath(input) {
-  let name = String(input ?? "").trim().replace(/\\/g, "/");
+  let name = String(input ?? "")
+    .trim()
+    .replace(/\\/g, "/");
   if (!name) return null;
   if (name.includes("..")) return null;
   name = name.replace(/^\/+/, "");
@@ -87,7 +91,9 @@ export function normalizeNewTxtRelPath(input) {
 
 /** Normalize a user-entered folder path (POSIX, no `..`, no leading slash). */
 export function normalizeDirPath(input) {
-  let p = String(input ?? "").trim().replace(/\\/g, "/");
+  let p = String(input ?? "")
+    .trim()
+    .replace(/\\/g, "/");
   if (!p) return null;
   if (p.includes("..")) return null;
   return p.replace(/^\/+/, "").replace(/\/+$/, "");
@@ -120,7 +126,11 @@ export function normalizeFileContent(relPath, rawContent) {
 }
 
 /** Apply external (host) content to a document when it is not dirty. */
-export function syncDocumentFromDisk(doc, diskContent, { isDirty = false, skipStaleBlank = false } = {}) {
+export function syncDocumentFromDisk(
+  doc,
+  diskContent,
+  { isDirty = false, skipStaleBlank = false } = {},
+) {
   if (isDirty) return doc;
   if (skipStaleBlank && isStaleBlankDiskRead(diskContent, doc.src)) return doc;
   const normalized = normalizeFileContent(doc.id, diskContent);

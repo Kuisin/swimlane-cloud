@@ -8,9 +8,4 @@
  *   <MobileDiagram dsl={dslString} />
  */
 export { MobileDiagram } from "./MobileDiagram.jsx";
-export {
-  buildMobileTree,
-  dslToMobile,
-  roleColor,
-  toColor,
-} from "./mobile-model.js";
+export { buildMobileTree, dslToMobile, roleColor, toColor } from "./mobile-model.js";

@@ -96,8 +96,12 @@ function Preview({ kind, entry, theme }) {
       <span
         className="sw-def-role-chip"
         style={{
-          background: cssColor(entry.bg) === "transparent" ? "var(--sw-bg-sunken)" : cssColor(entry.bg),
-          color: cssColor(entry.textColor) === "transparent" ? "var(--sw-text)" : cssColor(entry.textColor),
+          background:
+            cssColor(entry.bg) === "transparent" ? "var(--sw-bg-sunken)" : cssColor(entry.bg),
+          color:
+            cssColor(entry.textColor) === "transparent"
+              ? "var(--sw-text)"
+              : cssColor(entry.textColor),
         }}
       >
         {entry.icon && <IconGlyph name={entry.icon} size={13} />}

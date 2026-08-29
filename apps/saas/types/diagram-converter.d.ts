@@ -82,9 +82,7 @@ declare module "@swimlane-cloud/editor" {
     folders: FolderTreeNode[];
     files: { id: string; name: string }[];
   }
-  export function buildFolderTree(
-    files: { id: string; name?: string }[],
-  ): FolderTreeNode;
+  export function buildFolderTree(files: { id: string; name?: string }[]): FolderTreeNode;
   export function findAdjacentStepIndex(
     rows: GuiRow[],
     rowIndex: number,

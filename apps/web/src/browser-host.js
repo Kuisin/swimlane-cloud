@@ -238,14 +238,10 @@ export const browserHost = {
     // ".keep" placeholder path under each marked dir that has no real files yet.
     const dirs = readDirs();
     const existingDirs = new Set(
-      refs
-        .filter((r) => r.id.includes("/"))
-        .map((r) => r.id.slice(0, r.id.lastIndexOf("/"))),
+      refs.filter((r) => r.id.includes("/")).map((r) => r.id.slice(0, r.id.lastIndexOf("/"))),
     );
     for (const dir of dirs) {
-      const hasFiles = [...existingDirs].some(
-        (d) => d === dir || d.startsWith(dir + "/"),
-      );
+      const hasFiles = [...existingDirs].some((d) => d === dir || d.startsWith(dir + "/"));
       if (!hasFiles) {
         refs.push({ id: `${dir}/.keep`, name: ".keep" });
       }
@@ -317,9 +313,7 @@ export const browserHost = {
   async rmdir(dirPath) {
     const prefix = dirPath.replace(/\/+$/, "") + "/";
     const files = readFiles();
-    const toDelete = Object.keys(files).filter(
-      (k) => k === dirPath || k.startsWith(prefix),
-    );
+    const toDelete = Object.keys(files).filter((k) => k === dirPath || k.startsWith(prefix));
     for (const k of toDelete) delete files[k];
     writeFiles(files);
     const dirs = readDirs().filter((d) => d !== dirPath && !d.startsWith(prefix));

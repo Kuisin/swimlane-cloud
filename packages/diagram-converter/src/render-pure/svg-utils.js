@@ -94,7 +94,9 @@ export function el(tag, attrs = {}, children = "") {
     if (key === "key") continue;
     if (key.startsWith("on")) continue;
     if (key === "style" && rawValue && typeof rawValue === "object") {
-      parts.push(` style="${escapeAttr(styleObjectToString(/** @type {Record<string, unknown>} */ (rawValue)))}"`);
+      parts.push(
+        ` style="${escapeAttr(styleObjectToString(/** @type {Record<string, unknown>} */ (rawValue)))}"`,
+      );
       continue;
     }
     const attrName = SVG_ATTR_MAP[key] ?? key;
@@ -105,7 +107,10 @@ export function el(tag, attrs = {}, children = "") {
     parts.push(` ${attrName}="${escapeAttr(rawValue)}"`);
   }
   const childStr = String(join(Array.isArray(children) ? children : [children]));
-  if (!childStr && /^(?:path|rect|circle|ellipse|line|polygon|polyline|use|image|text|tspan|title)$/.test(tag)) {
+  if (
+    !childStr &&
+    /^(?:path|rect|circle|ellipse|line|polygon|polyline|use|image|text|tspan|title)$/.test(tag)
+  ) {
     return raw(`${parts.join("")} />`);
   }
   return raw(`${parts.join("")}>${childStr}</${tag}>`);
@@ -149,8 +154,7 @@ export function h(type, props, ...children) {
   const attrs = { ...(props || {}) };
   const propChildren = attrs.children;
   delete attrs.children;
-  const allChildren =
-    children.length > 0 ? children : propChildren != null ? [propChildren] : [];
+  const allChildren = children.length > 0 ? children : propChildren != null ? [propChildren] : [];
   return el(String(type), attrs, join(allChildren));
 }
 

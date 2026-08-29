@@ -70,10 +70,7 @@ export function findNextSiblingBranchStart(rows, branchStartIndex, afterRowIndex
     }
     if (row.kind === "branchEnd") {
       const closedStart = branchStartIndexForEnd(rows, j);
-      if (
-        closedStart >= 0 &&
-        branchNestLevel(rows, closedStart) < targetNest
-      ) {
+      if (closedStart >= 0 && branchNestLevel(rows, closedStart) < targetNest) {
         return -1;
       }
     }

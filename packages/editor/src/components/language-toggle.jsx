@@ -5,7 +5,12 @@ import { LANGUAGES, useT } from "../i18n.jsx";
 export function LanguageToggle() {
   const { lang, setLang, t } = useT();
   return (
-    <div className="sw-lang-toggle" role="group" aria-label={t("lang.label")} title={t("lang.label")}>
+    <div
+      className="sw-lang-toggle"
+      role="group"
+      aria-label={t("lang.label")}
+      title={t("lang.label")}
+    >
       <Globe size={13} className="sw-lang-icon" aria-hidden />
       {LANGUAGES.map((l) => (
         <button

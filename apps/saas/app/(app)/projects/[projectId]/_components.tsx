@@ -292,7 +292,9 @@ export function HistoryPanel({
                   <div className="text-xs text-neutral-500">
                     {c.author} · {new Date(c.ts).toLocaleString()}
                     {isTip && (
-                      <span className="ml-2 rounded bg-green-100 px-1 text-green-700">{t("history.tip")}</span>
+                      <span className="ml-2 rounded bg-green-100 px-1 text-green-700">
+                        {t("history.tip")}
+                      </span>
                     )}
                   </div>
                   {c.flagged && c.publicSlug && (
@@ -312,9 +314,7 @@ export function HistoryPanel({
                       onClick={() => onTogglePublish(c.id)}
                       title={c.flagged ? t("history.unpublish") : t("history.publishHint")}
                       className={`rounded p-1.5 ${
-                        c.flagged
-                          ? "text-emerald-600"
-                          : "text-neutral-300 hover:text-neutral-500"
+                        c.flagged ? "text-emerald-600" : "text-neutral-300 hover:text-neutral-500"
                       }`}
                     >
                       <Flag size={15} fill={c.flagged ? "currentColor" : "none"} />
@@ -397,14 +397,18 @@ function CommitDetailModal({
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex items-center gap-2">
             <span className="truncate font-mono text-xs text-neutral-500">{path}</span>
-            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${statusBadge}`}>{status}</span>
+            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${statusBadge}`}>
+              {status}
+            </span>
             <div className="ml-auto flex gap-1 text-xs">
               {(["preview", "diff", "text"] as const).map((m) => (
                 <button
                   key={m}
                   onClick={() => setMode(m)}
                   className={`rounded px-3 py-1 ${
-                    mode === m ? "bg-neutral-800 text-white" : "text-neutral-500 hover:bg-neutral-100"
+                    mode === m
+                      ? "bg-neutral-800 text-white"
+                      : "text-neutral-500 hover:bg-neutral-100"
                   }`}
                 >
                   {t(`commit.mode.${m}`)}
@@ -457,96 +461,97 @@ export function PrPanel({
   onComment: (id: string, text: string) => void;
 }) {
   const { t } = useT();
-  const reviewing = reviewPR ? st.prs.find((p) => p.id === reviewPR) ?? null : null;
-  if (st.prs.length === 0)
-    return <Empty>{t("pr.empty")}</Empty>;
+  const reviewing = reviewPR ? (st.prs.find((p) => p.id === reviewPR) ?? null) : null;
+  if (st.prs.length === 0) return <Empty>{t("pr.empty")}</Empty>;
   return (
     <>
-    <ul className="space-y-3">
-      {st.prs.map((pr) => {
-        const headFiles = tipFiles(st.branches[pr.head]);
-        const baseFiles = tipFiles(st.branches[pr.base]);
-        const changed = Object.keys({ ...headFiles, ...baseFiles }).filter(
-          (p) => (headFiles[p] ?? "") !== (baseFiles[p] ?? ""),
-        );
-        const canClose = pr.status === "open" && (isManager || st.role === pr.author);
-        const badge =
-          pr.status === "merged"
-            ? "bg-purple-100 text-purple-700"
-            : pr.status === "closed"
-              ? "bg-neutral-200 text-neutral-600"
-              : "bg-amber-100 text-amber-700";
-        return (
-          <li key={pr.id} className="rounded-md border border-neutral-200 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate font-medium">{pr.title}</div>
-                <div className="text-xs text-neutral-500">
-                  {pr.head} → {pr.base} · opened by {pr.author}
+      <ul className="space-y-3">
+        {st.prs.map((pr) => {
+          const headFiles = tipFiles(st.branches[pr.head]);
+          const baseFiles = tipFiles(st.branches[pr.base]);
+          const changed = Object.keys({ ...headFiles, ...baseFiles }).filter(
+            (p) => (headFiles[p] ?? "") !== (baseFiles[p] ?? ""),
+          );
+          const canClose = pr.status === "open" && (isManager || st.role === pr.author);
+          const badge =
+            pr.status === "merged"
+              ? "bg-purple-100 text-purple-700"
+              : pr.status === "closed"
+                ? "bg-neutral-200 text-neutral-600"
+                : "bg-amber-100 text-amber-700";
+          return (
+            <li key={pr.id} className="rounded-md border border-neutral-200 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{pr.title}</div>
+                  <div className="text-xs text-neutral-500">
+                    {pr.head} → {pr.base} · opened by {pr.author}
+                  </div>
                 </div>
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${badge}`}>
+                  {pr.status}
+                </span>
               </div>
-              <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${badge}`}>{pr.status}</span>
-            </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => onReview(pr.id)}
-                className="text-xs text-indigo-600 hover:underline"
-              >
-                {reviewPR === pr.id
-                  ? t("pr.hideFiles")
-                  : changed.length === 1
-                    ? t("pr.reviewFile")
-                    : t("pr.reviewFiles", { n: String(changed.length) })}
-              </button>
-              {pr.status === "open" && (
-                <div className="ml-auto flex items-center gap-2">
-                  {canClose && (
-                    <button
-                      onClick={() => onClose(pr.id)}
-                      className="rounded border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-50"
-                    >
-                      {t("pr.close")}
-                    </button>
-                  )}
-                  {isManager ? (
-                    <button
-                      onClick={() => onMerge(pr.id)}
-                      className="rounded bg-purple-600 px-3 py-1 text-xs font-medium text-white hover:bg-purple-500"
-                    >
-                      {t("pr.mergeTo", { base: pr.base })}
-                    </button>
-                  ) : (
-                    <span className="text-xs text-neutral-400">{t("pr.managerMerges")}</span>
-                  )}
-                </div>
-              )}
-            </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => onReview(pr.id)}
+                  className="text-xs text-indigo-600 hover:underline"
+                >
+                  {reviewPR === pr.id
+                    ? t("pr.hideFiles")
+                    : changed.length === 1
+                      ? t("pr.reviewFile")
+                      : t("pr.reviewFiles", { n: String(changed.length) })}
+                </button>
+                {pr.status === "open" && (
+                  <div className="ml-auto flex items-center gap-2">
+                    {canClose && (
+                      <button
+                        onClick={() => onClose(pr.id)}
+                        className="rounded border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-50"
+                      >
+                        {t("pr.close")}
+                      </button>
+                    )}
+                    {isManager ? (
+                      <button
+                        onClick={() => onMerge(pr.id)}
+                        className="rounded bg-purple-600 px-3 py-1 text-xs font-medium text-white hover:bg-purple-500"
+                      >
+                        {t("pr.mergeTo", { base: pr.base })}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-neutral-400">{t("pr.managerMerges")}</span>
+                    )}
+                  </div>
+                )}
+              </div>
 
-            <PrComments pr={pr} role={st.role} onComment={onComment} />
-          </li>
-        );
-      })}
-    </ul>
-    {reviewing && (
-      <CommitDetailModal
-        commit={{
-          id: reviewing.id,
-          message: `${reviewing.title}  (${reviewing.head} → ${reviewing.base})`,
-          author: reviewing.author,
-          ts: reviewing.ts,
-          files: tipFiles(st.branches[reviewing.head]),
-        }}
-        parent={{
-          id: `${reviewing.id}_base`,
-          message: "",
-          author: reviewing.author,
-          ts: reviewing.ts,
-          files: tipFiles(st.branches[reviewing.base]),
-        }}
-        onClose={() => onReview(reviewing.id)}
-      />
-    )}
+              <PrComments pr={pr} role={st.role} onComment={onComment} />
+            </li>
+          );
+        })}
+      </ul>
+      {reviewing && (
+        <CommitDetailModal
+          commit={{
+            id: reviewing.id,
+            message: `${reviewing.title}  (${reviewing.head} → ${reviewing.base})`,
+            author: reviewing.author,
+            ts: reviewing.ts,
+            files: tipFiles(st.branches[reviewing.head]),
+          }}
+          parent={{
+            id: `${reviewing.id}_base`,
+            message: "",
+            author: reviewing.author,
+            ts: reviewing.ts,
+            files: tipFiles(st.branches[reviewing.base]),
+          }}
+          onClose={() => onReview(reviewing.id)}
+        />
+      )}
     </>
   );
 }
@@ -654,8 +659,7 @@ export function VersionPanel({
 }) {
   const { t } = useT();
   const [dslEnabled, setDslEnabled] = useState<Record<string, boolean>>({});
-  if (st.versions.length === 0)
-    return <Empty>{t("version.empty")}</Empty>;
+  if (st.versions.length === 0) return <Empty>{t("version.empty")}</Empty>;
   return (
     <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {st.versions.map((v) => (
@@ -773,11 +777,13 @@ export function MobileView({
   onEditStep?: (i: number | null) => void;
 }) {
   const { t, lang } = useT();
-  const paths = Object.keys(files).filter((p) => p.endsWith(".txt")).sort();
+  const paths = Object.keys(files)
+    .filter((p) => p.endsWith(".txt"))
+    .sort();
   const [pathState, setPathState] = useState(primaryPath(files) ?? paths[0] ?? "");
   const path = pathProp ?? pathState;
   const setPath = (p: string) => (onPath ? onPath(p) : setPathState(p));
-  const active = files[path] !== undefined ? path : paths[0] ?? "";
+  const active = files[path] !== undefined ? path : (paths[0] ?? "");
   const [dsl, setDsl] = useState(files[active] ?? "");
   const [stepState, setStepState] = useState<number | null>(null);
   const editStep = editStepProp !== undefined ? editStepProp : stepState;
@@ -853,7 +859,8 @@ export function MobileView({
 
   const editRowIndex = editStep != null ? nthStepRowIndex(gui.rows, editStep) : -1;
   const canMoveUp = editRowIndex >= 0 && findAdjacentStepIndex(gui.rows, editRowIndex, "up") >= 0;
-  const canMoveDown = editRowIndex >= 0 && findAdjacentStepIndex(gui.rows, editRowIndex, "down") >= 0;
+  const canMoveDown =
+    editRowIndex >= 0 && findAdjacentStepIndex(gui.rows, editRowIndex, "down") >= 0;
   const moveStep = (dir: "up" | "down") => {
     if (editStep == null) return;
     const next = applyModelEdit(dsl, (draft) => {
@@ -1111,7 +1118,9 @@ function StepEditModal({
       <div className="space-y-3">
         {onMove && (
           <div className="flex items-center justify-between rounded-lg bg-neutral-50 px-3 py-2">
-            <span className="text-xs font-medium text-neutral-500">{t("stepEdit.movePosition")}</span>
+            <span className="text-xs font-medium text-neutral-500">
+              {t("stepEdit.movePosition")}
+            </span>
             <div className="flex gap-2">
               <button
                 onClick={() => onMove("up")}
@@ -1187,13 +1196,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** "Switch to mobile view?" prompt shown when opening the editor on a phone. */
-export function MobilePrompt({
-  onMobile,
-  onStay,
-}: {
-  onMobile: () => void;
-  onStay: () => void;
-}) {
+export function MobilePrompt({ onMobile, onStay }: { onMobile: () => void; onStay: () => void }) {
   const { t } = useT();
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
@@ -1328,15 +1331,7 @@ function ArrowPreview({ kind }: { kind: string }) {
   const dash = arrowLineDasharray(kind) ?? undefined;
   return (
     <svg width="96" height="14" viewBox="0 0 96 14" aria-hidden>
-      <line
-        x1="2"
-        y1="7"
-        x2="84"
-        y2="7"
-        stroke="#475569"
-        strokeWidth="2"
-        strokeDasharray={dash}
-      />
+      <line x1="2" y1="7" x2="84" y2="7" stroke="#475569" strokeWidth="2" strokeDasharray={dash} />
       <path d="M84 7 L76 3 L76 11 Z" fill="#475569" />
     </svg>
   );

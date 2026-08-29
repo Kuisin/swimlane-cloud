@@ -42,16 +42,16 @@ extension to force CommonJS. `package.json` `"main"` points at
 
 `desktopHost` maps the IPC bridge to the storage-agnostic contract:
 
-| EditorHost            | window.api                                  |
-|-----------------------|---------------------------------------------|
-| `root()`              | `getOpenedFolder()`                         |
-| `list()`              | `readTxtFiles()` → `[{ id, name, mtime }]`  |
-| `read(id)`            | `readFile(id)`                              |
-| `writeDraft(id,dsl)`  | `writeTxtFile(id, dsl)`                      |
-| `writeDraftMany(u)`   | `writeTxtFiles(u)` (Save all)               |
-| `create(id,dsl)`      | `createTxtFile(id, dsl)`                     |
-| `mkdir(dir)`          | `makeDir(dir)`                              |
-| `watch(cb)`           | `onFileChanged` → `{ id, dsl, type }` + unsub |
+| EditorHost           | window.api                                    |
+| -------------------- | --------------------------------------------- |
+| `root()`             | `getOpenedFolder()`                           |
+| `list()`             | `readTxtFiles()` → `[{ id, name, mtime }]`    |
+| `read(id)`           | `readFile(id)`                                |
+| `writeDraft(id,dsl)` | `writeTxtFile(id, dsl)`                       |
+| `writeDraftMany(u)`  | `writeTxtFiles(u)` (Save all)                 |
+| `create(id,dsl)`     | `createTxtFile(id, dsl)`                      |
+| `mkdir(dir)`         | `makeDir(dir)`                                |
+| `watch(cb)`          | `onFileChanged` → `{ id, dsl, type }` + unsub |
 
 `id` is the POSIX relative path within the opened folder root. The editor builds
 the folder tree by splitting ids on `/`.

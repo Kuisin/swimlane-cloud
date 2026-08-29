@@ -7,8 +7,8 @@ export default function Home() {
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 text-center">
       <h1 className="text-2xl font-semibold">Swimlane Share</h1>
       <p className="mt-2 text-sm text-neutral-500">
-        Diagrams on this site are shared by link. If someone sent you a link,
-        open it directly — there is nothing to browse here.
+        Diagrams on this site are shared by link. If someone sent you a link, open it directly —
+        there is nothing to browse here.
       </p>
     </main>
   );

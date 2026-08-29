@@ -65,8 +65,7 @@ export function TemplatePanel({ open, host, theme, policies, onClose, onInsert }
               className={`sw-tpl-tab ${section === s ? "sw-tpl-tab-active" : ""}`}
               onClick={() => setSection(s)}
             >
-              /{s}/
-              {policies?.[s]?.mode === "forced" && <span className="sw-tpl-lock"> 🔒</span>}
+              /{s}/{policies?.[s]?.mode === "forced" && <span className="sw-tpl-lock"> 🔒</span>}
             </button>
           ))}
         </div>

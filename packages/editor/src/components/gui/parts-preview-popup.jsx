@@ -67,7 +67,14 @@ export function PartsPreviewPopup({ open, section, src, theme, selectedId, onClo
                   theme={theme}
                   selected={id === selectedId}
                   canSelect={Boolean(onSelect)}
-                  onSelect={onSelect ? () => { onSelect(id); onClose(); } : undefined}
+                  onSelect={
+                    onSelect
+                      ? () => {
+                          onSelect(id);
+                          onClose();
+                        }
+                      : undefined
+                  }
                 />
               ))}
             </div>

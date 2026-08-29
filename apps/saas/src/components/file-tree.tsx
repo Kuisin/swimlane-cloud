@@ -24,7 +24,15 @@ export function FileTree({
   const tree = buildFolderTree(paths.map((p) => ({ id: p, name: p.split("/").pop() ?? p })));
   return (
     <div className="text-sm">
-      <TreeNode node={tree} depth={0} active={active} onPick={onPick} statusOf={statusOf} titleOf={titleOf} isRoot />
+      <TreeNode
+        node={tree}
+        depth={0}
+        active={active}
+        onPick={onPick}
+        statusOf={statusOf}
+        titleOf={titleOf}
+        isRoot
+      />
     </div>
   );
 }
@@ -86,16 +94,20 @@ function TreeNode({
             onClick={() => onPick(f.id)}
             style={{ paddingLeft: (isRoot ? 0 : depth + 1) * 12 + 16 }}
             className={`flex w-full items-start gap-1.5 rounded py-1 pr-2 text-left ${
-              isActive ? "bg-indigo-50 font-medium text-indigo-700" : `hover:bg-neutral-100 ${color}`
+              isActive
+                ? "bg-indigo-50 font-medium text-indigo-700"
+                : `hover:bg-neutral-100 ${color}`
             }`}
           >
             <FileText size={14} className="mt-0.5 shrink-0" />
             <span className="min-w-0 flex-1 overflow-hidden">
               <span className="block truncate">{title || f.name}</span>
               {title && (
-                <span className={`block truncate text-xs font-normal ${
-                  isActive ? "text-indigo-400" : "text-neutral-400"
-                }`}>
+                <span
+                  className={`block truncate text-xs font-normal ${
+                    isActive ? "text-indigo-400" : "text-neutral-400"
+                  }`}
+                >
                   {f.name}
                 </span>
               )}

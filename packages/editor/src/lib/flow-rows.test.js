@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import { moveRow, getFrameStepIndices, sameReorderFrame, rowBadgeLabel } from "./flow-rows.js";
 import { EN, JA, tr } from "../i18n.jsx";
 
-const steps = (...texts) =>
-  texts.map((text) => ({ kind: "step", role: "r", text }));
+const steps = (...texts) => texts.map((text) => ({ kind: "step", role: "r", text }));
 
 describe("moveRow", () => {
   it("moves an item forward and reports its landing index", () => {

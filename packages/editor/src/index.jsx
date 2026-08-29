@@ -9,12 +9,7 @@ export { FileEditorProvider } from "./context/file-editor-provider.jsx";
 export { useEditor } from "./context/editor-context.js";
 
 // EditorHost contract + capability helpers.
-export {
-  TEMPLATE_SECTIONS,
-  hostHas,
-  hostSupportsVersioning,
-  hostIsReadOnly,
-} from "./host.js";
+export { TEMPLATE_SECTIONS, hostHas, hostSupportsVersioning, hostIsReadOnly } from "./host.js";
 
 // Pure libs, useful to host adapters and tests.
 export { serializeDSL } from "./lib/serialize-dsl.js";

@@ -1,9 +1,12 @@
-import { stringDisplayColumnWidth, truncate, truncateToColumns, wrapDescriptionToVisualLines, wrapTextToDisplayColumns } from "../utils.js";
-import { buildStepRowDisplayInfo } from "../parser.js";
 import {
-  findNextFlowStepAfterBranchEnd,
-  findNextSiblingBranchStart,
-} from "../branch-rows.js";
+  stringDisplayColumnWidth,
+  truncate,
+  truncateToColumns,
+  wrapDescriptionToVisualLines,
+  wrapTextToDisplayColumns,
+} from "../utils.js";
+import { buildStepRowDisplayInfo } from "../parser.js";
+import { findNextFlowStepAfterBranchEnd, findNextSiblingBranchStart } from "../branch-rows.js";
 import { arrowLineStrokeProps, stepOutgoingArrowLine } from "../arrow-line.js";
 import { StepShape } from "./step-shape.js";
 import { BlockIcon } from "./block-icon.js";
@@ -15,7 +18,7 @@ import {
   findLastMainFlowStepBeforeGroupStart,
   findNextMainFlowStepAfterGroupEnd,
   groupModeOf,
-  isInsideBranchGroup
+  isInsideBranchGroup,
 } from "../group-rows.js";
 import {
   BRANCH_COLOR_STYLES,
@@ -40,124 +43,137 @@ function GutterBodyText({ x, y, text, wrapCols, fill, opacity }) {
       opacity,
       fontFamily: "'Noto Sans JP',sans-serif",
       fontSize: String(DIAGRAM_LAYOUT.gutterBodyFontSize),
-      fontWeight: "400"
+      fontWeight: "400",
     },
-    visualLines.map((runs, li) => /* @__PURE__ */ h(
-      "tspan",
-      {
-        key: li,
-        x,
-        dy: li === 0 ? 0 : DIAGRAM_LAYOUT.descriptionLineHeight
-      },
-      runs.map((run, ri) => /* @__PURE__ */ h(
+    visualLines.map((runs, li) =>
+      /* @__PURE__ */ h(
         "tspan",
         {
-          key: ri,
-          fontWeight: run.bold ? "600" : "400",
-          fontStyle: run.italic ? "italic" : "normal",
-          textDecoration: run.strike ? "line-through" : "none"
+          key: li,
+          x,
+          dy: li === 0 ? 0 : DIAGRAM_LAYOUT.descriptionLineHeight,
         },
-        run.text
-      ))
-    ))
+        runs.map((run, ri) =>
+          /* @__PURE__ */ h(
+            "tspan",
+            {
+              key: ri,
+              fontWeight: run.bold ? "600" : "400",
+              fontStyle: run.italic ? "italic" : "normal",
+              textDecoration: run.strike ? "line-through" : "none",
+            },
+            run.text,
+          ),
+        ),
+      ),
+    ),
   );
 }
-function PageTriColumnText({ y, width, xPad, left, center, right, fill, fontSize = DIAGRAM_LAYOUT.triColumnFontSize }) {
+function PageTriColumnText({
+  y,
+  width,
+  xPad,
+  left,
+  center,
+  right,
+  fill,
+  fontSize = DIAGRAM_LAYOUT.triColumnFontSize,
+}) {
   const fontFamily = DIAGRAM_LAYOUT.fontFamily;
-  return /* @__PURE__ */ h(Fragment, null, left?.trim() && /* @__PURE__ */ h(
-    "text",
-    {
-      x: xPad,
-      y,
-      textAnchor: "start",
-      fill,
-      fontFamily,
-      fontSize
-    },
-    left.trim()
-  ), center?.trim() && /* @__PURE__ */ h(
-    "text",
-    {
-      x: width / 2,
-      y,
-      textAnchor: "middle",
-      fill,
-      fontFamily,
-      fontSize
-    },
-    center.trim()
-  ), right?.trim() && /* @__PURE__ */ h(
-    "text",
-    {
-      x: width - xPad,
-      y,
-      textAnchor: "end",
-      fill,
-      fontFamily,
-      fontSize
-    },
-    right.trim()
-  ));
+  return /* @__PURE__ */ h(
+    Fragment,
+    null,
+    left?.trim() &&
+      /* @__PURE__ */ h(
+        "text",
+        {
+          x: xPad,
+          y,
+          textAnchor: "start",
+          fill,
+          fontFamily,
+          fontSize,
+        },
+        left.trim(),
+      ),
+    center?.trim() &&
+      /* @__PURE__ */ h(
+        "text",
+        {
+          x: width / 2,
+          y,
+          textAnchor: "middle",
+          fill,
+          fontFamily,
+          fontSize,
+        },
+        center.trim(),
+      ),
+    right?.trim() &&
+      /* @__PURE__ */ h(
+        "text",
+        {
+          x: width - xPad,
+          y,
+          textAnchor: "end",
+          fill,
+          fontFamily,
+          fontSize,
+        },
+        right.trim(),
+      ),
+  );
 }
 function RowSelectionHighlight({ x, y, w, h: height }) {
-  return /* @__PURE__ */ h(
-    "rect",
-    {
-      "data-export-hide": true,
-      x,
-      y,
-      width: w,
-      height,
-      fill: DIAGRAM_LAYOUT.selectionFill,
-      fillOpacity: DIAGRAM_LAYOUT.selectionFillOpacity,
-      stroke: DIAGRAM_LAYOUT.selectionFill,
-      strokeWidth: DIAGRAM_LAYOUT.selectionStrokeWidth,
-      rx: DIAGRAM_LAYOUT.selectionCornerRadius,
-      pointerEvents: "none"
-    }
-  );
+  return /* @__PURE__ */ h("rect", {
+    "data-export-hide": true,
+    x,
+    y,
+    width: w,
+    height,
+    fill: DIAGRAM_LAYOUT.selectionFill,
+    fillOpacity: DIAGRAM_LAYOUT.selectionFillOpacity,
+    stroke: DIAGRAM_LAYOUT.selectionFill,
+    strokeWidth: DIAGRAM_LAYOUT.selectionStrokeWidth,
+    rx: DIAGRAM_LAYOUT.selectionCornerRadius,
+    pointerEvents: "none",
+  });
 }
 function RowHitTarget({ rowIndex, x, y, w, h: height, selected, onSelect }) {
-  return /* @__PURE__ */ h(
-    "rect",
-    {
-      "data-export-hide": true,
-      "data-row-index": rowIndex,
-      x,
-      y,
-      width: w,
-      height,
-      fill: "transparent",
-      pointerEvents: "all",
-      cursor: "pointer",
-      stroke: selected ? DIAGRAM_LAYOUT.selectionFill : "none",
-      strokeWidth: selected ? DIAGRAM_LAYOUT.hitTargetStrokeWidth : 0,
-      rx: DIAGRAM_LAYOUT.hitTargetCornerRadius,
-      onClick: (event) => {
-        event.stopPropagation();
-        onSelect?.(rowIndex);
-      }
-    }
-  );
+  return /* @__PURE__ */ h("rect", {
+    "data-export-hide": true,
+    "data-row-index": rowIndex,
+    x,
+    y,
+    width: w,
+    height,
+    fill: "transparent",
+    pointerEvents: "all",
+    cursor: "pointer",
+    stroke: selected ? DIAGRAM_LAYOUT.selectionFill : "none",
+    strokeWidth: selected ? DIAGRAM_LAYOUT.hitTargetStrokeWidth : 0,
+    rx: DIAGRAM_LAYOUT.hitTargetCornerRadius,
+    onClick: (event) => {
+      event.stopPropagation();
+      onSelect?.(rowIndex);
+    },
+  });
 }
 function PathHitTarget({ rowIndex, d, onSelect }) {
-  return /* @__PURE__ */ h(
-    "path",
-    {
-      "data-export-hide": true,
-      "data-row-index": rowIndex,
-      d,
-      fill: "none",
-      stroke: "transparent",
-      strokeWidth: String(DIAGRAM_LAYOUT.pathHitStrokeWidth),
-      pointerEvents: "stroke",
-      cursor: "pointer",
-      onClick: (event) => {
-        event.stopPropagation();
-        onSelect?.(rowIndex);
-      }
-    }
-  );
+  return /* @__PURE__ */ h("path", {
+    "data-export-hide": true,
+    "data-row-index": rowIndex,
+    d,
+    fill: "none",
+    stroke: "transparent",
+    strokeWidth: String(DIAGRAM_LAYOUT.pathHitStrokeWidth),
+    pointerEvents: "stroke",
+    cursor: "pointer",
+    onClick: (event) => {
+      event.stopPropagation();
+      onSelect?.(rowIndex);
+    },
+  });
 }
 function PrintLayer({
   theme,
@@ -172,58 +188,72 @@ function PrintLayer({
   pageDescStartY,
   pageDescLineHeight,
   hasPageFooter,
-  height
+  height,
 }) {
   const serif = DIAGRAM_LAYOUT.fontFamily;
-  return /* @__PURE__ */ h(Fragment, null, hasPageHeader && pageHeaderY != null && /* @__PURE__ */ h(
-    PageTriColumnText,
-    {
-      y: pageHeaderY,
-      width,
-      xPad,
-      left: page.headerLeft,
-      center: page.headerCenter,
-      right: page.headerRight,
-      fill: theme.laneText || theme.title,
-      fontSize: DIAGRAM_LAYOUT.triColumnFontSize
-    }
-  ), title && titleY != null && /* @__PURE__ */ h(
-    "text",
-    {
-      x: width / 2,
-      y: titleY,
-      textAnchor: "middle",
-      fill: theme.title,
-      fontFamily: serif,
-      fontSize: String(DIAGRAM_LAYOUT.titleFontSize),
-      fontWeight: "600",
-      letterSpacing: "0.05em"
-    },
-    title
-  ), pageDescLines.length > 0 && pageDescStartY != null && /* @__PURE__ */ h(
-    "text",
-    {
-      x: width / 2,
-      y: pageDescStartY,
-      textAnchor: "middle",
-      fill: theme.laneText || theme.title,
-      fontFamily: serif,
-      fontSize: String(DIAGRAM_LAYOUT.pageDescFontSize)
-    },
-    pageDescLines.map((line, i) => /* @__PURE__ */ h("tspan", { key: i, x: width / 2, dy: i === 0 ? 0 : pageDescLineHeight }, line))
-  ), hasPageFooter && /* @__PURE__ */ h(
-    PageTriColumnText,
-    {
-      y: height - DIAGRAM_LAYOUT.pageFooterTextY,
-      width,
-      xPad,
-      left: page.footerLeft,
-      center: page.footerCenter,
-      right: page.footerRight,
-      fill: theme.laneText || theme.title,
-      fontSize: DIAGRAM_LAYOUT.triColumnFontSize
-    }
-  ));
+  return /* @__PURE__ */ h(
+    Fragment,
+    null,
+    hasPageHeader &&
+      pageHeaderY != null &&
+      /* @__PURE__ */ h(PageTriColumnText, {
+        y: pageHeaderY,
+        width,
+        xPad,
+        left: page.headerLeft,
+        center: page.headerCenter,
+        right: page.headerRight,
+        fill: theme.laneText || theme.title,
+        fontSize: DIAGRAM_LAYOUT.triColumnFontSize,
+      }),
+    title &&
+      titleY != null &&
+      /* @__PURE__ */ h(
+        "text",
+        {
+          x: width / 2,
+          y: titleY,
+          textAnchor: "middle",
+          fill: theme.title,
+          fontFamily: serif,
+          fontSize: String(DIAGRAM_LAYOUT.titleFontSize),
+          fontWeight: "600",
+          letterSpacing: "0.05em",
+        },
+        title,
+      ),
+    pageDescLines.length > 0 &&
+      pageDescStartY != null &&
+      /* @__PURE__ */ h(
+        "text",
+        {
+          x: width / 2,
+          y: pageDescStartY,
+          textAnchor: "middle",
+          fill: theme.laneText || theme.title,
+          fontFamily: serif,
+          fontSize: String(DIAGRAM_LAYOUT.pageDescFontSize),
+        },
+        pageDescLines.map((line, i) =>
+          /* @__PURE__ */ h(
+            "tspan",
+            { key: i, x: width / 2, dy: i === 0 ? 0 : pageDescLineHeight },
+            line,
+          ),
+        ),
+      ),
+    hasPageFooter &&
+      /* @__PURE__ */ h(PageTriColumnText, {
+        y: height - DIAGRAM_LAYOUT.pageFooterTextY,
+        width,
+        xPad,
+        left: page.footerLeft,
+        center: page.footerCenter,
+        right: page.footerRight,
+        fill: theme.laneText || theme.title,
+        fontSize: DIAGRAM_LAYOUT.triColumnFontSize,
+      }),
+  );
 }
 function renderDiagramSvg({
   model,
@@ -238,15 +268,17 @@ function renderDiagramSvg({
   branchColorArrows = true,
   interactive = false,
   selectedRowIndex = null,
-  onRowSelect
+  onRowSelect,
 }) {
   const { title, page = {}, lanes, rows, blocks = {}, props = {} } = model;
   const pageDescription = (showDescription ? page.description || "" : "").trim();
   const hasPageHeader = Boolean(
-    showHeader && (page.headerLeft?.trim() || page.headerCenter?.trim() || page.headerRight?.trim())
+    showHeader &&
+    (page.headerLeft?.trim() || page.headerCenter?.trim() || page.headerRight?.trim()),
   );
   const hasPageFooter = Boolean(
-    showFooter && (page.footerLeft?.trim() || page.footerCenter?.trim() || page.footerRight?.trim())
+    showFooter &&
+    (page.footerLeft?.trim() || page.footerCenter?.trim() || page.footerRight?.trim()),
   );
   const L = DIAGRAM_LAYOUT;
   const {
@@ -327,20 +359,20 @@ function renderDiagramSvg({
     nodeW,
   } = L;
   const leftGutter = showLeftGutter ? leftGutterWidth : 0;
-  const hasRemarks = (rows || []).some(
-    (r) => r.kind === "step" && (r.remark || "").trim()
-  );
+  const hasRemarks = (rows || []).some((r) => r.kind === "step" && (r.remark || "").trim());
   const rightGutterVisible = showRightGutter && hasRemarks;
   const rightGutter = rightGutterVisible ? rightGutterWidth : 0;
   const descWrapCols = gutterTextCols(leftGutterWidth, L.gutterBodyFontSize);
   const remarkWrapCols = Math.max(
     remarkWrapColsMin,
-    gutterTextCols(rightGutterWidth, L.gutterBodyFontSize)
+    gutterTextCols(rightGutterWidth, L.gutterBodyFontSize),
   );
   const propExtraWPerProps = docGapX;
   const propRowExtraHPerProps = docGapY;
   const loopRouteMargin = caseClearance;
-  const pageDescLines = pageDescription ? wrapTextToDisplayColumns(pageDescription, pageDescWrapCols) : [];
+  const pageDescLines = pageDescription
+    ? wrapTextToDisplayColumns(pageDescription, pageDescWrapCols)
+    : [];
   const pageFooterPad = hasPageFooter ? L.pageFooterPad : 0;
   const gridBottomPad = hasPageFooter ? L.gridBottomPadWithFooter : L.gridBottomPad;
   let pageHeaderY = null;
@@ -368,7 +400,7 @@ function renderDiagramSvg({
     }
     topPad = Math.max(
       layoutY + L.topPadTrailing,
-      title || pageDescLines.length > 0 ? L.topPadMinWithTitle : L.topPadMinDefault
+      title || pageDescLines.length > 0 ? L.topPadMinWithTitle : L.topPadMinDefault,
     );
   }
   const rowMeta = [];
@@ -394,7 +426,13 @@ function renderDiagramSvg({
     });
     return acc;
   }
-  function gutterTextExtraHeight(text, startOffset, rowIndex, heightWithProps, maxCols = descWrapCols) {
+  function gutterTextExtraHeight(
+    text,
+    startOffset,
+    rowIndex,
+    heightWithProps,
+    maxCols = descWrapCols,
+  ) {
     const t = (text || "").trim();
     if (!t) return 0;
     const visualLines = wrapDescriptionToVisualLines(t, maxCols);
@@ -412,16 +450,28 @@ function renderDiagramSvg({
     if (!row || row.kind !== "step" || row.empty) return rowH;
     const counts = stepPropCounts(row);
     const maxPropsPerSide = Math.max(counts.left, counts.right);
-    const propExtra = (maxPropsPerSide > 0 && propRowExtraHBase) + Math.max(0, maxPropsPerSide - 1) * propRowExtraHPerProps;
+    const propExtra =
+      (maxPropsPerSide > 0 && propRowExtraHBase) +
+      Math.max(0, maxPropsPerSide - 1) * propRowExtraHPerProps;
     const heightWithProps = rowH + propExtra;
     const titleText = (row.name || row.text || "").trim();
-    const descExtra = showLeftGutter ? gutterTextExtraHeight(
-      row.description,
-      gutterTextBandTopY + (titleText ? gutterTitleLineH : 0),
-      rowIndex,
-      heightWithProps
-    ) : 0;
-    const remarkExtra = rightGutterVisible ? gutterTextExtraHeight(row.remark, gutterTextBandTopY, rowIndex, heightWithProps, remarkWrapCols) : 0;
+    const descExtra = showLeftGutter
+      ? gutterTextExtraHeight(
+          row.description,
+          gutterTextBandTopY + (titleText ? gutterTitleLineH : 0),
+          rowIndex,
+          heightWithProps,
+        )
+      : 0;
+    const remarkExtra = rightGutterVisible
+      ? gutterTextExtraHeight(
+          row.remark,
+          gutterTextBandTopY,
+          rowIndex,
+          heightWithProps,
+          remarkWrapCols,
+        )
+      : 0;
     return heightWithProps + Math.max(descExtra, remarkExtra);
   }
   function rowCenterY(rowIndex) {
@@ -448,7 +498,8 @@ function renderDiagramSvg({
   function estimateTextWidth(text, base = estimateTextWidthBase) {
     if (!text) return base;
     let width2 = base;
-    for (const ch of text) width2 += /[ -~]/.test(ch) ? estimateTextWidthHalfWidth : estimateTextWidthFullWidth;
+    for (const ch of text)
+      width2 += /[ -~]/.test(ch) ? estimateTextWidthHalfWidth : estimateTextWidthFullWidth;
     return width2;
   }
   function pushToActiveCase(rowIndex) {
@@ -468,23 +519,27 @@ function renderDiagramSvg({
         decisionColor: r.branchColor || null,
         // A fork's first concurrent path opens at the `fork` line itself (no
         // condition/firstCase), mirroring how an `if` opens its first case.
-        cases: r.parallel ? [
-          {
-            label: "",
-            color: r.branchColor || null,
-            rowIndices: [],
-            startRow: i
-          }
-        ] : r.firstCase && String(r.firstCase).trim() ? [
-          {
-            label: r.firstCase.trim(),
-            color: r.branchColor || null,
-            rowIndices: [],
-            startRow: i
-          }
-        ] : [],
+        cases: r.parallel
+          ? [
+              {
+                label: "",
+                color: r.branchColor || null,
+                rowIndices: [],
+                startRow: i,
+              },
+            ]
+          : r.firstCase && String(r.firstCase).trim()
+            ? [
+                {
+                  label: r.firstCase.trim(),
+                  color: r.branchColor || null,
+                  rowIndices: [],
+                  startRow: i,
+                },
+              ]
+            : [],
         parentCase: null,
-        anchorX: null
+        anchorX: null,
       };
       if (frameStack.length > 0) {
         const parent = frameStack[frameStack.length - 1];
@@ -503,7 +558,7 @@ function renderDiagramSvg({
           label: r.label,
           color: r.branchColor || null,
           rowIndices: [],
-          startRow: i
+          startRow: i,
         });
       rowMeta[i] = { y, kind: "case" };
     } else if (r.kind === "branchEnd") {
@@ -570,10 +625,13 @@ function renderDiagramSvg({
   function firstDirectStepAfterChild(c) {
     const child = c.childFrame;
     if (!child) return null;
-    const childEndIdx = child.endRow ?? rows.findIndex((r) => r.kind === "branchEnd" && r.id === child.id);
+    const childEndIdx =
+      child.endRow ?? rows.findIndex((r) => r.kind === "branchEnd" && r.id === child.id);
     return c.rowIndices.find((idx) => {
       const row = rows[idx];
-      return row?.kind === "step" && !row.empty && row.role && (childEndIdx < 0 || idx > childEndIdx);
+      return (
+        row?.kind === "step" && !row.empty && row.role && (childEndIdx < 0 || idx > childEndIdx)
+      );
     });
   }
   function firstStepIdxInCase(c) {
@@ -594,7 +652,7 @@ function renderDiagramSvg({
       return {
         x: c ? caseAnchorX(c) : width / 2,
         y: stepBlockCenterY(stepIdx),
-        showArrow: false
+        showArrow: false,
       };
     }
     if (!row.role) return null;
@@ -602,7 +660,7 @@ function renderDiagramSvg({
     return {
       x: li >= 0 ? nodeCenterX(stepIdx, row.role) : width / 2,
       y: stepBlockCenterY(stepIdx) - 22,
-      showArrow: true
+      showArrow: true,
     };
   }
   function caseStepLineSource(stepIdx, caseHint) {
@@ -612,24 +670,24 @@ function renderDiagramSvg({
       const c = caseHint ?? findCaseForStep(stepIdx);
       return {
         x: c ? caseAnchorX(c) : width / 2,
-        y: stepBlockCenterY(stepIdx) + stepConnectorLabelOffsetY
+        y: stepBlockCenterY(stepIdx) + stepConnectorLabelOffsetY,
       };
     }
     if (!row.role) return null;
     const li = laneIndex(row.role);
     return {
       x: li >= 0 ? nodeCenterX(stepIdx, row.role) : width / 2,
-      y: stepBlockCenterY(stepIdx) + 22
+      y: stepBlockCenterY(stepIdx) + 22,
     };
   }
   function caseMergeAnchor(c) {
     const childFrame = c.childFrame;
     if (childFrame?.yMerge != null) {
-      const childEndIdx = childFrame.endRow ?? rows.findIndex(
-        (r) => r.kind === "branchEnd" && r.id === childFrame.id
-      );
+      const childEndIdx =
+        childFrame.endRow ??
+        rows.findIndex((r) => r.kind === "branchEnd" && r.id === childFrame.id);
       const stepsAfterChild = c.rowIndices.filter(
-        (idx) => rows[idx]?.kind === "step" && (childEndIdx < 0 || idx > childEndIdx)
+        (idx) => rows[idx]?.kind === "step" && (childEndIdx < 0 || idx > childEndIdx),
       );
       const lastAfterChild = stepsAfterChild[stepsAfterChild.length - 1];
       if (lastAfterChild != null) {
@@ -638,7 +696,7 @@ function renderDiagramSvg({
       }
       return {
         fromX: mergeAnchorX(childFrame),
-        fromY: childFrame.yMerge + mergeH / 2 - 14
+        fromY: childFrame.yMerge + mergeH / 2 - 14,
       };
     }
     const lastDirectStepIdx = lastMainFlowStepIdx(c);
@@ -647,7 +705,7 @@ function renderDiagramSvg({
       const li = laneIndex(r.role);
       return {
         fromX: li >= 0 ? nodeCenterX(lastDirectStepIdx, r.role) : caseAnchorX(c),
-        fromY: stepBlockCenterY(lastDirectStepIdx) + 22
+        fromY: stepBlockCenterY(lastDirectStepIdx) + 22,
       };
     }
     const lastAnyStepIdx = lastStepIdxInCase(c);
@@ -761,10 +819,7 @@ function renderDiagramSvg({
       c.rowIndices.forEach((stepIdx) => {
         const row = rows[stepIdx];
         if (row?.kind === "step" && !row.empty && row.role) {
-          stepOffsetByIndex.set(
-            stepIdx,
-            (inherited[row.role] || 0) + co(caseIdx, row.role)
-          );
+          stepOffsetByIndex.set(stepIdx, (inherited[row.role] || 0) + co(caseIdx, row.role));
         }
       });
       if (c.childFrame) {
@@ -843,10 +898,11 @@ function renderDiagramSvg({
     const right = off + stepRightExtent(row);
     const cur = stepEdgesByLane.get(row.role);
     if (!cur) stepEdgesByLane.set(row.role, { min: left, max: right });
-    else stepEdgesByLane.set(row.role, {
-      min: Math.min(cur.min, left),
-      max: Math.max(cur.max, right)
-    });
+    else
+      stepEdgesByLane.set(row.role, {
+        min: Math.min(cur.min, left),
+        max: Math.max(cur.max, right),
+      });
   });
   const loopRailAllowance = caseClearance;
   rows.forEach((row, i) => {
@@ -869,7 +925,10 @@ function renderDiagramSvg({
     else edge.max += loopRailAllowance;
   });
   const laneWidths = lanes.map((lane) => {
-    const headerWidth = estimateTextWidth(lane.label || lane.id, lane.icon ? laneHeaderWidthWithIcon : laneHeaderWidthNoIcon);
+    const headerWidth = estimateTextWidth(
+      lane.label || lane.id,
+      lane.icon ? laneHeaderWidthWithIcon : laneHeaderWidthNoIcon,
+    );
     const maxStepWidth = rows.reduce((maxWidth, row) => {
       if (row.kind !== "step" || row.role !== lane.id || row.empty) return maxWidth;
       const stepWidth = estimateTextWidth(row.text, 68);
@@ -920,7 +979,7 @@ function renderDiagramSvg({
       x: xPad,
       y: meta.y,
       w: width - xPad * 2,
-      h: stepRowHeightByIndex.get(rowIndex) ?? stepRowHeight(row, rowIndex)
+      h: stepRowHeightByIndex.get(rowIndex) ?? stepRowHeight(row, rowIndex),
     };
   }
   const laneIndex = (id) => laneIndexById.get(id) ?? -1;
@@ -960,9 +1019,7 @@ function renderDiagramSvg({
     return firstStepIdxInCase(c) == null;
   }
   function forkFirstBlockX(f) {
-    const startIdx = rows.findIndex(
-      (r) => r.kind === "branchStart" && r.id === f.id
-    );
+    const startIdx = rows.findIndex((r) => r.kind === "branchStart" && r.id === f.id);
     if (startIdx < 0) return null;
     for (let j = startIdx + 1; j < rows.length; j++) {
       const row = rows[j];
@@ -978,17 +1035,14 @@ function renderDiagramSvg({
       const fx = forkFirstBlockX(f);
       if (fx != null) return fx;
     }
-    const startIdx = rows.findIndex(
-      (r) => r.kind === "branchStart" && r.id === f.id
-    );
+    const startIdx = rows.findIndex((r) => r.kind === "branchStart" && r.id === f.id);
     if (startIdx > 0) {
       for (let j = startIdx - 1; j >= 0; j--) {
         const row = rows[j];
         if (row.kind === "step" && !row.empty && row.role && !isInsideBranchGroup(rows, j)) {
           return nodeCenterX(j, row.role);
         }
-        if (row.kind === "branchCase" && row.depth != null && row.depth < (f.depth ?? 0))
-          break;
+        if (row.kind === "branchCase" && row.depth != null && row.depth < (f.depth ?? 0)) break;
         if (row.kind === "branchStart" && row.depth < (f.depth ?? 0)) break;
         if (row.kind === "branchEnd") break;
       }
@@ -999,9 +1053,7 @@ function renderDiagramSvg({
   }
   function mergeAnchorX(f) {
     if (!mergeAtPreviousBlock) return frameAnchorX(f);
-    const endIdx = rows.findIndex(
-      (r) => r.kind === "branchEnd" && r.id === f.id
-    );
+    const endIdx = rows.findIndex((r) => r.kind === "branchEnd" && r.id === f.id);
     if (endIdx < 0) return frameAnchorX(f);
     for (let j = endIdx - 1; j >= 0; j--) {
       const row = rows[j];
@@ -1051,9 +1103,12 @@ function renderDiagramSvg({
     const child = c.childFrame;
     const firstMainStep = firstMainFlowStepIdx(c);
     const firstStepIdx = firstMainStep ?? firstStepIdxInCase(c);
-    const childStartIdx = child != null ? rows.findIndex((r) => r.kind === "branchStart" && r.id === child.id) : -1;
+    const childStartIdx =
+      child != null ? rows.findIndex((r) => r.kind === "branchStart" && r.id === child.id) : -1;
     const stubCase = isStubCase(c, f.id);
-    const targetsNestedDecision = child != null && (firstMainStep == null || childStartIdx >= 0 && childStartIdx < firstMainStep);
+    const targetsNestedDecision =
+      child != null &&
+      (firstMainStep == null || (childStartIdx >= 0 && childStartIdx < firstMainStep));
     const startX = dCx;
     const startY = dCy + dH / 2;
     const bendY = startY + branchCaseBendYOffset;
@@ -1087,47 +1142,50 @@ function renderDiagramSvg({
     const sideX = targetX;
     const laneSafeMin = targetX - caseLaneWidth / 2 + caseLaneSafeInset;
     const laneSafeMax = targetX + caseLaneWidth / 2 - caseLaneSafeInset;
-    const clampedSideX = Math.max(
-      laneSafeMin,
-      Math.min(laneSafeMax, sideX)
-    );
-    const needsElbow = Math.abs(targetX - startX) > branchConnectorElbowThreshold || showArrow && sideOffset !== 0;
-    return showArrow && sideOffset !== 0 ? `M ${startX} ${startY} L ${startX} ${bendY} L ${clampedSideX} ${bendY} L ${clampedSideX} ${targetY}` : needsElbow ? `M ${startX} ${startY} L ${startX} ${bendY} L ${targetX} ${bendY} L ${targetX} ${targetY}` : `M ${startX} ${startY} L ${targetX} ${targetY}`;
+    const clampedSideX = Math.max(laneSafeMin, Math.min(laneSafeMax, sideX));
+    const needsElbow =
+      Math.abs(targetX - startX) > branchConnectorElbowThreshold || (showArrow && sideOffset !== 0);
+    return showArrow && sideOffset !== 0
+      ? `M ${startX} ${startY} L ${startX} ${bendY} L ${clampedSideX} ${bendY} L ${clampedSideX} ${targetY}`
+      : needsElbow
+        ? `M ${startX} ${startY} L ${startX} ${bendY} L ${targetX} ${bendY} L ${targetX} ${targetY}`
+        : `M ${startX} ${startY} L ${targetX} ${targetY}`;
   }
-  const stepRows = rows.map((r, i) => ({ r, i, y: rowMeta[i]?.y, meta: rowMeta[i] })).filter((x) => x.r.kind === "step" && !x.r.empty && x.r.role);
+  const stepRows = rows
+    .map((r, i) => ({ r, i, y: rowMeta[i]?.y, meta: rowMeta[i] }))
+    .filter((x) => x.r.kind === "step" && !x.r.empty && x.r.role);
   const connectors = [];
   function caseOfStep(stepIdx) {
     let matched = null;
     for (const f of frames) {
       for (let ci = 0; ci < f.cases.length; ci++) {
-        if (f.cases[ci].rowIndices.includes(stepIdx))
-          matched = { frame: f, caseIdx: ci };
+        if (f.cases[ci].rowIndices.includes(stepIdx)) matched = { frame: f, caseIdx: ci };
       }
     }
     return matched;
   }
   function loopAnchorInCase(rowIndices, branchId) {
-    const loopIdx = [...rowIndices].reverse().find(
-      (idx) => rows[idx]?.kind === "branchLoop" && rows[idx].loopBranchId === branchId
-    );
+    const loopIdx = [...rowIndices]
+      .reverse()
+      .find((idx) => rows[idx]?.kind === "branchLoop" && rows[idx].loopBranchId === branchId);
     if (loopIdx == null) return null;
-    const prevStepIdx = [...rowIndices].filter((idx) => idx < loopIdx).reverse().find(
-      (idx) => rows[idx]?.kind === "step" && !rows[idx].empty && rows[idx].role
-    );
+    const prevStepIdx = [...rowIndices]
+      .filter((idx) => idx < loopIdx)
+      .reverse()
+      .find((idx) => rows[idx]?.kind === "step" && !rows[idx].empty && rows[idx].role);
     return { loopIdx, prevStepIdx: prevStepIdx ?? null };
   }
   function findStepIndexByMergeId(mergeId) {
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      if (r.kind === "step" && !r.empty && r.role && r.mergeId === mergeId)
-        return i;
+      if (r.kind === "step" && !r.empty && r.role && r.mergeId === mergeId) return i;
     }
     return -1;
   }
   function mergeAnchorInCase(rowIndices, branchId) {
-    const mergeIdx = [...rowIndices].reverse().find(
-      (idx) => rows[idx]?.kind === "branchMerge" && rows[idx].mergeBranchId === branchId
-    );
+    const mergeIdx = [...rowIndices]
+      .reverse()
+      .find((idx) => rows[idx]?.kind === "branchMerge" && rows[idx].mergeBranchId === branchId);
     if (mergeIdx == null) return null;
     let prevStepIdx = null;
     for (const idx of rowIndices) {
@@ -1167,7 +1225,8 @@ function renderDiagramSvg({
     }
     const lastLaneIdx = lanes.length - 1;
     const laneGridLeft = laneX(0);
-    const laneGridRight = lastLaneIdx >= 0 ? laneX(lastLaneIdx) + laneWidth(lastLaneIdx) : width - xPad;
+    const laneGridRight =
+      lastLaneIdx >= 0 ? laneX(lastLaneIdx) + laneWidth(lastLaneIdx) : width - xPad;
     routeX = Math.max(laneGridLeft, Math.min(laneGridRight, routeX));
     const toSideX = sideSign < 0 ? targetCenterX - nodeW / 2 : targetCenterX + nodeW / 2;
     const toY = targetCenterY;
@@ -1188,14 +1247,15 @@ function renderDiagramSvg({
         if (row?.kind === "step" && !row.empty && row.role) {
           stepOffsetByIndex.set(
             stepIdx,
-            (inherited[row.role] || 0) + caseLaneOffset(caseIdx, row.role)
+            (inherited[row.role] || 0) + caseLaneOffset(caseIdx, row.role),
           );
         }
       });
       if (c.childFrame) {
         const childInherited = { ...inherited };
         for (const lane of lanes) {
-          childInherited[lane.id] = (childInherited[lane.id] || 0) + caseLaneOffset(caseIdx, lane.id);
+          childInherited[lane.id] =
+            (childInherited[lane.id] || 0) + caseLaneOffset(caseIdx, lane.id);
         }
         applyCaseOffsetsForFrame(c.childFrame, childInherited);
       }
@@ -1265,7 +1325,7 @@ function renderDiagramSvg({
     dW,
     frame,
     sourceStepIdx,
-    caseOffset
+    caseOffset,
   }) {
     const startY = fromBottomY;
     const sourceBounds = sourceStepIdx != null ? stepObstacleBounds(sourceStepIdx) : null;
@@ -1283,8 +1343,12 @@ function renderDiagramSvg({
     } else {
       sideSign = fromX <= dCx ? -1 : 1;
     }
-    const extentLeft = obstacles.length ? Math.min(...obstacles.map((o) => o.left)) : sourceBounds?.left ?? fromX - nodeW / 2;
-    const extentRight = obstacles.length ? Math.max(...obstacles.map((o) => o.right)) : sourceBounds?.right ?? fromX + nodeW / 2;
+    const extentLeft = obstacles.length
+      ? Math.min(...obstacles.map((o) => o.left))
+      : (sourceBounds?.left ?? fromX - nodeW / 2);
+    const extentRight = obstacles.length
+      ? Math.max(...obstacles.map((o) => o.right))
+      : (sourceBounds?.right ?? fromX + nodeW / 2);
     let routeX;
     if (sideSign < 0) {
       routeX = Math.min(extentLeft, fromX, dCx - dW / 2) - loopRouteMargin;
@@ -1293,7 +1357,8 @@ function renderDiagramSvg({
     }
     const lastLaneIdx = lanes.length - 1;
     const laneGridLeft = laneX(0);
-    const laneGridRight = lastLaneIdx >= 0 ? laneX(lastLaneIdx) + laneWidth(lastLaneIdx) : width - xPad;
+    const laneGridRight =
+      lastLaneIdx >= 0 ? laneX(lastLaneIdx) + laneWidth(lastLaneIdx) : width - xPad;
     routeX = Math.max(laneGridLeft, Math.min(laneGridRight, routeX));
     const enterFromLeft = routeX < dCx;
     const toX = enterFromLeft ? dCx - dW / 2 : dCx + dW / 2;
@@ -1317,41 +1382,47 @@ function renderDiagramSvg({
     const fill = prop.bg || theme.bg;
     const strokeCol = prop.borderColor || theme.stroke;
     const labelColor = prop.textColor || theme.title;
-    const maxLen = typeof prop.maxChars === "number" && prop.maxChars > 0 ? prop.maxChars : propDefaultMaxChars;
+    const maxLen =
+      typeof prop.maxChars === "number" && prop.maxChars > 0 ? prop.maxChars : propDefaultMaxChars;
     const tip = prop.title || prop.label || prop.id;
-    return /* @__PURE__ */ h(Fragment, null, /* @__PURE__ */ h("title", null, tip), /* @__PURE__ */ h(
-      "path",
-      {
+    return /* @__PURE__ */ h(
+      Fragment,
+      null,
+      /* @__PURE__ */ h("title", null, tip),
+      /* @__PURE__ */ h("path", {
         d: `M ${x} ${y2} H ${x + docW - propDocFold} L ${x + docW} ${y2 + propDocFold} V ${y2 + docH} H ${x} Z`,
         fill,
         stroke: strokeCol,
-        strokeWidth: "1.1"
-      }
-    ), /* @__PURE__ */ h(
-      "path",
-      {
+        strokeWidth: "1.1",
+      }),
+      /* @__PURE__ */ h("path", {
         d: `M ${x + docW - propDocFold} ${y2} V ${y2 + propDocFold} H ${x + docW}`,
         fill: "none",
         stroke: strokeCol,
-        strokeWidth: "1"
-      }
-    ), /* @__PURE__ */ h(
-      "text",
-      {
-        x: x + docW / 2 - 2,
-        y: y2 + propDocTextY,
-        textAnchor: "middle",
-        fontFamily: "'JetBrains Mono',monospace",
-        fontSize: String(propDocFontSize),
-        fill: labelColor
-      },
-      truncate(prop.label || prop.id, maxLen)
-    ));
+        strokeWidth: "1",
+      }),
+      /* @__PURE__ */ h(
+        "text",
+        {
+          x: x + docW / 2 - 2,
+          y: y2 + propDocTextY,
+          textAnchor: "middle",
+          fontFamily: "'JetBrains Mono',monospace",
+          fontSize: String(propDocFontSize),
+          fill: labelColor,
+        },
+        truncate(prop.label || prop.id, maxLen),
+      ),
+    );
   }
   function pushSequentialStepConnector(prev, cur, key) {
     const prevCase = caseOfStep(prev.i);
     const curCase = caseOfStep(cur.i);
-    if (prevCase && curCase && (prevCase.frame !== curCase.frame || prevCase.caseIdx !== curCase.caseIdx)) {
+    if (
+      prevCase &&
+      curCase &&
+      (prevCase.frame !== curCase.frame || prevCase.caseIdx !== curCase.caseIdx)
+    ) {
       return;
     }
     if (prevCase && !curCase) return;
@@ -1377,7 +1448,9 @@ function renderDiagramSvg({
         break;
       }
     }
-    const bendY = hasBranchGroupBetween ? Math.max(y1 + connectorBendMinGap, y2 - connectorBendMaxInset) : void 0;
+    const bendY = hasBranchGroupBetween
+      ? Math.max(y1 + connectorBendMinGap, y2 - connectorBendMaxInset)
+      : void 0;
     connectors.push({
       fromX: nodeCenterX(prev.i, prev.r.role),
       toX: nodeCenterX(cur.i, cur.r.role),
@@ -1386,22 +1459,20 @@ function renderDiagramSvg({
       key,
       lineType: stepOutgoingArrowLine(prev.r),
       bendY,
-      caseColor: curCase ? curCase.frame.cases[curCase.caseIdx]?.color ?? null : null
+      caseColor: curCase ? (curCase.frame.cases[curCase.caseIdx]?.color ?? null) : null,
     });
   }
   const mainFlowSteps = stepRows.filter((x) => !isInsideBranchGroup(rows, x.i));
   for (let i = 1; i < mainFlowSteps.length; i++) {
-    pushSequentialStepConnector(
-      mainFlowSteps[i - 1],
-      mainFlowSteps[i],
-      `c-main-${i}`
-    );
+    pushSequentialStepConnector(mainFlowSteps[i - 1], mainFlowSteps[i], `c-main-${i}`);
   }
   for (let i = 1; i < stepRows.length; i++) {
     const prev = stepRows[i - 1];
     const cur = stepRows[i];
     if (!isInsideBranchGroup(rows, prev.i) || !isInsideBranchGroup(rows, cur.i)) continue;
-    if (findEnclosingBranchGroupStart(rows, prev.i) !== findEnclosingBranchGroupStart(rows, cur.i)) {
+    if (
+      findEnclosingBranchGroupStart(rows, prev.i) !== findEnclosingBranchGroupStart(rows, cur.i)
+    ) {
       continue;
     }
     pushSequentialStepConnector(prev, cur, `c-grp-${i}`);
@@ -1440,7 +1511,7 @@ function renderDiagramSvg({
       // horizontal Y with the arrow coming from the block before the branch.
       bendY: Math.max(innerY1 + connectorGroupBendMinGap, toY - connectorGroupBendMaxInset),
       key: `c-grp-merge-${startIdx}`,
-      lineType: stepOutgoingArrowLine(innerRow)
+      lineType: stepOutgoingArrowLine(innerRow),
     });
   });
   function lastStepInBranchSpan(startIdx, endIdx) {
@@ -1475,7 +1546,7 @@ function renderDiagramSvg({
         if (!frame) continue;
         return {
           x: frameAnchorX(frame),
-          targetY: branchDecisionCy(frame) - (frame.parallel ? FORK_GATEWAY_RADIUS : 25)
+          targetY: branchDecisionCy(frame) - (frame.parallel ? FORK_GATEWAY_RADIUS : 25),
         };
       }
     }
@@ -1489,22 +1560,20 @@ function renderDiagramSvg({
         return {
           x: nodeCenterX(i, row.role),
           sourceY: stepBlockCenterY(i) + 22,
-          lineType: stepOutgoingArrowLine(row)
+          lineType: stepOutgoingArrowLine(row),
         };
       }
       if (row.kind === "branchEnd") {
         const frame = frameById.get(row.id);
         if (!frame) continue;
-        const startIdx = rows.findIndex(
-          (r) => r.kind === "branchStart" && r.id === row.id
-        );
+        const startIdx = rows.findIndex((r) => r.kind === "branchStart" && r.id === row.id);
         const lastInBranch = startIdx >= 0 ? lastStepInBranchSpan(startIdx, i) : -1;
         const mergeCenterX = mergeAnchorX(frame);
         const mergeBottomY = frame.yMerge + mergeH / 2 + 14;
         return {
           x: mergeCenterX,
           sourceY: mergeBottomY,
-          lineType: lastInBranch >= 0 ? stepOutgoingArrowLine(rows[lastInBranch]) : "solid"
+          lineType: lastInBranch >= 0 ? stepOutgoingArrowLine(rows[lastInBranch]) : "solid",
         };
       }
     }
@@ -1513,19 +1582,21 @@ function renderDiagramSvg({
   const firstAnchor = startTerminalAnchor();
   const lastAnchor = endTerminalAnchor();
   const hasEndTerminal = Boolean(lastAnchor);
-  const startTerminal = firstAnchor ? {
-    x: firstAnchor.x,
-    y: Math.max(
-      firstAnchor.targetY - terminalGap,
-      topPad + headerH + startTerminalInset
-    ),
-    targetY: firstAnchor.targetY
-  } : null;
-  const endTerminal = hasEndTerminal && lastAnchor ? {
-    x: lastAnchor.x,
-    y: lastAnchor.sourceY + terminalGap,
-    sourceY: lastAnchor.sourceY
-  } : null;
+  const startTerminal = firstAnchor
+    ? {
+        x: firstAnchor.x,
+        y: Math.max(firstAnchor.targetY - terminalGap, topPad + headerH + startTerminalInset),
+        targetY: firstAnchor.targetY,
+      }
+    : null;
+  const endTerminal =
+    hasEndTerminal && lastAnchor
+      ? {
+          x: lastAnchor.x,
+          y: lastAnchor.sourceY + terminalGap,
+          sourceY: lastAnchor.sourceY,
+        }
+      : null;
   const endTerminalBottom = endTerminal ? endTerminal.y + terminalRadius + endTerminalBottomPad : 0;
   const height = Math.max(y + baseBottomPadding, endTerminalBottom);
   let lastStepRowIndex = -1;
@@ -1581,642 +1652,684 @@ function renderDiagramSvg({
   }
   const swimlaneDividerX1 = xPad;
   const swimlaneDividerX2 =
-    (lanes.length > 0 ? laneX(lanes.length - 1) + laneWidth(lanes.length - 1) + outerPad : 0) + rightGutter;
+    (lanes.length > 0 ? laneX(lanes.length - 1) + laneWidth(lanes.length - 1) + outerPad : 0) +
+    rightGutter;
   // Coerce the branded markup back to a plain string at the public boundary so
   // consumers (React state, `Boolean(svg)`, file export) see a normal string.
-  return String(/* @__PURE__ */ h(
-    "svg",
-    {
-      viewBox: `0 0 ${width} ${height}`,
-      xmlns: "http://www.w3.org/2000/svg",
-      style: {
-        width: "100%",
-        height: "auto",
-        background: theme.bg,
-        display: "block"
-      },
-      id: "swimlane-svg"
-    },
-    /* @__PURE__ */ h("defs", null, /* @__PURE__ */ h(
-      "marker",
+  return String(
+    /* @__PURE__ */ h(
+      "svg",
       {
-        id: "arrowhead",
-        viewBox: "0 0 10 10",
-        refX: "9",
-        refY: "5",
-        markerWidth: "7",
-        markerHeight: "7",
-        orient: "auto-start-reverse"
-      },
-      /* @__PURE__ */ h("path", { d: "M 0 0 L 10 5 L 0 10 z", fill: theme.stroke })
-    ), branchColorArrows && Object.entries(BRANCH_COLOR_STYLES).map(([key, style]) => /* @__PURE__ */ h(
-      "marker",
-      {
-        key,
-        id: `arrowhead-${key}`,
-        viewBox: "0 0 10 10",
-        refX: "9",
-        refY: "5",
-        markerWidth: "7",
-        markerHeight: "7",
-        orient: "auto-start-reverse"
-      },
-      /* @__PURE__ */ h("path", { d: "M 0 0 L 10 5 L 0 10 z", fill: style.stroke })
-    )), /* @__PURE__ */ h(
-      "pattern",
-      {
-        id: "gridp",
-        width: "24",
-        height: "24",
-        patternUnits: "userSpaceOnUse"
+        viewBox: `0 0 ${width} ${height}`,
+        xmlns: "http://www.w3.org/2000/svg",
+        style: {
+          width: "100%",
+          height: "auto",
+          background: theme.bg,
+          display: "block",
+        },
+        id: "swimlane-svg",
       },
       /* @__PURE__ */ h(
-        "path",
-        {
-          d: "M 24 0 L 0 0 0 24",
-          fill: "none",
-          stroke: theme.grid,
-          strokeWidth: "0.5"
-        }
-      )
-    )),
-    /* @__PURE__ */ h(
-      "rect",
-      {
+        "defs",
+        null,
+        /* @__PURE__ */ h(
+          "marker",
+          {
+            id: "arrowhead",
+            viewBox: "0 0 10 10",
+            refX: "9",
+            refY: "5",
+            markerWidth: "7",
+            markerHeight: "7",
+            orient: "auto-start-reverse",
+          },
+          /* @__PURE__ */ h("path", { d: "M 0 0 L 10 5 L 0 10 z", fill: theme.stroke }),
+        ),
+        branchColorArrows &&
+          Object.entries(BRANCH_COLOR_STYLES).map(([key, style]) =>
+            /* @__PURE__ */ h(
+              "marker",
+              {
+                key,
+                id: `arrowhead-${key}`,
+                viewBox: "0 0 10 10",
+                refX: "9",
+                refY: "5",
+                markerWidth: "7",
+                markerHeight: "7",
+                orient: "auto-start-reverse",
+              },
+              /* @__PURE__ */ h("path", { d: "M 0 0 L 10 5 L 0 10 z", fill: style.stroke }),
+            ),
+          ),
+        /* @__PURE__ */ h(
+          "pattern",
+          {
+            id: "gridp",
+            width: "24",
+            height: "24",
+            patternUnits: "userSpaceOnUse",
+          },
+          /* @__PURE__ */ h("path", {
+            d: "M 24 0 L 0 0 0 24",
+            fill: "none",
+            stroke: theme.grid,
+            strokeWidth: "0.5",
+          }),
+        ),
+      ),
+      /* @__PURE__ */ h("rect", {
         x: xPad,
         y: topPad,
         width: width - xPad * 2,
         height: height - topPad - gridBottomPad,
         fill: "url(#gridp)",
-        opacity: "0.5"
-      }
-    ),
-    showLeftGutter && /* @__PURE__ */ h(Fragment, null, /* @__PURE__ */ h(
-      "rect",
-      {
-        x: xPad,
-        y: topPad,
-        width: leftGutter,
-        height: headerH,
-        fill: "white",
-        opacity: "0.9"
-      }
-    ), page.leftTitle?.trim() && /* @__PURE__ */ h(
-      "text",
-      {
-        x: xPad + gutterInnerPad,
-        y: topPad + 30,
-        fill: theme.title,
-        fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: String(L.gutterHeaderTitleFontSize),
-        fontWeight: "700"
-      },
-      truncateToColumns(page.leftTitle.trim(), gutterTextCols(leftGutterWidth, L.gutterHeaderTitleFontSize))
-    ), page.leftSubtitle?.trim() && /* @__PURE__ */ h(
-      "text",
-      {
-        x: xPad + gutterInnerPad,
-        y: topPad + 50,
-        fill: theme.laneText || theme.title,
-        opacity: "0.7",
-        fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: String(L.gutterHeaderSubtitleFontSize)
-      },
-      truncateToColumns(page.leftSubtitle.trim(), gutterTextCols(leftGutterWidth, L.gutterHeaderSubtitleFontSize))
-    ), /* @__PURE__ */ h(
-      "line",
-      {
-        x1: xPad,
-        x2: xPad + leftGutter,
-        y1: topPad + headerH,
-        y2: topPad + headerH,
-        stroke: theme.stroke,
-        strokeWidth: "1.2",
-        vectorEffect: "non-scaling-stroke"
-      }
-    ), /* @__PURE__ */ h(
-      "rect",
-      {
-        x: xPad,
-        y: topPad,
-        width: leftGutter,
-        height: height - topPad - gridBottomPad,
-        fill: "none",
-        stroke: theme.stroke,
-        strokeWidth: "1.2",
-        vectorEffect: "non-scaling-stroke"
-      }
-    ), rows.map((r, i) => {
-      if (r.kind !== "step" || r.empty || !r.role) return null;
-      if (r.skipIndex) return null;
-      const yRow = rowMeta[i]?.y;
-      if (yRow == null) return null;
-      const d = stepRowDisplay.get(i);
-      const titleText = (r.name || r.text || "").trim();
-      const hasNum = d && !d.skipped && d.displayIndex != null;
-      const prefix = hasNum ? `${d.displayIndex}. ` : "";
-      if (!titleText && !r.description) return null;
-      const titleCols = gutterTextCols(leftGutterWidth, L.gutterStepTitleFontSize) - stringDisplayColumnWidth(prefix);
-      return /* @__PURE__ */ h("g", { key: `step-left-${i}` }, titleText && /* @__PURE__ */ h(
-        "text",
-        {
-          x: gutterInnerPad + xPad,
-          y: yRow + gutterTextBaselineY,
-          fill: theme.title,
-          fontFamily: "'Noto Sans JP',sans-serif",
-          fontSize: String(L.gutterStepTitleFontSize),
-          fontWeight: "600"
-        },
-        prefix,
-        truncateToColumns(titleText, titleCols)
-      ), r.description?.trim() && /* @__PURE__ */ h(GutterBodyText, {
-        x: gutterInnerPad + xPad,
-        y: yRow + gutterTextBaselineY + (titleText ? gutterTitleLineH : 0),
-        text: r.description.trim(),
-        wrapCols: descWrapCols,
-        fill: theme.laneText || theme.title,
-        opacity: "0.78"
-      }));
-    })),
-    rightGutterVisible && /* @__PURE__ */ h(Fragment, null, /* @__PURE__ */ h(
-      "rect",
-      {
-        x: rightGutterX,
-        y: topPad,
-        width: rightGutter,
-        height: headerH,
-        fill: "white",
-        opacity: "0.9"
-      }
-    ), page.rightTitle?.trim() && /* @__PURE__ */ h(
-      "text",
-      {
-        x: rightGutterX + gutterInnerPad,
-        y: topPad + 30,
-        fill: theme.title,
-        fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: String(L.gutterHeaderTitleFontSize),
-        fontWeight: "700"
-      },
-      truncateToColumns(page.rightTitle.trim(), gutterTextCols(rightGutterWidth, L.gutterHeaderTitleFontSize))
-    ), page.rightSubtitle?.trim() && /* @__PURE__ */ h(
-      "text",
-      {
-        x: rightGutterX + gutterInnerPad,
-        y: topPad + 50,
-        fill: theme.laneText || theme.title,
-        opacity: "0.7",
-        fontFamily: "'Noto Sans JP',sans-serif",
-        fontSize: String(L.gutterHeaderSubtitleFontSize)
-      },
-      truncateToColumns(page.rightSubtitle.trim(), gutterTextCols(rightGutterWidth, L.gutterHeaderSubtitleFontSize))
-    ), /* @__PURE__ */ h(
-      "line",
-      {
-        x1: rightGutterX,
-        x2: rightGutterX + rightGutter,
-        y1: topPad + headerH,
-        y2: topPad + headerH,
-        stroke: theme.stroke,
-        strokeWidth: "1.2",
-        vectorEffect: "non-scaling-stroke"
-      }
-    ), /* @__PURE__ */ h(
-      "rect",
-      {
-        x: rightGutterX,
-        y: topPad,
-        width: rightGutter,
-        height: height - topPad - gridBottomPad,
-        fill: "none",
-        stroke: theme.stroke,
-        strokeWidth: "1.2",
-        vectorEffect: "non-scaling-stroke"
-      }
-    ), rows.map((r, i) => {
-      if (r.kind !== "step" || r.empty || !r.role) return null;
-      const yRow = rowMeta[i]?.y;
-      if (yRow == null) return null;
-      const remark = (r.remark || "").trim();
-      if (!remark) return null;
-      return /* @__PURE__ */ h(GutterBodyText, {
-        key: `step-remark-${i}`,
-        x: rightGutterX + gutterInnerPad,
-        y: yRow + gutterTextBaselineY,
-        text: remark,
-        wrapCols: remarkWrapCols,
-        fill: theme.laneText || theme.title,
-        opacity: "0.85"
-      });
-    })),
-    lanes.map((lane, i) => {
-      // The outermost lanes also paint the outer padding band (reserved for
-      // section borders / side rails) so no unfilled gap is left between the
-      // lane grid and the gutters. Content geometry (laneX/laneWidth) is
-      // unchanged — this only widens what the first/last lane paint.
-      const x = laneX(i) - (i === 0 ? outerPad : 0);
-      const currentLaneW =
-        laneWidth(i) +
-        (i === 0 ? outerPad : 0) +
-        (i === lanes.length - 1 ? outerPad : 0);
-      const bg = lane.bg || theme.laneFills[i % theme.laneFills.length];
-      const txt = lane.textColor || theme.laneText;
-      return /* @__PURE__ */ h("g", { key: `lane-${i}` }, /* @__PURE__ */ h(
-        "rect",
-        {
-          x,
-          y: topPad,
-          width: currentLaneW,
-          height: height - topPad - gridBottomPad,
-          fill: bg,
-          opacity: "0.12"
-        }
-      ), /* @__PURE__ */ h(
-        "rect",
-        {
-          x,
-          y: topPad,
-          width: currentLaneW,
-          height: headerH,
-          fill: bg,
-          opacity: "0.9"
-        }
-      ), lane.icon && /* @__PURE__ */ h("g", null, /* @__PURE__ */ h(
-        "circle",
-        {
-          cx: x + 28,
-          cy: topPad + headerH / 2,
-          r: "16",
-          fill: theme.bg,
-          stroke: txt,
-          strokeWidth: "1.2"
-        }
-      ), /* @__PURE__ */ h(
-        BlockIcon,
-        {
-          icon: lane.icon,
-          x: x + gutterInnerPad,
-          y: topPad + headerH / 2,
-          size: 22,
-          color: txt,
-          shape: "rounded"
-        }
-      )), /* @__PURE__ */ h(
-        "text",
-        {
-          x: lane.icon ? x + 54 : x + currentLaneW / 2,
-          y: topPad + headerH / 2 + 6,
-          textAnchor: lane.icon ? "start" : "middle",
-          fill: txt,
-          fontFamily: "'Noto Sans JP',sans-serif",
-          fontSize: "15",
-          fontWeight: "700",
-          letterSpacing: "0.06em"
-        },
-        lane.label
-      ), /* @__PURE__ */ h(
-        "line",
-        {
-          x1: x,
-          x2: x + currentLaneW,
-          y1: topPad + headerH,
-          y2: topPad + headerH,
-          stroke: theme.stroke,
-          strokeWidth: "1.2",
-          vectorEffect: "non-scaling-stroke"
-        }
-      ));
-    }),
-    stepRowDividerYs.map((yLine, di) => /* @__PURE__ */ h(
-      "line",
-      {
-        key: `step-row-div-${di}`,
-        x1: swimlaneDividerX1,
-        y1: yLine,
-        x2: swimlaneDividerX2,
-        y2: yLine,
-        stroke: theme.grid,
-        strokeWidth: "1",
-        vectorEffect: "non-scaling-stroke",
-        opacity: "0.95"
-      }
-    )),
-    lanes.length > 0 && /* @__PURE__ */ h(Fragment, null, /* @__PURE__ */ h(
-      "rect",
-      {
-        x: laneX(0) - outerPad,
-        y: topPad,
-        width: laneWidths.reduce((sum, w) => sum + w, 0) + outerPad * 2,
-        height: height - topPad - gridBottomPad,
-        fill: "none",
-        stroke: theme.stroke,
-        strokeWidth: "1.2",
-        vectorEffect: "non-scaling-stroke"
-      }
-    ), lanes.slice(1).map((lane, i) => /* @__PURE__ */ h(
-      "line",
-      {
-        key: `lane-divider-${lane.id ?? i + 1}`,
-        x1: laneX(i + 1),
-        x2: laneX(i + 1),
-        y1: topPad,
-        y2: height - gridBottomPad,
-        stroke: theme.stroke,
-        strokeWidth: "1.2",
-        vectorEffect: "non-scaling-stroke"
-      }
-    ))),
-    frames.map((f) => {
-      if (f.yMerge == null) return null;
-      const isParallel = f.parallel;
-      const dCx = frameAnchorX(f);
-      const dCy = branchDecisionCy(f);
-      const dW = isParallel ? 0 : decisionDiamondWidth(f.cond.length);
-      const dH = decisionDiamondH;
-      const decisionStyle = resolveBranchStyle(f.decisionColor);
-      const parallelGatewayStyle = resolveBranchStyle(
-        f.decisionColor || "purple"
-      );
-      const mCx = mergeAnchorX(f);
-      const mCy = f.yMerge + mergeH / 2;
-      const mW = mergeNodeW;
-      const mH = mergeNodeH;
-      const diamondPath = (cx, cy, w, h2) => `M ${cx} ${cy - h2 / 2} L ${cx + w / 2} ${cy} L ${cx} ${cy + h2 / 2} L ${cx - w / 2} ${cy} Z`;
-      return /* @__PURE__ */ h("g", { key: `branch-${f.id}` }, isParallel ? /* @__PURE__ */ h(
-        "circle",
-        {
-          cx: dCx,
-          cy: dCy,
-          r: FORK_GATEWAY_RADIUS,
-          fill: parallelGatewayStyle.bg,
-          stroke: parallelGatewayStyle.stroke,
-          strokeWidth: "1.6"
-        }
-      ) : /* @__PURE__ */ h(Fragment, null, /* @__PURE__ */ h(
-        "path",
-        {
-          d: diamondPath(dCx, dCy, dW, dH),
-          fill: theme.branchBg,
-          stroke: theme.branch,
-          strokeWidth: "1.8"
-        }
-      ), /* @__PURE__ */ h(
-        "text",
-        {
-          x: dCx,
-          y: dCy + decisionTextOffsetY,
-          textAnchor: "middle",
-          fontFamily: DIAGRAM_LAYOUT.decisionFontFamily,
-          fontSize: String(DIAGRAM_LAYOUT.decisionFontSize),
-          fontWeight: "600",
-          fill: theme.branch
-        },
-        truncateToColumns(
-          f.cond,
-          blockMaxTextCols("if", false)
-        )
-      )), f.cases.map((c, ci) => {
-        const edgeD = buildCaseFanOutEdgeD(f, c);
-        const firstStepIdx = firstMainFlowStepIdx(c) ?? firstStepIdxInCase(c);
-        const showArrow = firstStepIdx != null && caseStepLineTarget(firstStepIdx, c)?.showArrow;
-        const cStroke = branchColorArrows && c.color ? resolveBranchStyle(c.color).stroke : theme.stroke;
-        const cMarker = branchColorArrows && c.color ? `url(#arrowhead-${c.color})` : "url(#arrowhead)";
-        return /* @__PURE__ */ h("g", { key: `case-${f.id}-${ci}` }, /* @__PURE__ */ h(
-          "path",
-          {
-            d: edgeD,
+        opacity: "0.5",
+      }),
+      showLeftGutter &&
+        /* @__PURE__ */ h(
+          Fragment,
+          null,
+          /* @__PURE__ */ h("rect", {
+            x: xPad,
+            y: topPad,
+            width: leftGutter,
+            height: headerH,
+            fill: "white",
+            opacity: "0.9",
+          }),
+          page.leftTitle?.trim() &&
+            /* @__PURE__ */ h(
+              "text",
+              {
+                x: xPad + gutterInnerPad,
+                y: topPad + 30,
+                fill: theme.title,
+                fontFamily: "'Noto Sans JP',sans-serif",
+                fontSize: String(L.gutterHeaderTitleFontSize),
+                fontWeight: "700",
+              },
+              truncateToColumns(
+                page.leftTitle.trim(),
+                gutterTextCols(leftGutterWidth, L.gutterHeaderTitleFontSize),
+              ),
+            ),
+          page.leftSubtitle?.trim() &&
+            /* @__PURE__ */ h(
+              "text",
+              {
+                x: xPad + gutterInnerPad,
+                y: topPad + 50,
+                fill: theme.laneText || theme.title,
+                opacity: "0.7",
+                fontFamily: "'Noto Sans JP',sans-serif",
+                fontSize: String(L.gutterHeaderSubtitleFontSize),
+              },
+              truncateToColumns(
+                page.leftSubtitle.trim(),
+                gutterTextCols(leftGutterWidth, L.gutterHeaderSubtitleFontSize),
+              ),
+            ),
+          /* @__PURE__ */ h("line", {
+            x1: xPad,
+            x2: xPad + leftGutter,
+            y1: topPad + headerH,
+            y2: topPad + headerH,
+            stroke: theme.stroke,
+            strokeWidth: "1.2",
+            vectorEffect: "non-scaling-stroke",
+          }),
+          /* @__PURE__ */ h("rect", {
+            x: xPad,
+            y: topPad,
+            width: leftGutter,
+            height: height - topPad - gridBottomPad,
             fill: "none",
-            stroke: cStroke,
-            strokeWidth: "1.6",
-            markerEnd: showArrow ? cMarker : void 0
-          }
-        ));
-      }), f.cases.map((c, ci) => {
-        const stubCase = isStubCase(c, f.id);
-        const startY = dCy + dH / 2;
-        const caseRailY = startY + branchCaseBendYOffset;
-        const cStroke = branchColorArrows && c.color ? resolveBranchStyle(c.color).stroke : theme.stroke;
-        const cMarker = branchColorArrows && c.color ? `url(#arrowhead-${c.color})` : "url(#arrowhead)";
-        const mergeJump = mergeAnchorInCase(c.rowIndices, f.id);
-        if (mergeJump) {
-          let fromX2;
-          let fromBottomY;
-          if (mergeJump.prevStepIdx != null) {
-            const r = rows[mergeJump.prevStepIdx];
-            const li = laneIndex(r.role);
-            fromX2 = li >= 0 ? nodeCenterX(mergeJump.prevStepIdx, r.role) : c.x;
-            fromBottomY = stepBlockBottomY(mergeJump.prevStepIdx);
-          } else {
-            fromX2 = caseAnchorX(c);
-            const mIdxY = rowMeta[mergeJump.mergeIdx]?.y ?? f.yDecision;
-            fromBottomY = mIdxY + branchMergeH;
-          }
-          const d2 = buildMergeForwardPath({
-            fromX: fromX2,
-            fromBottomY,
-            targetIdx: mergeJump.targetIdx
-          });
-          const mergeLineType = mergeJump.prevStepIdx != null ? stepOutgoingArrowLine(rows[mergeJump.prevStepIdx]) : "solid";
-          return /* @__PURE__ */ h(
-            "path",
+            stroke: theme.stroke,
+            strokeWidth: "1.2",
+            vectorEffect: "non-scaling-stroke",
+          }),
+          rows.map((r, i) => {
+            if (r.kind !== "step" || r.empty || !r.role) return null;
+            if (r.skipIndex) return null;
+            const yRow = rowMeta[i]?.y;
+            if (yRow == null) return null;
+            const d = stepRowDisplay.get(i);
+            const titleText = (r.name || r.text || "").trim();
+            const hasNum = d && !d.skipped && d.displayIndex != null;
+            const prefix = hasNum ? `${d.displayIndex}. ` : "";
+            if (!titleText && !r.description) return null;
+            const titleCols =
+              gutterTextCols(leftGutterWidth, L.gutterStepTitleFontSize) -
+              stringDisplayColumnWidth(prefix);
+            return /* @__PURE__ */ h(
+              "g",
+              { key: `step-left-${i}` },
+              titleText &&
+                /* @__PURE__ */ h(
+                  "text",
+                  {
+                    x: gutterInnerPad + xPad,
+                    y: yRow + gutterTextBaselineY,
+                    fill: theme.title,
+                    fontFamily: "'Noto Sans JP',sans-serif",
+                    fontSize: String(L.gutterStepTitleFontSize),
+                    fontWeight: "600",
+                  },
+                  prefix,
+                  truncateToColumns(titleText, titleCols),
+                ),
+              r.description?.trim() &&
+                /* @__PURE__ */ h(GutterBodyText, {
+                  x: gutterInnerPad + xPad,
+                  y: yRow + gutterTextBaselineY + (titleText ? gutterTitleLineH : 0),
+                  text: r.description.trim(),
+                  wrapCols: descWrapCols,
+                  fill: theme.laneText || theme.title,
+                  opacity: "0.78",
+                }),
+            );
+          }),
+        ),
+      rightGutterVisible &&
+        /* @__PURE__ */ h(
+          Fragment,
+          null,
+          /* @__PURE__ */ h("rect", {
+            x: rightGutterX,
+            y: topPad,
+            width: rightGutter,
+            height: headerH,
+            fill: "white",
+            opacity: "0.9",
+          }),
+          page.rightTitle?.trim() &&
+            /* @__PURE__ */ h(
+              "text",
+              {
+                x: rightGutterX + gutterInnerPad,
+                y: topPad + 30,
+                fill: theme.title,
+                fontFamily: "'Noto Sans JP',sans-serif",
+                fontSize: String(L.gutterHeaderTitleFontSize),
+                fontWeight: "700",
+              },
+              truncateToColumns(
+                page.rightTitle.trim(),
+                gutterTextCols(rightGutterWidth, L.gutterHeaderTitleFontSize),
+              ),
+            ),
+          page.rightSubtitle?.trim() &&
+            /* @__PURE__ */ h(
+              "text",
+              {
+                x: rightGutterX + gutterInnerPad,
+                y: topPad + 50,
+                fill: theme.laneText || theme.title,
+                opacity: "0.7",
+                fontFamily: "'Noto Sans JP',sans-serif",
+                fontSize: String(L.gutterHeaderSubtitleFontSize),
+              },
+              truncateToColumns(
+                page.rightSubtitle.trim(),
+                gutterTextCols(rightGutterWidth, L.gutterHeaderSubtitleFontSize),
+              ),
+            ),
+          /* @__PURE__ */ h("line", {
+            x1: rightGutterX,
+            x2: rightGutterX + rightGutter,
+            y1: topPad + headerH,
+            y2: topPad + headerH,
+            stroke: theme.stroke,
+            strokeWidth: "1.2",
+            vectorEffect: "non-scaling-stroke",
+          }),
+          /* @__PURE__ */ h("rect", {
+            x: rightGutterX,
+            y: topPad,
+            width: rightGutter,
+            height: height - topPad - gridBottomPad,
+            fill: "none",
+            stroke: theme.stroke,
+            strokeWidth: "1.2",
+            vectorEffect: "non-scaling-stroke",
+          }),
+          rows.map((r, i) => {
+            if (r.kind !== "step" || r.empty || !r.role) return null;
+            const yRow = rowMeta[i]?.y;
+            if (yRow == null) return null;
+            const remark = (r.remark || "").trim();
+            if (!remark) return null;
+            return /* @__PURE__ */ h(GutterBodyText, {
+              key: `step-remark-${i}`,
+              x: rightGutterX + gutterInnerPad,
+              y: yRow + gutterTextBaselineY,
+              text: remark,
+              wrapCols: remarkWrapCols,
+              fill: theme.laneText || theme.title,
+              opacity: "0.85",
+            });
+          }),
+        ),
+      lanes.map((lane, i) => {
+        // The outermost lanes also paint the outer padding band (reserved for
+        // section borders / side rails) so no unfilled gap is left between the
+        // lane grid and the gutters. Content geometry (laneX/laneWidth) is
+        // unchanged — this only widens what the first/last lane paint.
+        const x = laneX(i) - (i === 0 ? outerPad : 0);
+        const currentLaneW =
+          laneWidth(i) + (i === 0 ? outerPad : 0) + (i === lanes.length - 1 ? outerPad : 0);
+        const bg = lane.bg || theme.laneFills[i % theme.laneFills.length];
+        const txt = lane.textColor || theme.laneText;
+        return /* @__PURE__ */ h(
+          "g",
+          { key: `lane-${i}` },
+          /* @__PURE__ */ h("rect", {
+            x,
+            y: topPad,
+            width: currentLaneW,
+            height: height - topPad - gridBottomPad,
+            fill: bg,
+            opacity: "0.12",
+          }),
+          /* @__PURE__ */ h("rect", {
+            x,
+            y: topPad,
+            width: currentLaneW,
+            height: headerH,
+            fill: bg,
+            opacity: "0.9",
+          }),
+          lane.icon &&
+            /* @__PURE__ */ h(
+              "g",
+              null,
+              /* @__PURE__ */ h("circle", {
+                cx: x + 28,
+                cy: topPad + headerH / 2,
+                r: "16",
+                fill: theme.bg,
+                stroke: txt,
+                strokeWidth: "1.2",
+              }),
+              /* @__PURE__ */ h(BlockIcon, {
+                icon: lane.icon,
+                x: x + gutterInnerPad,
+                y: topPad + headerH / 2,
+                size: 22,
+                color: txt,
+                shape: "rounded",
+              }),
+            ),
+          /* @__PURE__ */ h(
+            "text",
             {
-              key: `merge-${f.id}-${ci}`,
-              d: d2,
+              x: lane.icon ? x + 54 : x + currentLaneW / 2,
+              y: topPad + headerH / 2 + 6,
+              textAnchor: lane.icon ? "start" : "middle",
+              fill: txt,
+              fontFamily: "'Noto Sans JP',sans-serif",
+              fontSize: "15",
+              fontWeight: "700",
+              letterSpacing: "0.06em",
+            },
+            lane.label,
+          ),
+          /* @__PURE__ */ h("line", {
+            x1: x,
+            x2: x + currentLaneW,
+            y1: topPad + headerH,
+            y2: topPad + headerH,
+            stroke: theme.stroke,
+            strokeWidth: "1.2",
+            vectorEffect: "non-scaling-stroke",
+          }),
+        );
+      }),
+      stepRowDividerYs.map((yLine, di) =>
+        /* @__PURE__ */ h("line", {
+          key: `step-row-div-${di}`,
+          x1: swimlaneDividerX1,
+          y1: yLine,
+          x2: swimlaneDividerX2,
+          y2: yLine,
+          stroke: theme.grid,
+          strokeWidth: "1",
+          vectorEffect: "non-scaling-stroke",
+          opacity: "0.95",
+        }),
+      ),
+      lanes.length > 0 &&
+        /* @__PURE__ */ h(
+          Fragment,
+          null,
+          /* @__PURE__ */ h("rect", {
+            x: laneX(0) - outerPad,
+            y: topPad,
+            width: laneWidths.reduce((sum, w) => sum + w, 0) + outerPad * 2,
+            height: height - topPad - gridBottomPad,
+            fill: "none",
+            stroke: theme.stroke,
+            strokeWidth: "1.2",
+            vectorEffect: "non-scaling-stroke",
+          }),
+          lanes.slice(1).map((lane, i) =>
+            /* @__PURE__ */ h("line", {
+              key: `lane-divider-${lane.id ?? i + 1}`,
+              x1: laneX(i + 1),
+              x2: laneX(i + 1),
+              y1: topPad,
+              y2: height - gridBottomPad,
+              stroke: theme.stroke,
+              strokeWidth: "1.2",
+              vectorEffect: "non-scaling-stroke",
+            }),
+          ),
+        ),
+      frames.map((f) => {
+        if (f.yMerge == null) return null;
+        const isParallel = f.parallel;
+        const dCx = frameAnchorX(f);
+        const dCy = branchDecisionCy(f);
+        const dW = isParallel ? 0 : decisionDiamondWidth(f.cond.length);
+        const dH = decisionDiamondH;
+        const decisionStyle = resolveBranchStyle(f.decisionColor);
+        const parallelGatewayStyle = resolveBranchStyle(f.decisionColor || "purple");
+        const mCx = mergeAnchorX(f);
+        const mCy = f.yMerge + mergeH / 2;
+        const mW = mergeNodeW;
+        const mH = mergeNodeH;
+        const diamondPath = (cx, cy, w, h2) =>
+          `M ${cx} ${cy - h2 / 2} L ${cx + w / 2} ${cy} L ${cx} ${cy + h2 / 2} L ${cx - w / 2} ${cy} Z`;
+        return /* @__PURE__ */ h(
+          "g",
+          { key: `branch-${f.id}` },
+          isParallel
+            ? /* @__PURE__ */ h("circle", {
+                cx: dCx,
+                cy: dCy,
+                r: FORK_GATEWAY_RADIUS,
+                fill: parallelGatewayStyle.bg,
+                stroke: parallelGatewayStyle.stroke,
+                strokeWidth: "1.6",
+              })
+            : /* @__PURE__ */ h(
+                Fragment,
+                null,
+                /* @__PURE__ */ h("path", {
+                  d: diamondPath(dCx, dCy, dW, dH),
+                  fill: theme.branchBg,
+                  stroke: theme.branch,
+                  strokeWidth: "1.8",
+                }),
+                /* @__PURE__ */ h(
+                  "text",
+                  {
+                    x: dCx,
+                    y: dCy + decisionTextOffsetY,
+                    textAnchor: "middle",
+                    fontFamily: DIAGRAM_LAYOUT.decisionFontFamily,
+                    fontSize: String(DIAGRAM_LAYOUT.decisionFontSize),
+                    fontWeight: "600",
+                    fill: theme.branch,
+                  },
+                  truncateToColumns(f.cond, blockMaxTextCols("if", false)),
+                ),
+              ),
+          f.cases.map((c, ci) => {
+            const edgeD = buildCaseFanOutEdgeD(f, c);
+            const firstStepIdx = firstMainFlowStepIdx(c) ?? firstStepIdxInCase(c);
+            const showArrow =
+              firstStepIdx != null && caseStepLineTarget(firstStepIdx, c)?.showArrow;
+            const cStroke =
+              branchColorArrows && c.color ? resolveBranchStyle(c.color).stroke : theme.stroke;
+            const cMarker =
+              branchColorArrows && c.color ? `url(#arrowhead-${c.color})` : "url(#arrowhead)";
+            return /* @__PURE__ */ h(
+              "g",
+              { key: `case-${f.id}-${ci}` },
+              /* @__PURE__ */ h("path", {
+                d: edgeD,
+                fill: "none",
+                stroke: cStroke,
+                strokeWidth: "1.6",
+                markerEnd: showArrow ? cMarker : void 0,
+              }),
+            );
+          }),
+          f.cases.map((c, ci) => {
+            const stubCase = isStubCase(c, f.id);
+            const startY = dCy + dH / 2;
+            const caseRailY = startY + branchCaseBendYOffset;
+            const cStroke =
+              branchColorArrows && c.color ? resolveBranchStyle(c.color).stroke : theme.stroke;
+            const cMarker =
+              branchColorArrows && c.color ? `url(#arrowhead-${c.color})` : "url(#arrowhead)";
+            const mergeJump = mergeAnchorInCase(c.rowIndices, f.id);
+            if (mergeJump) {
+              let fromX2;
+              let fromBottomY;
+              if (mergeJump.prevStepIdx != null) {
+                const r = rows[mergeJump.prevStepIdx];
+                const li = laneIndex(r.role);
+                fromX2 = li >= 0 ? nodeCenterX(mergeJump.prevStepIdx, r.role) : c.x;
+                fromBottomY = stepBlockBottomY(mergeJump.prevStepIdx);
+              } else {
+                fromX2 = caseAnchorX(c);
+                const mIdxY = rowMeta[mergeJump.mergeIdx]?.y ?? f.yDecision;
+                fromBottomY = mIdxY + branchMergeH;
+              }
+              const d2 = buildMergeForwardPath({
+                fromX: fromX2,
+                fromBottomY,
+                targetIdx: mergeJump.targetIdx,
+              });
+              const mergeLineType =
+                mergeJump.prevStepIdx != null
+                  ? stepOutgoingArrowLine(rows[mergeJump.prevStepIdx])
+                  : "solid";
+              return /* @__PURE__ */ h("path", {
+                key: `merge-${f.id}-${ci}`,
+                d: d2,
+                fill: "none",
+                stroke: cStroke,
+                strokeWidth: "1.6",
+                markerEnd: cMarker,
+                ...arrowLineStrokeProps(mergeLineType),
+              });
+            }
+            const anchor = loopAnchorInCase(c.rowIndices, f.id);
+            if (anchor) {
+              let fromX2;
+              let fromBottomY;
+              let sourceStepIdx = null;
+              if (anchor.prevStepIdx != null) {
+                sourceStepIdx = anchor.prevStepIdx;
+                const r = rows[anchor.prevStepIdx];
+                const li = laneIndex(r.role);
+                fromX2 = li >= 0 ? nodeCenterX(anchor.prevStepIdx, r.role) : c.x;
+                fromBottomY = stepBlockBottomY(anchor.prevStepIdx);
+              } else {
+                fromX2 = c.x;
+                const loopY = rowMeta[anchor.loopIdx]?.y ?? f.yDecision;
+                fromBottomY = loopY + (stepRowHeightByIndex.get(anchor.loopIdx) || branchLoopH);
+              }
+              const d2 = buildLoopBackPath({
+                fromX: fromX2,
+                fromBottomY,
+                dCx,
+                dCy,
+                dW,
+                frame: f,
+                sourceStepIdx,
+                caseOffset: c.offset || 0,
+              });
+              const loopLineType =
+                sourceStepIdx != null ? stepOutgoingArrowLine(rows[sourceStepIdx]) : "solid";
+              return /* @__PURE__ */ h("path", {
+                key: `loop-${f.id}-${ci}`,
+                d: d2,
+                fill: "none",
+                stroke: cStroke,
+                strokeWidth: "1.6",
+                markerEnd: cMarker,
+                ...arrowLineStrokeProps(loopLineType),
+              });
+            }
+            const mergeFrom = caseMergeAnchor(c);
+            let fromX;
+            let fromY;
+            if (stubCase) {
+              fromX = caseAnchorX(c);
+              fromY = caseRailY;
+            } else if (mergeFrom) {
+              fromX = mergeFrom.fromX;
+              fromY = mergeFrom.fromY;
+            } else {
+              const lastStepIdx = lastStepIdxInCase(c);
+              const stepSource = lastStepIdx != null ? caseStepLineSource(lastStepIdx, c) : null;
+              if (stepSource) {
+                fromX = stepSource.x;
+                fromY = stepSource.y;
+              } else {
+                fromX = caseAnchorX(c);
+                fromY = caseRailY;
+              }
+            }
+            const toX = mCx;
+            const toY = mCy - (isParallel ? FORK_GATEWAY_RADIUS : mH / 2);
+            const bendY2 = toY - 14;
+            const sideOffset = c.offset || 0;
+            const needsMergeElbow = Math.abs(fromX - toX) > 0.5 || sideOffset !== 0 || stubCase;
+            const d = needsMergeElbow
+              ? `M ${fromX} ${fromY} L ${fromX} ${bendY2} L ${toX} ${bendY2} L ${toX} ${toY}`
+              : `M ${fromX} ${fromY} L ${toX} ${toY}`;
+            const lastInCase = lastMainFlowStepIdx(c) ?? lastStepIdxInCase(c);
+            const mrgLineType =
+              lastInCase != null ? stepOutgoingArrowLine(rows[lastInCase]) : "solid";
+            return /* @__PURE__ */ h("path", {
+              key: `mrg-${f.id}-${ci}`,
+              d,
               fill: "none",
               stroke: cStroke,
               strokeWidth: "1.6",
-              markerEnd: cMarker,
-              ...arrowLineStrokeProps(mergeLineType)
-            }
-          );
-        }
-        const anchor = loopAnchorInCase(c.rowIndices, f.id);
-        if (anchor) {
-          let fromX2;
-          let fromBottomY;
-          let sourceStepIdx = null;
-          if (anchor.prevStepIdx != null) {
-            sourceStepIdx = anchor.prevStepIdx;
-            const r = rows[anchor.prevStepIdx];
-            const li = laneIndex(r.role);
-            fromX2 = li >= 0 ? nodeCenterX(anchor.prevStepIdx, r.role) : c.x;
-            fromBottomY = stepBlockBottomY(anchor.prevStepIdx);
-          } else {
-            fromX2 = c.x;
-            const loopY = rowMeta[anchor.loopIdx]?.y ?? f.yDecision;
-            fromBottomY = loopY + (stepRowHeightByIndex.get(anchor.loopIdx) || branchLoopH);
-          }
-          const d2 = buildLoopBackPath({
-            fromX: fromX2,
-            fromBottomY,
-            dCx,
-            dCy,
-            dW,
-            frame: f,
-            sourceStepIdx,
-            caseOffset: c.offset || 0
-          });
-          const loopLineType = sourceStepIdx != null ? stepOutgoingArrowLine(rows[sourceStepIdx]) : "solid";
-          return /* @__PURE__ */ h(
-            "path",
-            {
-              key: `loop-${f.id}-${ci}`,
-              d: d2,
+              ...arrowLineStrokeProps(mrgLineType),
+            });
+          }),
+          f.cases.map((c, ci) => {
+            const child = c.childFrame;
+            const afterIdx = firstDirectStepAfterChild(c);
+            if (child?.yMerge == null || afterIdx == null) return null;
+            const stepTarget = caseStepLineTarget(afterIdx, c);
+            if (!stepTarget) return null;
+            const fromX = mergeAnchorX(child);
+            const fromY = child.yMerge + mergeH / 2 + 14;
+            const toX = stepTarget.x;
+            const toY = stepTarget.y;
+            const mid = (fromY + toY) / 2;
+            const d =
+              Math.abs(fromX - toX) < 0.5
+                ? `M ${fromX} ${fromY} L ${toX} ${toY}`
+                : `M ${fromX} ${fromY} L ${fromX} ${mid} L ${toX} ${mid} L ${toX} ${toY}`;
+            const cStroke2 =
+              branchColorArrows && c.color ? resolveBranchStyle(c.color).stroke : theme.stroke;
+            const cMarker2 =
+              branchColorArrows && c.color ? `url(#arrowhead-${c.color})` : "url(#arrowhead)";
+            return /* @__PURE__ */ h("path", {
+              key: `nested-out-${f.id}-${ci}`,
+              d,
               fill: "none",
-              stroke: cStroke,
+              stroke: cStroke2,
               strokeWidth: "1.6",
-              markerEnd: cMarker,
-              ...arrowLineStrokeProps(loopLineType)
-            }
-          );
-        }
-        const mergeFrom = caseMergeAnchor(c);
-        let fromX;
-        let fromY;
-        if (stubCase) {
-          fromX = caseAnchorX(c);
-          fromY = caseRailY;
-        } else if (mergeFrom) {
-          fromX = mergeFrom.fromX;
-          fromY = mergeFrom.fromY;
-        } else {
-          const lastStepIdx = lastStepIdxInCase(c);
-          const stepSource = lastStepIdx != null ? caseStepLineSource(lastStepIdx, c) : null;
-          if (stepSource) {
-            fromX = stepSource.x;
-            fromY = stepSource.y;
-          } else {
-            fromX = caseAnchorX(c);
-            fromY = caseRailY;
-          }
-        }
-        const toX = mCx;
-        const toY = mCy - (isParallel ? FORK_GATEWAY_RADIUS : mH / 2);
-        const bendY2 = toY - 14;
-        const sideOffset = c.offset || 0;
-        const needsMergeElbow = Math.abs(fromX - toX) > 0.5 || sideOffset !== 0 || stubCase;
-        const d = needsMergeElbow ? `M ${fromX} ${fromY} L ${fromX} ${bendY2} L ${toX} ${bendY2} L ${toX} ${toY}` : `M ${fromX} ${fromY} L ${toX} ${toY}`;
-        const lastInCase = lastMainFlowStepIdx(c) ?? lastStepIdxInCase(c);
-        const mrgLineType = lastInCase != null ? stepOutgoingArrowLine(rows[lastInCase]) : "solid";
-        return /* @__PURE__ */ h(
-          "path",
-          {
-            key: `mrg-${f.id}-${ci}`,
-            d,
-            fill: "none",
-            stroke: cStroke,
-            strokeWidth: "1.6",
-            ...arrowLineStrokeProps(mrgLineType)
-          }
+              markerEnd: cMarker2,
+            });
+          }),
+          isParallel
+            ? /* @__PURE__ */ h("circle", {
+                cx: mCx,
+                cy: mCy,
+                r: FORK_GATEWAY_RADIUS,
+                fill: parallelGatewayStyle.bg,
+                stroke: parallelGatewayStyle.stroke,
+                strokeWidth: "1.6",
+              })
+            : /* @__PURE__ */ h("path", {
+                d: diamondPath(mCx, mCy, mW, mH),
+                fill: theme.branchBg,
+                stroke: theme.branch,
+                strokeWidth: "1.6",
+              }),
         );
-      }), f.cases.map((c, ci) => {
-        const child = c.childFrame;
-        const afterIdx = firstDirectStepAfterChild(c);
-        if (child?.yMerge == null || afterIdx == null) return null;
-        const stepTarget = caseStepLineTarget(afterIdx, c);
-        if (!stepTarget) return null;
-        const fromX = mergeAnchorX(child);
-        const fromY = child.yMerge + mergeH / 2 + 14;
-        const toX = stepTarget.x;
-        const toY = stepTarget.y;
-        const mid = (fromY + toY) / 2;
-        const d = Math.abs(fromX - toX) < 0.5 ? `M ${fromX} ${fromY} L ${toX} ${toY}` : `M ${fromX} ${fromY} L ${fromX} ${mid} L ${toX} ${mid} L ${toX} ${toY}`;
-        const cStroke2 = branchColorArrows && c.color ? resolveBranchStyle(c.color).stroke : theme.stroke;
-        const cMarker2 = branchColorArrows && c.color ? `url(#arrowhead-${c.color})` : "url(#arrowhead)";
-        return /* @__PURE__ */ h(
-          "path",
-          {
-            key: `nested-out-${f.id}-${ci}`,
-            d,
-            fill: "none",
-            stroke: cStroke2,
-            strokeWidth: "1.6",
-            markerEnd: cMarker2
+      }),
+      rows.map((row, i) => {
+        if (row.kind !== "groupStart" || groupModeOf(row) !== "section") {
+          return null;
+        }
+        const endIdx = findGroupEndIndex(rows, i);
+        if (endIdx < 0 || lanes.length === 0) return null;
+        const yTop = rowMeta[i]?.y ?? 0;
+        const yEnd = rowMeta[endIdx]?.y ?? yTop;
+        let sectionNestDepth = 0;
+        for (let k = 0; k < i; k++) {
+          if (rows[k].kind === "groupStart" && groupModeOf(rows[k]) === "section") {
+            const ek = findGroupEndIndex(rows, k);
+            if (ek > i) sectionNestDepth++;
           }
-        );
-      }), isParallel ? /* @__PURE__ */ h(
-        "circle",
-        {
-          cx: mCx,
-          cy: mCy,
-          r: FORK_GATEWAY_RADIUS,
-          fill: parallelGatewayStyle.bg,
-          stroke: parallelGatewayStyle.stroke,
-          strokeWidth: "1.6"
         }
-      ) : /* @__PURE__ */ h(
-        "path",
-        {
-          d: diamondPath(mCx, mCy, mW, mH),
-          fill: theme.branchBg,
-          stroke: theme.branch,
-          strokeWidth: "1.6"
-        }
-      ));
-    }),
-    rows.map((row, i) => {
-      if (row.kind !== "groupStart" || groupModeOf(row) !== "section") {
-        return null;
-      }
-      const endIdx = findGroupEndIndex(rows, i);
-      if (endIdx < 0 || lanes.length === 0) return null;
-      const yTop = rowMeta[i]?.y ?? 0;
-      const yEnd = rowMeta[endIdx]?.y ?? yTop;
-      let sectionNestDepth = 0;
-      for (let k = 0; k < i; k++) {
-        if (rows[k].kind === "groupStart" && groupModeOf(rows[k]) === "section") {
-          const ek = findGroupEndIndex(rows, k);
-          if (ek > i) sectionNestDepth++;
-        }
-      }
-      const nestInset = sectionNestDepth * sectionNestStep;
-      // Inset from the *painted* grid edge (the outermost lanes also paint the
-      // outerPad band), so the box spans the visible lanes with the designed
-      // sectionEdgeInset margin and still clears the side rails by outerPad.
-      const boxX = laneX(0) - outerPad + sectionEdgeInset + nestInset;
-      const boxW =
-        laneWidths.reduce((sum, w) => sum + w, 0) +
-        outerPad * 2 -
-        sectionEdgeInset * 2 -
-        nestInset * 2;
-      const style = row.sectionColor && BRANCH_COLOR_STYLES[row.sectionColor] ? BRANCH_COLOR_STYLES[row.sectionColor] : { stroke: theme.stroke, bg: theme.branchBg };
-      const label = (row.sectionName || "Section").trim() || "Section";
-      return /* @__PURE__ */ h("g", { key: `section-${row.id}` }, /* @__PURE__ */ h(
-        "rect",
-        {
-          x: boxX,
-          y: yTop + sectionInset,
-          width: boxW,
-          height: Math.max(0, yEnd - yTop - sectionInset * 2),
-          rx: "8",
-          fill: style.bg,
-          fillOpacity: "0.2",
-          stroke: style.stroke,
-          strokeWidth: "1.1",
-          strokeDasharray: "6 4"
-        }
-      ), /* @__PURE__ */ h(
-        "text",
-        {
-          x: boxX + 8,
-          y: yTop + 20,
-          fontFamily: "'JetBrains Mono',monospace",
-          fontSize: "12",
-          fill: style.stroke,
-          opacity: "0.9"
-        },
-        label
-      ));
-    }),
-    connectors.map((c) => {
-      const dash = arrowLineStrokeProps(c.lineType || "solid");
-      const cStroke = branchColorArrows && c.caseColor ? resolveBranchStyle(c.caseColor).stroke : theme.stroke;
-      const cMarker = branchColorArrows && c.caseColor ? `url(#arrowhead-${c.caseColor})` : "url(#arrowhead)";
-      if (Math.abs(c.fromX - c.toX) < 0.5) {
-        const x = c.fromX;
+        const nestInset = sectionNestDepth * sectionNestStep;
+        // Inset from the *painted* grid edge (the outermost lanes also paint the
+        // outerPad band), so the box spans the visible lanes with the designed
+        // sectionEdgeInset margin and still clears the side rails by outerPad.
+        const boxX = laneX(0) - outerPad + sectionEdgeInset + nestInset;
+        const boxW =
+          laneWidths.reduce((sum, w) => sum + w, 0) +
+          outerPad * 2 -
+          sectionEdgeInset * 2 -
+          nestInset * 2;
+        const style =
+          row.sectionColor && BRANCH_COLOR_STYLES[row.sectionColor]
+            ? BRANCH_COLOR_STYLES[row.sectionColor]
+            : { stroke: theme.stroke, bg: theme.branchBg };
+        const label = (row.sectionName || "Section").trim() || "Section";
         return /* @__PURE__ */ h(
-          "line",
-          {
+          "g",
+          { key: `section-${row.id}` },
+          /* @__PURE__ */ h("rect", {
+            x: boxX,
+            y: yTop + sectionInset,
+            width: boxW,
+            height: Math.max(0, yEnd - yTop - sectionInset * 2),
+            rx: "8",
+            fill: style.bg,
+            fillOpacity: "0.2",
+            stroke: style.stroke,
+            strokeWidth: "1.1",
+            strokeDasharray: "6 4",
+          }),
+          /* @__PURE__ */ h(
+            "text",
+            {
+              x: boxX + 8,
+              y: yTop + 20,
+              fontFamily: "'JetBrains Mono',monospace",
+              fontSize: "12",
+              fill: style.stroke,
+              opacity: "0.9",
+            },
+            label,
+          ),
+        );
+      }),
+      connectors.map((c) => {
+        const dash = arrowLineStrokeProps(c.lineType || "solid");
+        const cStroke =
+          branchColorArrows && c.caseColor ? resolveBranchStyle(c.caseColor).stroke : theme.stroke;
+        const cMarker =
+          branchColorArrows && c.caseColor ? `url(#arrowhead-${c.caseColor})` : "url(#arrowhead)";
+        if (Math.abs(c.fromX - c.toX) < 0.5) {
+          const x = c.fromX;
+          return /* @__PURE__ */ h("line", {
             key: c.key,
             x1: x,
             y1: c.y1,
@@ -2225,511 +2338,496 @@ function renderDiagramSvg({
             stroke: cStroke,
             strokeWidth: "1.6",
             markerEnd: cMarker,
-            ...dash
-          }
-        );
-      }
-      const x1 = c.fromX;
-      const x2 = c.toX;
-      const mid = c.bendY ?? (c.y1 + c.y2) / 2;
-      const d = `M ${x1} ${c.y1} L ${x1} ${mid} L ${x2} ${mid} L ${x2} ${c.y2}`;
-      return /* @__PURE__ */ h(
-        "path",
-        {
+            ...dash,
+          });
+        }
+        const x1 = c.fromX;
+        const x2 = c.toX;
+        const mid = c.bendY ?? (c.y1 + c.y2) / 2;
+        const d = `M ${x1} ${c.y1} L ${x1} ${mid} L ${x2} ${mid} L ${x2} ${c.y2}`;
+        return /* @__PURE__ */ h("path", {
           key: c.key,
           d,
           fill: "none",
           stroke: cStroke,
           strokeWidth: "1.6",
           markerEnd: cMarker,
-          ...dash
-        }
-      );
-    }),
-    startTerminal && /* @__PURE__ */ h(Fragment, null, /* @__PURE__ */ h(
-      "line",
-      {
-        x1: startTerminal.x,
-        y1: startTerminal.y + terminalRadius,
-        x2: startTerminal.x,
-        y2: startTerminal.targetY,
-        stroke: theme.stroke,
-        strokeWidth: "1.6",
-        markerEnd: "url(#arrowhead)"
-      }
-    ), /* @__PURE__ */ h(
-      "circle",
-      {
-        cx: startTerminal.x,
-        cy: startTerminal.y,
-        r: terminalRadius,
-        fill: theme.stroke
-      }
-    )),
-    endTerminal && /* @__PURE__ */ h(Fragment, null, /* @__PURE__ */ h(
-      "line",
-      {
-        x1: endTerminal.x,
-        y1: endTerminal.sourceY,
-        x2: endTerminal.x,
-        y2: endTerminal.y - terminalRadius,
-        stroke: theme.stroke,
-        strokeWidth: "1.6",
-        markerEnd: "url(#arrowhead)",
-        ...arrowLineStrokeProps(endTerminal.lineType || "solid")
-      }
-    ), /* @__PURE__ */ h(
-      "circle",
-      {
-        cx: endTerminal.x,
-        cy: endTerminal.y,
-        r: terminalRadius,
-        fill: theme.stroke
-      }
-    )),
-    rows.map((r, i) => {
-      const yRow = rowMeta[i]?.y;
-      if (yRow == null || r.kind !== "step") return null;
-      if (r.empty) {
-        const emptyCase = findCaseForStep(i);
-        const cx2 = emptyCase ? caseAnchorX(emptyCase) : width / 2;
-        return /* @__PURE__ */ h(
-          "circle",
-          {
+          ...dash,
+        });
+      }),
+      startTerminal &&
+        /* @__PURE__ */ h(
+          Fragment,
+          null,
+          /* @__PURE__ */ h("line", {
+            x1: startTerminal.x,
+            y1: startTerminal.y + terminalRadius,
+            x2: startTerminal.x,
+            y2: startTerminal.targetY,
+            stroke: theme.stroke,
+            strokeWidth: "1.6",
+            markerEnd: "url(#arrowhead)",
+          }),
+          /* @__PURE__ */ h("circle", {
+            cx: startTerminal.x,
+            cy: startTerminal.y,
+            r: terminalRadius,
+            fill: theme.stroke,
+          }),
+        ),
+      endTerminal &&
+        /* @__PURE__ */ h(
+          Fragment,
+          null,
+          /* @__PURE__ */ h("line", {
+            x1: endTerminal.x,
+            y1: endTerminal.sourceY,
+            x2: endTerminal.x,
+            y2: endTerminal.y - terminalRadius,
+            stroke: theme.stroke,
+            strokeWidth: "1.6",
+            markerEnd: "url(#arrowhead)",
+            ...arrowLineStrokeProps(endTerminal.lineType || "solid"),
+          }),
+          /* @__PURE__ */ h("circle", {
+            cx: endTerminal.x,
+            cy: endTerminal.y,
+            r: terminalRadius,
+            fill: theme.stroke,
+          }),
+        ),
+      rows.map((r, i) => {
+        const yRow = rowMeta[i]?.y;
+        if (yRow == null || r.kind !== "step") return null;
+        if (r.empty) {
+          const emptyCase = findCaseForStep(i);
+          const cx2 = emptyCase ? caseAnchorX(emptyCase) : width / 2;
+          return /* @__PURE__ */ h("circle", {
             key: `step-${i}`,
             cx: cx2,
             cy: stepBlockCenterY(i),
             r: "5",
             fill: theme.stroke,
-            opacity: "0.35"
-          }
+            opacity: "0.35",
+          });
+        }
+        const idx = laneIndex(r.role);
+        if (idx < 0) return null;
+        const lane = lanes[idx];
+        const block = r.blockRef ? blocks[r.blockRef] : null;
+        const cx = nodeCenterX(i, r.role);
+        const cy = stepBlockCenterY(i);
+        const boxW = nodeW;
+        const boxH = 44;
+        const fill = (block && block.bg) || lane.bg || theme.boxBg;
+        const txtColor = (block && block.textColor) || lane.textColor || theme.boxText;
+        const stroke = (block && block.borderColor) || theme.stroke;
+        const shape = (block && block.shape) || "rounded";
+        const blockIcon = block && block.icon;
+        const { left: leftProps, right: rightProps } = splitPropsBySide(r.props);
+        const docY = cy + boxH / 2 - 8;
+        return /* @__PURE__ */ h(
+          "g",
+          { key: `step-${i}` },
+          /* @__PURE__ */ h(StepShape, {
+            shape,
+            cx,
+            cy,
+            w: boxW,
+            h: boxH,
+            fill,
+            stroke,
+          }),
+          blockIcon &&
+            /* @__PURE__ */ h(BlockIcon, {
+              icon: blockIcon,
+              x: cx - boxW / 2,
+              y: cy,
+              size: 16,
+              color: txtColor,
+              shape,
+            }),
+          /* @__PURE__ */ h(
+            "text",
+            {
+              x: blockIcon ? cx + 8 : cx,
+              y: cy + 5,
+              textAnchor: "middle",
+              fill: txtColor,
+              fontFamily: "'Noto Sans JP',sans-serif",
+              fontSize: "13",
+              fontWeight: "500",
+            },
+            truncateToColumns(r.text, blockMaxTextCols(shape, Boolean(blockIcon))),
+          ),
+          showStepBlockCaptions &&
+            r.blockRef &&
+            /* @__PURE__ */ h(
+              "text",
+              {
+                "data-export-caption": "block-ref",
+                x: cx + boxW / 2 - 4,
+                y: cy - boxH / 2 - 5,
+                textAnchor: "end",
+                fontSize: "8",
+                fontFamily: "'JetBrains Mono',monospace",
+                opacity: "0.45",
+              },
+              r.blockRef,
+            ),
+          showStepBlockCaptions &&
+            shape &&
+            /* @__PURE__ */ h(
+              "text",
+              {
+                "data-export-caption": "shape",
+                x: cx - boxW / 2 + 4,
+                y: cy - boxH / 2 - 5,
+                textAnchor: "start",
+                fontSize: "8",
+                fontFamily: "'JetBrains Mono',monospace",
+                opacity: "0.45",
+              },
+              shape.toUpperCase(),
+            ),
+          [...leftProps].reverse().map((prop, docIdx) => {
+            const x = cx - boxW / 2 + 55 - docW + docIdx * docGapX;
+            const y2 = docY + docIdx * docGapY;
+            return /* @__PURE__ */ h(
+              "g",
+              { key: `prop-left-${i}-${prop.id}` },
+              renderPropDocChip(prop, x, y2),
+            );
+          }),
+          rightProps.map((prop, docIdx) => {
+            const x = cx + boxW / 2 - 60 + docIdx * docGapX;
+            const y2 = docY + docIdx * docGapY;
+            return /* @__PURE__ */ h(
+              "g",
+              { key: `prop-right-${i}-${prop.id}` },
+              renderPropDocChip(prop, x, y2),
+            );
+          }),
         );
-      }
-      const idx = laneIndex(r.role);
-      if (idx < 0) return null;
-      const lane = lanes[idx];
-      const block = r.blockRef ? blocks[r.blockRef] : null;
-      const cx = nodeCenterX(i, r.role);
-      const cy = stepBlockCenterY(i);
-      const boxW = nodeW;
-      const boxH = 44;
-      const fill = block && block.bg || lane.bg || theme.boxBg;
-      const txtColor = block && block.textColor || lane.textColor || theme.boxText;
-      const stroke = block && block.borderColor || theme.stroke;
-      const shape = block && block.shape || "rounded";
-      const blockIcon = block && block.icon;
-      const { left: leftProps, right: rightProps } = splitPropsBySide(r.props);
-      const docY = cy + boxH / 2 - 8;
-      return /* @__PURE__ */ h("g", { key: `step-${i}` }, /* @__PURE__ */ h(
-        StepShape,
-        {
-          shape,
-          cx,
-          cy,
-          w: boxW,
-          h: boxH,
-          fill,
-          stroke
-        }
-      ), blockIcon && /* @__PURE__ */ h(
-        BlockIcon,
-        {
-          icon: blockIcon,
-          x: cx - boxW / 2,
-          y: cy,
-          size: 16,
-          color: txtColor,
-          shape
-        }
-      ), /* @__PURE__ */ h(
-        "text",
-        {
-          x: blockIcon ? cx + 8 : cx,
-          y: cy + 5,
-          textAnchor: "middle",
-          fill: txtColor,
-          fontFamily: "'Noto Sans JP',sans-serif",
-          fontSize: "13",
-          fontWeight: "500"
-        },
-        truncateToColumns(r.text, blockMaxTextCols(shape, Boolean(blockIcon)))
-      ), showStepBlockCaptions && r.blockRef && /* @__PURE__ */ h(
-        "text",
-        {
-          "data-export-caption": "block-ref",
-          x: cx + boxW / 2 - 4,
-          y: cy - boxH / 2 - 5,
-          textAnchor: "end",
-          fontSize: "8",
-          fontFamily: "'JetBrains Mono',monospace",
-          opacity: "0.45"
-        },
-        r.blockRef
-      ), showStepBlockCaptions && shape && /* @__PURE__ */ h(
-        "text",
-        {
-          "data-export-caption": "shape",
-          x: cx - boxW / 2 + 4,
-          y: cy - boxH / 2 - 5,
-          textAnchor: "start",
-          fontSize: "8",
-          fontFamily: "'JetBrains Mono',monospace",
-          opacity: "0.45"
-        },
-        shape.toUpperCase()
-      ), [...leftProps].reverse().map((prop, docIdx) => {
-        const x = cx - boxW / 2 + 55 - docW + docIdx * docGapX;
-        const y2 = docY + docIdx * docGapY;
-        return /* @__PURE__ */ h("g", { key: `prop-left-${i}-${prop.id}` }, renderPropDocChip(prop, x, y2));
-      }), rightProps.map((prop, docIdx) => {
-        const x = cx + boxW / 2 - 60 + docIdx * docGapX;
-        const y2 = docY + docIdx * docGapY;
-        return /* @__PURE__ */ h("g", { key: `prop-right-${i}-${prop.id}` }, renderPropDocChip(prop, x, y2));
-      }));
-    }),
-    frames.map((f) => {
-      if (f.yMerge == null) return null;
-      const dCy = branchDecisionCy(f);
-      const dH = decisionDiamondH;
-      return f.cases.map((c, ci) => {
-        if (!(c.label || "").trim()) return null;
-        if (/^else$/i.test((c.label || "").trim())) return null;
-        const firstStepIdx = firstStepIdxInCase(c);
-        let targetY;
-        let targetX = c.x;
-        if (firstStepIdx != null) {
-          const stepTarget = caseStepLineTarget(firstStepIdx, c);
-          if (stepTarget) {
-            targetX = stepTarget.x;
-            targetY = stepTarget.y;
+      }),
+      frames.map((f) => {
+        if (f.yMerge == null) return null;
+        const dCy = branchDecisionCy(f);
+        const dH = decisionDiamondH;
+        return f.cases.map((c, ci) => {
+          if (!(c.label || "").trim()) return null;
+          if (/^else$/i.test((c.label || "").trim())) return null;
+          const firstStepIdx = firstStepIdxInCase(c);
+          let targetY;
+          let targetX = c.x;
+          if (firstStepIdx != null) {
+            const stepTarget = caseStepLineTarget(firstStepIdx, c);
+            if (stepTarget) {
+              targetX = stepTarget.x;
+              targetY = stepTarget.y;
+            } else {
+              targetY = stepBlockCenterY(firstStepIdx) - 22;
+            }
           } else {
-            targetY = stepBlockCenterY(firstStepIdx) - 22;
+            const mCy = f.yMerge + mergeH / 2;
+            const mH = mergeNodeH;
+            targetY = mCy - mH / 2 - mergeArrowClearance;
           }
-        } else {
-          const mCy = f.yMerge + mergeH / 2;
-          const mH = mergeNodeH;
-          targetY = mCy - mH / 2 - mergeArrowClearance;
-        }
-        const startY = dCy + dH / 2;
-        const bendY = startY + branchCaseBendYOffset;
-        const labelX = targetX;
-        const labelY = bendY + caseLabelOffsetY;
-        const labelW = (c.label.length + 2) * caseLabelCharWidth;
-        const caseStyle = resolveBranchStyle(c.color);
-        return /* @__PURE__ */ h("g", { key: `case-label-overlay-${f.id}-${ci}` }, /* @__PURE__ */ h(
-          "rect",
-          {
-            x: labelX - labelW / 2,
-            y: labelY - 11,
-            width: labelW,
-            height: 20,
-            rx: "3",
-            fill: caseStyle.bg,
-            fillOpacity: "0.8",
-            stroke: caseStyle.stroke,
-            strokeWidth: "0.9"
-          }
-        ), /* @__PURE__ */ h(
-          "text",
-          {
-            x: labelX,
-            y: labelY + 4,
-            textAnchor: "middle",
-            fontSize: "11",
-            fontWeight: "600",
-            fontFamily: "'Noto Sans JP',sans-serif",
-            fill: caseStyle.stroke
-          },
-          c.label
-        ));
-      });
-    }),
-    frames.map((f) => {
-      const startIdx = rows.findIndex(
-        (r) => r.kind === "branchStart" && r.id === f.id
-      );
-      if (startIdx < 0) return null;
-      let prevStepIdx = -1;
-      for (let j = startIdx - 1; j >= 0; j--) {
-        const row = rows[j];
-        if (row.kind === "step" && !row.empty && row.role && !isInsideBranchGroup(rows, j)) {
-          prevStepIdx = j;
-          break;
-        }
-        if (row.kind === "branchCase" && (row.id === f.id || row.depth != null && row.depth < f.depth))
-          break;
-        if (row.kind === "branchStart" && row.depth < f.depth) break;
-        if (row.kind === "branchEnd") break;
-      }
-      const endIdx = rows.findIndex(
-        (r) => r.kind === "branchEnd" && r.id === f.id
-      );
-      if (endIdx < 0) return null;
-      const nextStepIdx = findNextFlowStepAfterBranchEnd(
-        rows,
-        startIdx,
-        endIdx
-      );
-      const nextBranchStartIdx = findNextSiblingBranchStart(
-        rows,
-        startIdx,
-        endIdx
-      );
-      const dCx = frameAnchorX(f);
-      const dCy = branchDecisionCy(f);
-      const dTopY = dCy - (f.parallel ? FORK_GATEWAY_RADIUS : 25);
-      const mCx = mergeAnchorX(f);
-      const mBotY = f.yMerge + mergeH / 2 + (f.parallel ? FORK_GATEWAY_RADIUS : 14);
-      const edges = [];
-      const branchLastStep = lastStepInBranchSpan(startIdx, endIdx);
-      if (prevStepIdx >= 0) {
-        const r = rows[prevStepIdx];
-        const li = laneIndex(r.role);
-        const sx = li >= 0 ? nodeCenterX(prevStepIdx, r.role) : dCx;
-        const sy = stepBlockCenterY(prevStepIdx) + 22;
-        let branchGroupBeforeGateway = false;
-        for (let j = prevStepIdx + 1; j < startIdx; j++) {
-          if (rows[j]?.kind === "groupStart" && groupModeOf(rows[j]) === "branch") {
-            branchGroupBeforeGateway = true;
+          const startY = dCy + dH / 2;
+          const bendY = startY + branchCaseBendYOffset;
+          const labelX = targetX;
+          const labelY = bendY + caseLabelOffsetY;
+          const labelW = (c.label.length + 2) * caseLabelCharWidth;
+          const caseStyle = resolveBranchStyle(c.color);
+          return /* @__PURE__ */ h(
+            "g",
+            { key: `case-label-overlay-${f.id}-${ci}` },
+            /* @__PURE__ */ h("rect", {
+              x: labelX - labelW / 2,
+              y: labelY - 11,
+              width: labelW,
+              height: 20,
+              rx: "3",
+              fill: caseStyle.bg,
+              fillOpacity: "0.8",
+              stroke: caseStyle.stroke,
+              strokeWidth: "0.9",
+            }),
+            /* @__PURE__ */ h(
+              "text",
+              {
+                x: labelX,
+                y: labelY + 4,
+                textAnchor: "middle",
+                fontSize: "11",
+                fontWeight: "600",
+                fontFamily: "'Noto Sans JP',sans-serif",
+                fill: caseStyle.stroke,
+              },
+              c.label,
+            ),
+          );
+        });
+      }),
+      frames.map((f) => {
+        const startIdx = rows.findIndex((r) => r.kind === "branchStart" && r.id === f.id);
+        if (startIdx < 0) return null;
+        let prevStepIdx = -1;
+        for (let j = startIdx - 1; j >= 0; j--) {
+          const row = rows[j];
+          if (row.kind === "step" && !row.empty && row.role && !isInsideBranchGroup(rows, j)) {
+            prevStepIdx = j;
             break;
           }
+          if (
+            row.kind === "branchCase" &&
+            (row.id === f.id || (row.depth != null && row.depth < f.depth))
+          )
+            break;
+          if (row.kind === "branchStart" && row.depth < f.depth) break;
+          if (row.kind === "branchEnd") break;
         }
-        const bend = branchGroupBeforeGateway ? Math.max(sy + connectorBendMinGap, dTopY - connectorBendMaxInset) : (sy + dTopY) / 2;
-        const d = sx === dCx ? `M ${sx} ${sy} L ${dCx} ${dTopY}` : `M ${sx} ${sy} L ${sx} ${bend} L ${dCx} ${bend} L ${dCx} ${dTopY}`;
-        edges.push(
-          /* @__PURE__ */ h(
-            "path",
-            {
+        const endIdx = rows.findIndex((r) => r.kind === "branchEnd" && r.id === f.id);
+        if (endIdx < 0) return null;
+        const nextStepIdx = findNextFlowStepAfterBranchEnd(rows, startIdx, endIdx);
+        const nextBranchStartIdx = findNextSiblingBranchStart(rows, startIdx, endIdx);
+        const dCx = frameAnchorX(f);
+        const dCy = branchDecisionCy(f);
+        const dTopY = dCy - (f.parallel ? FORK_GATEWAY_RADIUS : 25);
+        const mCx = mergeAnchorX(f);
+        const mBotY = f.yMerge + mergeH / 2 + (f.parallel ? FORK_GATEWAY_RADIUS : 14);
+        const edges = [];
+        const branchLastStep = lastStepInBranchSpan(startIdx, endIdx);
+        if (prevStepIdx >= 0) {
+          const r = rows[prevStepIdx];
+          const li = laneIndex(r.role);
+          const sx = li >= 0 ? nodeCenterX(prevStepIdx, r.role) : dCx;
+          const sy = stepBlockCenterY(prevStepIdx) + 22;
+          let branchGroupBeforeGateway = false;
+          for (let j = prevStepIdx + 1; j < startIdx; j++) {
+            if (rows[j]?.kind === "groupStart" && groupModeOf(rows[j]) === "branch") {
+              branchGroupBeforeGateway = true;
+              break;
+            }
+          }
+          const bend = branchGroupBeforeGateway
+            ? Math.max(sy + connectorBendMinGap, dTopY - connectorBendMaxInset)
+            : (sy + dTopY) / 2;
+          const d =
+            sx === dCx
+              ? `M ${sx} ${sy} L ${dCx} ${dTopY}`
+              : `M ${sx} ${sy} L ${sx} ${bend} L ${dCx} ${bend} L ${dCx} ${dTopY}`;
+          edges.push(
+            /* @__PURE__ */ h("path", {
               key: `in-${f.id}`,
               d,
               fill: "none",
               stroke: theme.stroke,
               strokeWidth: "1.6",
               markerEnd: "url(#arrowhead)",
-              ...arrowLineStrokeProps(stepOutgoingArrowLine(r))
-            }
-          )
-        );
-      }
-      if (nextStepIdx >= 0) {
-        const r = rows[nextStepIdx];
-        const li = laneIndex(r.role);
-        const tx = li >= 0 ? nodeCenterX(nextStepIdx, r.role) : mCx;
-        const ty = stepBlockCenterY(nextStepIdx) - 22;
-        const bend = (mBotY + ty) / 2;
-        const d = tx === mCx ? `M ${mCx} ${mBotY} L ${tx} ${ty}` : `M ${mCx} ${mBotY} L ${mCx} ${bend} L ${tx} ${bend} L ${tx} ${ty}`;
-        const outLineType = branchLastStep >= 0 ? stepOutgoingArrowLine(rows[branchLastStep]) : "solid";
-        edges.push(
-          /* @__PURE__ */ h(
-            "path",
-            {
+              ...arrowLineStrokeProps(stepOutgoingArrowLine(r)),
+            }),
+          );
+        }
+        if (nextStepIdx >= 0) {
+          const r = rows[nextStepIdx];
+          const li = laneIndex(r.role);
+          const tx = li >= 0 ? nodeCenterX(nextStepIdx, r.role) : mCx;
+          const ty = stepBlockCenterY(nextStepIdx) - 22;
+          const bend = (mBotY + ty) / 2;
+          const d =
+            tx === mCx
+              ? `M ${mCx} ${mBotY} L ${tx} ${ty}`
+              : `M ${mCx} ${mBotY} L ${mCx} ${bend} L ${tx} ${bend} L ${tx} ${ty}`;
+          const outLineType =
+            branchLastStep >= 0 ? stepOutgoingArrowLine(rows[branchLastStep]) : "solid";
+          edges.push(
+            /* @__PURE__ */ h("path", {
               key: `out-${f.id}`,
               d,
               fill: "none",
               stroke: theme.stroke,
               strokeWidth: "1.6",
               markerEnd: "url(#arrowhead)",
-              ...arrowLineStrokeProps(outLineType)
-            }
-          )
-        );
-      } else if (nextBranchStartIdx >= 0) {
-        const nextFrame = frameById.get(rows[nextBranchStartIdx].id);
-        const nextRowY = rowMeta[nextBranchStartIdx]?.y;
-        if (nextFrame && nextRowY != null) {
-          const nextCx = frameAnchorX(nextFrame);
-          const nextTopY = branchDecisionCy(nextFrame) - (nextFrame.parallel ? FORK_GATEWAY_RADIUS : 25);
-          const bend = (mBotY + nextTopY) / 2;
-          const d = Math.abs(nextCx - mCx) < 0.5 ? `M ${mCx} ${mBotY} L ${nextCx} ${nextTopY}` : `M ${mCx} ${mBotY} L ${mCx} ${bend} L ${nextCx} ${bend} L ${nextCx} ${nextTopY}`;
-          const outLineType = branchLastStep >= 0 ? stepOutgoingArrowLine(rows[branchLastStep]) : "solid";
-          edges.push(
-            /* @__PURE__ */ h(
-              "path",
-              {
+              ...arrowLineStrokeProps(outLineType),
+            }),
+          );
+        } else if (nextBranchStartIdx >= 0) {
+          const nextFrame = frameById.get(rows[nextBranchStartIdx].id);
+          const nextRowY = rowMeta[nextBranchStartIdx]?.y;
+          if (nextFrame && nextRowY != null) {
+            const nextCx = frameAnchorX(nextFrame);
+            const nextTopY =
+              branchDecisionCy(nextFrame) - (nextFrame.parallel ? FORK_GATEWAY_RADIUS : 25);
+            const bend = (mBotY + nextTopY) / 2;
+            const d =
+              Math.abs(nextCx - mCx) < 0.5
+                ? `M ${mCx} ${mBotY} L ${nextCx} ${nextTopY}`
+                : `M ${mCx} ${mBotY} L ${mCx} ${bend} L ${nextCx} ${bend} L ${nextCx} ${nextTopY}`;
+            const outLineType =
+              branchLastStep >= 0 ? stepOutgoingArrowLine(rows[branchLastStep]) : "solid";
+            edges.push(
+              /* @__PURE__ */ h("path", {
                 key: `out-if-${f.id}-${rows[nextBranchStartIdx].id}`,
                 d,
                 fill: "none",
                 stroke: theme.stroke,
                 strokeWidth: "1.6",
                 markerEnd: "url(#arrowhead)",
-                ...arrowLineStrokeProps(outLineType)
-              }
-            )
-          );
+                ...arrowLineStrokeProps(outLineType),
+              }),
+            );
+          }
         }
-      }
-      return edges.length > 0 ? /* @__PURE__ */ h("g", { key: `io-${f.id}` }, edges) : null;
-    }),
-    interactive && selectedRowIndex != null && (() => {
-      const bounds = stepRowBounds(selectedRowIndex);
-      if (!bounds) return null;
-      return /* @__PURE__ */ h(
-        RowSelectionHighlight,
-        {
-          key: `sel-${selectedRowIndex}`,
-          x: bounds.x,
-          y: bounds.y,
-          w: bounds.w,
-          h: bounds.h
-        }
-      );
-    })(),
-    interactive && rows.map((r, i) => {
-      const meta = rowMeta[i];
-      if (!meta) return null;
-      if (r.kind === "step" && !r.empty && r.role) {
-        const bounds = stepRowBounds(i);
-        if (!bounds) return null;
-        return /* @__PURE__ */ h(
-          RowHitTarget,
-          {
-            key: `hit-${i}`,
-            rowIndex: i,
+        return edges.length > 0 ? /* @__PURE__ */ h("g", { key: `io-${f.id}` }, edges) : null;
+      }),
+      interactive &&
+        selectedRowIndex != null &&
+        (() => {
+          const bounds = stepRowBounds(selectedRowIndex);
+          if (!bounds) return null;
+          return /* @__PURE__ */ h(RowSelectionHighlight, {
+            key: `sel-${selectedRowIndex}`,
             x: bounds.x,
             y: bounds.y,
             w: bounds.w,
             h: bounds.h,
-            selected: false,
-            onSelect: onRowSelect
-          }
-        );
-      }
-      if (r.kind === "branchStart") {
-        const f = frames.find((fr) => fr.id === r.id);
-        if (!f) return null;
-        const dCx = frameAnchorX(f);
-        const dCy = branchDecisionCy(f);
-        if (f.parallel) {
-          const pad = hitTargetPad;
-          const r0 = FORK_GATEWAY_RADIUS;
-          return /* @__PURE__ */ h(
-            RowHitTarget,
-            {
+          });
+        })(),
+      interactive &&
+        rows.map((r, i) => {
+          const meta = rowMeta[i];
+          if (!meta) return null;
+          if (r.kind === "step" && !r.empty && r.role) {
+            const bounds = stepRowBounds(i);
+            if (!bounds) return null;
+            return /* @__PURE__ */ h(RowHitTarget, {
               key: `hit-${i}`,
               rowIndex: i,
-              x: dCx - r0 - pad,
-              y: dCy - r0 - pad,
-              w: r0 * 2 + pad * 2,
-              h: r0 * 2 + pad * 2,
-              selected: selectedRowIndex === i,
-              onSelect: onRowSelect
+              x: bounds.x,
+              y: bounds.y,
+              w: bounds.w,
+              h: bounds.h,
+              selected: false,
+              onSelect: onRowSelect,
+            });
+          }
+          if (r.kind === "branchStart") {
+            const f = frames.find((fr) => fr.id === r.id);
+            if (!f) return null;
+            const dCx = frameAnchorX(f);
+            const dCy = branchDecisionCy(f);
+            if (f.parallel) {
+              const pad = hitTargetPad;
+              const r0 = FORK_GATEWAY_RADIUS;
+              return /* @__PURE__ */ h(RowHitTarget, {
+                key: `hit-${i}`,
+                rowIndex: i,
+                x: dCx - r0 - pad,
+                y: dCy - r0 - pad,
+                w: r0 * 2 + pad * 2,
+                h: r0 * 2 + pad * 2,
+                selected: selectedRowIndex === i,
+                onSelect: onRowSelect,
+              });
             }
-          );
-        }
-        const dW = decisionDiamondWidth(f.cond.length);
-        const dH = decisionDiamondH;
-        return /* @__PURE__ */ h(
-          RowHitTarget,
-          {
-            key: `hit-${i}`,
-            rowIndex: i,
-            x: dCx - dW / 2 - hitTargetDecisionPad,
-            y: dCy - dH / 2 - hitTargetDecisionPad,
-            w: dW + hitTargetDecisionPad * 2,
-            h: dH + hitTargetDecisionPad * 2,
-            selected: selectedRowIndex === i,
-            onSelect: onRowSelect
-          }
-        );
-      }
-      if (r.kind === "branchCase") {
-        const f = frames.find(
-          (fr) => fr.cases.some((c2) => c2.startRow === i)
-        );
-        const c = f?.cases.find((ca) => ca.startRow === i);
-        if (!f || !c) return null;
-        const labelW = ((c.label || "").length + 2) * caseLabelCharWidth;
-        const dCy = branchDecisionCy(f);
-        const dH = decisionDiamondH;
-        const startY = dCy + dH / 2;
-        const bendY = startY + branchCaseBendYOffset;
-        const labelY = bendY + caseLabelOffsetY;
-        let targetX = c.x;
-        const firstStepIdx = firstStepIdxInCase(c);
-        if (firstStepIdx != null) {
-          const stepTarget = caseStepLineTarget(firstStepIdx, c);
-          if (stepTarget) targetX = stepTarget.x;
-        }
-        const edgeD = buildCaseFanOutEdgeD(f, c);
-        return /* @__PURE__ */ h("g", { key: `hit-${i}` }, /* @__PURE__ */ h(
-          PathHitTarget,
-          {
-            rowIndex: i,
-            d: edgeD,
-            onSelect: onRowSelect
-          }
-        ), /* @__PURE__ */ h(
-          RowHitTarget,
-          {
-            rowIndex: i,
-            x: targetX - labelW / 2 - caseLabelPadX,
-            y: labelY - caseLabelPadY,
-            w: labelW + caseLabelPadX * 2,
-            h: caseLabelHeight,
-            selected: selectedRowIndex === i,
-            onSelect: onRowSelect
-          }
-        ));
-      }
-      if (r.kind === "branchEnd") {
-        const f = frames.find((fr) => fr.endRow === i);
-        if (!f || f.yMerge == null) return null;
-        const mCx = mergeAnchorX(f);
-        const mCy = f.yMerge + mergeH / 2;
-        if (f.parallel) {
-          const pad = hitTargetPad;
-          const r0 = FORK_GATEWAY_RADIUS;
-          return /* @__PURE__ */ h(
-            RowHitTarget,
-            {
+            const dW = decisionDiamondWidth(f.cond.length);
+            const dH = decisionDiamondH;
+            return /* @__PURE__ */ h(RowHitTarget, {
               key: `hit-${i}`,
               rowIndex: i,
-              x: mCx - r0 - pad,
-              y: mCy - r0 - pad,
-              w: r0 * 2 + pad * 2,
-              h: r0 * 2 + pad * 2,
+              x: dCx - dW / 2 - hitTargetDecisionPad,
+              y: dCy - dH / 2 - hitTargetDecisionPad,
+              w: dW + hitTargetDecisionPad * 2,
+              h: dH + hitTargetDecisionPad * 2,
               selected: selectedRowIndex === i,
-              onSelect: onRowSelect
+              onSelect: onRowSelect,
+            });
+          }
+          if (r.kind === "branchCase") {
+            const f = frames.find((fr) => fr.cases.some((c2) => c2.startRow === i));
+            const c = f?.cases.find((ca) => ca.startRow === i);
+            if (!f || !c) return null;
+            const labelW = ((c.label || "").length + 2) * caseLabelCharWidth;
+            const dCy = branchDecisionCy(f);
+            const dH = decisionDiamondH;
+            const startY = dCy + dH / 2;
+            const bendY = startY + branchCaseBendYOffset;
+            const labelY = bendY + caseLabelOffsetY;
+            let targetX = c.x;
+            const firstStepIdx = firstStepIdxInCase(c);
+            if (firstStepIdx != null) {
+              const stepTarget = caseStepLineTarget(firstStepIdx, c);
+              if (stepTarget) targetX = stepTarget.x;
             }
-          );
-        }
-        const mW = mergeNodeW;
-        const mH = mergeNodeH;
-        return /* @__PURE__ */ h(
-          RowHitTarget,
-          {
-            key: `hit-${i}`,
-            rowIndex: i,
-            x: mCx - mW / 2 - hitTargetMergePad,
-            y: mCy - mH / 2 - hitTargetMergePad,
-            w: mW + hitTargetMergeExtra,
-            h: mH + hitTargetMergeExtra,
-            selected: selectedRowIndex === i,
-            onSelect: onRowSelect
+            const edgeD = buildCaseFanOutEdgeD(f, c);
+            return /* @__PURE__ */ h(
+              "g",
+              { key: `hit-${i}` },
+              /* @__PURE__ */ h(PathHitTarget, {
+                rowIndex: i,
+                d: edgeD,
+                onSelect: onRowSelect,
+              }),
+              /* @__PURE__ */ h(RowHitTarget, {
+                rowIndex: i,
+                x: targetX - labelW / 2 - caseLabelPadX,
+                y: labelY - caseLabelPadY,
+                w: labelW + caseLabelPadX * 2,
+                h: caseLabelHeight,
+                selected: selectedRowIndex === i,
+                onSelect: onRowSelect,
+              }),
+            );
           }
-        );
-      }
-      if (r.kind === "branchLoop") {
-        const yRow = meta.y ?? 0;
-        return /* @__PURE__ */ h(
-          RowHitTarget,
-          {
-            key: `hit-${i}`,
-            rowIndex: i,
-            x: xPad + leftGutter,
-            y: yRow,
-            w: width - xPad * 2 - leftGutter,
-            h: branchLoopH,
-            selected: selectedRowIndex === i,
-            onSelect: onRowSelect
+          if (r.kind === "branchEnd") {
+            const f = frames.find((fr) => fr.endRow === i);
+            if (!f || f.yMerge == null) return null;
+            const mCx = mergeAnchorX(f);
+            const mCy = f.yMerge + mergeH / 2;
+            if (f.parallel) {
+              const pad = hitTargetPad;
+              const r0 = FORK_GATEWAY_RADIUS;
+              return /* @__PURE__ */ h(RowHitTarget, {
+                key: `hit-${i}`,
+                rowIndex: i,
+                x: mCx - r0 - pad,
+                y: mCy - r0 - pad,
+                w: r0 * 2 + pad * 2,
+                h: r0 * 2 + pad * 2,
+                selected: selectedRowIndex === i,
+                onSelect: onRowSelect,
+              });
+            }
+            const mW = mergeNodeW;
+            const mH = mergeNodeH;
+            return /* @__PURE__ */ h(RowHitTarget, {
+              key: `hit-${i}`,
+              rowIndex: i,
+              x: mCx - mW / 2 - hitTargetMergePad,
+              y: mCy - mH / 2 - hitTargetMergePad,
+              w: mW + hitTargetMergeExtra,
+              h: mH + hitTargetMergeExtra,
+              selected: selectedRowIndex === i,
+              onSelect: onRowSelect,
+            });
           }
-        );
-      }
-      return null;
-    }),
-    /* @__PURE__ */ h(
-      PrintLayer,
-      {
+          if (r.kind === "branchLoop") {
+            const yRow = meta.y ?? 0;
+            return /* @__PURE__ */ h(RowHitTarget, {
+              key: `hit-${i}`,
+              rowIndex: i,
+              x: xPad + leftGutter,
+              y: yRow,
+              w: width - xPad * 2 - leftGutter,
+              h: branchLoopH,
+              selected: selectedRowIndex === i,
+              onSelect: onRowSelect,
+            });
+          }
+          return null;
+        }),
+      /* @__PURE__ */ h(PrintLayer, {
         theme,
         page,
         title,
@@ -2742,10 +2840,10 @@ function renderDiagramSvg({
         pageDescStartY,
         pageDescLineHeight,
         hasPageFooter,
-        height
-      }
-    )
-  ));
+        height,
+      }),
+    ),
+  );
 }
 export { renderDiagramSvg };
 export { BRANCH_COLOR_STYLES } from "./diagram-layout.js";

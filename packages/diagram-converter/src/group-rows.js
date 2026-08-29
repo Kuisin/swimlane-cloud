@@ -70,12 +70,7 @@ export function isInsideBranchGroup(rows, rowIndex) {
 export function findLastMainFlowStepBeforeGroupStart(rows, groupStartIndex) {
   for (let j = groupStartIndex - 1; j >= 0; j--) {
     const row = rows[j];
-    if (
-      row.kind === "step" &&
-      !row.empty &&
-      row.role &&
-      !isInsideBranchGroup(rows, j)
-    ) {
+    if (row.kind === "step" && !row.empty && row.role && !isInsideBranchGroup(rows, j)) {
       return j;
     }
     if (row.kind === "branchStart") break;
@@ -96,12 +91,7 @@ export function findNextMainFlowStepAfterGroupEnd(rows, groupEndIndex) {
   for (let j = groupEndIndex + 1; j < rows.length; j++) {
     const row = rows[j];
     if (row.kind === "branchStart") break;
-    if (
-      row.kind === "step" &&
-      !row.empty &&
-      row.role &&
-      !isInsideBranchGroup(rows, j)
-    ) {
+    if (row.kind === "step" && !row.empty && row.role && !isInsideBranchGroup(rows, j)) {
       return j;
     }
   }

@@ -155,7 +155,14 @@ function useStepDrag(onMoveStep) {
     window.addEventListener("pointercancel", up);
   };
 
-  return { from: state.from, x: state.x, y: state.y, preview: state.preview, drop: state.drop, start };
+  return {
+    from: state.from,
+    x: state.x,
+    y: state.y,
+    preview: state.preview,
+    drop: state.drop,
+    start,
+  };
 }
 
 /** The block that floats under the pointer while dragging a step. */
@@ -239,9 +246,7 @@ export function MobileDiagram({
   const drag = useStepDrag(onMoveStep);
   const { tree, laneMap } = useMemo(() => {
     const built = model ? buildMobileTree(model) : dslToMobile(dsl || "").tree;
-    const lm = new Map(
-      built.lanes.map((l) => [l.id, { ...l, color: roleColor(l) }]),
-    );
+    const lm = new Map(built.lanes.map((l) => [l.id, { ...l, color: roleColor(l) }]));
     return { tree: built, laneMap: lm };
   }, [dsl, model]);
 
@@ -270,9 +275,7 @@ export function MobileDiagram({
       <div className="mx-auto max-w-lg px-3 pt-3.5 pb-6 text-slate-900 [-webkit-text-size-adjust:100%]">
         <div className="mx-0.5 mb-3 flex items-center justify-between gap-2">
           {tree.title ? (
-            <h1 className="m-0 min-w-0 truncate text-[18px] font-bold">
-              {tree.title}
-            </h1>
+            <h1 className="m-0 min-w-0 truncate text-[18px] font-bold">{tree.title}</h1>
           ) : (
             <span />
           )}
@@ -372,10 +375,7 @@ function ConnectorLine({ lineType, height, head }) {
         strokeDasharray={dash}
       />
       {head && (
-        <path
-          d={`M7 ${height} L3 ${height - 6} L11 ${height - 6} Z`}
-          fill={CONNECTOR_STROKE}
-        />
+        <path d={`M7 ${height} L3 ${height - 6} L11 ${height - 6} Z`} fill={CONNECTOR_STROKE} />
       )}
     </svg>
   );
@@ -490,8 +490,7 @@ function StepCard({ node, ctx, hasNext = false }) {
   const lane = node.role ? ctx.laneMap.get(node.role) : null;
   const color = lane?.color || "#94a3b8";
   const block = node.blockRef ? ctx.tree.blocks?.[node.blockRef] : null;
-  const hasDetail =
-    node.description || node.remark || node.props?.length > 0 || block;
+  const hasDetail = node.description || node.remark || node.props?.length > 0 || block;
   const showInsert = open && ctx.editable && ctx.onInsertStep;
   const isDragging = ctx.drag?.from === node.rowIndex;
 
@@ -510,11 +509,7 @@ function StepCard({ node, ctx, hasNext = false }) {
             type="button"
             className="flex min-w-0 flex-1 items-center gap-2 bg-transparent text-start text-inherit"
           >
-            {hasDetail ? (
-              <Chevron open={open} />
-            ) : (
-              <span className={CHEVRON_CLS} />
-            )}
+            {hasDetail ? <Chevron open={open} /> : <span className={CHEVRON_CLS} />}
             {lane && (
               <span
                 className="rounded-full px-[9px] py-0.5 text-[11px] font-semibold leading-[1.6]"
@@ -536,8 +531,7 @@ function StepCard({ node, ctx, hasNext = false }) {
               <GitMerge size={11} className="shrink-0" /> {node.mergeId}
             </span>
           )}
-          {ctx.editable &&
-          (ctx.onMoveStep || ctx.onEditStep || ctx.onDeleteStep) ? (
+          {ctx.editable && (ctx.onMoveStep || ctx.onEditStep || ctx.onDeleteStep) ? (
             <div className="flex shrink-0 items-center">
               {ctx.onMoveStep && (
                 <button
@@ -598,14 +592,10 @@ function StepCard({ node, ctx, hasNext = false }) {
               </div>
             )}
             {node.description && (
-              <div className="mt-[3px] text-[13px] text-slate-500">
-                {node.description}
-              </div>
+              <div className="mt-[3px] text-[13px] text-slate-500">{node.description}</div>
             )}
             {node.remark && (
-              <div className="mt-[3px] text-[12px] italic text-slate-400">
-                {node.remark}
-              </div>
+              <div className="mt-[3px] text-[12px] italic text-slate-400">{node.remark}</div>
             )}
             {node.props?.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-[5px]">
@@ -658,10 +648,7 @@ function BranchCard({ node, ctx }) {
       {open && (
         <div className="flex flex-col gap-2.5 p-2.5">
           {node.cases.map((c, i) => (
-            <div
-              key={i}
-              className="border-s-2 border-dashed border-blue-200 ps-2.5"
-            >
+            <div key={i} className="border-s-2 border-dashed border-blue-200 ps-2.5">
               <div className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.03em] text-blue-600">
                 {caseLabel(node, c, i, ctx.t)}
               </div>

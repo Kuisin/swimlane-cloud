@@ -46,10 +46,7 @@ export const POST = withApi(
     if (input.merge) {
       await gitea.mergePullRequest(org, repo, number, "merge");
       status = "merged";
-      await supabase
-        .from("edit_sessions")
-        .update({ status: "merged" })
-        .eq("id", editId);
+      await supabase.from("edit_sessions").update({ status: "merged" }).eq("id", editId);
     }
 
     await supabase.from("merge_requests").insert({

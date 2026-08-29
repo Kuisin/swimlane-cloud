@@ -13,8 +13,7 @@ import { renderDiagramSvg } from "./diagram.js";
  */
 export function textToSvg(src, { theme, themeKey } = {}) {
   const model = parseDSL(src);
-  const resolvedTheme =
-    theme ?? (themeKey ? THEMES[themeKey] : null) ?? THEMES.basic;
+  const resolvedTheme = theme ?? (themeKey ? THEMES[themeKey] : null) ?? THEMES.basic;
   const opts = resolveDiagramOptions(model.options);
   try {
     const svg = renderDiagramSvg({ model, theme: resolvedTheme, ...opts });

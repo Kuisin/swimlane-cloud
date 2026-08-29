@@ -18,7 +18,15 @@ import { useT } from "../../i18n.jsx";
  * dragged to any other row — including in and out of groups; the host validates
  * the move and rejects anything that would break the DSL. Clicking selects.
  */
-export function FlowStepList({ rows, lanes, selectedIndex, lockedRows, canReorder, onReorder, onSelect }) {
+export function FlowStepList({
+  rows,
+  lanes,
+  selectedIndex,
+  lockedRows,
+  canReorder,
+  onReorder,
+  onSelect,
+}) {
   const { t } = useT();
   const [dragIndex, setDragIndex] = useState(-1);
   const [overIndex, setOverIndex] = useState(-1);

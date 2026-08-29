@@ -196,8 +196,15 @@ export function parseDSL(src) {
   let foundEnd = false;
   for (let i = 0; i < allLines.length; i++) {
     const t = allLines[i].trim();
-    if (t === "@kai-swimlane") { startIdx = i; continue; }
-    if (t === "@end" && startIdx >= 0) { endIdx = i; foundEnd = true; break; }
+    if (t === "@kai-swimlane") {
+      startIdx = i;
+      continue;
+    }
+    if (t === "@end" && startIdx >= 0) {
+      endIdx = i;
+      foundEnd = true;
+      break;
+    }
   }
   if (startIdx < 0) {
     return {
@@ -459,7 +466,11 @@ export function parseDSL(src) {
       } else if (field === "maxChars") {
         const n = parseInt(kv.val, 10);
         if (Number.isNaN(n) || n <= 0 || !/^\d+$/.test(kv.val.trim())) {
-          errors.push({ line, text, msg: `max-chars: must be a positive integer (got "${kv.val}")` });
+          errors.push({
+            line,
+            text,
+            msg: `max-chars: must be a positive integer (got "${kv.val}")`,
+          });
           continue;
         }
         props[active].maxChars = n;
@@ -680,10 +691,7 @@ export function parseDSL(src) {
         continue;
       }
       stack.pop();
-      pushLineRow(
-        { kind: "branchEnd", parallel: true, id: top.id, depth: top.depth },
-        line,
-      );
+      pushLineRow({ kind: "branchEnd", parallel: true, id: top.id, depth: top.depth }, line);
       continue;
     }
 
@@ -970,7 +978,7 @@ export function parseDSL(src) {
       errors.push({
         line,
         text,
-        msg: 'use merge: <id>; instead of merge <id>;',
+        msg: "use merge: <id>; instead of merge <id>;",
       });
       continue;
     }
@@ -983,9 +991,7 @@ export function parseDSL(src) {
       work = u.slice(0, blockAtEnd.index).trim();
     }
 
-    m = work.match(
-      /^\[([A-Za-z0-9_\-]+)\s*:\s*([\s\S]+?)\]\s*;?\s*$/,
-    );
+    m = work.match(/^\[([A-Za-z0-9_\-]+)\s*:\s*([\s\S]+?)\]\s*;?\s*$/);
     if (m) {
       const role = m[1].trim();
       const txt = m[2].trim();

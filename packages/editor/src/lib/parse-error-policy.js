@@ -1,11 +1,7 @@
 /** @typedef {'fix' | 'continue'} ParseErrorPolicy */
 
 export function errorLineSet(errors) {
-  return new Set(
-    (errors || [])
-      .map((e) => e.line)
-      .filter((n) => typeof n === "number" && n > 0),
-  );
+  return new Set((errors || []).map((e) => e.line).filter((n) => typeof n === "number" && n > 0));
 }
 
 export function hasParseErrors(errors) {

@@ -28,21 +28,21 @@ env and no network**. Set these in Vercel → Project → Settings → Environme
 Variables. Cross-reference the canonical list in
 [`../../.env.vercel.example`](../../.env.vercel.example).
 
-| Var | Used by | Notes |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | server + browser Supabase | |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | browser auth, RLS-scoped reads | |
-| `SUPABASE_SERVICE_ROLE_KEY` | privileged server ops (provisioning, writes) | never exposed to browser |
-| `GITEA_URL` | Gitea client | base URL, e.g. `https://git.yourco.com` |
-| `GITEA_ADMIN_TOKEN` | Gitea client | bot service-account token |
-| `AWS_REGION` | S3 + SES | |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 + SES | dedicated IAM user |
-| `S3_SVG_BUCKET` | SVG blob storage | e.g. `swimlane-svg-blobs` |
-| `SES_FROM_EMAIL` | transactional email (optional / stub) | |
-| `STRIPE_SECRET_KEY` | billing webhook | |
-| `STRIPE_WEBHOOK_SECRET` | billing webhook signature verification | |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | client checkout (Phase 5) | |
-| `APP_URL` / `NEXTAUTH_URL` | absolute URLs | |
+| Var                                           | Used by                                      | Notes                                   |
+| --------------------------------------------- | -------------------------------------------- | --------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`                    | server + browser Supabase                    |                                         |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`               | browser auth, RLS-scoped reads               |                                         |
+| `SUPABASE_SERVICE_ROLE_KEY`                   | privileged server ops (provisioning, writes) | never exposed to browser                |
+| `GITEA_URL`                                   | Gitea client                                 | base URL, e.g. `https://git.yourco.com` |
+| `GITEA_ADMIN_TOKEN`                           | Gitea client                                 | bot service-account token               |
+| `AWS_REGION`                                  | S3 + SES                                     |                                         |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 + SES                                     | dedicated IAM user                      |
+| `S3_SVG_BUCKET`                               | SVG blob storage                             | e.g. `swimlane-svg-blobs`               |
+| `SES_FROM_EMAIL`                              | transactional email (optional / stub)        |                                         |
+| `STRIPE_SECRET_KEY`                           | billing webhook                              |                                         |
+| `STRIPE_WEBHOOK_SECRET`                       | billing webhook signature verification       |                                         |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`          | client checkout (Phase 5)                    |                                         |
+| `APP_URL` / `NEXTAUTH_URL`                    | absolute URLs                                |                                         |
 
 Public SVG sharing assumes the `S3_SVG_BUCKET` objects are readable (or fronted
 by a CDN); adjust `svgPublicUrl` in `src/lib/svg-blobs.ts` for private buckets.
@@ -83,22 +83,22 @@ templates) with `POST /api/workspaces` while signed in.
 
 ## API routes
 
-| Method | Route | Phase |
-|---|---|---|
-| POST | `/api/workspaces` | 1.3 onboarding |
-| GET | `/api/projects/[projectId]/tree?branch=` | 1.1 listing |
-| GET | `/api/projects/[projectId]/file?branch=&path=` | 1.1 read (draft-or-git) |
-| POST | `/api/projects/[projectId]/draft` | 1.5 draft save |
-| POST | `/api/projects/[projectId]/checkpoint` | 1.5 git commit |
-| GET | `/api/projects/[projectId]/commits?branch=` | 1.6 history |
-| GET/POST/PATCH/DELETE | `/api/projects/[projectId]/templates?section=` | 1.7 |
-| GET/PATCH | `/api/projects/[projectId]/template-policies` | 1.7 force policy |
-| GET/POST | `/api/diagrams/[id]/versions` | 2.1 flag new version |
-| POST | `/api/diagrams/[id]/versions/[versionId]/promote` | 2.2 promote |
-| PATCH | `/api/diagrams/[id]/versions/[versionId]/public` | 2.4 public share |
-| GET/POST | `/api/projects/[projectId]/edits` | 3.1 start edit (basic) |
-| POST | `/api/projects/[projectId]/edits/[editId]/merge-request` | 3.2 merge to test (basic) |
-| POST | `/api/billing/webhook` | 5 stub |
+| Method                | Route                                                    | Phase                     |
+| --------------------- | -------------------------------------------------------- | ------------------------- |
+| POST                  | `/api/workspaces`                                        | 1.3 onboarding            |
+| GET                   | `/api/projects/[projectId]/tree?branch=`                 | 1.1 listing               |
+| GET                   | `/api/projects/[projectId]/file?branch=&path=`           | 1.1 read (draft-or-git)   |
+| POST                  | `/api/projects/[projectId]/draft`                        | 1.5 draft save            |
+| POST                  | `/api/projects/[projectId]/checkpoint`                   | 1.5 git commit            |
+| GET                   | `/api/projects/[projectId]/commits?branch=`              | 1.6 history               |
+| GET/POST/PATCH/DELETE | `/api/projects/[projectId]/templates?section=`           | 1.7                       |
+| GET/PATCH             | `/api/projects/[projectId]/template-policies`            | 1.7 force policy          |
+| GET/POST              | `/api/diagrams/[id]/versions`                            | 2.1 flag new version      |
+| POST                  | `/api/diagrams/[id]/versions/[versionId]/promote`        | 2.2 promote               |
+| PATCH                 | `/api/diagrams/[id]/versions/[versionId]/public`         | 2.4 public share          |
+| GET/POST              | `/api/projects/[projectId]/edits`                        | 3.1 start edit (basic)    |
+| POST                  | `/api/projects/[projectId]/edits/[editId]/merge-request` | 3.2 merge to test (basic) |
+| POST                  | `/api/billing/webhook`                                   | 5 stub                    |
 
 ## Pages
 

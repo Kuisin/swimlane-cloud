@@ -7,13 +7,7 @@
  */
 import { ApiError } from "./api";
 
-export const TEMPLATE_SECTIONS = [
-  "page",
-  "option",
-  "role",
-  "block",
-  "prop",
-] as const;
+export const TEMPLATE_SECTIONS = ["page", "option", "role", "block", "prop"] as const;
 
 export type TemplateSection = (typeof TEMPLATE_SECTIONS)[number];
 
@@ -99,33 +93,21 @@ export function assertForcedSections(
     if (!isTemplateSection(section)) continue;
     const templateId = policy.forcedTemplateId;
     if (!templateId) {
-      throw new ApiError(
-        500,
-        `Section /${section}/ is forced but no template is pinned.`,
-      );
+      throw new ApiError(500, `Section /${section}/ is forced but no template is pinned.`);
     }
     const template = templatesById[templateId];
     if (!template) {
-      throw new ApiError(
-        500,
-        `Forced template ${templateId} for /${section}/ not found.`,
-      );
+      throw new ApiError(500, `Forced template ${templateId} for /${section}/ not found.`);
     }
     const expected = normalizeSection(template.body);
     const actual = normalizeSection(extractSection(dslText, section));
     if (actual !== expected) {
-      throw new ApiError(
-        422,
-        `/${section}/ must match project template "${template.name}".`,
-      );
+      throw new ApiError(422, `/${section}/ must match project template "${template.name}".`);
     }
   }
 }
 
 /** Repo mirror path for a template (plan: templates/{section}/{slug}.txt). */
-export function templateRepoPath(
-  section: TemplateSection,
-  slug: string,
-): string {
+export function templateRepoPath(section: TemplateSection, slug: string): string {
   return `templates/${section}/${slug}.txt`;
 }

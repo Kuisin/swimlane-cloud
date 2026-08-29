@@ -54,23 +54,18 @@ export const POST = withApi(
     });
     await gitea.mergePullRequest(org, repo, number, "merge");
 
-    await supabase
-      .from("merge_requests")
-      .insert({
-        project_id: projectId,
-        gitea_pr_index: number,
-        head_branch: "test",
-        base_branch: "main",
-        version_id: versionId,
-        title: `Promote ${version.name}`,
-        status: "merged",
-        author_id: user.id,
-      });
+    await supabase.from("merge_requests").insert({
+      project_id: projectId,
+      gitea_pr_index: number,
+      head_branch: "test",
+      base_branch: "main",
+      version_id: versionId,
+      title: `Promote ${version.name}`,
+      status: "merged",
+      author_id: user.id,
+    });
 
-    await supabase
-      .from("versions")
-      .update({ promoted_to_main: true })
-      .eq("id", versionId);
+    await supabase.from("versions").update({ promoted_to_main: true }).eq("id", versionId);
 
     await audit({
       workspaceId,

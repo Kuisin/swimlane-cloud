@@ -43,9 +43,7 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
         Subject: { Data: input.subject, Charset: "UTF-8" },
         Body: {
           Text: { Data: input.text, Charset: "UTF-8" },
-          ...(input.html
-            ? { Html: { Data: input.html, Charset: "UTF-8" } }
-            : {}),
+          ...(input.html ? { Html: { Data: input.html, Charset: "UTF-8" } } : {}),
         },
       },
     }),

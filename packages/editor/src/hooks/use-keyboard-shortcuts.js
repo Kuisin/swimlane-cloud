@@ -20,9 +20,7 @@ export function useKeyboardShortcuts(shortcuts) {
 
       for (const sc of ref.current) {
         if (sc.enabled === false) continue;
-        const modMatch = sc.mod
-          ? e.metaKey || e.ctrlKey
-          : !e.metaKey && !e.ctrlKey;
+        const modMatch = sc.mod ? e.metaKey || e.ctrlKey : !e.metaKey && !e.ctrlKey;
         // `sc.shift` may be undefined (don't-care), true, or false
         const shiftMatch = sc.shift == null ? true : sc.shift ? e.shiftKey : !e.shiftKey;
         const keyMatch = e.key === sc.key || e.key.toLowerCase() === sc.key.toLowerCase();

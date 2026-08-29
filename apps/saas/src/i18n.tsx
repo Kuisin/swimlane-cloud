@@ -32,11 +32,9 @@ export const EN: Record<string, string> = {
   "landing.feature.draft": "Draft & checkpoint",
   "landing.feature.draftDesc": "Fast Postgres drafts, grouped git commits on demand.",
   "landing.feature.versions": "Flag versions",
-  "landing.feature.versionsDesc":
-    "Render canonical SVG only when you flag a new version on test.",
+  "landing.feature.versionsDesc": "Render canonical SVG only when you flag a new version on test.",
   "landing.feature.promote": "Promote to main",
-  "landing.feature.promoteDesc":
-    "Promote flagged versions to production with a gated merge.",
+  "landing.feature.promoteDesc": "Promote flagged versions to production with a gated merge.",
   "landing.feature.share": "Public sharing",
   "landing.feature.shareDesc": "Share a stable read-only link for versions on main.",
   // dashboard
@@ -75,8 +73,7 @@ export const EN: Record<string, string> = {
   "edit.prompt.prTitleDefault": "Merge {branch} into {prBase}",
   "edit.prompt.prOpened":
     "Pull request opened ({branch} → {base}). A Manager reviews and merges it.",
-  "edit.prompt.openPrHint":
-    "Open a PR from a tmp-* branch (→ test) or from test (→ main)",
+  "edit.prompt.openPrHint": "Open a PR from a tmp-* branch (→ test) or from test (→ main)",
   "edit.prompt.prAlreadyOpen": "A pull request is already open for this branch",
   // branches page
   "branches.title": "Branches",
@@ -92,8 +89,7 @@ export const EN: Record<string, string> = {
   "pulls.confirmClose": "Close this pull request without merging?",
   // versions page
   "versions.title": "Versions",
-  "versions.description":
-    "Flagged from the test branch; promote to main to ship.",
+  "versions.description": "Flagged from the test branch; promote to main to ship.",
   "versions.flagNew": "Flag new version",
   "versions.managerHint": "Switch to Manager to flag a version",
   "versions.prompt.name": "Version name (snapshots the current test branch):",
@@ -122,8 +118,7 @@ export const EN: Record<string, string> = {
   "pr.commentAs": "Comment as {role}…",
   "pr.comment": "Comment",
   // version panel
-  "version.empty":
-    "No versions yet. A Manager flags one from the test branch above.",
+  "version.empty": "No versions yet. A Manager flags one from the test branch above.",
   "version.promoteTo": "Promote → main",
   "version.managerPromotes": "Manager promotes",
   "version.onMain": "on main",
@@ -194,13 +189,13 @@ export const JA: Record<string, string> = {
   "landing.openDashboard": "ダッシュボードを開く",
   "landing.signIn": "サインイン",
   "landing.feature.draft": "草稿とチェックポイント",
-  "landing.feature.draftDesc": "高速な Postgres 草稿、オンデマンドのグループ化された git コミット。",
+  "landing.feature.draftDesc":
+    "高速な Postgres 草稿、オンデマンドのグループ化された git コミット。",
   "landing.feature.versions": "バージョンのフラグ",
   "landing.feature.versionsDesc":
     "テストで新しいバージョンをフラグしたときだけ正規の SVG をレンダリング。",
   "landing.feature.promote": "main に昇格",
-  "landing.feature.promoteDesc":
-    "ゲートされたマージでフラグ済みバージョンを本番に昇格。",
+  "landing.feature.promoteDesc": "ゲートされたマージでフラグ済みバージョンを本番に昇格。",
   "landing.feature.share": "公開共有",
   "landing.feature.shareDesc": "main 上のバージョンの安定した読み取り専用リンクを共有。",
   // dashboard
@@ -255,7 +250,8 @@ export const JA: Record<string, string> = {
   "pulls.confirmClose": "このプルリクエストをマージせずにクローズしますか？",
   // versions page
   "versions.title": "バージョン",
-  "versions.description": "テストブランチからフラグを立て、リリースするには main に昇格してください。",
+  "versions.description":
+    "テストブランチからフラグを立て、リリースするには main に昇格してください。",
   "versions.flagNew": "新しいバージョンをフラグ",
   "versions.managerHint": "バージョンをフラグするにはマネージャーに切り替えてください",
   "versions.prompt.name": "バージョン名（現在のテストブランチのスナップショット）：",
@@ -284,7 +280,8 @@ export const JA: Record<string, string> = {
   "pr.commentAs": "{role} としてコメント…",
   "pr.comment": "コメント",
   // version panel
-  "version.empty": "バージョンはまだありません。マネージャーが上のテストブランチからフラグを立てます。",
+  "version.empty":
+    "バージョンはまだありません。マネージャーが上のテストブランチからフラグを立てます。",
   "version.promoteTo": "main に昇格",
   "version.managerPromotes": "マネージャーが昇格します",
   "version.onMain": "main に適用済み",
@@ -344,7 +341,11 @@ export const LANGUAGES = [
 const STORAGE_KEY = "sw-app-lang";
 
 /** Translate `key` against `dict`, substituting `{var}` placeholders. */
-export function tr(dict: Record<string, string>, key: string, vars?: Record<string, string>): string {
+export function tr(
+  dict: Record<string, string>,
+  key: string,
+  vars?: Record<string, string>,
+): string {
   let s = dict[key] ?? EN[key] ?? key;
   if (vars) {
     for (const k of Object.keys(vars)) {
@@ -412,9 +413,7 @@ export function LanguageProvider({
     return { lang, setLang, t: (key, vars) => tr(dict, key, vars) };
   }, [lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return (
-    <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>
-  );
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 
 export function useT() {
@@ -439,9 +438,7 @@ export function LanguageToggle() {
           aria-pressed={lang === l.code}
           onClick={() => setLang(l.code)}
           className={`rounded px-1.5 py-0.5 text-xs ${
-            lang === l.code
-              ? "bg-indigo-600 text-white"
-              : "text-neutral-500 hover:text-neutral-800"
+            lang === l.code ? "bg-indigo-600 text-white" : "text-neutral-500 hover:text-neutral-800"
           }`}
         >
           {l.label}

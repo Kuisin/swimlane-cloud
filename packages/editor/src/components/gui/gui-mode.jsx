@@ -155,7 +155,15 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
       draft.rows.splice(
         insertAt,
         0,
-        { kind: "branchStart", id, cond: "Condition", firstCase: "Case 1", parallel: false, branchColor: null, depth: 0 },
+        {
+          kind: "branchStart",
+          id,
+          cond: "Condition",
+          firstCase: "Case 1",
+          parallel: false,
+          branchColor: null,
+          depth: 0,
+        },
         { kind: "branchCase", id, label: "else", parallel: false, branchColor: null, depth: 0 },
         { kind: "branchEnd", id, parallel: false, depth: 0 },
       );
@@ -185,7 +193,15 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
       draft.rows.splice(
         insertAt,
         0,
-        { kind: "branchStart", id, cond: "Condition", firstCase: "Case A", parallel: false, branchColor: null, depth: 0 },
+        {
+          kind: "branchStart",
+          id,
+          cond: "Condition",
+          firstCase: "Case A",
+          parallel: false,
+          branchColor: null,
+          depth: 0,
+        },
         { kind: "branchCase", id, label: "Case B", parallel: false, branchColor: null, depth: 0 },
         { kind: "branchCase", id, label: "else", parallel: false, branchColor: null, depth: 0 },
         { kind: "branchEnd", id, parallel: false, depth: 0 },
@@ -199,9 +215,7 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
     const branchId = row.id;
     const isParallel = Boolean(row.parallel);
     commit((draft) => {
-      const startIdx = draft.rows.findIndex(
-        (r) => r.kind === "branchStart" && r.id === branchId,
-      );
+      const startIdx = draft.rows.findIndex((r) => r.kind === "branchStart" && r.id === branchId);
       if (startIdx < 0) return;
       const endIdx = findBranchEndIndex(draft.rows, startIdx);
       if (endIdx < 0) return;
@@ -253,7 +267,9 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
 
   useEffect(() => {
     if (!dropOpen) return;
-    function close() { setDropOpen(false); }
+    function close() {
+      setDropOpen(false);
+    }
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [dropOpen]);
@@ -264,133 +280,129 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
   return (
     <div className="sw-gui-wrap">
       <div className="sw-gui">
-      <div
-        className="sw-gui-list-pane"
-        style={{ width: stepList.width, flex: "0 0 auto" }}
-      >
-        <div className="sw-gui-list-head">
-          <span>{t("gui.flow")}</span>
-          <div className="sw-gui-list-actions">
-            {!readOnly && (
-              <div className="sw-add-block-wrap">
-                <button
-                  type="button"
-                  className="sw-btn sw-btn-sm sw-add-block-main"
-                  onClick={addStep}
-                >
-                  <Plus size={13} /> {t("gui.addStep")}
-                </button>
-                <button
-                  type="button"
-                  ref={chevronRef}
-                  className="sw-add-block-chevron"
-                  title={t("gui.addBlock")}
-                  onClick={(e) => { e.stopPropagation(); openDrop(); }}
-                >
-                  <ChevronDown size={12} />
-                </button>
-                {dropOpen && (
-                  <div
-                    className="sw-add-block-menu"
-                    style={{ top: dropPos.top, left: dropPos.left }}
-                    onMouseDown={(e) => e.stopPropagation()}
+        <div className="sw-gui-list-pane" style={{ width: stepList.width, flex: "0 0 auto" }}>
+          <div className="sw-gui-list-head">
+            <span>{t("gui.flow")}</span>
+            <div className="sw-gui-list-actions">
+              {!readOnly && (
+                <div className="sw-add-block-wrap">
+                  <button
+                    type="button"
+                    className="sw-btn sw-btn-sm sw-add-block-main"
+                    onClick={addStep}
                   >
-                    <button type="button" className="sw-add-block-item" onClick={addIfBranch}>
-                      {t("gui.addIf")}
-                    </button>
-                    <button type="button" className="sw-add-block-item" onClick={addSwitch}>
-                      {t("gui.addSwitch")}
-                    </button>
-                    <button type="button" className="sw-add-block-item" onClick={addFork}>
-                      {t("gui.addFork")}
-                    </button>
-                    <button type="button" className="sw-add-block-item" onClick={addSection}>
-                      {t("gui.addSection")}
-                    </button>
-                    <button type="button" className="sw-add-block-item" onClick={addSubBranch}>
-                      {t("gui.addBranch")}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-            <button
-              type="button"
-              className="sw-icon-btn"
-              title={t("file.settings")}
-              onClick={() => setShowSettings(true)}
-            >
-              <Settings size={14} />
-            </button>
+                    <Plus size={13} /> {t("gui.addStep")}
+                  </button>
+                  <button
+                    type="button"
+                    ref={chevronRef}
+                    className="sw-add-block-chevron"
+                    title={t("gui.addBlock")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDrop();
+                    }}
+                  >
+                    <ChevronDown size={12} />
+                  </button>
+                  {dropOpen && (
+                    <div
+                      className="sw-add-block-menu"
+                      style={{ top: dropPos.top, left: dropPos.left }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <button type="button" className="sw-add-block-item" onClick={addIfBranch}>
+                        {t("gui.addIf")}
+                      </button>
+                      <button type="button" className="sw-add-block-item" onClick={addSwitch}>
+                        {t("gui.addSwitch")}
+                      </button>
+                      <button type="button" className="sw-add-block-item" onClick={addFork}>
+                        {t("gui.addFork")}
+                      </button>
+                      <button type="button" className="sw-add-block-item" onClick={addSection}>
+                        {t("gui.addSection")}
+                      </button>
+                      <button type="button" className="sw-add-block-item" onClick={addSubBranch}>
+                        {t("gui.addBranch")}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              <button
+                type="button"
+                className="sw-icon-btn"
+                title={t("file.settings")}
+                onClick={() => setShowSettings(true)}
+              >
+                <Settings size={14} />
+              </button>
+            </div>
           </div>
-        </div>
-        <FlowStepList
-          rows={rows}
-          lanes={guiModel.lanes}
-          selectedIndex={selectedIndex}
-          lockedRows={lockedRows}
-          canReorder={!readOnly}
-          onReorder={moveStepTo}
-          onSelect={setSelectedIndex}
-        />
-      </div>
-      <div
-        className="sw-resizer"
-        role="separator"
-        aria-orientation="vertical"
-        onMouseDown={stepList.startDrag}
-        onTouchStart={stepList.startDrag}
-      />
-      <div
-        className="sw-gui-inspector-pane"
-        style={{ width: detail.width, flex: "0 0 auto" }}
-      >
-        {isStep ? (
-          <StepInspector
-            row={inspectorRow}
+          <FlowStepList
+            rows={rows}
             lanes={guiModel.lanes}
-            blocks={guiModel.blocks}
-            props={guiModel.props}
-            src={src}
-            theme={theme}
-            reorder={reorder}
-            readOnly={readOnly}
-            onPatch={patchRow}
-            onMove={moveStep}
-            onOpenMove={() => setShowMove(true)}
-            onDelete={deleteRow}
+            selectedIndex={selectedIndex}
+            lockedRows={lockedRows}
+            canReorder={!readOnly}
+            onReorder={moveStepTo}
+            onSelect={setSelectedIndex}
           />
-        ) : inspectorRow ? (
-          <BranchInspector
-            row={inspectorRow}
-            readOnly={readOnly}
-            onPatch={patchRow}
-            onDelete={deleteRow}
-            onAddCase={
-              !readOnly &&
-              ["branchStart", "branchCase"].includes(inspectorRow?.kind)
-                ? addCaseToBranch
-                : undefined
-            }
-          />
-        ) : (
-          <div className="sw-gui-empty">{t("gui.selectRow")}</div>
-        )}
-      </div>
-      <div
-        className="sw-resizer"
-        role="separator"
-        aria-orientation="vertical"
-        onMouseDown={detail.startDrag}
-        onTouchStart={detail.startDrag}
-      />
-      <div className="sw-gui-preview-pane sw-preview-pane">
-        <PreviewPane
-          svg={interactiveSvg ?? svg}
-          hasErrors={errors?.length > 0}
-          onRowClick={!readOnly ? setSelectedIndex : undefined}
+        </div>
+        <div
+          className="sw-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          onMouseDown={stepList.startDrag}
+          onTouchStart={stepList.startDrag}
         />
-      </div>
+        <div className="sw-gui-inspector-pane" style={{ width: detail.width, flex: "0 0 auto" }}>
+          {isStep ? (
+            <StepInspector
+              row={inspectorRow}
+              lanes={guiModel.lanes}
+              blocks={guiModel.blocks}
+              props={guiModel.props}
+              src={src}
+              theme={theme}
+              reorder={reorder}
+              readOnly={readOnly}
+              onPatch={patchRow}
+              onMove={moveStep}
+              onOpenMove={() => setShowMove(true)}
+              onDelete={deleteRow}
+            />
+          ) : inspectorRow ? (
+            <BranchInspector
+              row={inspectorRow}
+              readOnly={readOnly}
+              onPatch={patchRow}
+              onDelete={deleteRow}
+              onAddCase={
+                !readOnly && ["branchStart", "branchCase"].includes(inspectorRow?.kind)
+                  ? addCaseToBranch
+                  : undefined
+              }
+            />
+          ) : (
+            <div className="sw-gui-empty">{t("gui.selectRow")}</div>
+          )}
+        </div>
+        <div
+          className="sw-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          onMouseDown={detail.startDrag}
+          onTouchStart={detail.startDrag}
+        />
+        <div className="sw-gui-preview-pane sw-preview-pane">
+          <PreviewPane
+            svg={interactiveSvg ?? svg}
+            hasErrors={errors?.length > 0}
+            onRowClick={!readOnly ? setSelectedIndex : undefined}
+          />
+        </div>
       </div>
 
       <ErrorList errors={errors} onSelectLine={() => {}} />
