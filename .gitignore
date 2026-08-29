@@ -6,6 +6,7 @@ node_modules/
 dist/
 dist-electron/
 build/
+!apps/desktop/build/
 out/
 # electron-builder output. Anchored so it does not also swallow tools/release,
 # which is source.
