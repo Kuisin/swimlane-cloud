@@ -11,7 +11,9 @@
     "build": "vite build",
     "start": "electron .",
     "build:mac": "vite build && electron-builder --mac",
-    "build:win": "vite build && electron-builder --win"
+    "build:win": "vite build && electron-builder --win",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@swimlane-cloud/diagram-converter": "workspace:*",
@@ -29,7 +31,8 @@
     "electron-builder": "^25.0.0",
     "tailwindcss": "^4.0.0",
     "vite": "^6.0.0",
-    "wait-on": "^8.0.1"
+    "wait-on": "^8.0.1",
+    "prettier": "^3.9.6"
   },
   "build": {
     "appId": "com.swimlanecloud.desktop",
@@ -46,16 +49,24 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
-      ]
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "win": {
       "target": [
         {
           "target": "nsis"
         }
-      ]
-    }
+      ],
+      "artifactName": "Swimlane-Cloud-${version}-setup.${ext}"
+    },
+    "artifactName": "Swimlane-Cloud-${version}-${arch}.${ext}",
+    "afterPack": "build/adhoc-sign.cjs"
   }
 }
