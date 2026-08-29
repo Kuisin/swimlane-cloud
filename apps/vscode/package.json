@@ -1,0 +1,102 @@
+{
+  "name": "swimlane-diagrams",
+  "displayName": "Swimlane Diagrams",
+  "description": "Edit kai-swimlane .txt diagrams in VS Code with live preview, backed by your own git history and GitHub for review and release.",
+  "version": "0.1.0",
+  "publisher": "swimlane-cloud",
+  "private": true,
+  "license": "SEE LICENSE IN README.md",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "main": "./dist/extension.cjs",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Diagrams can be viewed and edited in an untrusted workspace, but git operations are disabled because committing runs the repository's hooks."
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "swimlane.open",
+        "title": "Swimlane: Open Diagram Editor",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "swimlane.checkpoint",
+        "title": "Swimlane: Checkpoint (commit diagrams)"
+      },
+      {
+        "command": "swimlane.startEdit",
+        "title": "Swimlane: Start Edit (new branch)"
+      },
+      {
+        "command": "swimlane.publish",
+        "title": "Swimlane: Push and Open Pull Request"
+      },
+      {
+        "command": "swimlane.showLog",
+        "title": "Swimlane: Show Git Log"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "swimlane.open",
+          "when": "resourceExtname == .txt",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Swimlane Diagrams",
+      "properties": {
+        "swimlane.diagramsRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Folder holding the .txt diagrams, relative to the workspace root. Empty means the whole workspace. Overridden by .swimlane.json when present."
+        },
+        "swimlane.integrationBranch": {
+          "type": "string",
+          "default": "test",
+          "description": "Branch that edit branches are cut from and merged back into. Never the production branch."
+        },
+        "swimlane.productionBranch": {
+          "type": "string",
+          "default": "main",
+          "description": "Production branch. Releases are tagged here; it is never a direct edit target."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p . --noEmit",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@swimlane-cloud/diagram-converter": "workspace:*",
+    "@swimlane-cloud/editor": "workspace:*",
+    "@swimlane-cloud/github-client": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.25.0",
+    "prettier": "^3.9.6",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
+  }
+}

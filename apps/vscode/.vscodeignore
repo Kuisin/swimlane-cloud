@@ -1,0 +1,11 @@
+# Only the bundles ship. Everything else is build input.
+src/**
+webview/**
+test/**
+node_modules/**
+esbuild.mjs
+tsconfig.json
+vitest.config.ts
+.prettierignore
+**/*.map
+**/*.test.*
