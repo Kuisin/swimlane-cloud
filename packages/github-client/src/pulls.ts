@@ -1,0 +1,132 @@
+/**
+ * Pull requests.
+ *
+ * Every merge goes through `assertMergeTarget`, so the illegal transition the
+ * branch model exists to prevent — `tmp-* -> main`, unreviewed work landing
+ * straight in production and in a public release URL — cannot be expressed by
+ * any caller of this package, in either app.
+ */
+
+import { assertMergeTarget } from "./branch-model.ts";
+import { GitHubConflictError } from "./errors.ts";
+import type { RestClient } from "./rest.ts";
+import type { RepoRef } from "./types.ts";
+
+export interface PullRequest {
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  merged: boolean;
+  head: string;
+  base: string;
+  htmlUrl: string;
+  draft: boolean;
+}
+
+interface RawPull {
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  merged?: boolean;
+  merged_at?: string | null;
+  head: { ref: string };
+  base: { ref: string };
+  html_url: string;
+  draft?: boolean;
+}
+
+function toPull(raw: RawPull): PullRequest {
+  return {
+    number: raw.number,
+    title: raw.title,
+    state: raw.state,
+    merged: raw.merged ?? Boolean(raw.merged_at),
+    head: raw.head.ref,
+    base: raw.base.ref,
+    htmlUrl: raw.html_url,
+    draft: raw.draft ?? false,
+  };
+}
+
+export type MergeMethod = "merge" | "squash" | "rebase";
+
+export function createPullsApi(rest: RestClient, repo: RepoRef) {
+  const base = `/repos/${repo.owner}/${repo.repo}`;
+
+  return {
+    async createPullRequest(opts: {
+      head: string;
+      base: string;
+      title: string;
+      body?: string;
+      draft?: boolean;
+    }): Promise<PullRequest> {
+      // Refuse before the request, not after: a rejected PR still notifies
+      // reviewers and leaves a closed PR behind.
+      assertMergeTarget(opts.head, opts.base);
+      const raw = await rest.request<RawPull>(`${base}/pulls`, {
+        method: "POST",
+        body: {
+          head: opts.head,
+          base: opts.base,
+          title: opts.title,
+          body: opts.body ?? "",
+          draft: opts.draft ?? false,
+        },
+      });
+      return toPull(raw);
+    },
+
+    async listPullRequests(
+      opts: { state?: "open" | "closed" | "all"; head?: string; base?: string } = {},
+    ): Promise<PullRequest[]> {
+      const params = new URLSearchParams({ state: opts.state ?? "open" });
+      // GitHub wants `owner:branch` here, not a bare branch name.
+      if (opts.head) params.set("head", `${repo.owner}:${opts.head}`);
+      if (opts.base) params.set("base", opts.base);
+      const raws = await rest.paginate<RawPull>(`${base}/pulls?${params}`);
+      return raws.map(toPull);
+    },
+
+    async getPullRequest(number: number): Promise<PullRequest> {
+      return toPull(await rest.request<RawPull>(`${base}/pulls/${number}`));
+    },
+
+    /**
+     * PUT, not POST — and it 405s when the PR is not mergeable, which is how a
+     * conflict surfaces. Translate that into something a user can act on.
+     */
+    async mergePullRequest(
+      number: number,
+      opts: { method?: MergeMethod; title?: string; expectedHeadSha?: string } = {},
+    ): Promise<{ sha: string; merged: boolean }> {
+      const pr = await this.getPullRequest(number);
+      assertMergeTarget(pr.head, pr.base);
+
+      try {
+        const res = await rest.request<{ sha: string; merged: boolean }>(
+          `${base}/pulls/${number}/merge`,
+          {
+            method: "PUT",
+            body: {
+              merge_method: opts.method ?? "merge",
+              ...(opts.title ? { commit_title: opts.title } : {}),
+              ...(opts.expectedHeadSha ? { sha: opts.expectedHeadSha } : {}),
+            },
+          },
+        );
+        return res;
+      } catch (err) {
+        if (err instanceof GitHubConflictError) {
+          throw new GitHubConflictError(
+            `Pull request #${number} cannot be merged automatically — ${pr.head} conflicts with ${pr.base}. ` +
+              "Resolve it on GitHub, or locally, and try again.",
+          );
+        }
+        throw err;
+      }
+    },
+  };
+}
+
+export type PullsApi = ReturnType<typeof createPullsApi>;

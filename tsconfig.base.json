@@ -11,6 +11,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    // Workspace packages that ship raw TypeScript (packages/github-client)
+    // are imported by path, so consumers must accept a .ts specifier.
+    // Safe repo-wide: every project here sets noEmit.
+    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "allowJs": true,
     "declaration": false,
