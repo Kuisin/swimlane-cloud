@@ -12,10 +12,11 @@ const rawPull = (head: string, base: string) => ({
   title: "Edit diagrams",
   state: "open",
   merged_at: null,
-  head: { ref: head },
-  base: { ref: base },
+  head: { ref: head, sha: "a".repeat(40) },
+  base: { ref: base, sha: "b".repeat(40) },
   html_url: "https://github.com/o/r/pull/7",
   draft: false,
+  user: { login: "kuisin" },
 });
 
 function routed(routes: Record<string, unknown>, status: Record<string, number> = {}) {
@@ -105,5 +106,53 @@ describe("mergePullRequest", () => {
       .catch((e) => e);
     expect(err).toBeInstanceOf(GitHubConflictError);
     expect(err.message).toMatch(/conflicts with test/);
+  });
+});
+
+describe("listPullFiles", () => {
+  it("returns only the diagram sources when an extension filter is given", async () => {
+    const { fetchImpl } = routed({
+      "/pulls/7/files": [
+        { filename: "diagrams/a.txt", status: "modified", additions: 3, deletions: 1 },
+        { filename: "src/app.ts", status: "modified", additions: 9, deletions: 0 },
+        { filename: "diagrams/new.txt", status: "added", additions: 12, deletions: 0 },
+      ],
+    });
+    const files = await api(fetchImpl).listPullFiles(7, { onlyExt: ".txt" });
+    expect(files.map((f) => f.path)).toEqual(["diagrams/a.txt", "diagrams/new.txt"]);
+    expect(files[1]!.status).toBe("added");
+  });
+
+  it("keeps the previous path for a rename, so the old version can still be read", async () => {
+    const { fetchImpl } = routed({
+      "/pulls/7/files": [
+        {
+          filename: "diagrams/new-name.txt",
+          previous_filename: "diagrams/old-name.txt",
+          status: "renamed",
+          additions: 0,
+          deletions: 0,
+        },
+      ],
+    });
+    const [f] = await api(fetchImpl).listPullFiles(7);
+    expect(f).toMatchObject({ status: "renamed", previousPath: "diagrams/old-name.txt" });
+  });
+
+  it("normalises GitHub's other statuses to `modified`", async () => {
+    const { fetchImpl } = routed({
+      "/pulls/7/files": [{ filename: "a.txt", status: "changed", additions: 1, deletions: 1 }],
+    });
+    expect((await api(fetchImpl).listPullFiles(7))[0]!.status).toBe("modified");
+  });
+});
+
+describe("getPullRequest", () => {
+  it("exposes both commit shas, which the visual diff needs", async () => {
+    const { fetchImpl } = routed({ "/pulls/7": rawPull("tmp-u-e", "test") });
+    const pr = await api(fetchImpl).getPullRequest(7);
+    expect(pr.headSha).toBe("a".repeat(40));
+    expect(pr.baseSha).toBe("b".repeat(40));
+    expect(pr.author).toBe("kuisin");
   });
 });

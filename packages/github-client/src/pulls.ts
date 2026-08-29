@@ -19,8 +19,23 @@ export interface PullRequest {
   merged: boolean;
   head: string;
   base: string;
+  /** Commit shas, needed to render the same file on both sides of the change. */
+  headSha: string;
+  baseSha: string;
   htmlUrl: string;
   draft: boolean;
+  author: string | null;
+}
+
+export type FileChange = "added" | "modified" | "removed" | "renamed";
+
+export interface PullFile {
+  path: string;
+  /** Set only for a rename, so the previous version can still be read. */
+  previousPath: string | null;
+  status: FileChange;
+  additions: number;
+  deletions: number;
 }
 
 interface RawPull {
@@ -29,10 +44,11 @@ interface RawPull {
   state: "open" | "closed";
   merged?: boolean;
   merged_at?: string | null;
-  head: { ref: string };
-  base: { ref: string };
+  head: { ref: string; sha: string };
+  base: { ref: string; sha: string };
   html_url: string;
   draft?: boolean;
+  user?: { login?: string } | null;
 }
 
 function toPull(raw: RawPull): PullRequest {
@@ -43,8 +59,11 @@ function toPull(raw: RawPull): PullRequest {
     merged: raw.merged ?? Boolean(raw.merged_at),
     head: raw.head.ref,
     base: raw.base.ref,
+    headSha: raw.head.sha,
+    baseSha: raw.base.sha,
     htmlUrl: raw.html_url,
     draft: raw.draft ?? false,
+    author: raw.user?.login ?? null,
   };
 }
 
@@ -90,6 +109,37 @@ export function createPullsApi(rest: RestClient, repo: RepoRef) {
 
     async getPullRequest(number: number): Promise<PullRequest> {
       return toPull(await rest.request<RawPull>(`${base}/pulls/${number}`));
+    },
+
+    /**
+     * Files a pull request touches.
+     *
+     * Only the paths and their status; the patch text is deliberately ignored,
+     * because the point of rendering a review visually is that a unified diff of
+     * DSL source is close to unreadable for anyone who is not the author.
+     */
+    async listPullFiles(number: number, opts: { onlyExt?: string } = {}): Promise<PullFile[]> {
+      const raws = await rest.paginate<{
+        filename: string;
+        previous_filename?: string;
+        status: string;
+        additions: number;
+        deletions: number;
+      }>(`${base}/pulls/${number}/files`);
+
+      return raws
+        .filter((f) => !opts.onlyExt || f.filename.toLowerCase().endsWith(opts.onlyExt))
+        .map((f) => ({
+          path: f.filename,
+          previousPath: f.previous_filename ?? null,
+          // GitHub also reports "changed" and "unchanged"; treat anything that
+          // is not a create/delete/rename as a modification.
+          status: (["added", "removed", "renamed"].includes(f.status)
+            ? f.status
+            : "modified") as FileChange,
+          additions: f.additions,
+          deletions: f.deletions,
+        }));
     },
 
     /**

@@ -11,8 +11,10 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import {
   createRepoReader,
+  createRestClient,
   type FetchImpl,
   type RepoReaderApi,
+  type RestClient,
 } from "@swimlane-cloud/github-client";
 import { openSession, SESSION_COOKIE } from "@/lib/session";
 
@@ -88,3 +90,20 @@ export const getReader = cache(async (owner: string, repo: string): Promise<Repo
       )
     : createRepoReader({ owner, repo }, { ...shared, fetchImpl: publicFetch });
 });
+
+/**
+ * A REST client carrying this app's session and endpoint configuration.
+ *
+ * Routes must not construct their own: one built directly would miss the
+ * origin override and the per-user cache policy, and would silently talk to
+ * api.github.com even when the app is pointed elsewhere.
+ */
+export async function getRestClient(): Promise<RestClient> {
+  const session = await getSession();
+  const api = origins()?.api;
+  return createRestClient({
+    ...(session ? { getToken: () => session.token } : {}),
+    ...(api ? { origin: api } : {}),
+    fetchImpl: session ? privateFetch : publicFetch,
+  });
+}

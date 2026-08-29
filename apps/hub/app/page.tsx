@@ -65,6 +65,13 @@ export default async function Home({
             <dt className="inline text-neutral-900">/owner/repo/c/&lt;sha&gt;/path/to.txt</dt>
             <dd className="inline text-neutral-500"> — a permalink that never changes</dd>
           </div>
+          <div>
+            <dt className="inline text-neutral-900">/owner/repo/pull/123</dt>
+            <dd className="inline text-neutral-500">
+              {" "}
+              — a pull request as before/after diagrams, for review
+            </dd>
+          </div>
         </dl>
       </section>
     </main>
