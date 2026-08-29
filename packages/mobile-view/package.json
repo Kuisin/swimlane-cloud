@@ -4,12 +4,17 @@
   "description": "Converts the parsed kai-swimlane model into mobile-friendly React components (vertical, card-based). Separate from the SVG renderer and the desktop editor; a base for a future mobile editor.",
   "license": "SEE LICENSE IN README.md",
   "type": "module",
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "exports": {
     ".": "./src/index.jsx"
   },
   "scripts": {
-    "test": "vitest run"
+    "build": "node -e \"process.exit(0)\"",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@swimlane-cloud/diagram-converter": "workspace:*"
@@ -23,6 +28,7 @@
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "prettier": "^3.9.6"
   }
 }

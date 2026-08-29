@@ -24,13 +24,13 @@ const svg = textToSvg(dslText); // -> SVG markup string
 
 Other exports from the main entry point:
 
-| Export | Purpose |
-| --- | --- |
-| `textToSvg(dsl, options?)` | DSL string → full SVG diagram string |
-| `renderDiagramSvg(...)` | Lower-level: parsed diagram → SVG string |
-| `renderStepShape` / `renderBlockIcon` | Render individual pieces |
+| Export                                                      | Purpose                                  |
+| ----------------------------------------------------------- | ---------------------------------------- |
+| `textToSvg(dsl, options?)`                                  | DSL string → full SVG diagram string     |
+| `renderDiagramSvg(...)`                                     | Lower-level: parsed diagram → SVG string |
+| `renderStepShape` / `renderBlockIcon`                       | Render individual pieces                 |
 | `renderPartsPreviewHtml` / `renderTemplatePartsPreviewHtml` | Parts/template galleries as HTML strings |
-| `BRANCH_COLOR_STYLES` | Branch color style constants |
+| `BRANCH_COLOR_STYLES`                                       | Branch color style constants             |
 
 Subpath exports for working with the DSL directly:
 

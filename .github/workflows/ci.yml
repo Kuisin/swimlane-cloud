@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Every suite is offline by design: the GitHub client drives an injected
+      # `fetchImpl` against recorded fixtures, so CI never touches the network
+      # and never spends rate-limit budget.
+      - name: Test
+        run: pnpm -r test
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Format check
+        run: pnpm format:check
+
+      # Both Next apps must build with no environment set at all — that is what
+      # keeps a missing secret from turning into a failed deploy.
+      - name: Build
+        run: pnpm build

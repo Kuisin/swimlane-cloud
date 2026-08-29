@@ -1,8 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { tokenizeDslLine } from "./highlight-dsl.js";
 
-const concat = (line) => tokenizeDslLine(line).map((tok) => tok.s).join("");
-const types = (line) => tokenizeDslLine(line).filter((t) => t.s.trim()).map((t) => `${t.t}:${t.s}`);
+const concat = (line) =>
+  tokenizeDslLine(line)
+    .map((tok) => tok.s)
+    .join("");
+const types = (line) =>
+  tokenizeDslLine(line)
+    .filter((t) => t.s.trim())
+    .map((t) => `${t.t}:${t.s}`);
 
 describe("tokenizeDslLine", () => {
   it("is lossless — tokens always concatenate back to the line (overlay alignment)", () => {

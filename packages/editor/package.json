@@ -4,14 +4,24 @@
   "description": "Shared DSL editor surface (GUI + text modes, live preview, folder tree, document model). Storage-agnostic via the EditorHost contract. Consumed identically by web, desktop, and SaaS.",
   "license": "SEE LICENSE IN README.md",
   "type": "module",
-  "sideEffects": ["*.css"],
-  "files": ["src"],
+  "sideEffects": [
+    "*.css"
+  ],
+  "files": [
+    "src"
+  ],
   "exports": {
-    ".": "./src/index.jsx",
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.jsx"
+    },
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
-    "test": "vitest run"
+    "build": "node -e \"process.exit(0)\"",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@swimlane-cloud/diagram-converter": "workspace:*",
@@ -24,6 +34,7 @@
   "devDependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "prettier": "^3.9.6"
   }
 }

@@ -1,0 +1,96 @@
+/*
+ * Map the editor's palette onto VS Code's theme colours.
+ *
+ * The editor ships a light-only palette with no prefers-color-scheme block, so
+ * without this the editor is a white rectangle inside a dark workbench.
+ *
+ * Critically, the `--sw-*` variables are declared in TWO places:
+ * `.sw-editor` and `.sw-parts-tooltip`. The tooltip re-declares its own because
+ * it renders into a document.body portal and so sits outside `.sw-editor`.
+ * Overriding only the first leaves the hover preview a white box on a dark
+ * background, so both selectors are listed here.
+ */
+
+.sw-editor,
+.sw-parts-tooltip {
+  --sw-bg: var(--vscode-editor-background);
+  --sw-bg-alt: var(--vscode-sideBar-background);
+  --sw-bg-sunken: var(--vscode-editorWidget-background);
+  --sw-border: var(--vscode-panel-border, var(--vscode-editorWidget-border));
+  --sw-border-strong: var(--vscode-focusBorder);
+  --sw-text: var(--vscode-editor-foreground);
+  --sw-text-muted: var(--vscode-descriptionForeground);
+  --sw-text-faint: var(--vscode-disabledForeground);
+  --sw-accent: var(--vscode-textLink-foreground);
+  --sw-accent-bg: var(--vscode-editor-selectionBackground);
+  --sw-amber: var(--vscode-editorWarning-foreground);
+  --sw-amber-bg: var(--vscode-inputValidation-warningBackground);
+  --sw-danger: var(--vscode-editorError-foreground);
+
+  --sw-syn-comment: var(--vscode-editorLineNumber-foreground);
+  --sw-syn-meta: var(--vscode-symbolIcon-namespaceForeground, var(--vscode-textLink-foreground));
+  --sw-syn-section: var(--vscode-symbolIcon-keywordForeground, var(--vscode-textLink-foreground));
+  --sw-syn-keyword: var(--vscode-symbolIcon-keywordForeground, var(--vscode-textLink-foreground));
+  --sw-syn-key: var(--vscode-symbolIcon-propertyForeground, var(--vscode-editor-foreground));
+  --sw-syn-ref: var(--vscode-symbolIcon-variableForeground, var(--vscode-editor-foreground));
+  --sw-syn-anchor: var(--vscode-symbolIcon-functionForeground, var(--vscode-textLink-foreground));
+  --sw-syn-punct: var(--vscode-descriptionForeground);
+
+  --sw-mono: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-family: var(--vscode-font-family);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+}
+
+/*
+ * The generated SVG carries a hard-coded white background, which is correct on
+ * the web and wrong inside a dark editor. Only the preview surface is adjusted;
+ * the SVG itself is never rewritten, so exports stay faithful.
+ */
+.sw-editor .sw-preview svg {
+  border-radius: 4px;
+}
+
+.sw-vscode-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.sw-vscode-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.sw-vscode-status {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 3px 10px;
+  font-size: 11px;
+  border-bottom: 1px solid var(--vscode-panel-border, transparent);
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-sideBar-background);
+}
+
+.sw-vscode-status--warn {
+  background: var(--vscode-inputValidation-warningBackground);
+  color: var(--vscode-inputValidation-warningForeground, var(--vscode-editor-foreground));
+}
+
+.sw-vscode-branch {
+  font-family: var(--vscode-editor-font-family, monospace);
+  color: var(--vscode-textLink-foreground);
+}
+
+.sw-vscode-problem {
+  color: var(--vscode-editorWarning-foreground);
+}

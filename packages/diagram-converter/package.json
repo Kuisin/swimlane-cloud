@@ -1,7 +1,7 @@
 {
   "name": "@swimlane-cloud/diagram-converter",
   "version": "0.1.0",
-  "description": "Dependency-free JavaScript converter for the kai-swimlane DSL: parses the DSL and renders SVG/HTML as strings. No React, no DOM — runs in the browser and in Node for server-side rendering.",
+  "description": "Dependency-free JavaScript converter for the kai-swimlane DSL: parses the DSL and renders SVG/HTML as strings. No React, no DOM \u2014 runs in the browser and in Node for server-side rendering.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -17,9 +17,12 @@
   },
   "scripts": {
     "build": "node -e \"process.exit(0)\"",
-    "test": "vitest run"
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "prettier": "^3.9.6"
   }
 }

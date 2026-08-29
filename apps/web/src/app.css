@@ -12,8 +12,14 @@ body,
   /* Match the editor's surface + font so the app reads as one piece. */
   background: #ffffff;
   color: #1e293b;
-  font-family: "Noto Sans JP", "Noto Sans", system-ui, -apple-system, "Segoe UI",
-    Roboto, sans-serif;
+  font-family:
+    "Noto Sans JP",
+    "Noto Sans",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
 }
 
 .web-topbar {

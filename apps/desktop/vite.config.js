@@ -39,10 +39,7 @@ export default defineConfig({
         converterSrc,
         "diagram-options.js",
       ),
-      "@swimlane-cloud/diagram-converter": path.join(
-        converterSrc,
-        "render-pure/index.js",
-      ),
+      "@swimlane-cloud/diagram-converter": path.join(converterSrc, "render-pure/index.js"),
     },
   },
 });

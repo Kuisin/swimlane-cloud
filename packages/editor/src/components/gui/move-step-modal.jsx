@@ -46,7 +46,9 @@ export function MoveStepModal({ open, rows, currentIndex, lanes, onMove, onClose
                         <span className="sw-move-label">
                           {stepBlockDisplayName(rows[rowIdx], rowIdx, t)}
                         </span>
-                        {isCurrent && <span className="sw-move-current-tag">{t("move.current")}</span>}
+                        {isCurrent && (
+                          <span className="sw-move-current-tag">{t("move.current")}</span>
+                        )}
                       </button>
                     </li>
                   );

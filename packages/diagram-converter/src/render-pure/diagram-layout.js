@@ -203,17 +203,10 @@ export function gutterTextCols(gutterWidth, fontSize) {
 
 export function blockMaxTextCols(shape, hasIcon) {
   const factor = BLOCK_SHAPE_WIDTH_FACTOR[shape] ?? 1;
-  return Math.max(
-    BLOCK_MIN_TEXT_COLS,
-    Math.round(factor) - (hasIcon ? BLOCK_ICON_COLS : 0),
-  );
+  return Math.max(BLOCK_MIN_TEXT_COLS, Math.round(factor) - (hasIcon ? BLOCK_ICON_COLS : 0));
 }
 
 export function decisionDiamondWidth(condLength) {
-  const { decisionMinWidth, decisionWidthPadding, decisionWidthCharFactor } =
-    DIAGRAM_LAYOUT;
-  return Math.max(
-    decisionMinWidth,
-    (condLength + decisionWidthPadding) * decisionWidthCharFactor,
-  );
+  const { decisionMinWidth, decisionWidthPadding, decisionWidthCharFactor } = DIAGRAM_LAYOUT;
+  return Math.max(decisionMinWidth, (condLength + decisionWidthPadding) * decisionWidthCharFactor);
 }

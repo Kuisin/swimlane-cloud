@@ -106,8 +106,8 @@ export default function PublicSharePage() {
       <Centered>
         <h1 className="text-lg font-semibold">Not found</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          No published version for <code>/p/{slug}</code> in this browser. (Demo
-          links resolve only where they were published.)
+          No published version for <code>/p/{slug}</code> in this browser. (Demo links resolve only
+          where they were published.)
         </p>
       </Centered>
     );
@@ -206,7 +206,10 @@ function extractTitle(dsl: string): string {
   const parts: string[] = [];
   for (const line of lines) {
     const t = line.trim();
-    if (t === "/title/") { inTitle = true; continue; }
+    if (t === "/title/") {
+      inTitle = true;
+      continue;
+    }
     if (inTitle) {
       if (t.startsWith("/") || t === "@end") break;
       if (t) parts.push(t);
@@ -232,9 +235,7 @@ function ViewButton({
       onClick={onClick}
       aria-pressed={active}
       className={`flex items-center gap-1.5 px-2.5 py-1.5 font-medium ${
-        active
-          ? "bg-neutral-900 text-white"
-          : "bg-white text-neutral-600 hover:bg-neutral-50"
+        active ? "bg-neutral-900 text-white" : "bg-white text-neutral-600 hover:bg-neutral-50"
       }`}
     >
       {icon}

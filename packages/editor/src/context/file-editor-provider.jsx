@@ -63,8 +63,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     if (activeDocumentId) onActiveDocumentRef.current?.(activeDocumentId);
   }, [activeDocumentId]);
 
-  const activeDocument =
-    documents.find((doc) => doc.id === activeDocumentId) || null;
+  const activeDocument = documents.find((doc) => doc.id === activeDocumentId) || null;
   const src = activeDocument?.src ?? "";
   const theme = THEMES[themeKey] ?? THEMES.basic;
   const model = useMemo(() => parseDSL(src), [src]);
@@ -113,8 +112,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
         // Open the host-requested file if it still exists, else the first one,
         // so the editor always has content to show.
         const wanted = options?.initialDocumentId;
-        const target =
-          (wanted && (list || []).find((f) => f.id === wanted)) || (list || [])[0];
+        const target = (wanted && (list || []).find((f) => f.id === wanted)) || (list || [])[0];
         if (target && !cancelled) {
           await openFile(target.id);
         }
@@ -139,7 +137,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
         setDocuments((cur) => cur.filter((d) => d.id !== e.id));
         setOpenDocumentIds((cur) => {
           const next = cur.filter((id) => id !== e.id);
-          setActiveDocumentIdState((curId) => (curId === e.id ? next[0] ?? null : curId));
+          setActiveDocumentIdState((curId) => (curId === e.id ? (next[0] ?? null) : curId));
           return next;
         });
         setFiles((cur) => cur.filter((f) => f.id !== e.id));
@@ -165,9 +163,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     if (readOnly) return;
     setDocuments((cur) =>
       cur.map((doc) =>
-        doc.id === documentId
-          ? { ...doc, src: nextSrc, revision: (doc.revision ?? 0) + 1 }
-          : doc,
+        doc.id === documentId ? { ...doc, src: nextSrc, revision: (doc.revision ?? 0) + 1 } : doc,
       ),
     );
   }
@@ -192,9 +188,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
   function setActiveDocumentParseErrorPolicy(policy) {
     if (readOnly || !activeDocumentId) return;
     setDocuments((cur) =>
-      cur.map((doc) =>
-        doc.id === activeDocumentId ? { ...doc, parseErrorPolicy: policy } : doc,
-      ),
+      cur.map((doc) => (doc.id === activeDocumentId ? { ...doc, parseErrorPolicy: policy } : doc)),
     );
   }
 
@@ -229,9 +223,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
         "This file has unsaved changes. Switch anyway? (changes will be discarded)",
       );
       if (!ok) return;
-      setDocuments((cur) =>
-        cur.map((d) => (d.id === leaving.id ? { ...d, src: d.savedSrc } : d)),
-      );
+      setDocuments((cur) => cur.map((d) => (d.id === leaving.id ? { ...d, src: d.savedSrc } : d)));
     }
     setActiveDocumentIdState(documentId);
   }
@@ -240,7 +232,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     setOpenDocumentIds((cur) => {
       const next = cur.filter((id) => id !== documentId);
       setActiveDocumentIdState((curId) =>
-        curId === documentId ? next[next.length - 1] ?? null : curId,
+        curId === documentId ? (next[next.length - 1] ?? null) : curId,
       );
       return next;
     });
@@ -345,9 +337,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
   async function deleteFile(fileId) {
     if (readOnly || !hostHas(host, "delete")) return;
     const name = fileId.split("/").pop();
-    const ok = await dialog.confirm(
-      `Delete "${name}"? This cannot be undone.`,
-    );
+    const ok = await dialog.confirm(`Delete "${name}"? This cannot be undone.`);
     if (!ok) return;
     try {
       await host.delete(fileId);
@@ -372,9 +362,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
       `Delete folder "${name}" and all files inside? This cannot be undone.`,
     );
     if (!ok) return;
-    const toDelete = files.filter(
-      (f) => f.id === dirPath || f.id.startsWith(dirPath + "/"),
-    );
+    const toDelete = files.filter((f) => f.id === dirPath || f.id.startsWith(dirPath + "/"));
     try {
       if (hostHas(host, "rmdir")) {
         await host.rmdir(dirPath);
@@ -408,13 +396,9 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
       await host.rename(fromId, toId);
       const newName = toId.split("/").pop();
       setDocuments((cur) =>
-        cur.map((d) =>
-          d.id === fromId ? { ...d, id: toId, name: newName } : d,
-        ),
+        cur.map((d) => (d.id === fromId ? { ...d, id: toId, name: newName } : d)),
       );
-      setOpenDocumentIds((cur) =>
-        cur.map((id) => (id === fromId ? toId : id)),
-      );
+      setOpenDocumentIds((cur) => cur.map((id) => (id === fromId ? toId : id)));
       setActiveDocumentIdState((curId) => (curId === fromId ? toId : curId));
       await refreshFileList();
     } catch (err) {
@@ -450,9 +434,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     try {
       await host.checkpoint({ message, files: filesPayload });
       const ids = new Set(dirty.map((d) => d.id));
-      setDocuments((cur) =>
-        cur.map((d) => (ids.has(d.id) ? { ...d, savedSrc: d.src } : d)),
-      );
+      setDocuments((cur) => cur.map((d) => (ids.has(d.id) ? { ...d, savedSrc: d.src } : d)));
     } catch (err) {
       await dialog.alert(err?.message || "Checkpoint failed.");
     }
@@ -466,9 +448,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     loadError,
     files,
     documents,
-    openDocuments: openDocumentIds
-      .map((id) => documents.find((d) => d.id === id))
-      .filter(Boolean),
+    openDocuments: openDocumentIds.map((id) => documents.find((d) => d.id === id)).filter(Boolean),
     openDocumentIds,
     activeDocument,
     activeDocumentId,
@@ -500,9 +480,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     dialog,
   };
 
-  return (
-    <EditorContext.Provider value={editorValue}>{children}</EditorContext.Provider>
-  );
+  return <EditorContext.Provider value={editorValue}>{children}</EditorContext.Provider>;
 }
 
 /** Prepend forced section bodies into freshly created file content. */

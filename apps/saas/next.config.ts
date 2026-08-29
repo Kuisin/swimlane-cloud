@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   // Workspace packages ship raw ESM/JSX and must be transpiled by Next.
   transpilePackages: [
     "@swimlane-cloud/editor",
+    "@swimlane-cloud/github-client",
     "@swimlane-cloud/diagram-converter",
     "@swimlane-cloud/mobile-view",
   ],

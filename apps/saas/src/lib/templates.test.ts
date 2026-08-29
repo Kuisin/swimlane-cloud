@@ -69,11 +69,7 @@ describe("assertForcedSections", () => {
 
   it("ignores non-forced sections", () => {
     expect(() =>
-      assertForcedSections(
-        DSL,
-        { option: { mode: "optional" } },
-        templatesById,
-      ),
+      assertForcedSections(DSL, { option: { mode: "optional" } }, templatesById),
     ).not.toThrow();
   });
 });

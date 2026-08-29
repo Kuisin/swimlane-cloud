@@ -1,7 +1,8 @@
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { getGitea } from "@/lib/gitea";
 import { getServiceSupabase } from "@/lib/supabase/server";
-import { audit, getRepoCoords, requireUser, slugify } from "@/lib/projects";
+import { audit, getRepoCoords, requireUser } from "@/lib/projects";
+import { INTEGRATION_BRANCH, tmpBranchName } from "@swimlane-cloud/github-client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,12 +22,13 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   const body = await readJson<StartEditBody>(req);
   if (!body.editName) throw new ApiError(400, "editName is required");
 
-  const userSlug = slugify(body.userSlug ?? user.email ?? user.id);
-  const branchName = `tmp-${userSlug}-${slugify(body.editName)}`;
+  // Shared with the hub and the VS Code extension so the same edit produces
+  // the same branch name everywhere.
+  const branchName = tmpBranchName(body.userSlug ?? user.email ?? user.id, body.editName);
 
   const { org, repo, workspaceId } = await getRepoCoords(projectId);
   const gitea = getGitea();
-  await gitea.createBranch(org, repo, branchName, "test");
+  await gitea.createBranch(org, repo, branchName, INTEGRATION_BRANCH);
 
   const supabase = getServiceSupabase();
   const { data, error } = await supabase

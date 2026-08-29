@@ -27,7 +27,7 @@ describe("parser validation — document structure", () => {
 
   it("errors on unclosed fork (missing endfork)", () => {
     expect(msgs(DOC(`fork\n  [a: 並行1]\nand\n  [a: 並行2]`))).toContain(
-      "unclosed fork (missing endfork)"
+      "unclosed fork (missing endfork)",
     );
   });
 
@@ -116,8 +116,8 @@ describe("parser validation — branch colors", () => {
   it("errors on unknown #color tokens on if/elseif/fork/and/section", () => {
     const m = msgs(
       DOC(
-        `if (確認) is (OK) than #pink\n  [a: 手順]\nelseif (NG) than #magenta\n  [a: 差戻]\nendif\nfork #cyan\n  [a: p1]\nand #teal\n  [a: p2]\nendfork\nsection (S) #ivory\n  [a: s1]\nend-section`
-      )
+        `if (確認) is (OK) than #pink\n  [a: 手順]\nelseif (NG) than #magenta\n  [a: 差戻]\nendif\nfork #cyan\n  [a: p1]\nand #teal\n  [a: p2]\nendfork\nsection (S) #ivory\n  [a: s1]\nend-section`,
+      ),
     );
     for (const bad of ["#pink", "#magenta", "#cyan", "#teal", "#ivory"]) {
       expect(m.some((x) => x.includes(`unknown color "${bad}"`))).toBe(true);
@@ -127,8 +127,8 @@ describe("parser validation — branch colors", () => {
   it("accepts all palette colors", () => {
     const m = msgs(
       DOC(
-        `if (c) is (y) than #blue\n  [a: 1]\nelseif (n) than #green\n  [a: 2]\nendif\nfork #purple\n  [a: 3]\nand #gray\n  [a: 4]\nendfork\nsection (S) #orange\n  [a: 5]\nend-section`
-      )
+        `if (c) is (y) than #blue\n  [a: 1]\nelseif (n) than #green\n  [a: 2]\nendif\nfork #purple\n  [a: 3]\nand #gray\n  [a: 4]\nendfork\nsection (S) #orange\n  [a: 5]\nend-section`,
+      ),
     );
     expect(m.filter((x) => x.includes("unknown color"))).toEqual([]);
   });

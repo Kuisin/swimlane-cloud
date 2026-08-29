@@ -7,14 +7,42 @@ const ICON_NAMES = Object.keys(LUCIDE_ICON_NODES);
 
 /** Preset color palette shown in the color picker (light fills + saturated). */
 const COLOR_PALETTE = [
-  "#ffffff", "#f8fafc", "#f1f5f9", "#e2e8f0", "#94a3b8", "#475569", "#1e293b", "#000000",
-  "#fee2e2", "#fecaca", "#ef4444", "#b91c1c",
-  "#ffedd5", "#fed7aa", "#f97316", "#c2410c",
-  "#fef9c3", "#fde68a", "#eab308", "#a16207",
-  "#dcfce7", "#bbf7d0", "#22c55e", "#15803d",
-  "#dbeafe", "#bfdbfe", "#3b82f6", "#1d4ed8",
-  "#e0e7ff", "#c7d2fe", "#6366f1", "#4338ca",
-  "#f3e8ff", "#e9d5ff", "#a855f7", "#7e22ce",
+  "#ffffff",
+  "#f8fafc",
+  "#f1f5f9",
+  "#e2e8f0",
+  "#94a3b8",
+  "#475569",
+  "#1e293b",
+  "#000000",
+  "#fee2e2",
+  "#fecaca",
+  "#ef4444",
+  "#b91c1c",
+  "#ffedd5",
+  "#fed7aa",
+  "#f97316",
+  "#c2410c",
+  "#fef9c3",
+  "#fde68a",
+  "#eab308",
+  "#a16207",
+  "#dcfce7",
+  "#bbf7d0",
+  "#22c55e",
+  "#15803d",
+  "#dbeafe",
+  "#bfdbfe",
+  "#3b82f6",
+  "#1d4ed8",
+  "#e0e7ff",
+  "#c7d2fe",
+  "#6366f1",
+  "#4338ca",
+  "#f3e8ff",
+  "#e9d5ff",
+  "#a855f7",
+  "#7e22ce",
 ];
 
 const cssColor = (v) => {
@@ -25,7 +53,11 @@ const cssColor = (v) => {
 
 /** Render a Lucide icon (by DSL name, with or without a leading `#`) as inline SVG. */
 export function IconGlyph({ name, size = 16 }) {
-  const node = getLucideIconNode(String(name ?? "").replace(/^#/, "").trim());
+  const node = getLucideIconNode(
+    String(name ?? "")
+      .replace(/^#/, "")
+      .trim(),
+  );
   if (!node) return null;
   return (
     <svg
@@ -76,7 +108,9 @@ export function IconField({ value, onChange, readOnly, placeholder }) {
   const wrapRef = useRef(null);
   useDismiss(wrapRef, () => setOpen(false));
 
-  const current = String(value ?? "").replace(/^#/, "").trim();
+  const current = String(value ?? "")
+    .replace(/^#/, "")
+    .trim();
   const filtered = q.trim()
     ? ICON_NAMES.filter((n) => n.includes(q.trim().toLowerCase()))
     : ICON_NAMES;
@@ -161,7 +195,9 @@ export function ColorField({ value, onChange, readOnly }) {
 
   const resolved = cssColor(value);
   const nativeHex = /^#?[0-9a-fA-F]{6}$/.test(String(value ?? "").trim())
-    ? (String(value).startsWith("#") ? value : `#${value}`)
+    ? String(value).startsWith("#")
+      ? value
+      : `#${value}`
     : "#ffffff";
 
   return (
@@ -201,11 +237,7 @@ export function ColorField({ value, onChange, readOnly }) {
           </div>
           <div className="sw-color-popover-foot">
             <label className="sw-color-native">
-              <input
-                type="color"
-                value={nativeHex}
-                onChange={(e) => onChange(e.target.value)}
-              />
+              <input type="color" value={nativeHex} onChange={(e) => onChange(e.target.value)} />
               <span>{t("defs.pick.custom")}</span>
             </label>
             <button

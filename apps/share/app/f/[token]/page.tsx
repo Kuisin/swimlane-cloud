@@ -72,7 +72,7 @@ export default async function SharedFolderPage({
               const isActive = f === active;
               const subtitle = title
                 ? [name, folder].filter(Boolean).join(" · ")
-                : folder ?? null;
+                : (folder ?? null);
               return (
                 <li key={f}>
                   <Link
@@ -88,9 +88,11 @@ export default async function SharedFolderPage({
                       {title || name}
                     </div>
                     {subtitle && (
-                      <div className={`mt-0.5 truncate text-xs ${
-                        isActive ? "text-indigo-400" : "text-neutral-400"
-                      }`}>
+                      <div
+                        className={`mt-0.5 truncate text-xs ${
+                          isActive ? "text-indigo-400" : "text-neutral-400"
+                        }`}
+                      >
                         {subtitle}
                       </div>
                     )}

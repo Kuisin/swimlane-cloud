@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+/* Generate Tailwind classes used by the mobile-view package (a workspace dep,
+   so it lives outside the default content scan). */
+@source "../../../packages/mobile-view/src";
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: #fafafa;
+  color: #171717;
+}

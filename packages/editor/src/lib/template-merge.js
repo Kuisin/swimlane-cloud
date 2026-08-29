@@ -44,10 +44,7 @@ export function mergeSectionTemplate(src, section, body) {
       const parsed = parseDSL(wrapped);
       model.options = { ...(model.options || {}), ...(parsed.options || {}) };
       model.providedColumnTitles = [
-        ...new Set([
-          ...(model.providedColumnTitles || []),
-          ...(parsed.providedColumnTitles || []),
-        ]),
+        ...new Set([...(model.providedColumnTitles || []), ...(parsed.providedColumnTitles || [])]),
       ];
       // page may carry column titles from the option section
       model.page = { ...(model.page || {}), ...(parsed.page || {}) };

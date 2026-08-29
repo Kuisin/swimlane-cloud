@@ -45,7 +45,11 @@ export function contrastText(color) {
   const hsl = String(color).match(/hsl\(\s*\d+\s+\d+%\s+(\d+)%/);
   if (hsl) return Number(hsl[1]) > 62 ? "#111827" : "#ffffff";
   let hex = String(color).replace("#", "");
-  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+  if (hex.length === 3)
+    hex = hex
+      .split("")
+      .map((c) => c + c)
+      .join("");
   if (!/^[0-9a-fA-F]{6}$/.test(hex)) return "#ffffff";
   const r = parseInt(hex.slice(0, 2), 16);
   const g = parseInt(hex.slice(2, 4), 16);
@@ -60,9 +64,7 @@ export function truncateFullwidth(s, max = 4) {
   let w = 0;
   let out = "";
   for (const ch of str) {
-    const fw = /[　-〿぀-ヿ㐀-鿿＀-￯가-힯]/.test(ch)
-      ? 1
-      : 0.5;
+    const fw = /[　-〿぀-ヿ㐀-鿿＀-￯가-힯]/.test(ch) ? 1 : 0.5;
     if (w + fw > max) return `${out}…`;
     w += fw;
     out += ch;

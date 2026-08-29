@@ -33,14 +33,12 @@ export const PATCH = withApi(
       throw new ApiError(400, "Only versions promoted to main can be made public");
     }
 
-    const shareMode = body.public ? body.share_mode ?? "svg_only" : null;
+    const shareMode = body.public ? (body.share_mode ?? "svg_only") : null;
     if (shareMode && !["svg_only", "svg_and_dsl"].includes(shareMode)) {
       throw new ApiError(400, "invalid share_mode");
     }
 
-    const slug = body.public
-      ? (version.public_slug as string | null) ?? randomSlug()
-      : null;
+    const slug = body.public ? ((version.public_slug as string | null) ?? randomSlug()) : null;
 
     const { error: upErr } = await supabase
       .from("versions")

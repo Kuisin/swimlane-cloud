@@ -3,25 +3,17 @@ import { htmlEl } from "./html-utils.js";
 import { renderBlockPreviewSvg, renderPropPreviewSvg } from "./parts-preview-core.js";
 
 function renderPropPreviewItem(prop, theme) {
-  return htmlEl(
-    "div",
-    { className: "flex flex-col items-center gap-1 shrink-0" },
-    [
-      renderPropPreviewSvg(prop, theme),
-      htmlEl("span", { className: "font-mono text-[10px] text-stone-500" }, prop.id),
-    ],
-  );
+  return htmlEl("div", { className: "flex flex-col items-center gap-1 shrink-0" }, [
+    renderPropPreviewSvg(prop, theme),
+    htmlEl("span", { className: "font-mono text-[10px] text-stone-500" }, prop.id),
+  ]);
 }
 
 function renderBlockPreviewItem(block, theme) {
-  return htmlEl(
-    "div",
-    { className: "flex flex-col items-center gap-1 shrink-0" },
-    [
-      renderBlockPreviewSvg(block, theme),
-      htmlEl("span", { className: "font-mono text-[10px] text-stone-500" }, block.id),
-    ],
-  );
+  return htmlEl("div", { className: "flex flex-col items-center gap-1 shrink-0" }, [
+    renderBlockPreviewSvg(block, theme),
+    htmlEl("span", { className: "font-mono text-[10px] text-stone-500" }, block.id),
+  ]);
 }
 
 /** Web template gallery preview — Tailwind class names on wrappers. */
@@ -29,11 +21,7 @@ export function renderTemplatePartsPreviewHtml(code, theme) {
   const { blocks, props, errors } = parseDSLParts(code);
 
   if (errors.length > 0) {
-    return htmlEl(
-      "p",
-      { className: "text-xs text-red-600 font-jp px-2 py-3" },
-      errors[0].msg,
-    );
+    return htmlEl("p", { className: "text-xs text-red-600 font-jp px-2 py-3" }, errors[0].msg);
   }
 
   const blockList = Object.values(blocks);

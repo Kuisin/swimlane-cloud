@@ -24,9 +24,7 @@ function sectionBoxCount(svg) {
 function sectionBoxXValues(svg) {
   // Anchor on `<rect x="…"` (x is the first attribute) — `[^>]*x=` would greedily
   // capture the later `rx="8"` corner radius instead of the real x position.
-  return [...svg.matchAll(/<rect x="([\d.]+)"[^>]*stroke-dasharray="6 4"/g)].map(
-    (m) => +m[1],
-  );
+  return [...svg.matchAll(/<rect x="([\d.]+)"[^>]*stroke-dasharray="6 4"/g)].map((m) => +m[1]);
 }
 
 /** Count arrows (path or line with marker-end="#arrowhead"). */
@@ -358,9 +356,7 @@ end-section
     );
     expect(gridBox).toBeTruthy();
     // …and end where the right (remark) gutter begins: no unpainted band.
-    const rightGutterBox = rects.find(
-      (r) => r.fill === "none" && +r.width === rightGutterWidth,
-    );
+    const rightGutterBox = rects.find((r) => r.fill === "none" && +r.width === rightGutterWidth);
     expect(rightGutterBox).toBeTruthy();
     expect(+gridBox.x + +gridBox.width).toBe(+rightGutterBox.x);
     // The first lane's background tint also covers the outer padding band.
@@ -371,8 +367,6 @@ end-section
     const sectionBox = rects.find((r) => r["stroke-dasharray"] === "6 4");
     expect(sectionBox).toBeTruthy();
     expect(+sectionBox.x).toBe(+gridBox.x + sectionEdgeInset);
-    expect(+sectionBox.x + +sectionBox.width).toBe(
-      +gridBox.x + +gridBox.width - sectionEdgeInset,
-    );
+    expect(+sectionBox.x + +sectionBox.width).toBe(+gridBox.x + +gridBox.width - sectionEdgeInset);
   });
 });

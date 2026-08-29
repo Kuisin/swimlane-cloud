@@ -2,21 +2,9 @@ import { X } from "lucide-react";
 import { useT } from "../i18n.jsx";
 
 const HELP_SECTIONS = [
-  [
-    "@kai-swimlane … @end",
-    "help.markers",
-    "@kai-swimlane\n\n/title/\n…\n\n@end",
-  ],
-  [
-    "/title/",
-    "help.title2",
-    "/title/\nDiagram title here",
-  ],
-  [
-    "/page/",
-    "help.page",
-    "/page/\ndescription: …;\nheader-left: …;\nheader-right: …;",
-  ],
+  ["@kai-swimlane … @end", "help.markers", "@kai-swimlane\n\n/title/\n…\n\n@end"],
+  ["/title/", "help.title2", "/title/\nDiagram title here"],
+  ["/page/", "help.page", "/page/\ndescription: …;\nheader-left: …;\nheader-right: …;"],
   [
     "/option/",
     "help.option",
@@ -32,16 +20,8 @@ const HELP_SECTIONS = [
     "help.block",
     "/block/\n\n<blockId>\nbackground-color: #dbeafe;\ntext-color: #1e40af;\nshape: rounded;\nicon: #zap;",
   ],
-  [
-    "/prop/",
-    "help.prop",
-    "/prop/\n\n<propId>\nlabel: Note text;\nside: right;",
-  ],
-  [
-    "icon: #name;",
-    "help.icon",
-    "icon: #check;\nicon: #alert-triangle;\nicon: 🔥;",
-  ],
+  ["/prop/", "help.prop", "/prop/\n\n<propId>\nlabel: Note text;\nside: right;"],
+  ["icon: #name;", "help.icon", "icon: #check;\nicon: #alert-triangle;\nicon: 🔥;"],
   [
     "// … / *** …",
     "help.comment",
@@ -72,11 +52,7 @@ const HELP_SECTIONS = [
     "help.merge",
     "if (cancel?) is (yes) than #red\n  [role: accept cancellation]\n  merge: done;\nelse\n  [role: normal close]\nendif\n\n[role: transaction complete]\nid: done;",
   ],
-  [
-    "arrow: solid|dashed|dotted;",
-    "help.arrow",
-    "[role: step]\narrow: dashed;\n[role: next step]",
-  ],
+  ["arrow: solid|dashed|dotted;", "help.arrow", "[role: step]\narrow: dashed;\n[role: next step]"],
 ];
 
 /**

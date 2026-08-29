@@ -5,7 +5,11 @@ import { useT } from "../i18n.jsx";
 export function ModeToggle({ mode, onChange, guiDisabled }) {
   const { t } = useT();
   return (
-    <div className="sw-mode-toggle" role="tablist" aria-label={t("mode.gui") + " / " + t("mode.text")}>
+    <div
+      className="sw-mode-toggle"
+      role="tablist"
+      aria-label={t("mode.gui") + " / " + t("mode.text")}
+    >
       <button
         type="button"
         role="tab"

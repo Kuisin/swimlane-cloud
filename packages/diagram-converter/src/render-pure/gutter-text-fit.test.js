@@ -45,9 +45,7 @@ function visualLines(content) {
   if (chunks.length === 0) {
     return [unescapeXml(content.replace(/<[^>]*>/g, ""))];
   }
-  return chunks.map((c) =>
-    unescapeXml(c.replace(/^[^>]*>/, "").replace(/<[^>]*>/g, ""))
-  );
+  return chunks.map((c) => unescapeXml(c.replace(/^[^>]*>/, "").replace(/<[^>]*>/g, "")));
 }
 
 /** Estimated rendered px width of the widest visual line of a text element. */
@@ -56,9 +54,7 @@ function maxLinePx(svg, marker) {
   expect(el, `text element containing ${JSON.stringify(marker)}`).toBeTruthy();
   return {
     px: Math.max(
-      ...visualLines(el.content).map(
-        (line) => stringDisplayColumnWidth(line) * el.fontSize
-      )
+      ...visualLines(el.content).map((line) => stringDisplayColumnWidth(line) * el.fontSize),
     ),
     lines: visualLines(el.content),
   };
@@ -93,11 +89,26 @@ describe("remark text wraps within the right gutter", () => {
   const budget = usablePx(L.rightGutterWidth);
 
   const cases = [
-    ["long CJK", "この備考はとても長い文章で右側の列の幅を超えないように必ず折り返して表示される必要があります"],
-    ["long ASCII uppercase", "APPROVAL REQUIRED FROM DEPARTMENT MANAGER BEFORE SUBMITTING THE REQUEST TO HEAD OFFICE"],
-    ["long ASCII lowercase", "approval required from department manager before submitting the request to head office"],
-    ["mixed CJK/ASCII", "承認後にSAPシステムへ自動連携されます RFC INTERFACE Workflow番号を必ず控えてください"],
-    ["unspaced token", "INTERFACE_RFC_Z_APPROVAL_WORKFLOW_0042_PRODUCTION_FALLBACK_HANDLER_LONG_IDENTIFIER"],
+    [
+      "long CJK",
+      "この備考はとても長い文章で右側の列の幅を超えないように必ず折り返して表示される必要があります",
+    ],
+    [
+      "long ASCII uppercase",
+      "APPROVAL REQUIRED FROM DEPARTMENT MANAGER BEFORE SUBMITTING THE REQUEST TO HEAD OFFICE",
+    ],
+    [
+      "long ASCII lowercase",
+      "approval required from department manager before submitting the request to head office",
+    ],
+    [
+      "mixed CJK/ASCII",
+      "承認後にSAPシステムへ自動連携されます RFC INTERFACE Workflow番号を必ず控えてください",
+    ],
+    [
+      "unspaced token",
+      "INTERFACE_RFC_Z_APPROVAL_WORKFLOW_0042_PRODUCTION_FALLBACK_HANDLER_LONG_IDENTIFIER",
+    ],
   ];
 
   for (const [name, remark] of cases) {
@@ -116,8 +127,14 @@ describe("description text wraps within the left gutter", () => {
   const budget = usablePx(L.leftGutterWidth);
 
   const cases = [
-    ["long CJK", "この説明はとても長い文章で左側の説明列の幅を超えないように必ず折り返して表示される必要がありますので確認してください"],
-    ["long ASCII", "this description is a very long sentence that must wrap inside the left description gutter without overflowing the column border"],
+    [
+      "long CJK",
+      "この説明はとても長い文章で左側の説明列の幅を超えないように必ず折り返して表示される必要がありますので確認してください",
+    ],
+    [
+      "long ASCII",
+      "this description is a very long sentence that must wrap inside the left description gutter without overflowing the column border",
+    ],
   ];
 
   for (const [name, desc] of cases) {
@@ -144,9 +161,8 @@ describe("gutter titles truncate within their column", () => {
     const svg = render(
       stepDsl({
         remark: "x",
-        page:
-          "left-title: 非常に長い手順列ヘッダータイトルで幅を超えるもの;\nleft-subtitle: 非常に長い説明列サブタイトルで幅を超えるもの確認用;",
-      })
+        page: "left-title: 非常に長い手順列ヘッダータイトルで幅を超えるもの;\nleft-subtitle: 非常に長い説明列サブタイトルで幅を超えるもの確認用;",
+      }),
     );
     expect(maxLinePx(svg, "非常に長い手順").px).toBeLessThanOrEqual(usablePx(L.leftGutterWidth));
     expect(maxLinePx(svg, "非常に長い説明").px).toBeLessThanOrEqual(usablePx(L.leftGutterWidth));
@@ -156,15 +172,14 @@ describe("gutter titles truncate within their column", () => {
     const svg = render(
       stepDsl({
         remark: "x",
-        page:
-          "right-title: 非常に長い備考列ヘッダータイトルで幅を超えるもの;\nright-subtitle: 非常に長い備考列サブタイトルで幅を超えるもの確認用;",
-      })
+        page: "right-title: 非常に長い備考列ヘッダータイトルで幅を超えるもの;\nright-subtitle: 非常に長い備考列サブタイトルで幅を超えるもの確認用;",
+      }),
     );
     expect(maxLinePx(svg, "非常に長い備考列ヘッダー").px).toBeLessThanOrEqual(
-      usablePx(L.rightGutterWidth)
+      usablePx(L.rightGutterWidth),
     );
     expect(maxLinePx(svg, "非常に長い備考列サブ").px).toBeLessThanOrEqual(
-      usablePx(L.rightGutterWidth)
+      usablePx(L.rightGutterWidth),
     );
   });
 });

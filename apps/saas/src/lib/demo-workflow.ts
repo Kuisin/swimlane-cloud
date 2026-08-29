@@ -113,10 +113,7 @@ export function primaryPath(files: Files): string | null {
 
 /** A tmp-* edit branch is locked while it has an open pull request. */
 export function isLocked(st: WorkflowState, branch: string): boolean {
-  return (
-    branch.startsWith("tmp-") &&
-    st.prs.some((p) => p.status === "open" && p.head === branch)
-  );
+  return branch.startsWith("tmp-") && st.prs.some((p) => p.status === "open" && p.head === branch);
 }
 
 /**
@@ -125,11 +122,7 @@ export function isLocked(st: WorkflowState, branch: string): boolean {
  * editable by anyone. Members therefore must create a tmp-* branch to change
  * anything.
  */
-export function canEditBranch(
-  st: WorkflowState,
-  branch: string,
-  role: Role,
-): boolean {
+export function canEditBranch(st: WorkflowState, branch: string, role: Role): boolean {
   if (branch === "main") return false;
   if (isLocked(st, branch)) return false;
   if (branch === "test") return role === "manager";
@@ -138,11 +131,7 @@ export function canEditBranch(
 }
 
 /** Why a branch can't be edited (for UI hints), or null if editable. */
-export function editLockReason(
-  st: WorkflowState,
-  branch: string,
-  role: Role,
-): string | null {
+export function editLockReason(st: WorkflowState, branch: string, role: Role): string | null {
   if (branch === "main") return "main is production (read-only)";
   if (isLocked(st, branch)) return "locked — a pull request is open";
   if (branch === "test" && role !== "manager")
@@ -162,8 +151,7 @@ function loadWorking(pid: string): Record<string, Files> {
   }
 }
 function saveWorking(pid: string, w: Record<string, Files>) {
-  if (typeof localStorage !== "undefined")
-    localStorage.setItem(WORK(pid), JSON.stringify(w));
+  if (typeof localStorage !== "undefined") localStorage.setItem(WORK(pid), JSON.stringify(w));
 }
 
 function defaultState(pid: string): WorkflowState {
@@ -206,8 +194,7 @@ export function loadState(pid: string): WorkflowState {
   }
 }
 export function saveState(pid: string, st: WorkflowState) {
-  if (typeof localStorage !== "undefined")
-    localStorage.setItem(META(pid), JSON.stringify(st));
+  if (typeof localStorage !== "undefined") localStorage.setItem(META(pid), JSON.stringify(st));
 }
 
 export function getWorking(pid: string, branch: string): Files {
@@ -234,21 +221,13 @@ export function setRole(pid: string, st: WorkflowState, role: Role): WorkflowSta
   return next;
 }
 
-export function setActiveBranch(
-  pid: string,
-  st: WorkflowState,
-  branch: string,
-): WorkflowState {
+export function setActiveBranch(pid: string, st: WorkflowState, branch: string): WorkflowState {
   const next = { ...st, activeBranch: branch };
   saveState(pid, next);
   return next;
 }
 
-export function startEdit(
-  pid: string,
-  st: WorkflowState,
-  name: string,
-): WorkflowState {
+export function startEdit(pid: string, st: WorkflowState, name: string): WorkflowState {
   const branchName = `tmp-${st.role}-${slug(name)}`;
   const base = st.branches.test;
   const next: WorkflowState = {
@@ -283,8 +262,7 @@ export function toggleCommitPublish(
   let publicSlug = commit.publicSlug;
   const map = loadPublished();
   if (willPublish) {
-    publicSlug =
-      publicSlug ?? `${slug(commit.message)}-${Math.random().toString(36).slice(2, 6)}`;
+    publicSlug = publicSlug ?? `${slug(commit.message)}-${Math.random().toString(36).slice(2, 6)}`;
     const pp = primaryPath(commit.files);
     let svg: string | null = null;
     if (pp) {
@@ -354,12 +332,7 @@ export function checkpoint(
 }
 
 /** Open a PR. tmp-* → test; test → main. Any role may open one. */
-export function openPR(
-  pid: string,
-  st: WorkflowState,
-  head: string,
-  title: string,
-): WorkflowState {
+export function openPR(pid: string, st: WorkflowState, head: string, title: string): WorkflowState {
   const base: "test" | "main" = head.startsWith("tmp-") ? "test" : "main";
   // Capture any uncommitted work on the head branch first, so the PR (and its
   // diff/merge) reflects the latest edits and newly-created files.
@@ -445,9 +418,7 @@ export function mergePR(pid: string, st: WorkflowState, prId: string): WorkflowS
     ...st,
     branches,
     activeBranch,
-    prs: st.prs.map((p) =>
-      p.id === prId ? { ...p, status: "merged", mergedTs: now() } : p,
-    ),
+    prs: st.prs.map((p) => (p.id === prId ? { ...p, status: "merged", mergedTs: now() } : p)),
   };
   saveState(pid, next);
   return next;
@@ -488,7 +459,10 @@ export function flagVersion(
 }
 
 const normDsl = (s: string | undefined) =>
-  (s ?? "").replace(/\r\n/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\s+$/, "");
+  (s ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\s+$/, "");
 
 /**
  * True when a branch's working copy meaningfully differs from its last commit.
@@ -527,9 +501,7 @@ export function promote(pid: string, st: WorkflowState, versionId: string): Work
       ...st.branches,
       main: { ...main, commits: [...main.commits, commit] },
     },
-    versions: st.versions.map((x) =>
-      x.id === versionId ? { ...x, promoted: true } : x,
-    ),
+    versions: st.versions.map((x) => (x.id === versionId ? { ...x, promoted: true } : x)),
   };
   saveState(pid, next);
   return next;
@@ -548,8 +520,7 @@ export function loadPublished(): Record<string, PublishedEntry> {
   }
 }
 function savePublished(map: Record<string, PublishedEntry>) {
-  if (typeof localStorage !== "undefined")
-    localStorage.setItem(PUB, JSON.stringify(map));
+  if (typeof localStorage !== "undefined") localStorage.setItem(PUB, JSON.stringify(map));
 }
 export function getPublished(slug: string): PublishedEntry | null {
   return loadPublished()[slug] ?? null;
@@ -590,11 +561,7 @@ export function publishVersion(
   return next;
 }
 
-export function unpublishVersion(
-  pid: string,
-  st: WorkflowState,
-  versionId: string,
-): WorkflowState {
+export function unpublishVersion(pid: string, st: WorkflowState, versionId: string): WorkflowState {
   const v = st.versions.find((x) => x.id === versionId);
   if (!v) return st;
   if (v.publicSlug) {
@@ -604,9 +571,7 @@ export function unpublishVersion(
   }
   const next = {
     ...st,
-    versions: st.versions.map((x) =>
-      x.id === versionId ? { ...x, published: false } : x,
-    ),
+    versions: st.versions.map((x) => (x.id === versionId ? { ...x, published: false } : x)),
   };
   saveState(pid, next);
   return next;
@@ -614,11 +579,7 @@ export function unpublishVersion(
 
 // ---- editor host bound to a branch's working copy ----
 
-export function createWorkflowHost(
-  pid: string,
-  branch: string,
-  readOnly: boolean,
-): EditorHost {
+export function createWorkflowHost(pid: string, branch: string, readOnly: boolean): EditorHost {
   const read = () => getWorking(pid, branch);
   const write = (files: Files) => setWorking(pid, branch, files);
   return {

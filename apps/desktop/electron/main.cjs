@@ -16,11 +16,7 @@ function getDevServerUrl() {
       return null;
     }
   })();
-  const port =
-    portArg?.split("=")[1] ||
-    process.env.DESKTOP_DEV_PORT ||
-    fromFile ||
-    "5174";
+  const port = portArg?.split("=")[1] || process.env.DESKTOP_DEV_PORT || fromFile || "5174";
   return `http://localhost:${port}`;
 }
 
@@ -86,10 +82,7 @@ function saveWindowState(win) {
   try {
     const isMaximized = win.isMaximized();
     const bounds = isMaximized ? win.getNormalBounds() : win.getBounds();
-    fs.writeFileSync(
-      windowStatePath(),
-      JSON.stringify({ ...bounds, isMaximized }),
-    );
+    fs.writeFileSync(windowStatePath(), JSON.stringify({ ...bounds, isMaximized }));
   } catch {
     /* ignore write failures */
   }
@@ -175,10 +168,7 @@ function readTxtFilesFromDir(folderPath) {
       if (entry.isDirectory()) {
         walk(fullPath);
       } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".txt")) {
-        const relPath = path
-          .relative(folderPath, fullPath)
-          .split(path.sep)
-          .join("/");
+        const relPath = path.relative(folderPath, fullPath).split(path.sep).join("/");
         let content = "";
         let mtime = 0;
         try {

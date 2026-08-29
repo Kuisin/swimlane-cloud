@@ -16,22 +16,14 @@ export interface EditorHost {
   read(id: string): Promise<string>;
   writeDraft(id: string, dsl: string): Promise<void>;
   writeDraftMany?(updates: { id: string; dsl: string }[]): Promise<void>;
-  checkpoint?(opts: {
-    message?: string;
-    files?: { id: string; dsl: string }[];
-  }): Promise<void>;
+  checkpoint?(opts: { message?: string; files?: { id: string; dsl: string }[] }): Promise<void>;
   create(id: string, dsl: string): Promise<void>;
   mkdir?(dirPath: string): Promise<void>;
   // SaaS-only versioning trigger (plan Step 1.5 / 2.1).
-  flagNewVersion?(
-    commitSha: string,
-    opts: { name: string; note?: string },
-  ): Promise<void>;
+  flagNewVersion?(commitSha: string, opts: { name: string; note?: string }): Promise<void>;
   listSectionTemplates?(
     section: "page" | "option" | "role" | "block" | "prop",
-  ): Promise<
-    { slug: string; name: string; body: string; isDefault?: boolean }[]
-  >;
+  ): Promise<{ slug: string; name: string; body: string; isDefault?: boolean }[]>;
   getTemplatePolicies?(): Promise<
     Record<
       "page" | "option" | "role" | "block" | "prop",
@@ -133,13 +125,9 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
     async flagNewVersion(commitSha, flagOpts) {
       // Resolve the diagram id for the currently active file is the caller's job;
       // we default to the project-level flag endpoint keyed by commit + branch.
-      const diagramId = opts.resolveDiagramId
-        ? await opts.resolveDiagramId(flagOpts.name)
-        : null;
+      const diagramId = opts.resolveDiagramId ? await opts.resolveDiagramId(flagOpts.name) : null;
       if (!diagramId) {
-        throw new Error(
-          "flagNewVersion requires a diagram id (pass resolveDiagramId).",
-        );
+        throw new Error("flagNewVersion requires a diagram id (pass resolveDiagramId).");
       }
       await jsonFetch(`/api/diagrams/${diagramId}/versions`, {
         method: "POST",
@@ -168,7 +156,11 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
       const data = await jsonFetch<{
         policies: Record<
           string,
-          { mode: "optional" | "default" | "forced"; forcedTemplateId?: string; forcedBody?: string }
+          {
+            mode: "optional" | "default" | "forced";
+            forcedTemplateId?: string;
+            forcedBody?: string;
+          }
         >;
       }>(`${base}/template-policies`);
       // Ensure all five sections are present.

@@ -57,10 +57,7 @@ export function hasOptionColumnTitleOverrides(page) {
 }
 
 export function hasOptionSectionContent(model) {
-  return (
-    hasDiagramOptionContent(model?.options) ||
-    hasOptionColumnTitleOverrides(model?.page)
-  );
+  return hasDiagramOptionContent(model?.options) || hasOptionColumnTitleOverrides(model?.page);
 }
 
 /** @param {string} raw */

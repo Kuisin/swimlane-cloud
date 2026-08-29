@@ -82,7 +82,12 @@ export function ActionBar({
           <LayoutTemplate size={14} /> {t("action.templates")}
         </button>
         {mode === "text" && canFormat && (
-          <button type="button" className="sw-btn" onClick={onFormat} title={withShortcut(t("action.format"), sc.format)}>
+          <button
+            type="button"
+            className="sw-btn"
+            onClick={onFormat}
+            title={withShortcut(t("action.format"), sc.format)}
+          >
             <Wand2 size={14} /> {t("action.format")}
           </button>
         )}
@@ -98,19 +103,21 @@ export function ActionBar({
 
       <div className="sw-actionbar-right">
         <div className="sw-export-wrap" ref={exportRef}>
-          <button
-            type="button"
-            className="sw-btn sw-export-toggle"
-            onClick={handleExportToggle}
-          >
+          <button type="button" className="sw-btn sw-export-toggle" onClick={handleExportToggle}>
             <Download size={14} /> {t("action.export")} <ChevronDown size={12} />
           </button>
           {exportOpen && exportMenuPos && (
-            <div className="sw-export-menu" style={{ position: "fixed", top: exportMenuPos.top, right: exportMenuPos.right }}>
+            <div
+              className="sw-export-menu"
+              style={{ position: "fixed", top: exportMenuPos.top, right: exportMenuPos.right }}
+            >
               <button
                 type="button"
                 className="sw-export-item"
-                onClick={() => { onExport("txt"); setExportOpen(false); }}
+                onClick={() => {
+                  onExport("txt");
+                  setExportOpen(false);
+                }}
               >
                 {t("action.exportTxt")}
               </button>
@@ -118,7 +125,10 @@ export function ActionBar({
                 type="button"
                 className="sw-export-item"
                 disabled={!hasSvg}
-                onClick={() => { onExport("svg"); setExportOpen(false); }}
+                onClick={() => {
+                  onExport("svg");
+                  setExportOpen(false);
+                }}
               >
                 {t("action.exportSvg")}
               </button>
@@ -126,7 +136,10 @@ export function ActionBar({
                 type="button"
                 className="sw-export-item"
                 disabled={!hasSvg}
-                onClick={() => { onExport("png"); setExportOpen(false); }}
+                onClick={() => {
+                  onExport("png");
+                  setExportOpen(false);
+                }}
               >
                 {t("action.exportPng")}
               </button>
@@ -134,18 +147,31 @@ export function ActionBar({
                 type="button"
                 className="sw-export-item"
                 disabled={!hasSvg}
-                onClick={() => { onExport("png-hd"); setExportOpen(false); }}
+                onClick={() => {
+                  onExport("png-hd");
+                  setExportOpen(false);
+                }}
               >
                 {t("action.exportPngHd")}
               </button>
             </div>
           )}
         </div>
-        <button type="button" className="sw-icon-btn" onClick={onOpenHelp} title={withShortcut(t("action.help"), sc.help)}>
+        <button
+          type="button"
+          className="sw-icon-btn"
+          onClick={onOpenHelp}
+          title={withShortcut(t("action.help"), sc.help)}
+        >
           <HelpCircle size={16} />
         </button>
         {canVersion && (
-          <button type="button" className="sw-btn" onClick={onFlagVersion} title={t("action.versionTitle")}>
+          <button
+            type="button"
+            className="sw-btn"
+            onClick={onFlagVersion}
+            title={t("action.versionTitle")}
+          >
             <Tag size={14} /> {t("action.version")}
           </button>
         )}
@@ -176,7 +202,10 @@ export function ActionBar({
               className={`sw-btn ${hasUnsavedChanges ? "sw-btn-accent" : ""}`}
               onClick={onSave}
               disabled={!hasUnsavedChanges}
-              title={withShortcut(hasUnsavedChanges ? t("action.saveDirty") : t("action.save"), sc.save)}
+              title={withShortcut(
+                hasUnsavedChanges ? t("action.saveDirty") : t("action.save"),
+                sc.save,
+              )}
             >
               <Save size={14} /> {hasUnsavedChanges ? t("action.saveDirty") : t("action.save")}
             </button>

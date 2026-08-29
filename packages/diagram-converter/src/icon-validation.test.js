@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseDSL } from "./parser.js";
 
-const iconErrors = (src) =>
-  parseDSL(src).errors.filter((e) => /unknown icon/.test(e.msg));
+const iconErrors = (src) => parseDSL(src).errors.filter((e) => /unknown icon/.test(e.msg));
 
 const doc = (blockIcon, roleIcon = "#database") => `@kai-swimlane
 /title/

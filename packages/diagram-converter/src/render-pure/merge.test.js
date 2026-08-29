@@ -43,14 +43,9 @@ describe("mid-flow merge", () => {
   });
 
   it("renders dashed merge when the preceding step sets arrow: dashed", () => {
-    const dashed = MERGE.replace(
-      "[a: キャンセル受付]",
-      "[a: キャンセル受付]\narrow: dashed;",
-    );
+    const dashed = MERGE.replace("[a: キャンセル受付]", "[a: キャンセル受付]\narrow: dashed;");
     const svg = render(dashed);
-    expect((svg.match(/stroke-dasharray="6 3"/g) || []).length).toBeGreaterThanOrEqual(
-      1,
-    );
+    expect((svg.match(/stroke-dasharray="6 3"/g) || []).length).toBeGreaterThanOrEqual(1);
   });
 
   it("errors when the merge target id does not exist", () => {
@@ -64,9 +59,7 @@ if (x) is (y) than
 merge: nowhere;
 endif
 @end`);
-    expect(model.errors.map((e) => e.msg)).toContain(
-      'merge: no step with id "nowhere"',
-    );
+    expect(model.errors.map((e) => e.msg)).toContain('merge: no step with id "nowhere"');
   });
 
   it("errors when step id is duplicated in the file", () => {
@@ -94,9 +87,7 @@ if (x) is (y) than
 merge legacy;
 endif
 @end`);
-    expect(model.errors.map((e) => e.msg)).toContain(
-      "use merge: <id>; instead of merge <id>;",
-    );
+    expect(model.errors.map((e) => e.msg)).toContain("use merge: <id>; instead of merge <id>;");
   });
 
   it("errors when merge is used outside an if", () => {

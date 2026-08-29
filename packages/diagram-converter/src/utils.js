@@ -220,11 +220,7 @@ function mergeCharLineToRuns(chars) {
   };
   for (let k = 1; k < chars.length; k++) {
     const c = chars[k];
-    if (
-      c.bold === cur.bold &&
-      c.italic === cur.italic &&
-      c.strike === cur.strike
-    ) {
+    if (c.bold === cur.bold && c.italic === cur.italic && c.strike === cur.strike) {
       cur.text += c.ch;
     } else {
       runs.push({
@@ -262,10 +258,7 @@ function continuationIndentChars(indentCols) {
 }
 
 function wrapFlatCharsToVisualLines(flat, maxCols, continuationIndentCols) {
-  const safeIndent = Math.min(
-    continuationIndentCols,
-    Math.max(0, maxCols - 0.5)
-  );
+  const safeIndent = Math.min(continuationIndentCols, Math.max(0, maxCols - 0.5));
   if (flat.length === 0) {
     return [[{ text: "\u00a0", bold: false, italic: false, strike: false }]];
   }
@@ -321,15 +314,11 @@ export function wrapDescriptionToVisualLines(description, maxCols = 28) {
   for (let pi = 0; pi < physical.length; pi++) {
     const segment = physical[pi];
     if (segment.length === 0) {
-      allLines.push([
-        { text: "\u00a0", bold: false, italic: false, strike: false },
-      ]);
+      allLines.push([{ text: "\u00a0", bold: false, italic: false, strike: false }]);
       continue;
     }
     const { prefix, rest } = splitDescriptionListLine(segment);
-    const prefixRuns = prefix
-      ? [{ text: prefix, bold: false, italic: false, strike: false }]
-      : [];
+    const prefixRuns = prefix ? [{ text: prefix, bold: false, italic: false, strike: false }] : [];
     const inlineRuns = parseDescriptionInline(rest);
     const combined = mergeAdjacentRuns([...prefixRuns, ...inlineRuns]);
     const flat = flattenRunsToChars(combined);

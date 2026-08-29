@@ -1,0 +1,36 @@
+{
+  "name": "@swimlane-cloud/hub",
+  "version": "0.1.0",
+  "description": "Stateless viewer for kai-swimlane diagrams stored in any GitHub repo. Renders .txt DSL to SVG on demand and serves both latest-on-default-branch and immutable per-release URLs. No database, no secrets, no stored state.",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@swimlane-cloud/diagram-converter": "workspace:*",
+    "@swimlane-cloud/github-client": "workspace:*",
+    "@swimlane-cloud/mobile-view": "workspace:*",
+    "lucide-react": "^0.469.0",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@swimlane-cloud/editor": "workspace:*"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "postcss": "^8.4.49",
+    "prettier": "^3.9.6",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
+  }
+}

@@ -6,11 +6,7 @@ import { fileName, readDiagram, resolveFileToken } from "@/lib/content";
 export const dynamic = "force-dynamic";
 
 /** Single shared diagram: /d/<token>. */
-export default async function SharedFilePage({
-  params,
-}: {
-  params: Promise<{ token: string }>;
-}) {
+export default async function SharedFilePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const rel = resolveFileToken(token);
   const dsl = rel ? readDiagram(rel) : null;

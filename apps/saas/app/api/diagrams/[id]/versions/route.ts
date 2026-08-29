@@ -38,9 +38,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ id: string }> }
     .single();
   if (dErr || !diagram) throw new ApiError(404, "diagram not found");
 
-  const { org, repo, workspaceId } = await getRepoCoords(
-    diagram.project_id as string,
-  );
+  const { org, repo, workspaceId } = await getRepoCoords(diagram.project_id as string);
   const gitea = getGitea();
 
   // Confirm the commit really belongs to test.

@@ -1,0 +1,9 @@
+node_modules
+.next
+dist
+build
+out
+release
+pnpm-lock.yaml
+apps/*/.vercel
+apps/share/content

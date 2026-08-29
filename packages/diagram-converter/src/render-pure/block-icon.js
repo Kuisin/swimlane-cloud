@@ -16,16 +16,20 @@ function renderLucideIcon(name, x, y, size, color) {
       return el(tag, rest);
     })
     .join("");
-  return el("svg", {
-    x: x - size / 2,
-    y: y - size / 2,
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: color,
-    strokeWidth: 2,
-  }, inner);
+  return el(
+    "svg",
+    {
+      x: x - size / 2,
+      y: y - size / 2,
+      width: size,
+      height: size,
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: color,
+      strokeWidth: 2,
+    },
+    inner,
+  );
 }
 
 export function renderBlockIcon({ icon, x, y, size, color, shape }) {
@@ -67,15 +71,19 @@ export function renderBlockIcon({ icon, x, y, size, color, shape }) {
   const display = icon.startsWith("#") ? icon.slice(1) : icon;
   const fontSize = isEmoji(display) ? size : size * 0.85;
 
-  return el("text", {
-    x: iconX,
-    y: iconY,
-    textAnchor: "middle",
-    dominantBaseline: "central",
-    fontSize,
-    fill: color,
-    fontFamily: "'Noto Sans JP','Noto Sans',sans-serif",
-  }, escapeText(display));
+  return el(
+    "text",
+    {
+      x: iconX,
+      y: iconY,
+      textAnchor: "middle",
+      dominantBaseline: "central",
+      fontSize,
+      fill: color,
+      fontFamily: "'Noto Sans JP','Noto Sans',sans-serif",
+    },
+    escapeText(display),
+  );
 }
 
 /** Alias for JSX-factory compatibility during codegen. */

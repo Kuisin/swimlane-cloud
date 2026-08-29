@@ -1,13 +1,9 @@
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { getGitea } from "@/lib/gitea";
 import { getServiceSupabase } from "@/lib/supabase/server";
-import {
-  audit,
-  getRepoCoords,
-  loadProjectTemplates,
-  requireUser,
-} from "@/lib/projects";
+import { audit, getRepoCoords, loadProjectTemplates, requireUser } from "@/lib/projects";
 import { assertForcedSections } from "@/lib/templates";
+import { isProdBranch, PROD_BRANCH } from "@swimlane-cloud/github-client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,8 +25,10 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   const body = await readJson<CheckpointBody>(req);
   const branch = body.branch;
   if (!branch) throw new ApiError(400, "branch is required");
-  if (branch === "main") {
-    throw new ApiError(400, "Checkpoints are not allowed directly on main");
+  // The rule lives in the shared branch model; the ApiError mapping stays here
+  // so this route's response shape is unchanged.
+  if (isProdBranch(branch)) {
+    throw new ApiError(400, `Checkpoints are not allowed directly on ${PROD_BRANCH}`);
   }
 
   const supabase = getServiceSupabase();

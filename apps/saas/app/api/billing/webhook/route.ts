@@ -31,11 +31,7 @@ export async function POST(req: Request): Promise<Response> {
   const rawBody = await req.text();
   let event: Stripe.Event;
   try {
-    event = await stripe.webhooks.constructEventAsync(
-      rawBody,
-      signature,
-      webhookSecret,
-    );
+    event = await stripe.webhooks.constructEventAsync(rawBody, signature, webhookSecret);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "signature verification failed";
     return json({ error: `Webhook Error: ${msg}` }, 400);
@@ -46,10 +42,7 @@ export async function POST(req: Request): Promise<Response> {
   // Map Stripe price/product to our plan tier. In production this lookup would
   // use price IDs; here we read plan from subscription metadata as a stub.
   async function setPlanForCustomer(customerId: string, plan: string) {
-    await supabase
-      .from("workspaces")
-      .update({ plan })
-      .eq("stripe_customer_id", customerId);
+    await supabase.from("workspaces").update({ plan }).eq("stripe_customer_id", customerId);
   }
 
   switch (event.type) {

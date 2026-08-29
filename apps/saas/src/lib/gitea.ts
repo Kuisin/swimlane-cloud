@@ -19,10 +19,7 @@ function loadConfig(): GiteaConfig {
   const url = process.env.GITEA_URL;
   const token = process.env.GITEA_ADMIN_TOKEN;
   if (!url || !token) {
-    throw new ApiError(
-      500,
-      "Gitea is not configured (GITEA_URL / GITEA_ADMIN_TOKEN missing).",
-    );
+    throw new ApiError(500, "Gitea is not configured (GITEA_URL / GITEA_ADMIN_TOKEN missing).");
   }
   return { url: url.replace(/\/+$/, ""), token };
 }
@@ -136,15 +133,9 @@ export class GiteaClient {
     });
   }
 
-  async branchExists(
-    owner: string,
-    repo: string,
-    branch: string,
-  ): Promise<boolean> {
+  async branchExists(owner: string, repo: string, branch: string): Promise<boolean> {
     try {
-      await this.request(
-        `/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}`,
-      );
+      await this.request(`/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}`);
       return true;
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) return false;
@@ -153,12 +144,7 @@ export class GiteaClient {
   }
 
   /** Ensure a branch exists, creating it from `from` if absent. */
-  async ensureBranch(
-    owner: string,
-    repo: string,
-    branch: string,
-    from: string,
-  ): Promise<void> {
+  async ensureBranch(owner: string, repo: string, branch: string, from: string): Promise<void> {
     if (!(await this.branchExists(owner, repo, branch))) {
       await this.createBranch(owner, repo, branch, from);
     }
@@ -184,24 +170,14 @@ export class GiteaClient {
   }
 
   /** Read a single file's metadata + base64 content at a ref. */
-  async readFile(
-    owner: string,
-    repo: string,
-    path: string,
-    ref: string,
-  ): Promise<ContentFile> {
+  async readFile(owner: string, repo: string, path: string, ref: string): Promise<ContentFile> {
     return this.request<ContentFile>(
       `/repos/${owner}/${repo}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
     );
   }
 
   /** Read a file's decoded UTF-8 text at a ref. */
-  async readFileText(
-    owner: string,
-    repo: string,
-    path: string,
-    ref: string,
-  ): Promise<string> {
+  async readFileText(owner: string, repo: string, path: string, ref: string): Promise<string> {
     const file = await this.readFile(owner, repo, path, ref);
     return decodeBase64(file.content);
   }
@@ -239,9 +215,7 @@ export class GiteaClient {
     },
   ): Promise<{ commitSha: string }> {
     const sha =
-      opts.sha === undefined
-        ? await this.getFileSha(owner, repo, path, branch)
-        : opts.sha;
+      opts.sha === undefined ? await this.getFileSha(owner, repo, path, branch) : opts.sha;
 
     const body: Record<string, unknown> = {
       message: opts.message,
@@ -304,14 +278,10 @@ export class GiteaClient {
       if (err instanceof ApiError && (err.status === 404 || err.status === 405)) {
         let last = "";
         for (const f of files) {
-          const { commitSha } = await this.upsertFile(
-            owner,
-            repo,
-            f.path,
-            f.text,
-            branch,
-            { message, author },
-          );
+          const { commitSha } = await this.upsertFile(owner, repo, f.path, f.text, branch, {
+            message,
+            author,
+          });
           last = commitSha;
         }
         return { commitSha: last };
@@ -340,18 +310,15 @@ export class GiteaClient {
     repo: string,
     opts: { title: string; body?: string; head: string; base: string },
   ): Promise<{ number: number }> {
-    const pr = await this.request<{ number: number }>(
-      `/repos/${owner}/${repo}/pulls`,
-      {
-        method: "POST",
-        rawBody: {
-          title: opts.title,
-          body: opts.body ?? "",
-          head: opts.head,
-          base: opts.base,
-        },
+    const pr = await this.request<{ number: number }>(`/repos/${owner}/${repo}/pulls`, {
+      method: "POST",
+      rawBody: {
+        title: opts.title,
+        body: opts.body ?? "",
+        head: opts.head,
+        base: opts.base,
       },
-    );
+    });
     return { number: pr.number };
   }
 
@@ -396,12 +363,7 @@ export class GiteaClient {
   }
 
   /** Which branches currently contain a given commit (used to verify on-main). */
-  async commitOnBranch(
-    owner: string,
-    repo: string,
-    branch: string,
-    sha: string,
-  ): Promise<boolean> {
+  async commitOnBranch(owner: string, repo: string, branch: string, sha: string): Promise<boolean> {
     try {
       const commits = await this.listCommits(owner, repo, branch, { limit: 50 });
       return commits.some((c) => c.sha === sha);

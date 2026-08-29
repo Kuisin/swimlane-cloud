@@ -64,9 +64,7 @@ function scan(): { files: string[]; folders: string[] } {
   walk(CONTENT_DIR, "", files, folders);
   files.sort();
   // Only folders that actually contain diagrams (directly or nested) are shareable.
-  const withContent = [...folders].filter((f) =>
-    files.some((p) => p.startsWith(`${f}/`)),
-  );
+  const withContent = [...folders].filter((f) => files.some((p) => p.startsWith(`${f}/`)));
   withContent.sort();
   return { files, folders: withContent };
 }
@@ -118,7 +116,10 @@ export function extractTitle(dsl: string): string {
   const parts: string[] = [];
   for (const line of lines) {
     const t = line.trim();
-    if (t === "/title/") { inTitle = true; continue; }
+    if (t === "/title/") {
+      inTitle = true;
+      continue;
+    }
     if (inTitle) {
       if (t.startsWith("/") || t === "@end") break;
       if (t) parts.push(t);

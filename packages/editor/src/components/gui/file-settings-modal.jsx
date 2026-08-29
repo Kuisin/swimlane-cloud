@@ -48,34 +48,40 @@ export function FileSettingsModal({ open, src, readOnly, onChange, onClose, them
 
   function patchPage(field, value) {
     if (readOnly) return;
-    onChange(applyModelEdit(src, (draft) => {
-      if (!draft.page) draft.page = {};
-      draft.page[field] = value || undefined;
-    }));
+    onChange(
+      applyModelEdit(src, (draft) => {
+        if (!draft.page) draft.page = {};
+        draft.page[field] = value || undefined;
+      }),
+    );
   }
 
   function patchTitle(value) {
     if (readOnly) return;
-    onChange(applyModelEdit(src, (draft) => {
-      draft.title = value;
-    }));
+    onChange(
+      applyModelEdit(src, (draft) => {
+        draft.title = value;
+      }),
+    );
   }
 
   function patchOption(field, value) {
     if (readOnly) return;
-    onChange(applyModelEdit(src, (draft) => {
-      if (!draft.options) draft.options = {};
-      if (value === null || value === undefined) {
-        delete draft.options[field];
-      } else {
-        draft.options[field] = value;
-      }
-    }));
+    onChange(
+      applyModelEdit(src, (draft) => {
+        if (!draft.options) draft.options = {};
+        if (value === null || value === undefined) {
+          delete draft.options[field];
+        } else {
+          draft.options[field] = value;
+        }
+      }),
+    );
   }
 
   const page = model?.page || {};
   const options = model?.options || {};
-  const getOption = (field) => options[field] !== undefined ? Boolean(options[field]) : true;
+  const getOption = (field) => (options[field] !== undefined ? Boolean(options[field]) : true);
 
   return (
     <div className="sw-modal-overlay" onClick={onClose}>
@@ -141,15 +147,33 @@ export function FileSettingsModal({ open, src, readOnly, onChange, onClose, them
                 <div className="sw-field-row sw-settings-row3">
                   <div className="sw-field">
                     <span className="sw-field-label">{t("settings.headerLeft")}</span>
-                    <input type="text" className="sw-input" value={page.headerLeft || ""} disabled={readOnly} onChange={(e) => patchPage("headerLeft", e.target.value)} />
+                    <input
+                      type="text"
+                      className="sw-input"
+                      value={page.headerLeft || ""}
+                      disabled={readOnly}
+                      onChange={(e) => patchPage("headerLeft", e.target.value)}
+                    />
                   </div>
                   <div className="sw-field">
                     <span className="sw-field-label">{t("settings.headerCenter")}</span>
-                    <input type="text" className="sw-input" value={page.headerCenter || ""} disabled={readOnly} onChange={(e) => patchPage("headerCenter", e.target.value)} />
+                    <input
+                      type="text"
+                      className="sw-input"
+                      value={page.headerCenter || ""}
+                      disabled={readOnly}
+                      onChange={(e) => patchPage("headerCenter", e.target.value)}
+                    />
                   </div>
                   <div className="sw-field">
                     <span className="sw-field-label">{t("settings.headerRight")}</span>
-                    <input type="text" className="sw-input" value={page.headerRight || ""} disabled={readOnly} onChange={(e) => patchPage("headerRight", e.target.value)} />
+                    <input
+                      type="text"
+                      className="sw-input"
+                      value={page.headerRight || ""}
+                      disabled={readOnly}
+                      onChange={(e) => patchPage("headerRight", e.target.value)}
+                    />
                   </div>
                 </div>
               )}
@@ -157,15 +181,33 @@ export function FileSettingsModal({ open, src, readOnly, onChange, onClose, them
                 <div className="sw-field-row sw-settings-row3">
                   <div className="sw-field">
                     <span className="sw-field-label">{t("settings.footerLeft")}</span>
-                    <input type="text" className="sw-input" value={page.footerLeft || ""} disabled={readOnly} onChange={(e) => patchPage("footerLeft", e.target.value)} />
+                    <input
+                      type="text"
+                      className="sw-input"
+                      value={page.footerLeft || ""}
+                      disabled={readOnly}
+                      onChange={(e) => patchPage("footerLeft", e.target.value)}
+                    />
                   </div>
                   <div className="sw-field">
                     <span className="sw-field-label">{t("settings.footerCenter")}</span>
-                    <input type="text" className="sw-input" value={page.footerCenter || ""} disabled={readOnly} onChange={(e) => patchPage("footerCenter", e.target.value)} />
+                    <input
+                      type="text"
+                      className="sw-input"
+                      value={page.footerCenter || ""}
+                      disabled={readOnly}
+                      onChange={(e) => patchPage("footerCenter", e.target.value)}
+                    />
                   </div>
                   <div className="sw-field">
                     <span className="sw-field-label">{t("settings.footerRight")}</span>
-                    <input type="text" className="sw-input" value={page.footerRight || ""} disabled={readOnly} onChange={(e) => patchPage("footerRight", e.target.value)} />
+                    <input
+                      type="text"
+                      className="sw-input"
+                      value={page.footerRight || ""}
+                      disabled={readOnly}
+                      onChange={(e) => patchPage("footerRight", e.target.value)}
+                    />
                   </div>
                 </div>
               )}
@@ -190,11 +232,23 @@ export function FileSettingsModal({ open, src, readOnly, onChange, onClose, them
                 <div className="sw-field-row sw-settings-row2">
                   <div className="sw-field">
                     <span className="sw-field-label">{t("settings.leftTitle")}</span>
-                    <input type="text" className="sw-input" value={page.leftTitle ?? DEFAULT_COLUMN_TITLES.leftTitle} disabled={readOnly} onChange={(e) => patchPage("leftTitle", e.target.value)} />
+                    <input
+                      type="text"
+                      className="sw-input"
+                      value={page.leftTitle ?? DEFAULT_COLUMN_TITLES.leftTitle}
+                      disabled={readOnly}
+                      onChange={(e) => patchPage("leftTitle", e.target.value)}
+                    />
                   </div>
                   <div className="sw-field">
                     <span className="sw-field-label">{t("settings.leftSubtitle")}</span>
-                    <input type="text" className="sw-input" value={page.leftSubtitle ?? DEFAULT_COLUMN_TITLES.leftSubtitle} disabled={readOnly} onChange={(e) => patchPage("leftSubtitle", e.target.value)} />
+                    <input
+                      type="text"
+                      className="sw-input"
+                      value={page.leftSubtitle ?? DEFAULT_COLUMN_TITLES.leftSubtitle}
+                      disabled={readOnly}
+                      onChange={(e) => patchPage("leftSubtitle", e.target.value)}
+                    />
                   </div>
                 </div>
               )}
@@ -202,11 +256,23 @@ export function FileSettingsModal({ open, src, readOnly, onChange, onClose, them
                 <div className="sw-field-row sw-settings-row2">
                   <div className="sw-field">
                     <span className="sw-field-label">{t("settings.rightTitle")}</span>
-                    <input type="text" className="sw-input" value={page.rightTitle ?? DEFAULT_COLUMN_TITLES.rightTitle} disabled={readOnly} onChange={(e) => patchPage("rightTitle", e.target.value)} />
+                    <input
+                      type="text"
+                      className="sw-input"
+                      value={page.rightTitle ?? DEFAULT_COLUMN_TITLES.rightTitle}
+                      disabled={readOnly}
+                      onChange={(e) => patchPage("rightTitle", e.target.value)}
+                    />
                   </div>
                   <div className="sw-field">
                     <span className="sw-field-label">{t("settings.rightSubtitle")}</span>
-                    <input type="text" className="sw-input" value={page.rightSubtitle ?? (DEFAULT_COLUMN_TITLES.rightSubtitle || "")} disabled={readOnly} onChange={(e) => patchPage("rightSubtitle", e.target.value)} />
+                    <input
+                      type="text"
+                      className="sw-input"
+                      value={page.rightSubtitle ?? (DEFAULT_COLUMN_TITLES.rightSubtitle || "")}
+                      disabled={readOnly}
+                      onChange={(e) => patchPage("rightSubtitle", e.target.value)}
+                    />
                   </div>
                 </div>
               )}

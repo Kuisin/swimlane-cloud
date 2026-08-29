@@ -238,9 +238,7 @@ function serializeLineRows(rows) {
         out.push(indent(controlDepth, `fork${color}`));
       } else {
         const firstCase = firstBranchCaseLabel(rows, i);
-        out.push(
-          indent(controlDepth, `if (${row.cond}) is (${firstCase}) than${color}`),
-        );
+        out.push(indent(controlDepth, `if (${row.cond}) is (${firstCase}) than${color}`));
       }
       prevKind = "branchStart";
       continue;
@@ -300,8 +298,7 @@ function serializeLineRows(rows) {
       const defaultName = isBranch ? "Branch" : "Section";
       const sectionName = (row.sectionName || "").trim();
       const sectionColor = row.sectionColor ? ` #${row.sectionColor}` : "";
-      const namePart =
-        sectionName && sectionName !== defaultName ? ` (${sectionName})` : "";
+      const namePart = sectionName && sectionName !== defaultName ? ` (${sectionName})` : "";
       out.push(indent(depth, `${keyword}${namePart}${sectionColor}`));
       prevKind = "groupStart";
       continue;

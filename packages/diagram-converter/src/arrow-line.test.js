@@ -8,13 +8,7 @@ import {
 
 describe("arrow line types", () => {
   it("exposes the full set of stroke types", () => {
-    expect(ARROW_LINE_TYPES).toEqual([
-      "solid",
-      "dashed",
-      "dotted",
-      "long-dash",
-      "dash-dot",
-    ]);
+    expect(ARROW_LINE_TYPES).toEqual(["solid", "dashed", "dotted", "long-dash", "dash-dot"]);
   });
 
   it("normalizes case/whitespace and rejects unknown values", () => {

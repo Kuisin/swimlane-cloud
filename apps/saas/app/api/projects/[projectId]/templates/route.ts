@@ -2,11 +2,7 @@ import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { getGitea } from "@/lib/gitea";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { audit, getRepoCoords, requireUser, slugify } from "@/lib/projects";
-import {
-  isTemplateSection,
-  templateRepoPath,
-  type TemplateSection,
-} from "@/lib/templates";
+import { isTemplateSection, templateRepoPath, type TemplateSection } from "@/lib/templates";
 // Validate fragments with the shared parser before persisting.
 import { parseDSL, parseDSLParts } from "@swimlane-cloud/diagram-converter/parser";
 
@@ -31,18 +27,14 @@ function validateBody(section: TemplateSection, body: string): void {
     if (section === "block" || section === "prop") {
       errors = parseDSLParts(`/${section}/\n${body}`).errors ?? [];
     } else {
-      errors =
-        parseDSL(`@kai-swimlane\n/${section}/\n${body}\n@end`).errors ?? [];
+      errors = parseDSL(`@kai-swimlane\n/${section}/\n${body}\n@end`).errors ?? [];
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "invalid fragment";
     throw new ApiError(422, `Invalid /${section}/ fragment: ${msg}`);
   }
   if (errors.length > 0) {
-    throw new ApiError(
-      422,
-      `Invalid /${section}/ fragment: ${errors[0]?.msg ?? "parse error"}`,
-    );
+    throw new ApiError(422, `Invalid /${section}/ fragment: ${errors[0]?.msg ?? "parse error"}`);
   }
 }
 
@@ -199,10 +191,7 @@ export const DELETE = withApi(async (req, ctx: { params: Promise<{ projectId: st
     .eq("forced_template_id", id)
     .maybeSingle();
   if (pinned) {
-    throw new ApiError(
-      409,
-      "Template is currently forced; relax the policy before deleting.",
-    );
+    throw new ApiError(409, "Template is currently forced; relax the policy before deleting.");
   }
 
   const { data: row } = await supabase
@@ -220,13 +209,7 @@ export const DELETE = withApi(async (req, ctx: { params: Promise<{ projectId: st
   if (error) throw new ApiError(400, error.message);
 
   if (row && isTemplateSection(row.section as string)) {
-    await mirrorToRepo(
-      projectId,
-      row.section as TemplateSection,
-      row.slug as string,
-      "",
-      true,
-    );
+    await mirrorToRepo(projectId, row.section as TemplateSection, row.slug as string, "", true);
   }
   return json({ deleted: id });
 });

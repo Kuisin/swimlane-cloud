@@ -31,11 +31,16 @@ import { GuiMode } from "./components/gui/gui-mode.jsx";
  * document, an error list, and a capability-gated action bar. All persistence
  * flows through the `host` prop — the editor knows nothing about git, auth,
  * networking, Electron, or the file system.
+ *
+ * `dialogs` overrides the default window.alert/confirm/prompt implementations.
+ * Shells where those are unavailable or disabled — a VS Code webview, for
+ * instance — must pass their own, or New file / Delete / Checkpoint silently
+ * do nothing. Omit it in a normal browser to keep the window-based defaults.
  */
-export function DslEditor({ host, projectId, options }) {
+export function DslEditor({ host, projectId, options, dialogs }) {
   return (
     <LanguageProvider defaultLang={options?.lang}>
-      <FileEditorProvider host={host} projectId={projectId} options={options}>
+      <FileEditorProvider host={host} projectId={projectId} options={options} dialogs={dialogs}>
         <DslEditorInner options={options} />
       </FileEditorProvider>
     </LanguageProvider>
@@ -79,25 +84,19 @@ function DslEditorInner({ options }) {
     dialog,
   } = editor;
 
-  const [mode, setMode] = usePersistentState(
-    "sw-editor:mode",
-    options?.initialMode || "text",
-  );
+  const [mode, setMode] = usePersistentState("sw-editor:mode", options?.initialMode || "text");
   const [selectedDir, setSelectedDir] = useState("");
   const [showHelp, setShowHelp] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [gotoLine, setGotoLine] = useState(null);
-  const [treeCollapsed, setTreeCollapsed] = usePersistentState(
-    "sw-editor:tree-collapsed",
-    false,
-    { parse: (v) => v === "true" },
-  );
+  const [treeCollapsed, setTreeCollapsed] = usePersistentState("sw-editor:tree-collapsed", false, {
+    parse: (v) => v === "true",
+  });
 
   const { svg, errors } = useLivePreview(src, { themeKey, theme });
-  const { leftPct, containerRef, onDividerMouseDown } = useSplitPane(
-    options?.initialSplit ?? 52,
-    { storageKey: "sw-editor:split-pct" },
-  );
+  const { leftPct, containerRef, onDividerMouseDown } = useSplitPane(options?.initialSplit ?? 52, {
+    storageKey: "sw-editor:split-pct",
+  });
   const tree = useDragWidth(options?.initialTreeWidth ?? 240, {
     min: 160,
     max: 480,
@@ -109,9 +108,7 @@ function DslEditorInner({ options }) {
   const dirtyIds = useMemo(
     () =>
       new Set(
-        documents
-          .filter((d) => d.src !== d.savedSrc || d.needsInitialDiskSave)
-          .map((d) => d.id),
+        documents.filter((d) => d.src !== d.savedSrc || d.needsInitialDiskSave).map((d) => d.id),
       ),
     [documents],
   );
@@ -119,12 +116,15 @@ function DslEditorInner({ options }) {
   const guiAllowed = canUseGuiEditing(model.errors, activeParseErrorPolicy);
   const effectiveMode = mode === "gui" && !guiAllowed ? "text" : mode;
 
-  const shortcuts = useMemo(() => ({
-    save: shortcutLabel("s", { mod: true }),
-    saveAll: shortcutLabel("s", { mod: true, shift: true }),
-    format: shortcutLabel("f", { mod: true, shift: true }),
-    help: "?",
-  }), []);
+  const shortcuts = useMemo(
+    () => ({
+      save: shortcutLabel("s", { mod: true }),
+      saveAll: shortcutLabel("s", { mod: true, shift: true }),
+      format: shortcutLabel("f", { mod: true, shift: true }),
+      help: "?",
+    }),
+    [],
+  );
 
   useKeyboardShortcuts([
     {
@@ -276,7 +276,11 @@ function DslEditorInner({ options }) {
 
   async function handleCheckpoint() {
     const message = await dialog.prompt(t("dlg.checkpointMsg"), "");
-    if (message === null) return;
+    // Loose null: an injected dialog backed by vscode.window.showInputBox
+    // resolves to `undefined` on cancel, not null. Strict === would treat a
+    // cancelled prompt as an empty message and create the checkpoint anyway.
+    // Matches file-editor-provider.jsx:319,431.
+    if (message == null) return;
     await checkpoint(message || undefined);
   }
 
@@ -416,10 +420,7 @@ function DslEditorInner({ options }) {
               onTouchStart={onDividerMouseDown}
             />
 
-            <div
-              className="sw-split-right sw-preview-pane"
-              style={{ width: `${100 - leftPct}%` }}
-            >
+            <div className="sw-split-right sw-preview-pane" style={{ width: `${100 - leftPct}%` }}>
               <PreviewPane svg={svg} hasErrors={errors?.length > 0} />
             </div>
           </div>

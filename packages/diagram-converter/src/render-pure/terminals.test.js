@@ -12,9 +12,10 @@ function render(dsl) {
 
 /** Terminal dots are the only r="5" circles; return their {cx, cy}. */
 function terminalCircles(svg) {
-  return [...svg.matchAll(/<circle[^>]*cx="([\d.]+)"[^>]*cy="([\d.]+)"[^>]*r="5"/g)].map(
-    (m) => ({ cx: +m[1], cy: +m[2] }),
-  );
+  return [...svg.matchAll(/<circle[^>]*cx="([\d.]+)"[^>]*cy="([\d.]+)"[^>]*r="5"/g)].map((m) => ({
+    cx: +m[1],
+    cy: +m[2],
+  }));
 }
 
 /** Diamonds render as `M cx top L cx+w/2 mid L cx bottom L cx-w/2 mid Z`. */
