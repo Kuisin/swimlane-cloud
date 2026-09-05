@@ -24,6 +24,12 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   if (!body.name?.trim()) throw new ApiError(400, "name is required");
 
   const project = await requireProjectRole(projectId, "owner");
+  if (project.project.provider !== "github") {
+    throw new ApiError(
+      400,
+      "Publishing is only available for GitHub-backed projects in this release.",
+    );
+  }
   const result = await flagVersion(project, projectId, body);
   return json(result, 201);
 });

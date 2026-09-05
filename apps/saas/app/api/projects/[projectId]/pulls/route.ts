@@ -40,6 +40,12 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   if (!isEditBranch(body.head)) throw new ApiError(400, "Only edit branches open pull requests.");
 
   const project = await requireProjectRole(projectId, "editor");
+  if (project.project.provider !== "github") {
+    throw new ApiError(
+      400,
+      "Pull request review is only available for GitHub-backed projects in this release.",
+    );
+  }
 
   if (await hasPendingDrafts(projectId, body.head)) {
     throw new ApiError(409, "This branch has unsaved drafts. Checkpoint them first.", {
@@ -95,5 +101,11 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
   const url = new URL(req.url);
   const state = (url.searchParams.get("state") ?? "open") as "open" | "closed" | "all";
   const project = await requireProjectRole(projectId, "viewer");
+  if (project.project.provider !== "github") {
+    throw new ApiError(
+      400,
+      "Pull request review is only available for GitHub-backed projects in this release.",
+    );
+  }
   return json({ pulls: await project.pulls.listPullRequests({ state }) });
 });

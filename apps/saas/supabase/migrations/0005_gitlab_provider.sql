@@ -57,6 +57,10 @@ create table if not exists public.gitlab_connections (
   instance_id                uuid not null references public.gitlab_instances(id) on delete cascade,
   gitlab_login               text not null,
   gitlab_user_id             bigint not null,
+  -- Real commit-author email (unlike GitHub, no universal noreply convention
+  -- exists across arbitrary self-hosted instances); fetched once at connect
+  -- time (see src/lib/gitlab.ts), not re-fetched on every request.
+  gitlab_email               text not null,
   access_token_ciphertext    text not null,
   refresh_token_ciphertext   text not null,
   token_expires_at           timestamptz not null,

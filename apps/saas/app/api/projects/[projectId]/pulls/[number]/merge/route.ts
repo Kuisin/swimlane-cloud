@@ -20,6 +20,12 @@ export const POST = withApi(
       () => ({}) as { expectedHeadSha?: string },
     );
     const project = await requireProjectRole(projectId, "owner");
+    if (project.project.provider !== "github") {
+      throw new ApiError(
+        400,
+        "Pull request review is only available for GitHub-backed projects in this release.",
+      );
+    }
 
     const pull = await project.pulls.getPullRequest(n);
     if (!isIntegrationBranch(pull.base)) {
