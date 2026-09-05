@@ -2,48 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { INTEGRATION_BRANCH } from "@swimlane-cloud/github-client";
-import { ChangeBrowser, ChangeList, Empty, Modal, describeError } from "../_components";
+import {
+  ChangeBrowser,
+  ChangeList,
+  Empty,
+  Modal,
+  ModalFooter,
+  describeError,
+} from "../_components";
 import { autoSubject } from "@/lib/commit-message";
 import { checkpoint, compare, listPendingChanges, openPR } from "@/lib/workflow";
 import type { CompareResponse, PendingChange } from "@/lib/types";
 import { useT } from "@/i18n";
-
-function ModalFooter({
-  onCancel,
-  onConfirm,
-  confirmLabel,
-  disabled,
-  busy,
-  danger,
-}: {
-  onCancel: () => void;
-  onConfirm: () => void;
-  confirmLabel: string;
-  disabled?: boolean;
-  busy?: boolean;
-  danger?: boolean;
-}) {
-  const { t } = useT();
-  return (
-    <div className="flex justify-end gap-2">
-      <button
-        onClick={onCancel}
-        className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
-      >
-        {t("common.cancel")}
-      </button>
-      <button
-        onClick={onConfirm}
-        disabled={disabled || busy}
-        className={`rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${
-          danger ? "bg-red-600 hover:bg-red-500" : "bg-indigo-600 hover:bg-indigo-500"
-        }`}
-      >
-        {busy ? t("loading") : confirmLabel}
-      </button>
-    </div>
-  );
-}
 
 /** Push everything uncommitted on `branch` to GitHub as one commit. */
 export function PushModal({

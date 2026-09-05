@@ -331,6 +331,44 @@ export function Modal({
   );
 }
 
+/** Cancel + a single coloured confirm action, for every confirmation modal on this app. */
+export function ModalFooter({
+  onCancel,
+  onConfirm,
+  confirmLabel,
+  disabled,
+  busy,
+  danger,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+  confirmLabel: string;
+  disabled?: boolean;
+  busy?: boolean;
+  danger?: boolean;
+}) {
+  const { t } = useT();
+  return (
+    <div className="flex justify-end gap-2">
+      <button
+        onClick={onCancel}
+        className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+      >
+        {t("common.cancel")}
+      </button>
+      <button
+        onClick={onConfirm}
+        disabled={disabled || busy}
+        className={`rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${
+          danger ? "bg-red-600 hover:bg-red-500" : "bg-indigo-600 hover:bg-indigo-500"
+        }`}
+      >
+        {busy ? t("loading") : confirmLabel}
+      </button>
+    </div>
+  );
+}
+
 const short = (sha: string) => sha.slice(0, 7);
 
 /** Commits of one branch, newest first, with a per-commit snapshot viewer. */
@@ -770,7 +808,7 @@ function PrItem({
                 onClick={() => onClose(pr)}
                 className="rounded border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-50"
               >
-                {t("pr.close")}
+                {t("pr.reject")}
               </button>
             )}
             {isOwner ? (
@@ -778,7 +816,7 @@ function PrItem({
                 onClick={() => onMerge(pr)}
                 className="rounded bg-purple-600 px-3 py-1 text-xs font-medium text-white hover:bg-purple-500"
               >
-                {t("pr.mergeTo", { base: pr.base })}
+                {t("pr.approve", { base: branchLabel(pr.base, t) })}
               </button>
             ) : (
               <span className="text-xs text-neutral-400">{t("pr.ownerMerges")}</span>
