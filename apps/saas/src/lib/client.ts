@@ -15,6 +15,10 @@ export class ApiClientError extends Error {
   dirty: boolean;
   upgrade: boolean;
   rateLimited: boolean;
+  /** Set alongside `needsAuth` when the missing connection is GitLab, not GitHub. */
+  provider?: "github" | "gitlab";
+  /** Which GitLab instance to reconnect, when `provider === "gitlab"`. */
+  instanceId?: string;
   body: Record<string, unknown>;
 
   constructor(status: number, body: Record<string, unknown>) {
@@ -28,6 +32,8 @@ export class ApiClientError extends Error {
     this.dirty = Boolean(body.dirty);
     this.upgrade = Boolean(body.upgrade);
     this.rateLimited = Boolean(body.rateLimited);
+    if (body.provider === "github" || body.provider === "gitlab") this.provider = body.provider;
+    if (typeof body.instanceId === "string") this.instanceId = body.instanceId;
   }
 }
 
@@ -57,4 +63,22 @@ export function redirectToLogin(): void {
   if (typeof window === "undefined") return;
   const next = window.location.pathname + window.location.search;
   window.location.assign(`/login?next=${encodeURIComponent(next)}&error=needsAuth`);
+}
+
+/** Sends the user through the GitLab connect flow, preserving where they were. */
+export function redirectToGitLabConnect(instanceId: string): void {
+  if (typeof window === "undefined") return;
+  const next = window.location.pathname + window.location.search;
+  window.location.assign(
+    `/api/gitlab/connect?instanceId=${encodeURIComponent(instanceId)}&next=${encodeURIComponent(next)}`,
+  );
+}
+
+/** Routes a `needsAuth` error to the right reconnect flow for its provider. */
+export function redirectToReconnect(err: ApiClientError): void {
+  if (err.provider === "gitlab" && err.instanceId) {
+    redirectToGitLabConnect(err.instanceId);
+    return;
+  }
+  redirectToLogin();
 }

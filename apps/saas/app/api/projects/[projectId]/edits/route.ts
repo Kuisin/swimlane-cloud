@@ -1,11 +1,8 @@
-import {
-  GitHubNotAccessibleError,
-  INTEGRATION_BRANCH,
-  editBranchName,
-} from "@swimlane-cloud/github-client";
+import { INTEGRATION_BRANCH, editBranchName } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { assertRef } from "@/lib/guard";
 import { audit, lockedBranches, requireProjectRole } from "@/lib/projects";
+import { isRepoNotAccessible } from "@/lib/repo-errors";
 import { getServiceSupabase } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +41,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
         const sha = await project.write.refSha(branch);
         return json({ editId: session.id, branch, sha, reused: true });
       } catch (err) {
-        if (!(err instanceof GitHubNotAccessibleError)) throw err;
+        if (!isRepoNotAccessible(err)) throw err;
         // The branch was deleted outside the app (merged, or removed on
         // GitHub directly); fall through and try the next session, or create
         // a fresh one below.

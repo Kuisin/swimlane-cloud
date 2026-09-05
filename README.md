@@ -68,9 +68,11 @@ packages/
   diagram-converter/   # @swimlane-cloud/diagram-converter (open-source engine, MIT)
   editor/              # @swimlane-cloud/editor — the shared GUI/text editor surface
   github-client/       # zero-dependency GitHub client (REST, git protocol v2, raw CDN)
+  gitlab-client/       # zero-dependency GitLab client, for a self-hosted (or gitlab.com) org instance
   mobile-view/         # card-based mobile rendering of a parsed diagram
 apps/
-  saas/                # Next.js SaaS: edit diagrams in your GitHub repos (Supabase + GitHub + Vercel)
+  saas/                # Next.js SaaS: edit diagrams in your GitHub repos (Supabase + GitHub + Vercel);
+                       #   a workspace can opt into a self-hosted GitLab instance instead, per org
   hub/                 # stateless viewer/editor for diagrams in any GitHub repo
   share/               # static tokened sharing of a folder of diagrams
   web/                 # standalone editor over browser storage (no backend)

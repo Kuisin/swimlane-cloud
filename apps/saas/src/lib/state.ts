@@ -38,7 +38,7 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
   const supabase = getServiceSupabase();
   const projectId = ctx.project.id;
 
-  let branchList = await ctx.repos.listBranches(ctx.repo.owner, ctx.repo.repo);
+  let branchList = await ctx.repos.listBranches();
   // Self-heal: a project reached without going through /api/projects/open (a
   // stale bookmark, a repo marked before this rename) may still be missing
   // `preview`. Create it from `main` once, best-effort, rather than leaving
@@ -50,7 +50,7 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
   ) {
     try {
       await ctx.write.ensureBranch(INTEGRATION_BRANCH, PROD_BRANCH);
-      branchList = await ctx.repos.listBranches(ctx.repo.owner, ctx.repo.repo);
+      branchList = await ctx.repos.listBranches();
     } catch {
       /* best-effort; the branch simply stays absent until it succeeds */
     }
@@ -180,8 +180,8 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
     project: {
       id: projectId,
       name: config.title ?? ctx.project.name,
-      owner: ctx.repo.owner,
-      repo: ctx.repo.repo,
+      owner: ctx.repoInfo.owner,
+      repo: ctx.repoInfo.name,
       htmlUrl: ctx.repoInfo.htmlUrl,
       diagramsRoot: config.diagramsRoot,
     },

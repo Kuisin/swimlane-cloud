@@ -10,7 +10,6 @@
  */
 import {
   GitHubConflictError,
-  GitHubNotAccessibleError,
   INTEGRATION_BRANCH,
   PROD_BRANCH,
   slugify,
@@ -144,15 +143,7 @@ export async function flagVersion(
 
 /** Whether `tag` already exists on the repository. */
 export async function tagExists(ctx: ProjectCtx, tag: string): Promise<boolean> {
-  try {
-    await ctx.rest.request(
-      `/repos/${ctx.repo.owner}/${ctx.repo.repo}/git/ref/tags/${encodeURIComponent(tag)}`,
-    );
-    return true;
-  } catch (err) {
-    if (err instanceof GitHubNotAccessibleError && err.status === 404) return false;
-    throw err;
-  }
+  return ctx.write.tagExists(tag);
 }
 
 /** Point a branch at a specific commit (the write API's ensureBranch takes a ref, not a sha). */
@@ -163,14 +154,7 @@ export async function ensureBranchAtSha(ctx: ProjectCtx, name: string, sha: stri
   } catch {
     /* does not exist yet */
   }
-  try {
-    await ctx.rest.request(`/repos/${ctx.repo.owner}/${ctx.repo.repo}/git/refs`, {
-      method: "POST",
-      body: { ref: `refs/heads/${name}`, sha },
-    });
-  } catch (err) {
-    if (!(err instanceof GitHubConflictError)) throw err;
-  }
+  await ctx.write.createBranchAtSha(name, sha);
 }
 
 export interface PromoteVersionResult {
@@ -229,11 +213,11 @@ export async function promoteVersion(
     if (err instanceof GitHubConflictError && /No commits between/i.test(err.message)) {
       promotedSha = sha;
     } else {
-      await ctx.repos.deleteBranch(ctx.repo.owner, ctx.repo.repo, release);
+      await ctx.repos.deleteBranch(release);
       throw err;
     }
   }
-  await ctx.repos.deleteBranch(ctx.repo.owner, ctx.repo.repo, release);
+  await ctx.repos.deleteBranch(release);
 
   await supabase
     .from("versions")

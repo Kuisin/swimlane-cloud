@@ -14,7 +14,9 @@ import {
   type RepoPermissions,
 } from "@swimlane-cloud/github-client";
 import { ApiError } from "./api";
-import { requireGitHubApis, withRepo, type GitHubApis, type RepoApis } from "./github";
+import { requireGitHubApis, withRepo, type GitHubApis } from "./github";
+import { requireGitLabApis, withGitLabRepo } from "./gitlab";
+import type { RepoApis } from "./repo-apis";
 import { getServiceSupabase } from "./supabase/server";
 import {
   type PolicyEntry,
@@ -40,15 +42,44 @@ export function roleAtLeast(role: Role, min: Role): boolean {
   return ROLE_RANK[role] >= ROLE_RANK[min];
 }
 
+export type Provider = "github" | "gitlab";
+
 export interface ProjectRow {
   id: string;
   name: string;
   workspaceId: string;
-  owner: string;
-  ownerType: "user" | "org";
-  repo: string;
-  githubRepoId: number;
+  provider: Provider;
   plan: "free" | "team" | "enterprise";
+  // GitHub-backed projects only.
+  owner?: string;
+  ownerType?: "user" | "org";
+  repo?: string;
+  githubRepoId?: number;
+  // GitLab-backed projects only.
+  gitlabInstanceId?: string;
+  gitlabInstanceHost?: string;
+  gitlabProjectId?: number;
+  gitlabProjectPath?: string;
+  gitlabNamespacePath?: string;
+}
+
+interface ProjectRowQuery {
+  id: string;
+  name: string;
+  workspace_id: string;
+  github_repo: string | null;
+  github_repo_id: number | null;
+  gitlab_project_id: number | null;
+  gitlab_project_path: string | null;
+  workspaces: {
+    provider: Provider;
+    github_owner: string | null;
+    github_owner_type: "user" | "org" | null;
+    gitlab_instance_id: string | null;
+    gitlab_namespace_path: string | null;
+    plan: ProjectRow["plan"];
+    gitlab_instances: { host: string } | null;
+  } | null;
 }
 
 /** The project row plus its workspace (service role; not an access check). */
@@ -57,27 +88,41 @@ export async function getProjectRow(projectId: string): Promise<ProjectRow> {
   const { data, error } = await supabase
     .from("projects")
     .select(
-      "id, name, workspace_id, github_repo, github_repo_id, workspaces(github_owner, github_owner_type, plan)",
+      "id, name, workspace_id, github_repo, github_repo_id, gitlab_project_id, gitlab_project_path, " +
+        "workspaces(provider, github_owner, github_owner_type, gitlab_instance_id, gitlab_namespace_path, plan, gitlab_instances(host))",
     )
     .eq("id", projectId)
     .maybeSingle();
   if (error) throw new ApiError(500, `project lookup failed: ${error.message}`);
   if (!data) throw new ApiError(404, "Project not found");
-  const ws = (
-    data as unknown as {
-      workspaces: { github_owner: string; github_owner_type: "user" | "org"; plan: string } | null;
-    }
-  ).workspaces;
+  const row = data as unknown as ProjectRowQuery;
+  const ws = row.workspaces;
   if (!ws) throw new ApiError(500, "Project has no workspace");
+
+  const base = {
+    id: row.id,
+    name: row.name,
+    workspaceId: row.workspace_id,
+    provider: ws.provider,
+    plan: ws.plan,
+  };
+  if (ws.provider === "gitlab") {
+    if (!ws.gitlab_instances) throw new ApiError(500, "Workspace has no GitLab instance");
+    return {
+      ...base,
+      gitlabInstanceId: ws.gitlab_instance_id ?? undefined,
+      gitlabInstanceHost: ws.gitlab_instances.host,
+      gitlabProjectId: row.gitlab_project_id ?? undefined,
+      gitlabProjectPath: row.gitlab_project_path ?? undefined,
+      gitlabNamespacePath: ws.gitlab_namespace_path ?? undefined,
+    };
+  }
   return {
-    id: data.id as string,
-    name: data.name as string,
-    workspaceId: data.workspace_id as string,
-    owner: ws.github_owner,
-    ownerType: ws.github_owner_type,
-    repo: data.github_repo as string,
-    githubRepoId: Number(data.github_repo_id),
-    plan: ws.plan as ProjectRow["plan"],
+    ...base,
+    owner: ws.github_owner ?? undefined,
+    ownerType: ws.github_owner_type ?? undefined,
+    repo: row.github_repo ?? undefined,
+    githubRepoId: row.github_repo_id ?? undefined,
   };
 }
 
@@ -98,11 +143,16 @@ export interface ProjectCtx extends RepoApis {
 export async function requireProjectRole(projectId: string, minRole: Role): Promise<ProjectCtx> {
   const user = await requireUser();
   const project = await getProjectRow(projectId);
-  const apis = withRepo(await requireGitHubApis(user.id), {
-    owner: project.owner,
-    repo: project.repo,
-  });
-  const repoInfo = await apis.repos.getRepo(project.owner, project.repo);
+  const apis =
+    project.provider === "gitlab"
+      ? withGitLabRepo(await requireGitLabApis(user.id, project.gitlabInstanceId!), {
+          projectId: project.gitlabProjectId!,
+        })
+      : withRepo(await requireGitHubApis(user.id), {
+          owner: project.owner!,
+          repo: project.repo!,
+        });
+  const repoInfo = await apis.repos.getRepo();
   const role = roleFromPermissions(repoInfo.permissions);
   if (!roleAtLeast(role, minRole)) {
     throw new ApiError(403, `This action needs the ${minRole} role (you are ${role}).`, {

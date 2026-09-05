@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Lock, Plus, RefreshCw } from "lucide-react";
 import { AppHeader, RoleBadge } from "@/components/app-header";
-import { api, ApiClientError, postJson, redirectToLogin } from "@/lib/client";
+import { api, ApiClientError, postJson, redirectToReconnect } from "@/lib/client";
 import { useT } from "@/i18n";
 
 interface DiscoveredRepo {
@@ -41,7 +41,7 @@ export default function DashboardPage() {
     try {
       setData(await api<ProjectsResponse>("/api/github/projects"));
     } catch (e) {
-      if (e instanceof ApiClientError && e.needsAuth) return redirectToLogin();
+      if (e instanceof ApiClientError && e.needsAuth) return redirectToReconnect(e);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -72,7 +72,7 @@ export default function DashboardPage() {
       });
       router.push(`/projects/${res.projectId}`);
     } catch (e) {
-      if (e instanceof ApiClientError && e.needsAuth) return redirectToLogin();
+      if (e instanceof ApiClientError && e.needsAuth) return redirectToReconnect(e);
       setError(e instanceof Error ? e.message : String(e));
       setOpening(null);
     }
@@ -83,12 +83,20 @@ export default function DashboardPage() {
       <AppHeader
         login={data?.login}
         right={
-          <Link
-            href="/new"
-            className="flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
-          >
-            <Plus size={14} /> {t("dashboard.newProject")}
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/workspaces/new-gitlab"
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-semibold hover:bg-neutral-50"
+            >
+              {t("dashboard.connectGitLab")}
+            </Link>
+            <Link
+              href="/new"
+              className="flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+            >
+              <Plus size={14} /> {t("dashboard.newProject")}
+            </Link>
+          </div>
         }
       />
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">

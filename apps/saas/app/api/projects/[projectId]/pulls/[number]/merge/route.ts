@@ -20,6 +20,12 @@ export const POST = withApi(
       () => ({}) as { expectedHeadSha?: string },
     );
     const project = await requireProjectRole(projectId, "owner");
+    if (project.project.provider !== "github") {
+      throw new ApiError(
+        400,
+        "Pull request review is only available for GitHub-backed projects in this release.",
+      );
+    }
 
     const pull = await project.pulls.getPullRequest(n);
     if (!isIntegrationBranch(pull.base)) {
@@ -38,7 +44,7 @@ export const POST = withApi(
     const supabase = getServiceSupabase();
     let deletedBranch: string | null = null;
     if (isEditBranch(pull.head)) {
-      await project.repos.deleteBranch(project.repo.owner, project.repo.repo, pull.head);
+      await project.repos.deleteBranch(pull.head);
       deletedBranch = pull.head;
       await supabase.from("drafts").delete().eq("project_id", projectId).eq("branch", pull.head);
       await supabase

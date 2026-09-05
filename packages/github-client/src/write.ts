@@ -15,12 +15,23 @@
  * checkpointing the same branch cannot silently clobber each other.
  */
 
-import { GitHubConflictError } from "./errors.ts";
+import { GitHubConflictError, GitHubNotAccessibleError } from "./errors.ts";
 import type { RestClient } from "./rest.ts";
 import type { RepoRef, TreeEntry } from "./types.ts";
 
 /** Regular non-executable file. The DSL is always plain text. */
 const FILE_MODE = "100644";
+
+const SHA_RE = /^[0-9a-f]{40}$/;
+
+/**
+ * Per-segment percent-encoding: the Contents API URL embeds the repo path
+ * literally (`/contents/dir/sub/file.txt`), so encoding the whole path in
+ * one pass would turn a real `/` into `%2F` and break the path structure.
+ */
+function encodeContentsPath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
 
 export interface FileWrite {
   path: string;
@@ -95,6 +106,34 @@ export function createWriteApi(rest: RestClient, repo: RepoRef) {
         });
       } catch (err) {
         if (err instanceof GitHubConflictError) return;
+        throw err;
+      }
+    },
+
+    /**
+     * Point a new branch at an exact sha rather than another ref's tip — the
+     * `release-*` branch a version promotion cuts under the flagged commit.
+     * Idempotent, like `ensureBranch`.
+     */
+    async createBranchAtSha(name: string, sha: string): Promise<void> {
+      try {
+        await rest.request(`${base}/git/refs`, {
+          method: "POST",
+          body: { ref: `refs/heads/${name}`, sha },
+        });
+      } catch (err) {
+        if (err instanceof GitHubConflictError) return;
+        throw err;
+      }
+    },
+
+    /** Whether a lightweight or annotated tag by this name already exists. */
+    async tagExists(tag: string): Promise<boolean> {
+      try {
+        await rest.request(`${base}/git/ref/tags/${encodeURIComponent(tag)}`);
+        return true;
+      } catch (err) {
+        if (err instanceof GitHubNotAccessibleError && err.status === 404) return false;
         throw err;
       }
     },
@@ -198,6 +237,19 @@ export function createWriteApi(rest: RestClient, repo: RepoRef) {
         },
       });
       return res.commit.sha;
+    },
+
+    /** Text of a file at a ref via the Contents API's raw accept header, or null when missing. */
+    async readFile(path: string, ref: string): Promise<string | null> {
+      try {
+        return await rest.requestText(
+          `${base}/contents/${encodeContentsPath(path)}?ref=${encodeURIComponent(ref)}`,
+          { accept: "application/vnd.github.raw", immutable: SHA_RE.test(ref) },
+        );
+      } catch (err) {
+        if (err instanceof GitHubNotAccessibleError && err.status === 404) return null;
+        throw err;
+      }
     },
 
     /** Lightweight tag. Releases are cut from `main` only. */

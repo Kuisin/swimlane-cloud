@@ -5,6 +5,7 @@ import {
   GitHubRateLimitError,
   MergeTargetError,
 } from "@swimlane-cloud/github-client";
+import { GitLabConflictError, GitLabNotImplementedError } from "@swimlane-cloud/gitlab-client";
 import { ApiError, errorResponse, withApi } from "./api";
 
 describe("errorResponse", () => {
@@ -40,6 +41,21 @@ describe("errorResponse", () => {
     const res = errorResponse(new Error("boom"));
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "boom" });
+  });
+
+  it("maps GitLab's error taxonomy the same way as GitHub's", async () => {
+    expect(errorResponse(new GitLabConflictError("moved")).status).toBe(409);
+    expect(await errorResponse(new GitLabConflictError("moved")).json()).toMatchObject({
+      conflict: true,
+    });
+  });
+
+  it("turns a not-yet-implemented GitLab method into a plain 400, not a crash", async () => {
+    const res = errorResponse(
+      new GitLabNotImplementedError("Merge requests are not available yet."),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Merge requests are not available yet." });
   });
 });
 
