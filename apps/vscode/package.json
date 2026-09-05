@@ -63,7 +63,7 @@
         },
         "swimlane.integrationBranch": {
           "type": "string",
-          "default": "test",
+          "default": "preview",
           "description": "Branch that edit branches are cut from and merged back into. Never the production branch."
         },
         "swimlane.productionBranch": {

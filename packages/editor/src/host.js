@@ -28,6 +28,9 @@
  * @typedef {Object} EditorCapabilities
  * @property {boolean} [readOnly]
  * @property {boolean} [versioning]
+ * @property {boolean} [autosave] Debounce-save every change instead of
+ *   requiring Save / Save all; hides those buttons and Checkpoint / Version
+ *   in the action bar in favour of a small "saved" status.
  *
  * @typedef {Object} WatchEvent
  * @property {string} id
@@ -63,6 +66,11 @@ export function hostHas(host, method) {
 /** True when host capabilities permit version-control actions. */
 export function hostSupportsVersioning(host) {
   return Boolean(host?.capabilities?.versioning);
+}
+
+/** True when the host wants drafts saved automatically rather than on demand. */
+export function hostAutosaves(host) {
+  return Boolean(host?.capabilities?.autosave);
 }
 
 export function hostIsReadOnly(host) {

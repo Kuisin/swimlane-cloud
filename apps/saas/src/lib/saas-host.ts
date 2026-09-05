@@ -3,10 +3,11 @@
  * over the project API. The editor never sees GitHub or Supabase; it sees a
  * folder of `.txt` files it can read, save, create and checkpoint.
  *
- * Drafts (Save / Save all / New file) go to Postgres; Checkpoint turns every
- * draft on the branch into one commit. `expectedHeadSha` is the head we last
- * listed, so two people checkpointing the same branch cannot clobber each
- * other — the second gets a 409 and a "branch moved" banner.
+ * Every writable branch is `autosave: true`, so the editor debounce-saves
+ * drafts to Postgres itself; the page's own "Push to GitHub" turns every
+ * draft on the branch into one commit via `checkpoint`. `expectedHeadSha` is
+ * the head we last listed, so two people pushing the same branch cannot
+ * clobber each other — the second gets a 409 and a "branch moved" banner.
  */
 import type {
   EditorHost,
@@ -19,7 +20,6 @@ import { api } from "./client";
 import {
   checkpoint as checkpointRequest,
   deleteFile,
-  flagVersion,
   getFile,
   getTree,
   removeFolder,
@@ -32,8 +32,6 @@ export interface SaasHostOptions {
   branch: string;
   /** Whether the caller may write to this branch (from ProjectState). */
   editable: boolean;
-  /** Owners on `test` may flag a version straight from the editor. */
-  versioning: boolean;
   /** Fired when the branch tip differs from the last one seen. */
   onHeadChange?: (sha: string) => void;
   /** Fired after any draft write, so the page can show "unsaved" without a round trip. */
@@ -53,7 +51,7 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
   }
 
   const host: EditorHost = {
-    capabilities: { readOnly: !opts.editable, versioning: opts.versioning },
+    capabilities: { readOnly: !opts.editable, autosave: opts.editable },
 
     async root() {
       return `${branch}`;
@@ -135,12 +133,6 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
       return res.policies;
     },
   };
-
-  if (opts.versioning) {
-    host.flagNewVersion = async (_commitSha, { name, note }) => {
-      await flagVersion(projectId, name, note);
-    };
-  }
 
   return host;
 }

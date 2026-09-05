@@ -43,6 +43,12 @@ export interface TemplatePolicy {
 export interface EditorCapabilities {
   readOnly?: boolean;
   versioning?: boolean;
+  /**
+   * Debounce-save every change instead of requiring Save / Save all; hides
+   * those buttons and Checkpoint / Version in the action bar in favour of a
+   * small "saved" status.
+   */
+  autosave?: boolean;
 }
 
 /**
@@ -84,6 +90,17 @@ export interface EditorOptions {
   lang?: string;
   initialMode?: "gui" | "text";
   initialSplit?: number;
+  /** Debounce delay in ms before an autosave host flushes dirty documents. Default 1500. */
+  autosaveDelayMs?: number;
+  /**
+   * Scope key for the localStorage mirror kept while `capabilities.autosave`
+   * is set (e.g. `${projectId}:${branch}`). Omit to disable the mirror.
+   */
+  localMirrorKey?: string;
+  /** Fired whenever there is (or stops being) an unflushed autosave. */
+  onPendingChange?(pending: boolean): void;
+  /** Fired when a background autosave flush fails. */
+  onAutosaveError?(message: string): void;
   [key: string]: unknown;
 }
 
@@ -103,7 +120,11 @@ export declare function useEditor(): Record<string, unknown>;
 export declare const TEMPLATE_SECTIONS: readonly TemplateSection[];
 export declare function hostHas(host: EditorHost, method: string): boolean;
 export declare function hostSupportsVersioning(host: EditorHost): boolean;
+export declare function hostAutosaves(host: EditorHost): boolean;
 export declare function hostIsReadOnly(host: EditorHost): boolean;
+
+/** Clears every localStorage-mirrored document under `scope` (e.g. after a successful push). */
+export declare function clearLocalMirror(scope: string): void;
 
 // ── Document model helpers (used by the SaaS mobile view and share pages) ────
 

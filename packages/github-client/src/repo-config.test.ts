@@ -41,7 +41,7 @@ describe("parseRepoConfig", () => {
     const c = parseRepoConfig('{"title":"   ","themeKey":"","integrationBranch":" "}');
     expect(c.title).toBeNull();
     expect(c.themeKey).toBe("basic");
-    expect(c.integrationBranch).toBe("test");
+    expect(c.integrationBranch).toBe("preview");
   });
 });
 

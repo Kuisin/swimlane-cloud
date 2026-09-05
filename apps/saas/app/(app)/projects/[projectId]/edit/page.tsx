@@ -2,19 +2,30 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, GitPullRequest, Lock, Monitor, Plus, RefreshCw, Smartphone } from "lucide-react";
-import { DslEditor } from "@swimlane-cloud/editor";
+import Link from "next/link";
+import {
+  GitPullRequest,
+  Lock,
+  Monitor,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Smartphone,
+  Upload,
+} from "lucide-react";
+import { clearLocalMirror, DslEditor } from "@swimlane-cloud/editor";
 import "@swimlane-cloud/editor/styles.css";
+import { INTEGRATION_BRANCH, isEditBranch, PROD_BRANCH } from "@swimlane-cloud/github-client";
+import { branchKindOf, branchLabel } from "@/lib/branch-label";
 import { createSaasHost } from "@/lib/saas-host";
 import {
+  abandonEdit,
   branchOf,
   canEditBranch,
-  checkpoint,
   defaultBranch,
   editLockReason,
   getSnapshot,
   isLocked,
-  openPR,
   saveDrafts,
   startEdit,
 } from "@/lib/workflow";
@@ -29,6 +40,7 @@ import {
   useProject,
   type Files,
 } from "../_components";
+import { DiscardEditModal, PushModal, RequestReviewModal } from "./_modals";
 import { useT } from "@/i18n";
 
 const VIEW_PREF = "sw-view-mode";
@@ -46,6 +58,35 @@ export default function EditPage() {
   );
 }
 
+function BranchChip({
+  active,
+  label,
+  dot,
+  locked,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  dot?: boolean;
+  locked?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap ${
+        active
+          ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+          : "border-neutral-300 text-neutral-600 hover:border-neutral-400"
+      }`}
+    >
+      {locked && <Lock size={11} />}
+      {label}
+      {dot && <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />}
+    </button>
+  );
+}
+
 function EditPageInner() {
   const { projectId, state, refresh, error } = useProject();
   const { t, lang } = useT();
@@ -60,21 +101,36 @@ function EditPageInner() {
   const [mStep, setMStep] = useState<number | null>(null);
   const [mobileFiles, setMobileFiles] = useState<Files | null>(null);
   const [localDirty, setLocalDirty] = useState(false);
+  const [autosavePending, setAutosavePending] = useState(false);
   const [headMoved, setHeadMoved] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [showPush, setShowPush] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [showDiscard, setShowDiscard] = useState(false);
+  const [reviewRequested, setReviewRequested] = useState<number | null>(null);
   const restored = useRef(false);
   // Gates the editor/mobile content until URL state is restored, so the editor
   // doesn't auto-open the first file before `?file=` is applied.
   const [ready, setReady] = useState(false);
 
-  const branch = state ? defaultBranch(state, branchParam) : "test";
+  const branch = state ? defaultBranch(state, branchParam) : INTEGRATION_BRANCH;
   const branchState = state ? branchOf(state, branch) : undefined;
   const role = state?.me.role ?? "viewer";
-  const onMain = branch === "main";
   const editable = state ? canEditBranch(state, branch) : false;
   const readOnly = !editable;
-  const versioning = role === "owner" && branch === "test";
+  const mirrorScope = `${projectId}:${branch}`;
+
+  // My active edit branch, if I have one and it still exists on the repo.
+  const myEdit =
+    state?.activeEdit && branchOf(state, state.activeEdit.branch) ? state.activeEdit : null;
+  const myEditState = myEdit ? branchOf(state!, myEdit.branch) : undefined;
+  const onMyEdit = Boolean(myEdit) && myEdit!.branch === branch;
+  const onEditBranch = isEditBranch(branch);
+  const locked = state ? isLocked(state, branch) : false;
+  const lockReasonKey = state ? editLockReason(state, branch) : null;
+  const lockReason = lockReasonKey ? t(`edit.lock.${lockReasonKey}`) : null;
+  const hasUnpushed = localDirty || Boolean(branchState?.dirty);
 
   const host = useMemo(
     () =>
@@ -82,15 +138,15 @@ function EditPageInner() {
         projectId,
         branch,
         editable,
-        versioning,
         onHeadChange: (sha) => setHeadMoved((prev) => prev ?? sha),
         onDraftSaved: () => setLocalDirty(true),
         onCheckpoint: () => {
           setLocalDirty(false);
+          clearLocalMirror(mirrorScope);
           void refresh();
         },
       }),
-    [projectId, branch, editable, versioning, reload], // eslint-disable-line react-hooks/exhaustive-deps
+    [projectId, branch, editable, mirrorScope, reload], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   useEffect(() => {
@@ -134,19 +190,23 @@ function EditPageInner() {
   useEffect(() => {
     setHeadMoved(null);
     setLocalDirty(false);
+    setAutosavePending(false);
     setMobileFiles(null);
+    setReviewRequested(null);
   }, [branch]);
 
-  const dirty = localDirty || Boolean(branchState?.dirty);
+  // Unpushed drafts already live on the server (autosave got them there), so
+  // only an in-flight autosave — the few seconds before it reaches Postgres —
+  // is worth warning about before the tab closes.
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (!dirty) return;
+      if (!autosavePending) return;
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
+  }, [autosavePending]);
 
   // Mobile view edits a full snapshot (committed text + drafts).
   const loadMobile = useCallback(async () => {
@@ -193,59 +253,52 @@ function EditPageInner() {
   };
 
   const doStartEdit = () => {
-    const name = window.prompt(t("edit.prompt.startEdit"), t("edit.prompt.startEditDefault"));
-    if (!name) return;
     void run("start", async () => {
-      const res = await startEdit(projectId, name);
+      const res = await startEdit(projectId);
       await refresh();
       setBranchParam(res.branch);
       setReload((r) => r + 1);
     });
   };
 
-  const doCheckpoint = () => {
-    const msg = window.prompt(t("edit.prompt.checkpoint"), t("edit.prompt.checkpointDefault"));
-    if (msg === null) return;
-    void run("checkpoint", async () => {
-      await checkpoint(projectId, branch, msg, undefined, branchState?.sha);
-      setLocalDirty(false);
-      setHeadMoved(null);
+  const doBackToEdit = () => {
+    if (myEdit) setBranchParam(myEdit.branch);
+  };
+
+  const doDiscard = () => {
+    if (!myEdit) return;
+    void run("discard", async () => {
+      await abandonEdit(projectId, myEdit.id);
+      setShowDiscard(false);
       await refresh();
+      setBranchParam(INTEGRATION_BRANCH);
       setReload((r) => r + 1);
     });
   };
 
-  const onTmp = branch.startsWith("tmp-");
-  const locked = state ? isLocked(state, branch) : false;
-  const lockReasonKey = state ? editLockReason(state, branch) : null;
-  const lockReason = lockReasonKey ? t(`edit.lock.${lockReasonKey}`) : null;
-  const canOpenPR = onTmp && !locked && role !== "viewer";
+  function handlePushed() {
+    setShowPush(false);
+    setLocalDirty(false);
+    setHeadMoved(null);
+    clearLocalMirror(mirrorScope);
+    void refresh();
+    setReload((r) => r + 1);
+  }
 
-  const doOpenPR = () => {
-    if (!state || !canOpenPR) return;
-    const title = window.prompt(
-      t("edit.prompt.prTitle"),
-      t("edit.prompt.prTitleDefault", { branch, prBase: "test" }),
-    );
-    if (title === null) return;
-    void run("pr", async () => {
-      const res = await openPR(projectId, state, branch, title);
-      await refresh();
-      window.alert(t("edit.prompt.prOpened", { branch, base: res.base }));
-    });
-  };
+  function handleReviewRequested(res: { number: number }) {
+    setShowReview(false);
+    setReviewRequested(res.number);
+    void refresh();
+  }
 
-  const statusLabel = onMain
-    ? t("edit.status.production")
-    : locked
-      ? t("edit.status.locked")
-      : branch === "test"
-        ? editable
-          ? t("edit.status.integration")
-          : t("edit.status.integrationReadonly")
+  const statusLabel =
+    onMyEdit && locked
+      ? t("edit.status.underReview")
+      : onEditBranch
+        ? t("edit.status.editing")
         : role === "viewer"
           ? t("edit.status.viewer")
-          : t("edit.status.editBranch");
+          : null;
 
   return (
     <ProjectPage active="edit" projectId={projectId} state={state} error={error}>
@@ -253,44 +306,72 @@ function EditPageInner() {
         <>
           {/* One compact row that scrolls horizontally on phones; wraps normally on sm+. */}
           <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-sm sm:flex-wrap sm:overflow-x-visible [&>*]:shrink-0">
-            <select
-              value={branch}
-              onChange={(e) => setBranchParam(e.target.value)}
-              className="rounded-md border border-neutral-300 bg-white px-2 py-1"
-            >
-              {state.branches.map((b) => (
-                <option key={b.name} value={b.name}>
-                  {b.name}
-                  {b.locked ? " 🔒" : ""}
-                  {b.dirty ? " •" : ""}
-                </option>
-              ))}
-            </select>
-            <Badge>{statusLabel}</Badge>
+            <div className="flex items-center gap-1.5">
+              <BranchChip
+                active={branch === INTEGRATION_BRANCH}
+                label={t("branch.preview")}
+                onClick={() => setBranchParam(INTEGRATION_BRANCH)}
+              />
+              <BranchChip
+                active={branch === PROD_BRANCH}
+                label={t("branch.main")}
+                onClick={() => setBranchParam(PROD_BRANCH)}
+              />
+              {myEdit && (
+                <BranchChip
+                  active={onMyEdit}
+                  label={t("edit.myEdit")}
+                  dot={Boolean(myEditState?.dirty)}
+                  locked={Boolean(myEditState?.openPrNumber)}
+                  onClick={doBackToEdit}
+                />
+              )}
+              {branchKindOf(branch) === "other" && (
+                <BranchChip active label={branchLabel(branch, t)} onClick={() => {}} />
+              )}
+            </div>
+            {statusLabel && <Badge>{statusLabel}</Badge>}
             <div className="mx-1 h-5 w-px bg-neutral-300" />
-            <Action onClick={doStartEdit} disabled={role === "viewer" || busy !== null}>
-              <Plus size={14} /> {t("edit.startEdit")}
-            </Action>
-            <Action
-              onClick={doCheckpoint}
-              disabled={readOnly || busy !== null}
-              title={lockReason ?? undefined}
-            >
-              <Check size={14} /> {t("edit.checkpoint")}
-            </Action>
-            <Action
-              onClick={doOpenPR}
-              disabled={!canOpenPR || busy !== null}
-              title={
-                !onTmp
-                  ? t("edit.prompt.openPrHint")
-                  : locked
-                    ? t("edit.prompt.prAlreadyOpen")
-                    : undefined
-              }
-            >
-              <GitPullRequest size={14} /> {t("edit.openPrTo", { base: "test" })}
-            </Action>
+
+            {role !== "viewer" &&
+              (!onMyEdit ? (
+                myEdit ? (
+                  <Action onClick={doBackToEdit} disabled={busy !== null}>
+                    <Pencil size={14} /> {t("edit.backToEdit")}
+                  </Action>
+                ) : (
+                  <Action onClick={doStartEdit} disabled={busy !== null}>
+                    <Plus size={14} /> {t("edit.startEditing")}
+                  </Action>
+                )
+              ) : locked ? (
+                <Link
+                  href={`/projects/${projectId}/pulls`}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-sm text-amber-800 hover:border-amber-400"
+                >
+                  <Lock size={14} />
+                  {t("edit.underReview", { n: String(branchState?.openPrNumber ?? "") })}
+                </Link>
+              ) : (
+                <>
+                  <Action
+                    onClick={() => setShowPush(true)}
+                    disabled={!hasUnpushed || autosavePending}
+                  >
+                    <Upload size={14} /> {t("edit.push")}
+                  </Action>
+                  <Action onClick={() => setShowReview(true)} disabled={autosavePending}>
+                    <GitPullRequest size={14} /> {t("edit.requestReview")}
+                  </Action>
+                  <button
+                    onClick={() => setShowDiscard(true)}
+                    className="whitespace-nowrap text-xs text-neutral-400 hover:text-red-600 hover:underline"
+                  >
+                    {t("edit.discard")}
+                  </button>
+                </>
+              ))}
+
             <Action onClick={toggleView}>
               {mobile ? (
                 <>
@@ -304,11 +385,6 @@ function EditPageInner() {
             </Action>
             <span className="ml-auto inline-flex items-center gap-2 text-xs text-neutral-500">
               {busy && <RefreshCw size={12} className="animate-spin" />}
-              {dirty && (
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">
-                  {t("edit.unsaved")}
-                </span>
-              )}
               <b>{t(`nav.role.${role}`)}</b>
             </span>
           </div>
@@ -319,6 +395,20 @@ function EditPageInner() {
               <button onClick={() => setNotice(null)} className="text-xs underline">
                 {t("close")}
               </button>
+            </div>
+          )}
+
+          {reviewRequested !== null && (
+            <div className="flex shrink-0 items-center justify-between border-b border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800">
+              <span>{t("edit.review.requested", { n: String(reviewRequested) })}</span>
+              <div className="flex items-center gap-3">
+                <Link href={`/projects/${projectId}/pulls`} className="text-xs underline">
+                  {t("nav.pulls")}
+                </Link>
+                <button onClick={() => setReviewRequested(null)} className="text-xs underline">
+                  {t("close")}
+                </button>
+              </div>
             </div>
           )}
 
@@ -343,14 +433,6 @@ function EditPageInner() {
               <span className="inline-flex items-center gap-1.5">
                 <Lock size={14} /> {t("edit.readonly", { reason: lockReason ?? "" })}
               </span>
-              {!onMain && !locked && role !== "viewer" && (
-                <button
-                  onClick={doStartEdit}
-                  className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-500"
-                >
-                  <Plus size={13} /> {t("edit.startEditBranch")}
-                </button>
-              )}
             </div>
           )}
 
@@ -384,12 +466,41 @@ function EditPageInner() {
                   showLanguageToggle: false,
                   initialDocumentId: mFile,
                   onActiveDocument: setMFile,
+                  autosaveDelayMs: 1500,
+                  localMirrorKey: mirrorScope,
+                  onPendingChange: setAutosavePending,
+                  onAutosaveError: setNotice,
                 }}
               />
             )}
           </div>
 
           {showPrompt && <MobilePrompt onMobile={chooseMobile} onStay={stayEditor} />}
+
+          {showPush && (
+            <PushModal
+              projectId={projectId}
+              branch={branch}
+              headSha={branchState?.sha}
+              onClose={() => setShowPush(false)}
+              onPushed={handlePushed}
+            />
+          )}
+          {showReview && (
+            <RequestReviewModal
+              projectId={projectId}
+              branch={branch}
+              onClose={() => setShowReview(false)}
+              onRequested={handleReviewRequested}
+            />
+          )}
+          {showDiscard && (
+            <DiscardEditModal
+              busy={busy === "discard"}
+              onClose={() => setShowDiscard(false)}
+              onConfirm={doDiscard}
+            />
+          )}
         </>
       )}
     </ProjectPage>

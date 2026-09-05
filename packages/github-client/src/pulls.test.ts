@@ -47,33 +47,33 @@ describe("createPullRequest", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("allows the sanctioned tmp-* -> test", async () => {
-    const { fetchImpl } = routed({ "/pulls": rawPull("tmp-u-e", "test") });
+  it("allows the sanctioned tmp-* -> preview", async () => {
+    const { fetchImpl } = routed({ "/pulls": rawPull("tmp-u-e", "preview") });
     const pr = await api(fetchImpl).createPullRequest({
       head: "tmp-u-e",
-      base: "test",
+      base: "preview",
       title: "t",
     });
     expect(pr).toMatchObject({
       number: 7,
       head: "tmp-u-e",
-      base: "test",
+      base: "preview",
       merged: false,
       state: "open",
     });
   });
 
-  it("allows the promotion test -> main", async () => {
-    const { fetchImpl } = routed({ "/pulls": rawPull("test", "main") });
+  it("allows the promotion preview -> main", async () => {
+    const { fetchImpl } = routed({ "/pulls": rawPull("preview", "main") });
     await expect(
-      api(fetchImpl).createPullRequest({ head: "test", base: "main", title: "release" }),
+      api(fetchImpl).createPullRequest({ head: "preview", base: "main", title: "release" }),
     ).resolves.toMatchObject({ base: "main" });
   });
 });
 
 describe("listPullRequests", () => {
   it("qualifies head with the owner, as GitHub requires", async () => {
-    const { fetchImpl, calls } = routed({ "/pulls": [rawPull("tmp-u-e", "test")] });
+    const { fetchImpl, calls } = routed({ "/pulls": [rawPull("tmp-u-e", "preview")] });
     await api(fetchImpl).listPullRequests({ head: "tmp-u-e" });
     expect(calls[0]![0]).toContain(`head=${encodeURIComponent("o:tmp-u-e")}`);
   });
@@ -89,7 +89,7 @@ describe("mergePullRequest", () => {
   it("uses PUT with a merge_method", async () => {
     const { fetchImpl, calls } = routed({
       "/pulls/7/merge": { sha: "a".repeat(40), merged: true },
-      "/pulls/7": rawPull("tmp-u-e", "test"),
+      "/pulls/7": rawPull("tmp-u-e", "preview"),
     });
     await api(fetchImpl).mergePullRequest(7, { method: "squash" });
     const merge = calls.find(([u]) => u.endsWith("/merge"))!;
@@ -99,20 +99,20 @@ describe("mergePullRequest", () => {
 
   it("turns a 409 into an actionable conflict message", async () => {
     const { fetchImpl } = routed(
-      { "/pulls/7/merge": { message: "not mergeable" }, "/pulls/7": rawPull("tmp-u-e", "test") },
+      { "/pulls/7/merge": { message: "not mergeable" }, "/pulls/7": rawPull("tmp-u-e", "preview") },
       { "/pulls/7/merge": 409 },
     );
     const err = await api(fetchImpl)
       .mergePullRequest(7)
       .catch((e) => e);
     expect(err).toBeInstanceOf(GitHubConflictError);
-    expect(err.message).toMatch(/conflicts with test/);
+    expect(err.message).toMatch(/conflicts with preview/);
   });
 });
 
 describe("pull request shape", () => {
   it("carries head/base shas and the author, which the SaaS state needs", async () => {
-    const { fetchImpl } = routed({ "/pulls/7": { ...rawPull("tmp-u-e", "test"), comments: 3 } });
+    const { fetchImpl } = routed({ "/pulls/7": { ...rawPull("tmp-u-e", "preview"), comments: 3 } });
     const pr = await api(fetchImpl).getPullRequest(7);
     expect(pr).toMatchObject({
       headSha: "h".repeat(40),
@@ -128,7 +128,7 @@ describe("pull request shape", () => {
 describe("closePullRequest", () => {
   it("PATCHes state=closed and never touches the merge endpoint", async () => {
     const { fetchImpl, calls } = routed({
-      "/pulls/7": { ...rawPull("tmp-u-e", "test"), state: "closed", closed_at: "2026-01-02" },
+      "/pulls/7": { ...rawPull("tmp-u-e", "preview"), state: "closed", closed_at: "2026-01-02" },
     });
     const pr = await api(fetchImpl).closePullRequest(7);
     expect(calls[0]![1].method).toBe("PATCH");

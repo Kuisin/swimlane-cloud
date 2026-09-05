@@ -9,7 +9,13 @@ export { FileEditorProvider } from "./context/file-editor-provider.jsx";
 export { useEditor } from "./context/editor-context.js";
 
 // EditorHost contract + capability helpers.
-export { TEMPLATE_SECTIONS, hostHas, hostSupportsVersioning, hostIsReadOnly } from "./host.js";
+export {
+  TEMPLATE_SECTIONS,
+  hostHas,
+  hostSupportsVersioning,
+  hostAutosaves,
+  hostIsReadOnly,
+} from "./host.js";
 
 // Pure libs, useful to host adapters and tests.
 export { serializeDSL } from "./lib/serialize-dsl.js";
@@ -23,6 +29,7 @@ export {
   normalizeDirPath,
 } from "./lib/dsl-document.js";
 export { buildFolderTree } from "./lib/folder-tree.js";
+export { clearLocalMirror } from "./lib/local-mirror.js";
 export { parseGuiModel, applyModelEdit } from "./lib/gui-model.js";
 export { extractPartsCode } from "./lib/parts-extract.js";
 export {

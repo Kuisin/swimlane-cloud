@@ -1,7 +1,7 @@
 import {
   INTEGRATION_BRANCH,
+  isEditBranch,
   isIntegrationBranch,
-  isTmpBranch,
 } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { assertRef } from "@/lib/guard";
@@ -20,8 +20,8 @@ interface OpenBody {
 
 /**
  * POST /api/projects/[projectId]/pulls — open (or reuse) the pull request from
- * a tmp-* branch into test. `test` itself never gets a pull request from
- * here: production is reached by promoting a flagged version.
+ * an edit branch into preview. `preview` itself never gets a pull request
+ * from here: main is reached by promoting a flagged version.
  */
 export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
@@ -31,13 +31,13 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   if (isIntegrationBranch(body.head)) {
     throw new ApiError(
       400,
-      "test is promoted to main from the Versions tab, not by pull request.",
+      "preview is promoted to main from the Versions tab, not by pull request.",
       {
         promoteViaVersions: true,
       },
     );
   }
-  if (!isTmpBranch(body.head)) throw new ApiError(400, "Only tmp-* branches open pull requests.");
+  if (!isEditBranch(body.head)) throw new ApiError(400, "Only edit branches open pull requests.");
 
   const project = await requireProjectRole(projectId, "editor");
 

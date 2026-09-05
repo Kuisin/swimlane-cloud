@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 /**
  * DELETE /api/projects/[projectId]/edits/[editId] — abandon an edit: delete
- * the tmp-* branch and its drafts. The author or an owner may do this; a
+ * the edit branch and its drafts. The author or an owner may do this; a
  * branch with an open pull request must be closed on the PR first.
  */
 export const DELETE = withApi(

@@ -155,8 +155,8 @@ error with a clear message, never a failed deploy.
 ### 3 — Smoke test
 
 Open the production URL → **Continue with GitHub** → the dashboard lists repositories tagged
-`swimlane` → **New project** creates a private repository with `main`, `test`, a sample diagram
-and `.swimlane.json`, or **Mark an existing repository** adds the topic to one you administer.
+`swimlane` → **New project** creates a private repository with `main` and `preview`, a sample
+diagram and `.swimlane.json`, or **Mark an existing repository** adds the topic to one you administer.
 
 ---
 
