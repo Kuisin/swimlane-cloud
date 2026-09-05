@@ -161,6 +161,28 @@ export function createProjectsApi(rest: RestClient) {
     },
 
     /**
+     * Every project directly inside one group (not its subgroups —
+     * `include_subgroups` stays off since a workspace names exactly one
+     * namespace) the token can see, optionally narrowed to one topic. Used
+     * for workspace-scoped discovery, where `listAccessibleRepos`'s
+     * every-namespace-the-token-can-reach scope would be too broad.
+     */
+    async listNamespaceProjects(
+      namespaceId: number,
+      opts: { topic?: string; max?: number } = {},
+    ): Promise<RepoInfo[]> {
+      const params = new URLSearchParams({
+        order_by: "last_activity_at",
+        sort: "desc",
+        ...(opts.topic ? { topic: opts.topic } : {}),
+      });
+      const raws = await rest.paginate<RawProject>(`/groups/${namespaceId}/projects?${params}`, {
+        max: opts.max ?? 30,
+      });
+      return raws.map(toRepo);
+    },
+
+    /**
      * Groups where the token's user holds Owner access (level 50) — the
      * GitLab analogue of "can spend the org's quota by creating new
      * projects", used only by the instance-claim and project-create flows.

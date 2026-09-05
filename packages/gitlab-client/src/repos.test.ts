@@ -89,6 +89,17 @@ describe("addTopic", () => {
   });
 });
 
+describe("listNamespaceProjects", () => {
+  it("scopes to /groups/:id/projects, not the global /projects endpoint", async () => {
+    const fetchImpl = vi.fn(async (_url: string) => json([RAW_PROJECT]));
+    const { repos } = client(fetchImpl as unknown as FetchImpl);
+    const result = await repos.listNamespaceProjects(7, { topic: "swimlane" });
+    expect(result).toHaveLength(1);
+    expect(fetchImpl.mock.calls[0]![0]).toContain("/groups/7/projects");
+    expect(fetchImpl.mock.calls[0]![0]).toContain("topic=swimlane");
+  });
+});
+
 describe("listBranches", () => {
   it("maps commit.id to sha", async () => {
     const fetchImpl = vi.fn(async () =>
