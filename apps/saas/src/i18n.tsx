@@ -175,6 +175,7 @@ export const EN: Record<string, string> = {
     'Every GitHub repository you can access that carries the "{topic}" topic. Your role comes from your GitHub permissions on each repository.',
   "dashboard.open": "Open",
   "dashboard.newProject": "New project",
+  "dashboard.connectGitLab": "Connect GitLab",
   "dashboard.refresh": "Refresh",
   "dashboard.empty": "No swimlane repositories yet.",
   "dashboard.emptyHint":
@@ -197,6 +198,37 @@ export const EN: Record<string, string> = {
   "new.search": "Search repositories…",
   "new.markButton": "Mark",
   "new.noRepos": "No repositories to mark.",
+  // GitLab: connect an instance, claim a workspace, add a project
+  "gitlab.wizardTitle": "Connect a GitLab instance",
+  "gitlab.registerHint":
+    "For a self-hosted GitLab instance (or gitlab.com), register the OAuth Application your instance's admin created for Swimlane Cloud. Read + create/attach + edit + push works today; pull request review and one-click Publish are GitHub-only for now.",
+  "gitlab.host": "Instance URL",
+  "gitlab.hostPlaceholder": "https://gitlab.example.com",
+  "gitlab.displayName": "Display name",
+  "gitlab.clientId": "OAuth Application client ID",
+  "gitlab.clientSecret": "OAuth Application client secret",
+  "gitlab.registerButton": "Register & connect",
+  "gitlab.registering": "Registering…",
+  "gitlab.claimTitle": "Choose a group",
+  "gitlab.claimHint":
+    "Connected. Pick the GitLab group (namespace) this workspace represents — you need Owner access to it.",
+  "gitlab.namespace": "Group",
+  "gitlab.claimButton": "Connect this group",
+  "gitlab.claiming": "Connecting…",
+  "gitlab.noNamespaces": "No groups where you have Owner access on this instance.",
+  "gitlab.projectStepTitle": "Add a project",
+  "gitlab.createProject": "Create a project",
+  "gitlab.attachProject": "Attach an existing project",
+  "gitlab.projectName": "Project name",
+  "gitlab.projectPath": "Project path (group/subgroup/project)",
+  "gitlab.createProjectHint":
+    "Creates a private project with main and preview branches, a sample diagram, section templates and .swimlane.json, tagged with the swimlane topic.",
+  "gitlab.attachProjectHint":
+    "Adds the swimlane topic, a preview branch and .swimlane.json to a project you already have Maintainer access to — nothing else changes.",
+  "gitlab.createProjectButton": "Create project",
+  "gitlab.attachProjectButton": "Attach",
+  "gitlab.openProject": "Open project",
+  "gitlab.workspaceConnected": "Workspace connected.",
   // login
   "login.title": "Sign in",
   "login.subtitle": "Swimlane Cloud edits diagrams in your own GitHub repositories.",
@@ -573,6 +605,7 @@ export const JA: Record<string, string> = {
     "「{topic}」トピックが付いた、アクセス可能な GitHub リポジトリの一覧です。役割は各リポジトリでの GitHub 権限から決まります。",
   "dashboard.open": "開く",
   "dashboard.newProject": "新規プロジェクト",
+  "dashboard.connectGitLab": "GitLab を接続",
   "dashboard.refresh": "更新",
   "dashboard.empty": "swimlane リポジトリはまだありません。",
   "dashboard.emptyHint":
@@ -595,6 +628,37 @@ export const JA: Record<string, string> = {
   "new.search": "リポジトリを検索…",
   "new.markButton": "マーク",
   "new.noRepos": "マークできるリポジトリがありません。",
+  // GitLab: インスタンスを接続し、ワークスペースを紐付け、プロジェクトを追加する
+  "gitlab.wizardTitle": "GitLab インスタンスを接続",
+  "gitlab.registerHint":
+    "セルフホストの GitLab インスタンス(または gitlab.com)向けに、インスタンスの管理者が Swimlane Cloud 用に作成した OAuth アプリケーションを登録します。閲覧・作成/アタッチ・編集・プッシュは今すぐ利用できます。プルリクエストのレビューとワンクリック公開は今のところ GitHub 限定です。",
+  "gitlab.host": "インスタンス URL",
+  "gitlab.hostPlaceholder": "https://gitlab.example.com",
+  "gitlab.displayName": "表示名",
+  "gitlab.clientId": "OAuth アプリケーションのクライアント ID",
+  "gitlab.clientSecret": "OAuth アプリケーションのクライアントシークレット",
+  "gitlab.registerButton": "登録して接続",
+  "gitlab.registering": "登録中…",
+  "gitlab.claimTitle": "グループを選択",
+  "gitlab.claimHint":
+    "接続しました。このワークスペースが表す GitLab グループ(名前空間)を選んでください — オーナー権限が必要です。",
+  "gitlab.namespace": "グループ",
+  "gitlab.claimButton": "このグループに接続",
+  "gitlab.claiming": "接続中…",
+  "gitlab.noNamespaces": "このインスタンスでオーナー権限のあるグループがありません。",
+  "gitlab.projectStepTitle": "プロジェクトを追加",
+  "gitlab.createProject": "プロジェクトを作成",
+  "gitlab.attachProject": "既存のプロジェクトをアタッチ",
+  "gitlab.projectName": "プロジェクト名",
+  "gitlab.projectPath": "プロジェクトパス(group/subgroup/project)",
+  "gitlab.createProjectHint":
+    "main と preview ブランチ、サンプル図、セクションテンプレート、.swimlane.json を備えたプライベートプロジェクトを作成し、swimlane トピックを付与します。",
+  "gitlab.attachProjectHint":
+    "すでに Maintainer 権限を持つプロジェクトに swimlane トピック、preview ブランチ、.swimlane.json を追加します。それ以外は変更しません。",
+  "gitlab.createProjectButton": "プロジェクトを作成",
+  "gitlab.attachProjectButton": "アタッチ",
+  "gitlab.openProject": "プロジェクトを開く",
+  "gitlab.workspaceConnected": "ワークスペースを接続しました。",
   // login
   "login.title": "サインイン",
   "login.subtitle": "Swimlane Cloud はあなた自身の GitHub リポジトリ内の図を編集します。",

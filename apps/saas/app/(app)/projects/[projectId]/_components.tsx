@@ -41,7 +41,7 @@ import { FileTree } from "@/components/file-tree";
 import { GitHubMark } from "@/components/github-mark";
 import { RoleBadge } from "@/components/app-header";
 import { branchLabel } from "@/lib/branch-label";
-import { ApiClientError, redirectToLogin } from "@/lib/client";
+import { ApiClientError, redirectToReconnect } from "@/lib/client";
 import {
   addPRComment,
   compare,
@@ -100,7 +100,7 @@ export function useProject() {
       setState(await getState(projectId));
       setError(null);
     } catch (e) {
-      if (e instanceof ApiClientError && e.needsAuth) return redirectToLogin();
+      if (e instanceof ApiClientError && e.needsAuth) return redirectToReconnect(e);
       setError(describeError(e, t));
     } finally {
       setLoading(false);
