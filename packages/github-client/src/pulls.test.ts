@@ -12,10 +12,12 @@ const rawPull = (head: string, base: string) => ({
   title: "Edit diagrams",
   state: "open",
   merged_at: null,
-  head: { ref: head },
-  base: { ref: base },
+  head: { ref: head, sha: "h".repeat(40) },
+  base: { ref: base, sha: "b".repeat(40) },
   html_url: "https://github.com/o/r/pull/7",
   draft: false,
+  user: { login: "kuisin" },
+  created_at: "2026-01-01T00:00:00Z",
 });
 
 function routed(routes: Record<string, unknown>, status: Record<string, number> = {}) {
@@ -105,5 +107,65 @@ describe("mergePullRequest", () => {
       .catch((e) => e);
     expect(err).toBeInstanceOf(GitHubConflictError);
     expect(err.message).toMatch(/conflicts with test/);
+  });
+});
+
+describe("pull request shape", () => {
+  it("carries head/base shas and the author, which the SaaS state needs", async () => {
+    const { fetchImpl } = routed({ "/pulls/7": { ...rawPull("tmp-u-e", "test"), comments: 3 } });
+    const pr = await api(fetchImpl).getPullRequest(7);
+    expect(pr).toMatchObject({
+      headSha: "h".repeat(40),
+      baseSha: "b".repeat(40),
+      author: "kuisin",
+      createdAt: "2026-01-01T00:00:00Z",
+      commentCount: 3,
+      mergedAt: null,
+    });
+  });
+});
+
+describe("closePullRequest", () => {
+  it("PATCHes state=closed and never touches the merge endpoint", async () => {
+    const { fetchImpl, calls } = routed({
+      "/pulls/7": { ...rawPull("tmp-u-e", "test"), state: "closed", closed_at: "2026-01-02" },
+    });
+    const pr = await api(fetchImpl).closePullRequest(7);
+    expect(calls[0]![1].method).toBe("PATCH");
+    expect(JSON.parse(calls[0]![1].body as string)).toEqual({ state: "closed" });
+    expect(calls.some(([u]) => u.endsWith("/merge"))).toBe(false);
+    expect(pr.state).toBe("closed");
+  });
+});
+
+describe("issue comments", () => {
+  const rawComment = {
+    id: 1,
+    body: "Looks good",
+    created_at: "2026-01-01T00:00:00Z",
+    html_url: "https://github.com/o/r/pull/7#issuecomment-1",
+    user: { login: "reviewer" },
+  };
+
+  it("reads the conversation from the issues endpoint, not the review thread", async () => {
+    const { fetchImpl, calls } = routed({ "/issues/7/comments": [rawComment] });
+    const out = await api(fetchImpl).listIssueComments(7);
+    expect(calls[0]![0]).toContain("/issues/7/comments");
+    expect(out).toEqual([
+      {
+        id: 1,
+        author: "reviewer",
+        body: "Looks good",
+        createdAt: "2026-01-01T00:00:00Z",
+        htmlUrl: rawComment.html_url,
+      },
+    ]);
+  });
+
+  it("posts a comment", async () => {
+    const { fetchImpl, calls } = routed({ "/issues/7/comments": rawComment });
+    await api(fetchImpl).createIssueComment(7, "Looks good");
+    expect(calls[0]![1].method).toBe("POST");
+    expect(JSON.parse(calls[0]![1].body as string)).toEqual({ body: "Looks good" });
   });
 });

@@ -1,62 +1,81 @@
 "use client";
 
-import { Tag } from "lucide-react";
-import { flagVersion, promote, publishVersion, unpublishVersion } from "@/lib/demo-workflow";
-import { ProjectNav, VersionPanel, useProject } from "../_components";
+import { useState } from "react";
+import { RefreshCw, Tag } from "lucide-react";
+import { flagVersion, promoteVersion, publishVersion, unpublishVersion } from "@/lib/workflow";
+import { ProjectPage, VersionPanel, describeError, useProject } from "../_components";
 import { useT } from "@/i18n";
 
 export default function VersionsPage() {
-  const { projectId, projectName, st, setSt, setRole, reset } = useProject();
+  const { projectId, state, refresh, error } = useProject();
   const { t } = useT();
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  if (!st) return <div className="p-6 text-sm text-neutral-500">{t("loading")}</div>;
+  const isOwner = state?.me.role === "owner";
+  const test = state?.branches.find((b) => b.name === "test");
 
-  const isManager = st.role === "manager";
+  const run = (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setNotice(null);
+    fn()
+      .then(() => refresh())
+      .catch((e) => setNotice(describeError(e, t)))
+      .finally(() => setBusy(false));
+  };
 
   const doFlag = () => {
     const name = window.prompt(t("versions.prompt.name"), "");
     if (!name) return;
     const note = window.prompt(t("versions.prompt.note"), "") ?? "";
-    setSt(flagVersion(projectId, st, name, note));
+    run(async () => {
+      const res = await flagVersion(projectId, name, note || undefined);
+      if (res.renderFailures.length) {
+        window.alert(t("versions.renderFailures", { files: res.renderFailures.join(", ") }));
+      }
+    });
   };
 
   return (
-    <div className="flex h-screen flex-col">
-      <ProjectNav
-        projectId={projectId}
-        projectName={projectName}
-        active="versions"
-        role={st.role}
-        onRole={setRole}
-        onReset={reset}
-      />
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="mx-auto max-w-4xl p-6">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">{t("versions.title")}</h2>
-              <p className="text-xs text-neutral-500">{t("versions.description")}</p>
+    <ProjectPage active="versions" projectId={projectId} state={state} error={error ?? notice}>
+      {state && (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <div className="mx-auto max-w-4xl p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">{t("versions.title")}</h2>
+                <p className="text-xs text-neutral-500">
+                  {t("versions.description")}
+                  {test?.dirty ? ` ${t("versions.testDirty")}` : ""}
+                </p>
+              </div>
+              {isOwner ? (
+                <button
+                  onClick={doFlag}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+                >
+                  {busy ? <RefreshCw size={15} className="animate-spin" /> : <Tag size={15} />}{" "}
+                  {t("versions.flagNew")}
+                </button>
+              ) : (
+                <span className="text-xs text-neutral-400">{t("versions.ownerHint")}</span>
+              )}
             </div>
-            {isManager ? (
-              <button
-                onClick={doFlag}
-                className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-              >
-                <Tag size={15} /> {t("versions.flagNew")}
-              </button>
-            ) : (
-              <span className="text-xs text-neutral-400">{t("versions.managerHint")}</span>
-            )}
+            <VersionPanel
+              projectId={projectId}
+              state={state}
+              isOwner={isOwner}
+              onPromote={(v) => {
+                if (!window.confirm(t("versions.confirmPromote", { name: v.name }))) return;
+                run(() => promoteVersion(projectId, v.id));
+              }}
+              onPublish={(v, shareMode) => run(() => publishVersion(projectId, v.id, shareMode))}
+              onUnpublish={(v) => run(() => unpublishVersion(projectId, v.id))}
+            />
           </div>
-          <VersionPanel
-            st={st}
-            isManager={isManager}
-            onPromote={(id) => setSt(promote(projectId, st, id))}
-            onPublish={(id, shareMode) => setSt(publishVersion(projectId, st, id, shareMode))}
-            onUnpublish={(id) => setSt(unpublishVersion(projectId, st, id))}
-          />
         </div>
-      </div>
-    </div>
+      )}
+    </ProjectPage>
   );
 }

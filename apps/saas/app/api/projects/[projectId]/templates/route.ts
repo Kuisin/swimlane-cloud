@@ -1,7 +1,7 @@
+import { INTEGRATION_BRANCH } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
-import { getGitea } from "@/lib/gitea";
 import { getServiceSupabase } from "@/lib/supabase/server";
-import { audit, getRepoCoords, requireUser, slugify } from "@/lib/projects";
+import { audit, requireProjectRole, slugify, type ProjectCtx } from "@/lib/projects";
 import { isTemplateSection, templateRepoPath, type TemplateSection } from "@/lib/templates";
 // Validate fragments with the shared parser before persisting.
 import { parseDSL, parseDSLParts } from "@swimlane-cloud/diagram-converter/parser";
@@ -38,26 +38,25 @@ function validateBody(section: TemplateSection, body: string): void {
   }
 }
 
+/**
+ * Keep `templates/{section}/{slug}.txt` on test in step with the database, so
+ * the desktop app and the VS Code extension see the same library. A removed
+ * template is emptied rather than deleted, which keeps its history visible.
+ */
 async function mirrorToRepo(
-  projectId: string,
+  project: ProjectCtx,
   section: TemplateSection,
   slug: string,
   body: string,
   remove = false,
 ): Promise<void> {
-  const { org, repo } = await getRepoCoords(projectId);
-  const gitea = getGitea();
   const path = templateRepoPath(section, slug);
-  if (remove) {
-    // Soft approach: overwrite with empty to keep history; full delete optional.
-    await gitea.upsertFile(org, repo, path, "", "test", {
-      message: `Remove template ${section}/${slug}`,
-    });
-    return;
-  }
-  await gitea.upsertFile(org, repo, path, body, "test", {
-    message: `Update template ${section}/${slug}`,
-  });
+  await project.write.putFile(
+    path,
+    remove ? "" : body,
+    INTEGRATION_BRANCH,
+    remove ? `Remove template ${section}/${slug}` : `Update template ${section}/${slug}`,
+  );
 }
 
 /** GET ...?section= — list templates (optionally filtered by section). */
@@ -65,6 +64,7 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
   const { projectId } = await ctx.params;
   const url = new URL(req.url);
   const sectionParam = url.searchParams.get("section");
+  await requireProjectRole(projectId, "viewer");
 
   const supabase = getServiceSupabase();
   let query = supabase
@@ -92,7 +92,8 @@ interface TemplateBody {
 /** POST — create a template. */
 export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
-  const user = await requireUser();
+  const project = await requireProjectRole(projectId, "owner");
+  const user = project.user;
   const input = await readJson<TemplateBody>(req);
   const section = requireSection(input.section);
   if (!input.name || !input.body) throw new ApiError(400, "name and body required");
@@ -122,11 +123,12 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     .single();
   if (error) throw new ApiError(400, error.message);
 
-  await mirrorToRepo(projectId, section, slug, input.body);
-  const { workspaceId } = await getRepoCoords(projectId);
+  await mirrorToRepo(project, section, slug, input.body);
   await audit({
-    workspaceId,
+    workspaceId: project.project.workspaceId,
+    projectId,
     userId: user.id,
+    actorLogin: project.login,
     action: "template.created",
     entityType: "template",
     entityId: data.id as string,
@@ -141,7 +143,7 @@ interface PatchBody extends TemplateBody {
 /** PATCH — update a template by id. */
 export const PATCH = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
-  const user = await requireUser();
+  const project = await requireProjectRole(projectId, "owner");
   const input = await readJson<PatchBody>(req);
   if (!input.id) throw new ApiError(400, "id is required");
   const section = requireSection(input.section);
@@ -169,14 +171,14 @@ export const PATCH = withApi(async (req, ctx: { params: Promise<{ projectId: str
     .eq("project_id", projectId);
   if (error) throw new ApiError(400, error.message);
 
-  await mirrorToRepo(projectId, section, slug, input.body);
+  await mirrorToRepo(project, section, slug, input.body);
   return json({ id: input.id });
 });
 
 /** DELETE ?id= — delete a template (blocked if currently forced). */
 export const DELETE = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
-  await requireUser();
+  const project = await requireProjectRole(projectId, "owner");
   const url = new URL(req.url);
   const id = url.searchParams.get("id");
   if (!id) throw new ApiError(400, "id is required");
@@ -209,7 +211,7 @@ export const DELETE = withApi(async (req, ctx: { params: Promise<{ projectId: st
   if (error) throw new ApiError(400, error.message);
 
   if (row && isTemplateSection(row.section as string)) {
-    await mirrorToRepo(projectId, row.section as TemplateSection, row.slug as string, "", true);
+    await mirrorToRepo(project, row.section as TemplateSection, row.slug as string, "", true);
   }
   return json({ deleted: id });
 });

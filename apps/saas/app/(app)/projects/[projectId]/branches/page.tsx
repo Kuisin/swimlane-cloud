@@ -1,89 +1,99 @@
 "use client";
 
 import { useState } from "react";
-import { tipFiles, toggleCommitPublish } from "@/lib/demo-workflow";
-import { ProjectNav, HistoryPanel, useProject } from "../_components";
+import { publishVersion, unpublishVersion } from "@/lib/workflow";
+import { ProjectPage, HistoryPanel, describeError, useProject } from "../_components";
 import { useT } from "@/i18n";
 
 export default function BranchesPage() {
-  const { projectId, projectName, st, setSt, setRole, reset } = useProject();
+  const { projectId, state, refresh, error } = useProject();
   const { t } = useT();
   const [selected, setSelected] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  if (!st) return <div className="p-6 text-sm text-neutral-500">{t("loading")}</div>;
-
-  const branchNames = Object.keys(st.branches).sort((a, b) => {
-    const ord = (n: string) => (n === "main" ? 0 : n === "test" ? 1 : 2);
-    return ord(a) - ord(b) || a.localeCompare(b);
-  });
-  const view = selected && st.branches[selected] ? selected : branchNames[0];
+  const branches = state?.branches ?? [];
+  const view =
+    selected && branches.some((b) => b.name === selected) ? selected : (branches[0]?.name ?? "");
+  const isOwner = state?.me.role === "owner";
 
   return (
-    <div className="flex h-screen flex-col">
-      <ProjectNav
-        projectId={projectId}
-        projectName={projectName}
-        active="branches"
-        role={st.role}
-        onRole={setRole}
-        onReset={reset}
-      />
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="mx-auto grid max-w-4xl gap-6 p-6 md:grid-cols-[220px_1fr]">
-          <div>
-            <h2 className="mb-2 text-sm font-semibold text-neutral-700">{t("branches.title")}</h2>
-            <ul className="space-y-1">
-              {branchNames.map((b) => {
-                const tip = st.branches[b].commits.at(-1);
-                const fileCount = Object.keys(tipFiles(st.branches[b])).length;
-                return (
-                  <li key={b}>
+    <ProjectPage active="branches" projectId={projectId} state={state} error={error ?? notice}>
+      {state && (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <div className="mx-auto grid max-w-4xl gap-6 p-6 md:grid-cols-[240px_1fr]">
+            <div>
+              <h2 className="mb-2 text-sm font-semibold text-neutral-700">{t("branches.title")}</h2>
+              <ul className="space-y-1">
+                {branches.map((b) => (
+                  <li key={b.name}>
                     <button
-                      onClick={() => setSelected(b)}
+                      onClick={() => setSelected(b.name)}
                       className={`w-full rounded-md border px-3 py-2 text-left text-sm ${
-                        view === b
+                        view === b.name
                           ? "border-indigo-400 bg-indigo-50"
                           : "border-neutral-200 hover:border-neutral-300"
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono">{b}</span>
-                        <span className="text-xs text-neutral-400">
-                          {st.branches[b].commits.length}c · {fileCount}f
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate font-mono">
+                          {b.name}
+                          {b.locked ? " 🔒" : ""}
+                        </span>
+                        <span className="shrink-0 font-mono text-[10px] text-neutral-400">
+                          {b.sha.slice(0, 7)}
                         </span>
                       </div>
-                      {tip && (
-                        <div className="truncate text-xs text-neutral-500">{tip.message}</div>
+                      {b.message && (
+                        <div className="truncate text-xs text-neutral-500">{b.message}</div>
+                      )}
+                      {(b.dirty || b.editSession) && (
+                        <div className="mt-0.5 flex gap-1 text-[10px]">
+                          {b.dirty && (
+                            <span className="rounded bg-amber-100 px-1 text-amber-700">
+                              {t("edit.unsaved")}
+                            </span>
+                          )}
+                          {b.editSession?.createdBy && (
+                            <span className="rounded bg-neutral-100 px-1 text-neutral-500">
+                              {b.editSession.createdBy}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </button>
                   </li>
-                );
-              })}
-            </ul>
-          </div>
-          <div>
-            <h2 className="mb-2 text-sm font-semibold text-neutral-700">
-              {t("branches.historyOf", { branch: view })}
-            </h2>
-            <HistoryPanel
-              st={st}
-              branch={view}
-              onTogglePublish={
-                view === "main"
-                  ? (id) => {
-                      const c = st.branches.main?.commits.find((x) => x.id === id);
-                      const msg = c?.flagged
-                        ? t("branches.confirmUnpublish")
-                        : t("branches.confirmPublish");
-                      if (!window.confirm(msg)) return;
-                      setSt(toggleCommitPublish(projectId, st, view, id));
-                    }
-                  : undefined
-              }
-            />
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h2 className="mb-2 text-sm font-semibold text-neutral-700">
+                {t("branches.historyOf", { branch: view })}
+              </h2>
+              {view && (
+                <HistoryPanel
+                  projectId={projectId}
+                  state={state}
+                  branch={view}
+                  onTogglePublish={
+                    view === "main" && isOwner
+                      ? (version) => {
+                          const msg = version.public
+                            ? t("branches.confirmUnpublish")
+                            : t("branches.confirmPublish");
+                          if (!window.confirm(msg)) return;
+                          const action = version.public
+                            ? unpublishVersion(projectId, version.id)
+                            : publishVersion(projectId, version.id, "svg_only");
+                          action.then(() => refresh()).catch((e) => setNotice(describeError(e, t)));
+                        }
+                      : undefined
+                  }
+                />
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </ProjectPage>
   );
 }

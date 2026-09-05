@@ -1,2 +1,5 @@
 .next
 next-env.d.ts
+
+# Supabase CLI scratch state from `supabase start` (gitignored, not ours to format).
+supabase/.temp/

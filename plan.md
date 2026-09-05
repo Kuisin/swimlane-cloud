@@ -5,22 +5,23 @@
 This plan is split into **two independently shippable products** that share one
 open-source engine:
 
-| | **Product A — Online DSL Editor** | **Product B — DSL Management SaaS** |
-|---|---|---|
-| What it is | The editing surface: **GUI mode + text mode**, live SVG preview, on-device render | Git-backed version control, collaboration, roles, billing for diagrams |
-| Who it's for | Anyone editing a diagram (works standalone) | Teams that need history, review, approvals, tenancy |
-| Backend needed | **None** — renders + edits locally | Gitea + Supabase + Stripe |
-| Ships as | Embeddable React package + standalone web app + desktop (Electron) app | Next.js app that **embeds** the editor |
-| Source | Engine open source (MIT); editor UI source-available | Closed source |
+|                | **Product A — Online DSL Editor**                                                 | **Product B — DSL Management SaaS**                                    |
+| -------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| What it is     | The editing surface: **GUI mode + text mode**, live SVG preview, on-device render | Git-backed version control, collaboration, roles, billing for diagrams |
+| Who it's for   | Anyone editing a diagram (works standalone)                                       | Teams that need history, review, approvals, tenancy                    |
+| Backend needed | **None** — renders + edits locally                                                | Gitea + Supabase + Stripe                                              |
+| Ships as       | Embeddable React package + standalone web app + desktop (Electron) app            | Next.js app that **embeds** the editor                                 |
+| Source         | Engine open source (MIT); editor UI source-available                              | Closed source                                                          |
 
-**The split is the key idea:** the editor knows how to *edit and live-preview* DSL; it
-does **not** know how files are stored or versioned. The SaaS knows how to *store,
-version, and collaborate* — using a fixed **branch model** (`main`, `test`, `tmp-*`).
+**The split is the key idea:** the editor knows how to _edit and live-preview_ DSL; it
+does **not** know how files are stored or versioned. The SaaS knows how to _store,
+version, and collaborate_ — using a fixed **branch model** (`main`, `test`, `tmp-*`).
 Server-side SVG is created **only** when a user explicitly flags a commit as **new version**
 (typically on `test`). **Only** new-version commits may be promoted to `main`. They meet at
 one small contract (the **host adapter**, §A4).
 
 **Two rendering roles, one engine:**
+
 - **Live preview → on-device.** Both editor surfaces render DSL→SVG locally as the user
   types: instant, offline, throwaway per-keystroke output.
 - **Canonical artifact → SaaS server-side.** The server runs `textToSvg` in Node **only**
@@ -59,7 +60,7 @@ one small contract (the **host adapter**, §A4).
                                           └────────────────────────────────┘
 ```
 
-> **Two rendering roles.** *Live preview* is always on-device. *Canonical SVG* is rendered
+> **Two rendering roles.** _Live preview_ is always on-device. _Canonical SVG_ is rendered
 > server-side **only** when a commit is flagged **new version** (on `test`). Checkpoints on
 > `tmp-*` / `test` store DSL in git only. Promotion to `main` requires the new-version flag.
 > Public links on `main` can expose SVG only or SVG + DSL. Same open-source engine everywhere.
@@ -97,11 +98,13 @@ the `swimlane-app/apps/txt-editor` reference: `gui-model.js`, `dsl-document.js`,
 `flow-rows.js`, `step-inspector`, `format-dsl.js`):
 
 **Text mode** — for power users.
+
 - Monaco (web/SaaS) or CodeMirror; register the DSL as a custom language for syntax
   highlighting, completion, and inline parse-error markers from `model.errors`.
 - `onChange` → debounce ~300ms → `textToSvg(src)` → live preview.
 
 **GUI mode** — for non-technical users.
+
 - Form/inspector UI over a parsed model: flow rows, step inspector, branch inspector,
   parts pickers, **project section templates** (see §B1), color presets.
 - When adding or editing `/page/`, `/option/`, `/role/`, `/block/`, or `/prop/` content,
@@ -111,6 +114,7 @@ the `swimlane-app/apps/txt-editor` reference: `gui-model.js`, `dsl-document.js`,
   formatter (`format-dsl.js`) so text and GUI never diverge.
 
 **Shared document model.**
+
 - One source of truth per file: `{ id, src, savedSrc, revision }`; **dirty = `src !== savedSrc`**.
 - Switching modes is loss-free: GUI ⇄ text both round-trip through the same DSL string.
 - Parse-error policy decides whether GUI mode is available (can't form-edit unparseable
@@ -119,10 +123,11 @@ the `swimlane-app/apps/txt-editor` reference: `gui-model.js`, `dsl-document.js`,
 ## A3 — Editor Shell (UI) — One Shared Package
 
 **Everything in §A2–A3 lives in a single package, `@swimlane-cloud/editor`, and is
-consumed *identically* by web, desktop, and SaaS.** No target forks or re-implements
+consumed _identically_ by web, desktop, and SaaS.** No target forks or re-implements
 editor UI. A target only supplies (1) an `EditorHost` (§A4) and (2) a ~10-line mount.
 
 The package owns the full editor surface:
+
 - **Split-pane:** editor (left, GUI or text) + SVG preview (right), resizable.
 - **Mode toggle:** GUI ⇄ Text.
 - **Folder tree + tabs:** a collapsible tree that mirrors the real folder structure
@@ -139,10 +144,10 @@ The package owns the full editor surface:
 ```tsx
 // The entire public surface every target mounts:
 import { DslEditor } from "@swimlane-cloud/editor";
-<DslEditor host={host} />   // host = desktop | browser | SaaS
+<DslEditor host={host} />; // host = desktop | browser | SaaS
 ```
 
-This is what makes the desktop app *minimal* and maintenance *cheap*: a fix or feature in
+This is what makes the desktop app _minimal_ and maintenance _cheap_: a fix or feature in
 `@swimlane-cloud/editor` ships to web, desktop, and SaaS at once. The only platform code
 is the host + shell.
 
@@ -155,18 +160,24 @@ it; each environment implements it.
 // id = POSIX relative path within the project/folder root, e.g. "ops/onboarding/flow.txt".
 // Desktop root = opened directory. SaaS root = project repo tree at branch ref.
 // The editor builds the folder TREE by splitting ids on "/"; hosts never flatten to a single file.
-interface FileRef { id: string; name: string; mtime?: number }
+interface FileRef {
+  id: string;
+  name: string;
+  mtime?: number;
+}
 
 interface EditorHost {
-  root?(): Promise<string | null>;                   // opened folder path or project label
-  list(): Promise<FileRef[]>;                         // recursive .txt under root
+  root?(): Promise<string | null>; // opened folder path or project label
+  list(): Promise<FileRef[]>; // recursive .txt under root
   read(id: string): Promise<string>;
   writeDraft(id: string, dsl: string): Promise<void>;
-  writeDraftMany?(updates: { id: string; dsl: string }[]): Promise<void>;  // Save all
-  checkpoint?(opts: { message?: string; files?: { id: string; dsl: string }[] }): Promise<void>;  // SaaS: one git commit, multi-path
+  writeDraftMany?(updates: { id: string; dsl: string }[]): Promise<void>; // Save all
+  checkpoint?(opts: { message?: string; files?: { id: string; dsl: string }[] }): Promise<void>; // SaaS: one git commit, multi-path
   create(id: string, dsl: string): Promise<void>;
   mkdir?(dirPath: string): Promise<void>;
-  watch?(cb: (e: { id: string; dsl: string | null; type: "add"|"change"|"unlink" }) => void): () => void;
+  watch?(
+    cb: (e: { id: string; dsl: string | null; type: "add" | "change" | "unlink" }) => void,
+  ): () => void;
   capabilities?: { readOnly?: boolean; versioning?: boolean };
 }
 ```
@@ -184,7 +195,7 @@ depends on `EditorHost`, not on Gitea.**
 ## A5 — Desktop App (Electron) — Minimal Shell
 
 **Principle: the desktop app adds zero UI.** It is a thin Electron wrapper around the
-*same* `@swimlane-cloud/editor` the web app uses. All editor code is shared; the desktop
+_same_ `@swimlane-cloud/editor` the web app uses. All editor code is shared; the desktop
 app contributes only (1) OS integration in the Electron main process and (2) a tiny host
 that adapts the filesystem to `EditorHost`.
 
@@ -196,9 +207,10 @@ external file changes appear automatically. Create files and subfolders from the
 Packaged as `.dmg` / `.exe`.
 
 **Local storage model — folder-first:**
+
 - The user **opens a folder** (directory picker); that path is the workspace **root**. All
   work is scoped to that tree — not single-file open/save dialogs.
-- Everything persists as plain UTF-8 `.txt` files under the root; the DSL text *is* the file.
+- Everything persists as plain UTF-8 `.txt` files under the root; the DSL text _is_ the file.
 - The on-disk hierarchy is preserved exactly and shown as a tree (arbitrary depth).
 - **Per-file save** writes back to the same relative path (`ops/onboarding/flow.txt`),
   `mkdir -p` on parents as needed.
@@ -210,16 +222,16 @@ Packaged as `.dmg` / `.exe`.
 
 ### A5.1 — What's shared vs. desktop-only
 
-| | Lives in | Reused by web? |
-|---|---|---|
-| Editor UI, GUI/text modes, preview, state, document model | `@swimlane-cloud/editor` | ✅ identical |
-| Engine (parse + render) | `@swimlane-cloud/diagram-converter` | ✅ identical |
-| Electron `main.js` (window, dialogs, fs, chokidar watch) | `apps/desktop/electron` | ❌ desktop-only |
-| `preload.js` → `window.api` (IPC bridge) | `apps/desktop/electron` | ❌ desktop-only |
-| `desktop-host.ts` (adapts `window.api` → `EditorHost`) | `apps/desktop/src` | ❌ desktop-only (~40 lines) |
-| Mount (`<DslEditor host={desktopHost} />`) | `apps/desktop/src/main.tsx` | ❌ desktop-only (~10 lines) |
+|                                                           | Lives in                            | Reused by web?              |
+| --------------------------------------------------------- | ----------------------------------- | --------------------------- |
+| Editor UI, GUI/text modes, preview, state, document model | `@swimlane-cloud/editor`            | ✅ identical                |
+| Engine (parse + render)                                   | `@swimlane-cloud/diagram-converter` | ✅ identical                |
+| Electron `main.js` (window, dialogs, fs, chokidar watch)  | `apps/desktop/electron`             | ❌ desktop-only             |
+| `preload.js` → `window.api` (IPC bridge)                  | `apps/desktop/electron`             | ❌ desktop-only             |
+| `desktop-host.ts` (adapts `window.api` → `EditorHost`)    | `apps/desktop/src`                  | ❌ desktop-only (~40 lines) |
+| Mount (`<DslEditor host={desktopHost} />`)                | `apps/desktop/src/main.tsx`         | ❌ desktop-only (~10 lines) |
 
-The desktop-only column is the *entire* app-specific surface — a few hundred lines of
+The desktop-only column is the _entire_ app-specific surface — a few hundred lines of
 Node/IPC, no React components.
 
 ### A5.2 — Scaffold (`apps/desktop`)
@@ -256,12 +268,11 @@ import { createRoot } from "react-dom/client";
 import { DslEditor } from "@swimlane-cloud/editor";
 import { desktopHost } from "./desktop-host";
 
-createRoot(document.getElementById("root")!).render(
-  <DslEditor host={desktopHost} />
-);
+createRoot(document.getElementById("root")!).render(<DslEditor host={desktopHost} />);
 ```
 
 ### A5.3 — Main Process (Node, desktop-only)
+
 - **Window** with `contextIsolation: true`, `nodeIntegration: false`, preload, macOS
   `hiddenInset` title bar.
 - **Window-state persistence** to `userData/window-state.json`, clamped to a visible display.
@@ -283,18 +294,22 @@ createRoot(document.getElementById("root")!).render(
   readTxtFiles, writeTxtFile, createTxtFile, makeDir, watchFolder, onFileChanged, …).
 
 ### A5.4 — Desktop Host (the only glue)
+
 `desktop-host.ts` maps `window.api` to `EditorHost` so the shared editor never sees IPC:
 
 ```ts
 export const desktopHost: EditorHost = {
-  root:   () => window.api.getOpenedFolder(),
-  list:   () => window.api.readTxtFiles(folderPath),  // all .txt under root, nested paths
-  read:   (id) => window.api.readFile(id),
+  root: () => window.api.getOpenedFolder(),
+  list: () => window.api.readTxtFiles(folderPath), // all .txt under root, nested paths
+  read: (id) => window.api.readFile(id),
   writeDraft: (id, dsl) => window.api.writeTxtFile(id, dsl),
-  writeDraftMany: (updates) => window.api.writeTxtFiles(updates),  // Save all — update folder
+  writeDraftMany: (updates) => window.api.writeTxtFiles(updates), // Save all — update folder
   create: (id, dsl) => window.api.createTxtFile(id, dsl),
-  mkdir:  (dir) => window.api.makeDir(dir),
-  watch:  (cb) => { window.api.onFileChanged(cb); return window.api.removeFileChangedListener; },
+  mkdir: (dir) => window.api.makeDir(dir),
+  watch: (cb) => {
+    window.api.onFileChanged(cb);
+    return window.api.removeFileChangedListener;
+  },
 };
 ```
 
@@ -304,10 +319,12 @@ behavior (dirty tracking, non-destructive sync, ~3s self-save echo guard) is han
 **inside the shared editor** against this interface — not re-implemented per platform.
 
 ### A5.5 — Package
+
 `electron-builder`: `appId`, `productName`, `files: [dist/**, electron/**, package.json]`,
 `extraResources` for samples, mac `dmg` (x64+arm64), win `nsis`.
 
 ## A6 — Standalone Web App (Optional, No Backend)
+
 - Same `@swimlane-cloud/editor` + a **browser-storage host** (localStorage/OPFS) — another
   ~40-line `EditorHost`, same ~10-line mount. No editor code duplicated.
 - Import/export `.txt`, same folder-tree view (paths kept in browser storage), live
@@ -326,20 +343,28 @@ versioning/collaboration capabilities.
 
 ## B0 — Tech Stack
 
-| Layer | Choice | Reason |
-|---|---|---|
-| Frontend | Next.js App Router | Existing stack |
-| Embedded editor | `@swimlane-cloud/editor` (Part A) | One editor everywhere |
-| DSL→SVG engine | `@swimlane-cloud/diagram-converter` (open source) | On-device for preview; same package in Node for canonical render |
-| SaaS API | Next.js Route Handlers | Git translation + SVG render on "new version" flag only |
-| Auth | Supabase Auth | Magic link for MVP, OIDC later |
-| Database | Supabase (Postgres) | RLS for tenant isolation |
-| File Storage | Supabase Storage | Deduped SVG blobs (one file per unique DSL content hash) |
-| Git server | Gitea (Docker, self-hosted VPS) | Full API, lightweight |
-| Billing | Stripe | Checkout + Customer Portal |
-| Deploy | Vercel (app) + VPS/Fly.io (Gitea) | |
+| Layer           | Choice                                               | Reason                                                                                                  |
+| --------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Frontend        | Next.js App Router                                   | Existing stack                                                                                          |
+| Embedded editor | `@swimlane-cloud/editor` (Part A)                    | One editor everywhere                                                                                   |
+| DSL→SVG engine  | `@swimlane-cloud/diagram-converter` (open source)    | On-device for preview; same package in Node for canonical render                                        |
+| SaaS API        | Next.js Route Handlers                               | GitHub translation layer; every call runs with the signed-in user's token                               |
+| Auth            | Supabase Auth, GitHub provider only (`repo` scope)   | The GitHub token is what the app works with; stored AES-256-GCM encrypted                               |
+| Database        | Supabase (Postgres, ap-northeast-1)                  | Drafts, edit sessions, versions (DSL snapshots), templates, audit. RLS on, no policies: API routes only |
+| File Storage    | none                                                 | SVG is rendered on request from the DSL snapshot in Postgres                                            |
+| Git server      | GitHub — repositories the user already has access to | Discovered by the `swimlane` topic; roles = GitHub permissions                                          |
+| Billing         | Stripe                                               | Checkout + Customer Portal                                                                              |
+| Deploy          | Vercel (`hnd1`, Tokyo) + Supabase (`ap-northeast-1`) | Nothing self-hosted                                                                                     |
 
 ## B1 — Data Model
+
+> **As built (September 2026):** the schema below was superseded when the git
+> backend moved from Gitea to GitHub. The live schema is
+> `apps/saas/supabase/migrations/0001_init.sql`: `workspaces` (one per GitHub
+> owner), `github_connections`, `projects` (one per marked repository),
+> `drafts`, `edit_sessions`, `versions` + `version_files`, `merge_requests`,
+> `audit_log`, `project_section_templates`, `project_template_policies`.
+> There is no membership table — roles come from GitHub repository permissions.
 
 ```sql
 -- Tenancy
@@ -403,15 +428,15 @@ functions for cross-table access.
 
 Same mental model on disk and in git: a **root** contains nested folders of `.txt` DSL files.
 
-| | Desktop | SaaS (Gitea) |
-|---|---|---|
-| **Root** | User-chosen directory (`select-folder`) | Project repo at branch ref (`main` / `test` / `tmp-*`) |
-| **Paths** | Relative POSIX paths from root | Same paths in repo (`filepath_in_repo`) |
-| **Listing** | Recursive `read-txt-files` | `GET /repos/.../git/trees/{sha}?recursive=1` → filter `*.txt` |
-| **Save one** | `write-txt-file` | `writeDraft` → `diagram_drafts` row for that path |
-| **Save all** | `write-txt-files` batch | `writeDraftMany` or loop drafts |
-| **Checkpoint** | N/A (direct disk) | **One git commit** can update **multiple paths** (folder-level checkpoint) |
-| **New folder** | `make-dir` on disk | commit `.gitkeep` or empty tree entry in git |
+|                | Desktop                                 | SaaS (Gitea)                                                               |
+| -------------- | --------------------------------------- | -------------------------------------------------------------------------- |
+| **Root**       | User-chosen directory (`select-folder`) | Project repo at branch ref (`main` / `test` / `tmp-*`)                     |
+| **Paths**      | Relative POSIX paths from root          | Same paths in repo (`filepath_in_repo`)                                    |
+| **Listing**    | Recursive `read-txt-files`              | `GET /repos/.../git/trees/{sha}?recursive=1` → filter `*.txt`              |
+| **Save one**   | `write-txt-file`                        | `writeDraft` → `diagram_drafts` row for that path                          |
+| **Save all**   | `write-txt-files` batch                 | `writeDraftMany` or loop drafts                                            |
+| **Checkpoint** | N/A (direct disk)                       | **One git commit** can update **multiple paths** (folder-level checkpoint) |
+| **New folder** | `make-dir` on disk                      | commit `.gitkeep` or empty tree entry in git                               |
 
 On project create, seed an initial folder tree in the repo (e.g. `diagrams/README.md` +
 sample `.txt` paths) so SaaS and desktop layouts align. `diagrams` rows are synced from the
@@ -425,13 +450,13 @@ in both products (shared `@swimlane-cloud/editor` sidebar).
 Per [dsl-rule.md](dsl-rule.md), diagrams use seven sections; **five** are template-eligible
 (headers/layout and reusable parts — not `/title/` or `/line/`):
 
-| `section` | DSL marker | What templates standardize |
-|---|---|---|
-| `page` | `/page/` | Headers, footers, description (図全体のページ枠) |
-| `option` | `/option/` | Gutter flags, column titles, display defaults |
-| `role` | `/role/` | Lane styles (label, colors, icon) — one `<roleId>` block per insert |
-| `block` | `/block/` | Reusable step shapes (`<blockId>` definitions) |
-| `prop` | `/prop/` | Reusable prop chips (`<propId>` definitions) |
+| `section` | DSL marker | What templates standardize                                          |
+| --------- | ---------- | ------------------------------------------------------------------- |
+| `page`    | `/page/`   | Headers, footers, description (図全体のページ枠)                    |
+| `option`  | `/option/` | Gutter flags, column titles, display defaults                       |
+| `role`    | `/role/`   | Lane styles (label, colors, icon) — one `<roleId>` block per insert |
+| `block`   | `/block/`  | Reusable step shapes (`<blockId>` definitions)                      |
+| `prop`    | `/prop/`   | Reusable prop chips (`<propId>` definitions)                        |
 
 **Each project** defines **one or more named templates per section** (e.g. "Corporate page",
 "Standard gutters", "Sales lane", "Terminal block"). Editors insert or merge fragments into
@@ -439,6 +464,7 @@ the active diagram — same pattern as `swimlane-app/apps/txt-editor` (`template
 template modal), but **scoped to the project**, not global defaults only.
 
 **Storage (two layers, same shape):**
+
 - **SaaS:** `project_section_templates` table (source of truth for cloud projects).
 - **Repo mirror (optional, recommended):** `templates/{section}/{slug}.txt` in the project
   repo so desktop open-folder and git history see the same library. Sync on template CRUD
@@ -448,6 +474,7 @@ template modal), but **scoped to the project**, not global defaults only.
 as the project library (no login). SaaS project maps the same paths from DB + git.
 
 **Editor UX (shared package):**
+
 - Project **Settings → Templates**: CRUD list grouped by section; preview via `parseDSLParts` /
   parts preview for `block` / `prop`.
 - GUI: "Insert template" on section editors; **New diagram** can start from project defaults
@@ -474,11 +501,11 @@ Owners can **require** a specific template for any of the five sections — not 
 **Forced policy is SaaS-only** (stored in `project_template_policies`); desktop offline folders
 are unaffected unless they sync the same project from the cloud.
 
-| `mode` | Meaning |
-|---|---|
-| **`optional`** | Template library available; insert is voluntary (default for new projects). |
-| **`default`** | New diagrams pre-fill `is_default` template; authors may change the section freely. |
-| **`forced`** | Section **must** match the chosen template; edits that diverge are blocked or reverted. |
+| `mode`         | Meaning                                                                                 |
+| -------------- | --------------------------------------------------------------------------------------- |
+| **`optional`** | Template library available; insert is voluntary (default for new projects).             |
+| **`default`**  | New diagrams pre-fill `is_default` template; authors may change the section freely.     |
+| **`forced`**   | Section **must** match the chosen template; edits that diverge are blocked or reverted. |
 
 **When `mode = forced`** (per section, one pinned `forced_template_id`):
 
@@ -496,11 +523,11 @@ are unaffected unless they sync the same project from the cloud.
 ```js
 function assertForcedSections(dslText, policies, templatesById) {
   for (const [section, policy] of Object.entries(policies)) {
-    if (policy.mode !== 'forced') continue
-    const expected = templatesById[policy.forced_template_id].body
-    const actual = extractSection(dslText, section)  // parser helper
+    if (policy.mode !== "forced") continue;
+    const expected = templatesById[policy.forced_template_id].body;
+    const actual = extractSection(dslText, section); // parser helper
     if (normalizeSection(actual) !== normalizeSection(expected))
-      throw new ApiError(422, `/${section}/ must match project template "${policy.name}"`)
+      throw new ApiError(422, `/${section}/ must match project template "${policy.name}"`);
   }
 }
 ```
@@ -513,38 +540,40 @@ Local-only folders keep optional templates under `templates/` only.
 
 ### Branch model (every project)
 
-| Branch | Purpose | Server SVG? | Can merge into |
-|---|---|---|---|
-| **`main`** | Production; public sharing lives here | Only via versions promoted from `test` | — |
-| **`test`** | Integration / staging | **Yes** — when user flags a commit as **new version** | `main` (flagged versions only) |
-| **`tmp-*`** | Active edits (`tmp-{user}-{slug}`) | No — DSL in git only; preview on-device | `test` |
+| Branch      | Purpose                               | Server SVG?                                           | Can merge into                 |
+| ----------- | ------------------------------------- | ----------------------------------------------------- | ------------------------------ |
+| **`main`**  | Production; public sharing lives here | Only via versions promoted from `test`                | —                              |
+| **`test`**  | Integration / staging                 | **Yes** — when user flags a commit as **new version** | `main` (flagged versions only) |
+| **`tmp-*`** | Active edits (`tmp-{user}-{slug}`)    | No — DSL in git only; preview on-device               | `test`                         |
 
 On project create: init repo with `main` and `test` branches (both tracked). Starting an edit
 creates `tmp-*` from `test`. Checkpoints commit to the active `tmp-*` branch.
 
 ### SVG — only on "new version" flag
 
-| Concern | Behavior |
-|---|---|
-| **Checkpoints** (`tmp-*`, `test`) | Git commit + optional message. **No** server render, **no** `svg_blobs` row. |
-| **Flag new version** | User picks a commit on **`test`** → server renders SVG (deduped by `dsl_content_hash`), inserts `versions` row. |
-| **Promote to main** | Merge/cherry-pick **only** if `versions.is_new_version` and commit matches; API rejects otherwise. |
-| **History UI** | Commit list: on-device preview at ref. Version gallery: server SVG thumbnails. |
-| **Dedup** | Same DSL hash → reuse existing `svg_blobs`; no duplicate Storage bytes. |
+| Concern                           | Behavior                                                                                                        |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Checkpoints** (`tmp-*`, `test`) | Git commit + optional message. **No** server render, **no** `svg_blobs` row.                                    |
+| **Flag new version**              | User picks a commit on **`test`** → server renders SVG (deduped by `dsl_content_hash`), inserts `versions` row. |
+| **Promote to main**               | Merge/cherry-pick **only** if `versions.is_new_version` and commit matches; API rejects otherwise.              |
+| **History UI**                    | Commit list: on-device preview at ref. Version gallery: server SVG thumbnails.                                  |
+| **Dedup**                         | Same DSL hash → reuse existing `svg_blobs`; no duplicate Storage bytes.                                         |
 
 ```js
 // Called ONLY from POST /api/diagrams/[id]/versions  (flag new version on test)
-async function resolveSvgBlob({ dslText, themeKey }) { /* same deduped upload as before */ }
+async function resolveSvgBlob({ dslText, themeKey }) {
+  /* same deduped upload as before */
+}
 ```
 
 ### Public sharing (main only)
 
 Versions on **`main`** with `public = true` get a stable `public_slug` URL:
 
-| `share_mode` | What visitors see |
-|---|---|
-| `svg_only` | Read-only rendered diagram (server SVG) |
-| `svg_and_dsl` | SVG + read-only DSL source |
+| `share_mode`  | What visitors see                       |
+| ------------- | --------------------------------------- |
+| `svg_only`    | Read-only rendered diagram (server SVG) |
+| `svg_and_dsl` | SVG + read-only DSL source              |
 
 Enforce: `public` may only be set when `promoted_to_main = true` (version exists on `main`).
 
@@ -554,14 +583,17 @@ Enforce: `public` may only be set when `promoted_to_main = true` (version exists
 **Ship criteria:** Open project tree, edit multiple `.txt` files, Save all, checkpoint to git, browse history.
 
 ### Step 1.1 — SaaS Host (implement `EditorHost`)
+
 The SaaS host mirrors the **desktop folder host**: same `list` / path-shaped `id`s / tree UI.
+
 - `list` → recursive git tree at active branch ref → all `.txt` paths (like `read-txt-files`).
 - `read` → draft row for path if present, else `GET .../contents/{path}?ref={branch}`.
 - `writeDraft` / `writeDraftMany` → upsert `diagram_drafts` by `(project_id, filepath_in_repo, branch)`.
 - `checkpoint` → one commit touching **all changed paths** in the batch (folder-level update).
-The editor is unchanged; only the host differs from the desktop app.
+  The editor is unchanged; only the host differs from the desktop app.
 
 ### Step 1.2 — Infrastructure
+
 ```bash
 # Gitea on VPS via Docker Compose
 services:
@@ -575,10 +607,12 @@ services:
     ports:
       - "3001:3000"
 ```
+
 - Create a machine service account in Gitea → store token as `GITEA_ADMIN_TOKEN`
 - Set up Next.js project with Supabase client + auth
 
 ### Step 1.3 — Workspace Onboarding
+
 ```
 1. INSERT into workspaces
 2. POST /api/v1/orgs → creates Gitea org (name = workspace.slug)
@@ -589,11 +623,13 @@ services:
    `project_section_templates` (one default per section for new diagrams)
 7. INSERT into projects; sync `diagrams` rows from repo paths
 ```
+
 Every project repo ships with **`main`** and **`test`** and a **directory of `.txt` files** —
 same shape the desktop app expects when you open that folder locally.
 Non-technical users see "Create workspace" → under the hood, Gitea is provisioned.
 
 ### Step 1.4 — Mount the Editor
+
 - Render `@swimlane-cloud/editor` with the SaaS host.
 - The editor provides GUI/text modes + live preview (Part A); the SaaS provides the file
   via `host.read` and persists via `host.writeDraft` / `host.checkpoint`.
@@ -605,22 +641,22 @@ Non-technical users see "Create workspace" → under the hood, Gitea is provisio
 
 **Is commit-per-save too much?** Often yes for SaaS, even with SVG deduplication.
 
-| Downside of commit-per-save | Why it hurts |
-|---|---|
-| Noisy history | "Updated diagram" every few minutes; hard to spot real milestones |
-| Gitea/API load | Each save = git write + DB row; latency and rate limits add up |
-| Audit confusion | Non-technical users think Save = "don't lose work", not "permanent history entry" |
-| Merge/review noise | PRs accumulate micro-commits (mitigated by multi-file folder checkpoints, still watch volume) |
-| Conflict churn | Frequent saves → more stale-SHA / 409 prompts when collaborating |
+| Downside of commit-per-save | Why it hurts                                                                                  |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| Noisy history               | "Updated diagram" every few minutes; hard to spot real milestones                             |
+| Gitea/API load              | Each save = git write + DB row; latency and rate limits add up                                |
+| Audit confusion             | Non-technical users think Save = "don't lose work", not "permanent history entry"             |
+| Merge/review noise          | PRs accumulate micro-commits (mitigated by multi-file folder checkpoints, still watch volume) |
+| Conflict churn              | Frequent saves → more stale-SHA / 409 prompts when collaborating                              |
 
 SVG dedup fixes **storage**, not **history noise** or **API churn**.
 
 **Recommended: two actions (grouped saves)**
 
-| Action | User label | What happens | In git history? |
-|---|---|---|---|
-| **Draft save** | Save | Persist current DSL to `diagram_drafts` (Postgres); fast, debounced autosave optional | No |
-| **Checkpoint** | Save to history / Record change | One git commit on active `tmp-*` (or `test`); **no** server SVG | Yes |
+| Action         | User label                      | What happens                                                                          | In git history? |
+| -------------- | ------------------------------- | ------------------------------------------------------------------------------------- | --------------- |
+| **Draft save** | Save                            | Persist current DSL to `diagram_drafts` (Postgres); fast, debounced autosave optional | No              |
+| **Checkpoint** | Save to history / Record change | One git commit on active `tmp-*` (or `test`); **no** server SVG                       | Yes             |
 
 - User edits freely → **Save** (or autosave) keeps work safe without polluting git.
 - When a logical unit of work is done → **Checkpoint** on `tmp-*` with a short note → git
@@ -638,7 +674,7 @@ SVG dedup fixes **storage**, not **history noise** or **API churn**.
 // (checkpoint takes { message?, files? } — one commit, multi-path). SaaS adds the
 // versioning trigger:
 interface EditorHost {
-  flagNewVersion?(commitSha: string, opts: { name: string; note?: string }): Promise<void>;  // test only → server SVG
+  flagNewVersion?(commitSha: string, opts: { name: string; note?: string }): Promise<void>; // test only → server SVG
 }
 ```
 
@@ -646,6 +682,7 @@ Desktop host maps `writeDraft` → `writeTxtFile`; SaaS maps `checkpoint` → gi
 Optional: prompt for checkpoint message; disable checkpoint if draft equals last commit (no-op).
 
 ### Step 1.5 — Checkpoint (git commit) + draft save
+
 **Draft save** — `POST /api/diagrams/[id]/draft` upserts `diagram_drafts`. No Gitea call.
 
 **Checkpoint** — one git commit for **all dirty paths** in the project tree on the active
@@ -656,23 +693,29 @@ Optional: prompt for checkpoint message; disable checkpoint if draft equals last
 // CLIENT: "Save to history" → host.checkpoint({ message, files: dirtyFiles })
 
 // SERVER: POST /api/projects/[projectId]/checkpoint
-const branch = await activeBranch(session)  // tmp-* from edit_sessions
-const changed = files.length ? files : await listDirtyDrafts(projectId, branch)
+const branch = await activeBranch(session); // tmp-* from edit_sessions
+const changed = files.length ? files : await listDirtyDrafts(projectId, branch);
 
 // Gitea: one commit updating multiple paths (tree API or sequential contents API + same message)
 for (const { id: filepath, dsl } of changed) {
-  await upsertRepoFile(owner, repo, filepath, dsl, branch, { partOfBatch: true })
+  await upsertRepoFile(owner, repo, filepath, dsl, branch, { partOfBatch: true });
 }
-await finalizeBatchCommit(owner, repo, branch, message, author)
+await finalizeBatchCommit(owner, repo, branch, message, author);
 
-await clearDrafts(projectId, branch, changed.map(f => f.id))
+await clearDrafts(
+  projectId,
+  branch,
+  changed.map((f) => f.id),
+);
 // NO resolveSvgBlob here
 ```
+
 - `409` from Gitea → prompt "Reload latest?"
 - On checkpoint: log to `audit_log`. Preview remains on-device only until a **new version** is flagged.
 - Re-open: `diagram_drafts` if newer than branch tip, else git at active branch ref.
 
 ### Step 1.6 — History View
+
 - Tabs or filter by branch: `tmp-*` (active edit), `test`, `main`.
 - Commit sidebar: `GET /repos/.../commits?sha={branch}` — author, time, message.
 - Click commit → load DSL at ref → **on-device** `textToSvg` for preview (no server SVG unless
@@ -681,7 +724,9 @@ await clearDrafts(projectId, branch, changed.map(f => f.id))
   thumbnails from `svg_blobs`. Badge commits on `test` that are eligible to flag.
 
 ### Step 1.7 — Project section templates (CRUD + force policy + editor)
+
 **API (SaaS):**
+
 - `GET/POST/PATCH/DELETE /api/projects/[id]/templates?section=role`
 - Body: `{ name, slug, body, is_default? }` — validate `section` and parse `body` with
   `parseDSL` / `parseDSLParts` before save (reject invalid fragments).
@@ -692,6 +737,7 @@ await clearDrafts(projectId, branch, changed.map(f => f.id))
 - **Checkpoint / draft batch:** call `assertForcedSections` before persisting (Step 1.5).
 
 **Editor (port from txt-editor):**
+
 - Template modal / side panel: tabs **Page · Option · Role · Block · Prop**.
 - **Insert** merges fragment into model (`mergeRole`, `mergeBlockProp`, or replace `/page/` /
   `/option/` block in serializer) — disabled for **forced** sections in GUI.
@@ -710,64 +756,80 @@ versions to `main`; optional **public** sharing from `main`.
 **Ship criteria:** Flag on `test` → SVG in gallery; blocked promote without flag; public link works.
 
 ### Step 2.1 — Flag new version (on `test` only)
+
 User selects a commit on **`test`** and clicks **Flag as new version** (name + note).
 This is the **only** trigger for server-side SVG render.
 
 ```js
 // CLIENT: host.flagNewVersion(commitSha, { name, note })
 // SERVER: POST /api/diagrams/[id]/versions
-assert(branch(commitSha) === 'test', 'New version can only be flagged on test')
+assert(branch(commitSha) === "test", "New version can only be flagged on test");
 
-const dslText = await readFileAtRef(owner, repo, filepath, commitSha)
-const svg_blob_id = await resolveSvgBlob({ dslText, themeKey: diagram.themeKey })
+const dslText = await readFileAtRef(owner, repo, filepath, commitSha);
+const svg_blob_id = await resolveSvgBlob({ dslText, themeKey: diagram.themeKey });
 
-await supabase.from('versions').insert({
-  diagram_id: id, name, commit_sha: commitSha, branch: 'test',
-  svg_blob_id, is_new_version: true, promoted_to_main: false,
-  public: false, share_mode: null, note, created_by: user.id,
-})
+await supabase.from("versions").insert({
+  diagram_id: id,
+  name,
+  commit_sha: commitSha,
+  branch: "test",
+  svg_blob_id,
+  is_new_version: true,
+  promoted_to_main: false,
+  public: false,
+  share_mode: null,
+  note,
+  created_by: user.id,
+});
 await gitea.post(`/repos/${owner}/${repo}/tags`, {
-  tag_name: slugify(name), target: commitSha, message: note,
-})
+  tag_name: slugify(name),
+  target: commitSha,
+  message: note,
+});
 ```
 
 ### Step 2.2 — Promote to `main` (gated)
+
 Only a version with `is_new_version = true` on `test` may be promoted. Merge the **exact
 flagged commit** into `main` (cherry-pick or PR `test` → `main` with `version_id` validation).
 
 ```js
 // POST /api/diagrams/[id]/versions/[versionId]/promote
-const version = await loadVersion(versionId)
-if (!version.is_new_version) throw new ApiError(400, 'Not a new-version commit')
-if (version.branch !== 'test') throw new ApiError(400, 'Version must be flagged on test')
+const version = await loadVersion(versionId);
+if (!version.is_new_version) throw new ApiError(400, "Not a new-version commit");
+if (version.branch !== "test") throw new ApiError(400, "Version must be flagged on test");
 
 await gitea.post(`/repos/${owner}/${repo}/pulls`, {
-  head: 'test', base: 'main', title: `Promote ${version.name}`,
+  head: "test",
+  base: "main",
+  title: `Promote ${version.name}`,
   // API merges only the files/state at version.commit_sha, not all of test ahead
-})
+});
 // On merge success:
-await supabase.from('versions').update({ promoted_to_main: true }).eq('id', versionId)
+await supabase.from("versions").update({ promoted_to_main: true }).eq("id", versionId);
 ```
 
 API middleware on any `base: main` merge: **reject** unless linked `version_id` has
 `is_new_version` and commit SHA matches.
 
 ### Step 2.3 — Version gallery
+
 - List `versions` on `test` and `main` (filter: promoted / not promoted).
 - Thumbnail = server `svg_blobs` only (flagged versions).
 - Compare two flagged versions: side-by-side stored SVG + DSL diff.
 
 ### Step 2.4 — Public sharing (`main` only)
+
 Owner toggles `public` + `share_mode` on a version that is `promoted_to_main`.
 
 ```js
 // PATCH /api/diagrams/[id]/versions/[versionId]/public
-assert(version.promoted_to_main && onMain(version.commit_sha))
-await supabase.from('versions').update({
+assert(version.promoted_to_main && onMain(version.commit_sha));
+await supabase.from("versions").update({
   public: true,
-  share_mode: 'svg_only' | 'svg_and_dsl',
+  share_mode: "svg_only" | "svg_and_dsl",
   public_slug: generateSlug(),
-})
+});
 ```
 
 - Public route: `GET /p/{public_slug}` → render page with SVG; include read-only DSL panel
@@ -781,34 +843,47 @@ await supabase.from('versions').update({
 **Ship criteria:** Start edit → `tmp-*` → checkpoint → merge to `test` → flag new version → promote.
 
 ### Step 3.1 — Start edit (`tmp-*` branch)
+
 ```js
 // POST /api/projects/[id]/edits
-const branchName = `tmp-${user.slug}-${slugify(editName)}`
+const branchName = `tmp-${user.slug}-${slugify(editName)}`;
 await gitea.post(`/repos/${owner}/${repo}/branches`, {
-  new_branch_name: branchName, old_branch_name: 'test'   // always branch from test
-})
-await supabase.from('edit_sessions').insert({
-  project_id, branch_name: branchName, created_by: user.id, status: 'active'
-})
+  new_branch_name: branchName,
+  old_branch_name: "test", // always branch from test
+});
+await supabase.from("edit_sessions").insert({
+  project_id,
+  branch_name: branchName,
+  created_by: user.id,
+  status: "active",
+});
 ```
+
 - All checkpoints go to this `tmp-*` branch. No server SVG until user later flags on `test`.
 
 ### Step 3.2 — Merge `tmp-*` → `test`
+
 ```js
 // POST /api/projects/[id]/edits/[editId]/merge-request
 await gitea.post(`/repos/${owner}/${repo}/pulls`, {
-  title, body, head: tmpBranch, base: 'test'   // never direct to main
-})
+  title,
+  body,
+  head: tmpBranch,
+  base: "test", // never direct to main
+});
 ```
+
 - After merge: close `edit_sessions`. User may **flag new version** on the resulting `test` commit.
 
 ### Step 3.3 — Review UI
+
 - **Left:** DSL diff (line-level).
-- **Right:** SVG comparison via **on-device** render of base/head DSL at branch tips, *or*
+- **Right:** SVG comparison via **on-device** render of base/head DSL at branch tips, _or_
   stored SVG if comparing two flagged versions on `test`.
 - Promote-to-main is a separate action (Step 2.2), not a generic PR to `main`.
 
 ### Step 3.4 — Conflict Handling
+
 Same visual chooser as before; apply resolution as new commit on `tmp-*`, re-merge to `test`.
 
 ---
@@ -818,22 +893,26 @@ Same visual chooser as before; apply resolution as new commit on `tmp-*`, re-mer
 **Goal:** Multi-user workspaces with roles, notifications, activity feed.
 
 ### Roles
-| Role | Can do |
-|---|---|
-| Owner | Everything + billing + members + **template CRUD + force policy** + public sharing on `main` |
+
+| Role   | Can do                                                                                         |
+| ------ | ---------------------------------------------------------------------------------------------- |
+| Owner  | Everything + billing + members + **template CRUD + force policy** + public sharing on `main`   |
 | Editor | Create, edit on `tmp-*`, merge to `test`, flag new version, promote request, **use templates** |
-| Viewer | Read-only — history, versions, review merges to `test` |
+| Viewer | Read-only — history, versions, review merges to `test`                                         |
 
 ### Invite Flow
+
 - Owner invites by email → Supabase Auth invite email.
 - On accept → insert `workspace_members` row with role.
 - No Gitea account per user — only the bot service account exists in Gitea.
 
 ### Notifications
+
 - Supabase Realtime on `notifications` (in-app) + email via Resend.
 - Triggers: PR opened, PR merged, version flagged, review requested.
 
 ### Activity Feed
+
 - Query `audit_log` per project, `created_at DESC`: actor, action, entity, timestamp.
 
 ---
@@ -841,20 +920,23 @@ Same visual chooser as before; apply resolution as new commit on `tmp-*`, re-mer
 ## Phase 5 — Billing
 
 ### Plans
-| Plan | Price | What's gated |
-|---|---|---|
-| Free | $0 | 1 user, 3 projects, history only |
-| Team | ~$12/user/mo | Unlimited users, branches + PRs, version flagging |
-| Enterprise | Custom | SSO, self-hosted, audit export, API |
+
+| Plan       | Price        | What's gated                                      |
+| ---------- | ------------ | ------------------------------------------------- |
+| Free       | $0           | 1 user, 3 projects, history only                  |
+| Team       | ~$12/user/mo | Unlimited users, branches + PRs, version flagging |
+| Enterprise | Custom       | SSO, self-hosted, audit export, API               |
 
 ### Implementation
+
 - Stripe Checkout + Customer Portal.
 - `workspaces.plan` checked in API middleware; Stripe webhook → `POST /api/billing/webhook`.
+
 ```js
 function requirePlan(workspace, minPlan) {
-  const order = ['free', 'team', 'enterprise']
+  const order = ["free", "team", "enterprise"];
   if (order.indexOf(workspace.plan) < order.indexOf(minPlan))
-    throw new ApiError(403, 'Upgrade required')
+    throw new ApiError(403, "Upgrade required");
 }
 ```
 
@@ -863,15 +945,19 @@ function requirePlan(workspace, minPlan) {
 ## Phase 6 — Enterprise & Power Users
 
 ### SSO
+
 - Supabase Auth OIDC: Entra ID / Google Workspace. Map SSO email domain → workspace auto-join.
 
 ### Self-Hosted Deployment
+
 - Docker Compose bundle: Next.js + Gitea + Postgres (or customer Supabase). All config via env.
 
 ### Audit Export
+
 - Export `audit_log` + commit log per project as CSV (user, action, timestamp, SHA, name).
 
 ### Public API
+
 - `POST /api/v1/projects/{id}/draft` / `drafts/batch` / `checkpoint` → per-path drafts + folder-level git commit.
 - `POST /api/v1/diagrams/{id}/versions` → flag **new version** on `test` (server renders SVG).
 - `POST /api/v1/diagrams/{id}/versions/{vid}/promote` → promote flagged version to `main`.
@@ -887,32 +973,48 @@ function requirePlan(workspace, minPlan) {
 const G = (path, opts = {}) =>
   fetch(`${GITEA_URL}/api/v1${path}`, {
     headers: {
-      'Authorization': `token ${GITEA_ADMIN_TOKEN}`,
-      'Content-Type':  'application/json',
+      Authorization: `token ${GITEA_ADMIN_TOKEN}`,
+      "Content-Type": "application/json",
     },
     ...opts,
-  }).then(r => r.json())
+  }).then((r) => r.json());
 
 // Org + repo
-G('/orgs',              { method: 'POST', body: { username, visibility: 'private' } })
-G(`/orgs/${org}/repos`, { method: 'POST', body: { name, private: true, auto_init: true } })
+G("/orgs", { method: "POST", body: { username, visibility: "private" } });
+G(`/orgs/${org}/repos`, { method: "POST", body: { name, private: true, auto_init: true } });
 
 // Tree (folder-first listing)
-G(`/repos/${o}/${r}/git/trees/${sha}?recursive=1`)                   // all paths → filter .txt
+G(`/repos/${o}/${r}/git/trees/${sha}?recursive=1`); // all paths → filter .txt
 
 // File
-G(`/repos/${o}/${r}/contents/${path}?ref=${branch}`)                // read one path
-G(`/repos/${o}/${r}/contents/${path}`, { method: 'POST', body: {    // create/update one path
-    message, content: btoa(dsl), sha, branch, author, committer }})
+G(`/repos/${o}/${r}/contents/${path}?ref=${branch}`); // read one path
+G(`/repos/${o}/${r}/contents/${path}`, {
+  method: "POST",
+  body: {
+    // create/update one path
+    message,
+    content: btoa(dsl),
+    sha,
+    branch,
+    author,
+    committer,
+  },
+});
 // Multi-path checkpoint: loop contents API sharing one commit message, or Gitea tree/commit API
 
 // Branch / Tag / PR / Merge / History
-G(`/repos/${o}/${r}/branches`, { method: 'POST', body: { new_branch_name: 'test', old_branch_name: 'main' } })
-G(`/repos/${o}/${r}/branches`, { method: 'POST', body: { new_branch_name: 'tmp-…', old_branch_name: 'test' } })
-G(`/repos/${o}/${r}/tags`,     { method: 'POST', body: { tag_name, target: 'main', message: note } })
-G(`/repos/${o}/${r}/pulls`,    { method: 'POST', body: { title, body, head: branch, base: 'main' } })
-G(`/repos/${o}/${r}/pulls/${index}/merge`, { method: 'POST', body: { Do: 'merge' } })
-G(`/repos/${o}/${r}/commits?sha=${branch}&limit=30&page=1`)
+G(`/repos/${o}/${r}/branches`, {
+  method: "POST",
+  body: { new_branch_name: "test", old_branch_name: "main" },
+});
+G(`/repos/${o}/${r}/branches`, {
+  method: "POST",
+  body: { new_branch_name: "tmp-…", old_branch_name: "test" },
+});
+G(`/repos/${o}/${r}/tags`, { method: "POST", body: { tag_name, target: "main", message: note } });
+G(`/repos/${o}/${r}/pulls`, { method: "POST", body: { title, body, head: branch, base: "main" } });
+G(`/repos/${o}/${r}/pulls/${index}/merge`, { method: "POST", body: { Do: "merge" } });
+G(`/repos/${o}/${r}/commits?sha=${branch}&limit=30&page=1`);
 ```
 
 ---
@@ -945,33 +1047,33 @@ Week 12+   6             SSO, self-hosted, public API, enterprise
 
 ## Key Decisions Made
 
-| Decision | Choice | Reason |
-|---|---|---|
-| Product split | Editor (A) separate from SaaS (B) | Editor ships standalone; SaaS reuses it verbatim |
-| Editor↔SaaS boundary | `EditorHost` adapter | Editor depends on storage interface, not on git |
-| Editing modes | GUI + text over one DSL document | Non-technical (GUI) and power (text) users, loss-free round-trip |
-| Live preview render | **On-device** (browser + Electron) | Instant, offline, per-keystroke, throwaway |
-| Save model | **Draft** + **checkpoint** on `tmp-*` (git only, no server SVG) | Safe edits without render cost |
-| Branch model | **`main` + `test` + `tmp-*`** per project | test = integration; tmp = isolated edits |
-| New version | Explicit flag on **`test`** commit → server SVG (deduped) | SVG only when it matters |
-| Promote gate | **Only `is_new_version` commits** may reach `main` | Production line stays intentional |
-| Public share | **`main` versions**; `svg_only` or `svg_and_dsl` | Controlled external visibility |
-| SVG storage | **Dedup by `dsl_content_hash`** | One blob per unique DSL content |
-| Engine licensing | **Open source (MIT)**, SaaS closed | Engine portable/auditable; product logic proprietary |
-| Engine distribution | One dependency-free npm package | Same renderer in browser, desktop, worker, Node, CI |
-| Editor UI packaging | One `@swimlane-cloud/editor` package, consumed identically | Web/desktop/SaaS share one codebase; fix once, ship everywhere |
-| Desktop scope | **Thin shell** — only Electron main + IPC + ~50-line host/mount, no UI | Minimal surface, max reuse, easy maintenance |
-| Desktop shell | Electron + Vite + React | Proven in `txt-editor`; mounts the shared editor unchanged |
-| Desktop storage | Plain local folder of `.txt` files, nested subfolders preserved | Local-first, no lock-in, git-friendly working copy |
-| File browser | Folder **tree** derived from path-structured `FileRef.id`s | Real folder structure visible; one shared UI, no per-target tree code |
-| Renderer/main split | `contextBridge` IPC, no `nodeIntegration` | Safe fs access, path-traversal guard |
-| External edits | `chokidar` watch → non-destructive sync | Files stay the source of truth |
-| Git backend | Gitea self-hosted | Full control, data residency, free |
-| Tenancy | One Gitea org per workspace | Clean isolation |
-| Repo structure | One repo per project = **folder tree of `.txt`** | Matches desktop open-folder; git tracks paths not single blob |
-| Content unit | Folder root (desktop dir / SaaS repo) | Save all + folder checkpoints; same tree in both products |
-| Section templates | Per project, five sections | Library + default; **SaaS force** pins one template per section |
-| Template force | `project_template_policies.mode = forced` | Checkpoint rejected if section ≠ forced body; GUI read-only |
-| SVG artifacts | Supabase Storage (`svg_blobs`), not git | Deduped by DSL hash; git holds `.txt` only |
-| Auth | Supabase Auth + magic link | Simple for non-technical users |
-| Conflict UI | Visual chooser, never raw markers | Non-technical users |
+| Decision             | Choice                                                                    | Reason                                                                |
+| -------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Product split        | Editor (A) separate from SaaS (B)                                         | Editor ships standalone; SaaS reuses it verbatim                      |
+| Editor↔SaaS boundary | `EditorHost` adapter                                                      | Editor depends on storage interface, not on git                       |
+| Editing modes        | GUI + text over one DSL document                                          | Non-technical (GUI) and power (text) users, loss-free round-trip      |
+| Live preview render  | **On-device** (browser + Electron)                                        | Instant, offline, per-keystroke, throwaway                            |
+| Save model           | **Draft** + **checkpoint** on `tmp-*` (git only, no server SVG)           | Safe edits without render cost                                        |
+| Branch model         | **`main` + `test` + `tmp-*`** per project                                 | test = integration; tmp = isolated edits                              |
+| New version          | Explicit flag on **`test`** commit → server SVG (deduped)                 | SVG only when it matters                                              |
+| Promote gate         | **Only `is_new_version` commits** may reach `main`                        | Production line stays intentional                                     |
+| Public share         | **`main` versions**; `svg_only` or `svg_and_dsl`                          | Controlled external visibility                                        |
+| SVG storage          | **Dedup by `dsl_content_hash`**                                           | One blob per unique DSL content                                       |
+| Engine licensing     | **Open source (MIT)**, SaaS closed                                        | Engine portable/auditable; product logic proprietary                  |
+| Engine distribution  | One dependency-free npm package                                           | Same renderer in browser, desktop, worker, Node, CI                   |
+| Editor UI packaging  | One `@swimlane-cloud/editor` package, consumed identically                | Web/desktop/SaaS share one codebase; fix once, ship everywhere        |
+| Desktop scope        | **Thin shell** — only Electron main + IPC + ~50-line host/mount, no UI    | Minimal surface, max reuse, easy maintenance                          |
+| Desktop shell        | Electron + Vite + React                                                   | Proven in `txt-editor`; mounts the shared editor unchanged            |
+| Desktop storage      | Plain local folder of `.txt` files, nested subfolders preserved           | Local-first, no lock-in, git-friendly working copy                    |
+| File browser         | Folder **tree** derived from path-structured `FileRef.id`s                | Real folder structure visible; one shared UI, no per-target tree code |
+| Renderer/main split  | `contextBridge` IPC, no `nodeIntegration`                                 | Safe fs access, path-traversal guard                                  |
+| External edits       | `chokidar` watch → non-destructive sync                                   | Files stay the source of truth                                        |
+| Git backend          | GitHub, user's own repositories, user's own token                         | No server to run; access managed where the code already lives         |
+| Tenancy              | One `workspaces` row per GitHub owner, one `projects` row per marked repo | Rows exist only to key drafts/versions/templates                      |
+| Repo structure       | One repo per project = **folder tree of `.txt`**                          | Matches desktop open-folder; git tracks paths not single blob         |
+| Content unit         | Folder root (desktop dir / SaaS repo)                                     | Save all + folder checkpoints; same tree in both products             |
+| Section templates    | Per project, five sections                                                | Library + default; **SaaS force** pins one template per section       |
+| Template force       | `project_template_policies.mode = forced`                                 | Checkpoint rejected if section ≠ forced body; GUI read-only           |
+| SVG artifacts        | Rendered on request from `version_files.dsl_text`                         | Engine is pure JS; nothing to upload or dedupe                        |
+| Auth                 | Supabase Auth with GitHub only                                            | One identity for sign-in and for git                                  |
+| Conflict UI          | Visual chooser, never raw markers                                         | Non-technical users                                                   |
