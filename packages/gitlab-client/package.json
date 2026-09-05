@@ -1,0 +1,34 @@
+{
+  "name": "@swimlane-cloud/gitlab-client",
+  "version": "0.1.0",
+  "description": "Zero-dependency GitLab client over fetch, for a self-hosted or gitlab.com instance an org registers its own OAuth Application against. Never imports Next, never acquires a token — callers inject both the token getter and the instance origin. Mirrors @swimlane-cloud/github-client's shape so apps/saas can dispatch between the two behind one interface.",
+  "license": "SEE LICENSE IN README.md",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./rest": "./src/rest.ts",
+    "./errors": "./src/errors.ts",
+    "./repos": "./src/repos.ts",
+    "./write": "./src/write.ts",
+    "./commits": "./src/commits.ts",
+    "./merge-requests": "./src/merge-requests.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p . --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@swimlane-cloud/github-client": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4",
+    "prettier": "^3.9.6"
+  }
+}
