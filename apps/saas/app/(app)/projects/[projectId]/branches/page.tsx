@@ -84,8 +84,8 @@ export default function BranchesPage() {
                     view === "main" && isOwner
                       ? (version) => {
                           const msg = version.public
-                            ? t("branches.confirmUnpublish")
-                            : t("branches.confirmPublish");
+                            ? t("branches.confirmUnshare")
+                            : t("branches.confirmShare");
                           if (!window.confirm(msg)) return;
                           const action = version.public
                             ? unpublishVersion(projectId, version.id)

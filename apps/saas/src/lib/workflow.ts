@@ -151,6 +151,16 @@ export const promoteVersion = (pid: string, versionId: string) =>
     {},
   );
 
+/** 公開する / Publish: flag preview as `name` (a semver) and promote it to main in one request. */
+export const publishRelease = (pid: string, name: string, note?: string) =>
+  postJson<{
+    versionId: string;
+    tag: string;
+    prNumber: number | null;
+    promotedSha: string;
+    renderFailures: string[];
+  }>(`${base(pid)}/versions/publish`, { name, note });
+
 export const publishVersion = (pid: string, versionId: string, shareMode: ShareMode) =>
   patchJson<{ versionId: string; public: boolean; public_slug: string }>(
     `${base(pid)}/versions/${versionId}/public`,

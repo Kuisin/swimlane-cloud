@@ -464,7 +464,7 @@ export function HistoryPanel({
                   {onTogglePublish && version?.promoted && (
                     <button
                       onClick={() => onTogglePublish(version)}
-                      title={published ? t("history.unpublish") : t("history.publishHint")}
+                      title={published ? t("history.unshare") : t("history.shareHint")}
                       className={`rounded p-1.5 ${
                         published ? "text-emerald-600" : "text-neutral-300 hover:text-neutral-500"
                       }`}
@@ -1036,7 +1036,7 @@ export function VersionPanel({
                             onClick={() => onUnpublish(v)}
                             className="text-xs text-neutral-400 hover:text-neutral-600"
                           >
-                            {t("version.unpublish")}
+                            {t("version.unshare")}
                           </button>
                         )}
                       </>
@@ -1059,11 +1059,11 @@ export function VersionPanel({
                           }
                           className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
                         >
-                          {t("version.publish")}
+                          {t("version.share")}
                         </button>
                       </div>
                     ) : (
-                      <span className="text-xs text-neutral-400">{t("version.notPublished")}</span>
+                      <span className="text-xs text-neutral-400">{t("version.notShared")}</span>
                     )}
                   </>
                 )}
