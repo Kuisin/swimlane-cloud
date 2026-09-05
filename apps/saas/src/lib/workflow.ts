@@ -101,23 +101,27 @@ export const listPendingChanges = (pid: string, branch: string) =>
 
 // ── Branches & pull requests ────────────────────────────────────────────────
 
-export const startEdit = (pid: string, editName: string) =>
-  postJson<{ editId: string; branch: string; sha: string; reused: boolean }>(`${base(pid)}/edits`, {
-    editName,
-  });
+/** Cuts (or reuses) an edit branch named `<login>/<timestamp>/<key>` by the server. */
+export const startEdit = (pid: string) =>
+  postJson<{ editId: string; branch: string; sha: string; reused: boolean }>(
+    `${base(pid)}/edits`,
+    {},
+  );
 
 export const abandonEdit = (pid: string, editId: string) =>
   del<{ abandoned: boolean; branch?: string }>(`${base(pid)}/edits/${editId}`);
 
-/** Opens the PR; if the branch has drafts, checkpoints them first (as the demo did). */
-export async function openPR(pid: string, state: ProjectState, head: string, title?: string) {
-  const branch = branchOf(state, head);
-  if (branch?.dirty) await checkpoint(pid, head, "Update for pull request");
-  return postJson<{ number: number; htmlUrl: string; base: string; reused: boolean }>(
+/**
+ * Opens (or reuses) the pull request for `head`. The caller is responsible
+ * for making sure `head` is fully pushed first — the Request-review modal
+ * checks `listPendingChanges` and blocks itself rather than silently
+ * committing on the user's behalf.
+ */
+export const openPR = (pid: string, head: string, title?: string) =>
+  postJson<{ number: number; htmlUrl: string; base: string; reused: boolean }>(
     `${base(pid)}/pulls`,
     { head, title },
   );
-}
 
 export const mergePR = (pid: string, number: number, expectedHeadSha?: string) =>
   postJson<{ sha: string; merged: boolean; deletedBranch: string | null }>(
