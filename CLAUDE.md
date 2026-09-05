@@ -19,8 +19,9 @@ writes to it.
 If you are asked to "push" or "ship" a change, that means steps 1–4. Promotion to production is the
 owner's decision, not the agent's.
 
-> Not to be confused with the **product's** branch model (`main` / `test` / `tmp-*`), which is what
-> `apps/saas` creates inside a _user's_ diagram repository. That is application behaviour, defined in
+> Not to be confused with the **product's** branch model (`main` 公開済み / `preview` 承認済み /
+> `<login>/<timestamp>/<key>` edit branches), which is what `apps/saas` creates inside a _user's_
+> diagram repository. That is application behaviour, defined in
 > `packages/github-client/src/branch-model.ts`; this section is about this repository's own history.
 
 ## Checks

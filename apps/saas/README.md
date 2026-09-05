@@ -23,18 +23,31 @@ state GitHub cannot hold; Vercel (Tokyo) runs the app. Nothing is self-hosted.
   reads the repository's permissions with the caller's token on every request:
   `admin` → owner, `push` → editor, `pull` → viewer.
 - **Branch model** (`packages/github-client/src/branch-model.ts`): `main` is
-  production and never edited in place; `test` is the integration line, owners
-  only; work happens on `tmp-*` branches cut from `test`; a `tmp-*` branch with
-  an open pull request is locked until it is merged or closed.
-- **Drafts vs. checkpoints.** Save writes a draft row to Postgres. Checkpoint
-  turns every draft on the branch into one commit (`commitFiles`, blob → tree
-  → commit → ref) guarded by `expectedHeadSha`, so two people cannot clobber
-  each other; the loser gets a 409 and a "branch moved" banner.
-- **Versions are releases of the whole folder.** Flagging a commit on `test`
-  snapshots every diagram's DSL into `version_files` and tags the commit.
-  Promoting creates a short-lived `release-*` branch at that sha, opens and
-  merges a pull request into `main`, and deletes the branch. SVG is rendered
-  on request from the snapshot — there is no object storage.
+  published (公開済み) and never edited in place; `preview` is the integration
+  line, owners only; work happens on edit branches named
+  `<login>/<timestamp>/<key>`, cut automatically when someone clicks
+  **Start editing** — never named by hand. An edit branch with an open pull
+  request is locked until it is merged or closed. A handful of repositories
+  seeded before this model existed still carry a legacy `test` branch or
+  `tmp-*` edit branches; both are recognised (`isEditBranch`) and left alone
+  rather than migrated.
+- **Autosave, then an explicit Push.** Every keystroke debounce-saves to a
+  `drafts` row in Postgres (`packages/editor`'s `capabilities.autosave`,
+  mirrored to `localStorage` too so a closed tab loses nothing). **Push to
+  GitHub** turns every draft on the branch into one commit (`commitFiles`,
+  blob → tree → commit → ref) guarded by `expectedHeadSha`, so two people
+  cannot clobber each other; the loser gets a 409 and a "branch moved"
+  banner. The commit message is auto-built from the changed files
+  (`src/lib/commit-message.ts`) when the user leaves it blank, and always
+  carries a plain-language file list plus machine trailers.
+- **Publishing is one step.** **Publish** (`src/lib/versions.ts
+publishRelease`) snapshots every diagram on `preview` into `version_files`,
+  tags the commit with the version number itself (e.g. `v1.3.0`, suggested
+  from the highest existing one), and promotes it straight to `main` via a
+  short-lived `release-*` branch, pull request and merge. SVG is rendered on
+  request from the snapshot — there is no object storage. The legacy
+  two-step flag-then-promote routes still exist for versions created before
+  this flow, sharing the same `flagVersion`/`promoteVersion` functions.
 - **Public sharing** (`/p/[slug]`) reads Postgres only. `svg_only` links never
   send the DSL to the browser.
 - **Database access.** RLS is enabled on every table with no policies; the
@@ -85,33 +98,34 @@ is documented in the root [`README.md`](../../README.md#deploying-appssaas).
 
 Every project route runs `requireProjectRole(projectId, role)` first.
 
-| Method                | Route                                                    | Role           | Purpose                                            |
-| --------------------- | -------------------------------------------------------- | -------------- | -------------------------------------------------- |
-| GET                   | `/api/me`                                                | user           | who is signed in, GitHub connected?                |
-| POST                  | `/api/auth/signout`                                      | user           | sign out                                           |
-| GET                   | `/api/github/projects`                                   | user           | accessible repos with the `swimlane` topic         |
-| GET                   | `/api/github/owners`                                     | user           | self + organisations (for create)                  |
-| GET                   | `/api/github/repos`                                      | user           | administered repos not yet marked                  |
-| POST                  | `/api/projects` `{mode:"create"\|"mark"}`                | user           | create a seeded repo / mark an existing one        |
-| POST                  | `/api/projects/open` `{owner, repo}`                     | user           | register a marked repo → `projectId`               |
-| GET                   | `…/state`                                                | viewer         | branches, pulls, versions, my role — the UI's feed |
-| GET                   | `…/tree?ref=` · `…/file?branch=&path=`                   | viewer         | listing / read (draft first)                       |
-| GET                   | `…/snapshot?ref=&withDrafts=1` · `…/compare?base=&head=` | viewer         | all diagrams at a ref / changed diagrams with text |
-| GET                   | `…/commits?branch=&page=`                                | viewer         | history                                            |
-| POST · DELETE         | `…/draft`                                                | editor         | save / discard drafts                              |
-| POST                  | `…/checkpoint` `{branch, message?, expectedHeadSha?}`    | editor         | one commit from drafts                             |
-| POST · GET            | `…/edits` · DELETE `…/edits/[editId]`                    | editor         | cut / list / abandon `tmp-*` branches              |
-| POST · GET            | `…/pulls`                                                | editor         | open (reuse) a PR `tmp-*` → `test`                 |
-| GET                   | `…/pulls/[n]`                                            | viewer         | PR + GitHub conversation + changed files           |
-| POST                  | `…/pulls/[n]/comments`                                   | viewer         | comment (as the GitHub user)                       |
-| POST                  | `…/pulls/[n]/merge` · `…/pulls/[n]/close`                | owner / author | merge (deletes the tmp branch) / close             |
-| POST · GET            | `…/versions`                                             | owner          | flag the tip of `test` (or a sha on it)            |
-| GET                   | `…/versions/[id]/svg?path=`                              | viewer         | one file rendered                                  |
-| POST                  | `…/versions/[id]/promote`                                | owner          | land the flagged commit on `main`                  |
-| PATCH                 | `…/versions/[id]/public` `{public, share_mode?}`         | owner          | public link on / off                               |
-| GET/POST/PATCH/DELETE | `…/templates?section=` · GET/PATCH `…/template-policies` | viewer / owner | section template library + force policy            |
-| GET                   | `…/activity`                                             | viewer         | audit trail                                        |
-| POST                  | `/api/billing/webhook`                                   | Stripe         | updates `workspaces.plan` (deferred)               |
+| Method                | Route                                                    | Role            | Purpose                                                             |
+| --------------------- | -------------------------------------------------------- | --------------- | ------------------------------------------------------------------- |
+| GET                   | `/api/me`                                                | user            | who is signed in, GitHub connected?                                 |
+| POST                  | `/api/auth/signout`                                      | user            | sign out                                                            |
+| GET                   | `/api/github/projects`                                   | user            | accessible repos with the `swimlane` topic                          |
+| GET                   | `/api/github/owners`                                     | user            | self + organisations (for create)                                   |
+| GET                   | `/api/github/repos`                                      | user            | administered repos not yet marked                                   |
+| POST                  | `/api/projects` `{mode:"create"\|"mark"}`                | user            | create a seeded repo / mark an existing one                         |
+| POST                  | `/api/projects/open` `{owner, repo}`                     | user            | register a marked repo → `projectId`; best-effort creates `preview` |
+| GET                   | `…/state`                                                | viewer          | branches, pulls, versions, my role — the UI's feed                  |
+| GET                   | `…/tree?ref=` · `…/file?branch=&path=`                   | viewer          | listing / read (draft first)                                        |
+| GET                   | `…/snapshot?ref=&withDrafts=1` · `…/compare?base=&head=` | viewer          | all diagrams at a ref / changed diagrams with text                  |
+| GET                   | `…/commits?branch=&page=`                                | viewer          | history                                                             |
+| POST · GET · DELETE   | `…/draft`                                                | editor / viewer | autosave writes drafts; GET lists pending changes; DELETE discards  |
+| POST                  | `…/checkpoint` `{branch, message?, expectedHeadSha?}`    | editor          | "Push to GitHub" — one commit from drafts, auto file list           |
+| POST · GET            | `…/edits` · DELETE `…/edits/[editId]`                    | editor          | cut (server-named) / list / abandon an edit branch                  |
+| POST · GET            | `…/pulls`                                                | editor          | request review: open (reuse) a PR edit branch → `preview`           |
+| GET                   | `…/pulls/[n]`                                            | viewer          | PR + GitHub conversation + changed files                            |
+| POST                  | `…/pulls/[n]/comments`                                   | viewer          | comment (as the GitHub user)                                        |
+| POST                  | `…/pulls/[n]/merge` · `…/pulls/[n]/close`                | owner / author  | approve (deletes the edit branch) / reject                          |
+| POST · GET            | `…/versions`                                             | owner           | legacy: flag the tip of `preview` (or a sha on it)                  |
+| POST                  | `…/versions/publish` `{name, note?}`                     | owner           | one-step Publish: flag `name` as the tag and promote to `main`      |
+| GET                   | `…/versions/[id]/svg?path=`                              | viewer          | one file rendered                                                   |
+| POST                  | `…/versions/[id]/promote`                                | owner           | legacy: land an already-flagged commit on `main`                    |
+| PATCH                 | `…/versions/[id]/public` `{public, share_mode?}`         | owner           | share a promoted version's public link on / off                     |
+| GET/POST/PATCH/DELETE | `…/templates?section=` · GET/PATCH `…/template-policies` | viewer / owner  | section template library + force policy                             |
+| GET                   | `…/activity`                                             | viewer          | audit trail                                                         |
+| POST                  | `/api/billing/webhook`                                   | Stripe          | updates `workspaces.plan` (deferred)                                |
 
 `…` = `/api/projects/[projectId]`.
 
@@ -119,9 +133,11 @@ Every project route runs `requireProjectRole(projectId, role)` first.
 
 - `/` landing · `/login` (GitHub only) · `/dashboard` (discovered projects) · `/new`
   (create / mark)
-- `/projects/[id]/edit` — the editor with branch switcher, Start edit,
-  Checkpoint, Open PR, mobile view
-- `/projects/[id]/branches` · `/pulls` · `/versions` · `/activity` ·
-  `/settings/templates` (owners)
+- `/projects/[id]/edit` — three branch chips (承認済み / 公開済み / 自分の編集)
+  instead of a raw branch picker; one primary action at a time (Start
+  editing, Push to GitHub, Request review); autosave replaces Save/Save all;
+  mobile view
+- `/projects/[id]/branches` · `/pulls` (Approve/Reject) · `/versions`
+  (Publish) · `/activity` · `/settings/templates` (owners)
 - `/billing/[workspaceId]` — plan limits (billing itself is deferred)
 - `/p/[slug]` — public share page, no sign-in

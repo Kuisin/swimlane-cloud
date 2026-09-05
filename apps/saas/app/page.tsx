@@ -269,9 +269,9 @@ function Workflow() {
       </ol>
 
       <div className="mt-12 flex flex-wrap items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-4 font-mono text-xs sm:text-sm">
-        <Branch name="tmp-*" tone="bg-neutral-200 text-neutral-700" />
+        <Branch name="you/2026-.../a1b2c3" tone="bg-neutral-200 text-neutral-700" />
         <ArrowRight size={14} className="text-neutral-400" />
-        <Branch name="test" tone="bg-amber-100 text-amber-800" />
+        <Branch name="preview" tone="bg-amber-100 text-amber-800" />
         <ArrowRight size={14} className="text-neutral-400" />
         <Branch name="main" tone="bg-emerald-100 text-emerald-800" />
         <span className="ml-2 font-sans text-xs text-neutral-500">
