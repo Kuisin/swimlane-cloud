@@ -1,16 +1,21 @@
 /**
- * Shared server helpers for resolving project repo coordinates, the active
- * edit branch, and forced-template policy/templates. Used by API routes.
+ * Project context and authorisation for API routes.
+ *
+ * A project is a GitHub repository; the caller's role in it is whatever GitHub
+ * says their permissions are, read with their own token on every request.
+ * Nothing here consults a membership table, because there is none.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ApiError } from "./api";
-import { getServiceSupabase } from "./supabase/server";
 import {
-  INTEGRATION_BRANCH,
   isIntegrationBranch,
   isProdBranch,
   isTmpBranch,
+  type RepoInfo,
+  type RepoPermissions,
 } from "@swimlane-cloud/github-client";
+import { ApiError } from "./api";
+import { requireGitHubApis, withRepo, type GitHubApis, type RepoApis } from "./github";
+import { getServiceSupabase } from "./supabase/server";
 import {
   type PolicyEntry,
   type TemplateRow,
@@ -18,61 +23,141 @@ import {
   isTemplateSection,
 } from "./templates";
 
-export interface RepoCoords {
-  projectId: string;
-  workspaceId: string;
-  org: string; // gitea org (workspace slug)
-  repo: string; // gitea repo name
+import type { LockReason, Role } from "./types";
+
+export type { LockReason, Role };
+
+const ROLE_RANK: Record<Role, number> = { viewer: 0, editor: 1, owner: 2 };
+
+/** admin → owner, push → editor, pull → viewer. */
+export function roleFromPermissions(p: RepoPermissions): Role {
+  if (p.admin) return "owner";
+  if (p.push) return "editor";
+  return "viewer";
 }
 
-/** Resolve the Gitea org/repo for a project via service-role (bypasses RLS). */
-export async function getRepoCoords(projectId: string): Promise<RepoCoords> {
+export function roleAtLeast(role: Role, min: Role): boolean {
+  return ROLE_RANK[role] >= ROLE_RANK[min];
+}
+
+export interface ProjectRow {
+  id: string;
+  name: string;
+  workspaceId: string;
+  owner: string;
+  ownerType: "user" | "org";
+  repo: string;
+  githubRepoId: number;
+  plan: "free" | "team" | "enterprise";
+}
+
+/** The project row plus its workspace (service role; not an access check). */
+export async function getProjectRow(projectId: string): Promise<ProjectRow> {
   const supabase = getServiceSupabase();
   const { data, error } = await supabase
     .from("projects")
-    .select("id, workspace_id, gitea_repo_name, workspaces(gitea_org_name)")
+    .select(
+      "id, name, workspace_id, github_repo, github_repo_id, workspaces(github_owner, github_owner_type, plan)",
+    )
     .eq("id", projectId)
-    .single();
-  if (error || !data) {
-    throw new ApiError(404, `Project ${projectId} not found`);
-  }
-  const ws = (data as { workspaces?: { gitea_org_name?: string } }).workspaces;
-  const org = ws?.gitea_org_name;
-  if (!org) throw new ApiError(500, "Project workspace missing gitea_org_name");
+    .maybeSingle();
+  if (error) throw new ApiError(500, `project lookup failed: ${error.message}`);
+  if (!data) throw new ApiError(404, "Project not found");
+  const ws = (
+    data as unknown as {
+      workspaces: { github_owner: string; github_owner_type: "user" | "org"; plan: string } | null;
+    }
+  ).workspaces;
+  if (!ws) throw new ApiError(500, "Project has no workspace");
   return {
-    projectId: data.id as string,
+    id: data.id as string,
+    name: data.name as string,
     workspaceId: data.workspace_id as string,
-    org,
-    repo: data.gitea_repo_name as string,
+    owner: ws.github_owner,
+    ownerType: ws.github_owner_type,
+    repo: data.github_repo as string,
+    githubRepoId: Number(data.github_repo_id),
+    plan: ws.plan as ProjectRow["plan"],
   };
 }
 
+export interface ProjectCtx extends RepoApis {
+  user: { id: string; email?: string };
+  project: ProjectRow;
+  /** Live repository metadata from GitHub (permissions, default branch, topics). */
+  repoInfo: RepoInfo;
+  role: Role;
+}
+
 /**
- * Resolve the active edit branch for a project. If an active edit_session
- * exists, its tmp-* branch is used; otherwise falls back to the requested
- * branch (defaulting to `test`). The optional `requested` lets callers honor a
- * branch chosen in the UI's branch switcher.
+ * The one gate every project route goes through: signed in → GitHub connected
+ * → repository visible to that token → role at least `minRole`. A repository
+ * the token cannot see is reported as 404 by GitHub, and we pass that on
+ * rather than confirming the project exists.
  */
-export async function resolveActiveBranch(
-  projectId: string,
-  requested?: string | null,
-): Promise<string> {
-  if (
-    requested &&
-    (isProdBranch(requested) || isIntegrationBranch(requested) || isTmpBranch(requested))
-  ) {
-    return requested;
+export async function requireProjectRole(projectId: string, minRole: Role): Promise<ProjectCtx> {
+  const user = await requireUser();
+  const project = await getProjectRow(projectId);
+  const apis = withRepo(await requireGitHubApis(user.id), {
+    owner: project.owner,
+    repo: project.repo,
+  });
+  const repoInfo = await apis.repos.getRepo(project.owner, project.repo);
+  const role = roleFromPermissions(repoInfo.permissions);
+  if (!roleAtLeast(role, minRole)) {
+    throw new ApiError(403, `This action needs the ${minRole} role (you are ${role}).`, {
+      role,
+      required: minRole,
+    });
   }
-  const supabase = getServiceSupabase();
-  const { data } = await supabase
-    .from("edit_sessions")
-    .select("branch_name")
-    .eq("project_id", projectId)
-    .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return (data?.branch_name as string | undefined) ?? INTEGRATION_BRANCH;
+  return { ...apis, user, project, repoInfo, role };
+}
+
+/**
+ * The branch rules, in one place. `main` is production and never edited in
+ * place; `test` is the integration line, owners only; `tmp-*` is where work
+ * happens; a `tmp-*` with an open pull request is frozen until it is merged
+ * or closed. Returns null when the branch is writable for this role.
+ */
+export function branchLockReason(
+  branch: string,
+  role: Role,
+  lockedBranches: ReadonlySet<string> | string[],
+): LockReason | null {
+  const locked = Array.isArray(lockedBranches) ? new Set(lockedBranches) : lockedBranches;
+  if (isProdBranch(branch)) return "main";
+  if (role === "viewer") return "viewer";
+  if (locked.has(branch)) return "locked";
+  if (isIntegrationBranch(branch)) return role === "owner" ? null : "testOwnerOnly";
+  if (isTmpBranch(branch)) return null;
+  return "other";
+}
+
+const LOCK_MESSAGES: Record<LockReason, string> = {
+  main: "main is production and is never edited directly.",
+  locked: "This branch has an open pull request and is locked until it is merged or closed.",
+  testOwnerOnly: "test can only be edited by a repository admin — start an edit branch.",
+  viewer: "You have read-only access to this repository.",
+  other: "Only test and tmp-* branches can be edited here.",
+};
+
+export function assertBranchWritable(
+  branch: string,
+  role: Role,
+  lockedBranches: ReadonlySet<string> | string[],
+): void {
+  const reason = branchLockReason(branch, role, lockedBranches);
+  if (!reason) return;
+  throw new ApiError(reason === "locked" ? 409 : 403, LOCK_MESSAGES[reason], {
+    lockReason: reason,
+    ...(reason === "locked" ? { locked: true } : {}),
+  });
+}
+
+/** tmp-* branches with an open pull request, from the project's open PRs. */
+export async function lockedBranches(ctx: RepoApis): Promise<Set<string>> {
+  const open = await ctx.pulls.listPullRequests({ state: "open" });
+  return new Set(open.map((p) => p.head).filter(isTmpBranch));
 }
 
 export interface ProjectTemplates {
@@ -124,7 +209,9 @@ export async function loadProjectTemplates(
 /** Append an audit_log row (best-effort; never throws into the caller). */
 export async function audit(entry: {
   workspaceId: string;
+  projectId?: string | null;
   userId?: string | null;
+  actorLogin?: string | null;
   action: string;
   entityType?: string;
   entityId?: string;
@@ -134,7 +221,9 @@ export async function audit(entry: {
     const supabase = getServiceSupabase();
     await supabase.from("audit_log").insert({
       workspace_id: entry.workspaceId,
+      project_id: entry.projectId ?? null,
       user_id: entry.userId ?? null,
+      actor_login: entry.actorLogin ?? null,
       action: entry.action,
       entity_type: entry.entityType ?? null,
       entity_id: entry.entityId ?? null,
@@ -149,14 +238,22 @@ export async function audit(entry: {
 export async function requireUser(): Promise<{ id: string; email?: string }> {
   const { getCurrentUser } = await import("./supabase/server");
   const user = await getCurrentUser();
-  if (!user) throw new ApiError(401, "Authentication required");
+  if (!user) throw new ApiError(401, "Authentication required", { needsAuth: true });
   return { id: user.id, email: user.email ?? undefined };
+}
+
+/** Signed-in user plus their GitHub clients (no project involved). */
+export async function requireUserWithGitHub(): Promise<
+  GitHubApis & { user: { id: string; email?: string } }
+> {
+  const user = await requireUser();
+  const apis = await requireGitHubApis(user.id);
+  return { ...apis, user };
 }
 
 /**
  * Re-exported from the shared branch model so the SaaS, the hub and the VS Code
  * extension cannot generate different branch names for the same input.
- * Verified equivalent to the previous local implementation.
  */
 export { slugify } from "@swimlane-cloud/github-client";
 

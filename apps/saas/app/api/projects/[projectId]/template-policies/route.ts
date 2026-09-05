@@ -1,6 +1,6 @@
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { getServiceSupabase } from "@/lib/supabase/server";
-import { requireUser } from "@/lib/projects";
+import { requireProjectRole } from "@/lib/projects";
 import { isTemplateSection, TEMPLATE_SECTIONS } from "@/lib/templates";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +9,7 @@ export const runtime = "nodejs";
 /** GET — per-section policies (all five sections present, default optional). */
 export const GET = withApi(async (_req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
+  await requireProjectRole(projectId, "viewer");
   const supabase = getServiceSupabase();
 
   const { data: rows, error } = await supabase
@@ -52,7 +53,7 @@ interface PatchBody {
 /** PATCH — set a section policy. forced requires a template of same project+section. */
 export const PATCH = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
-  const user = await requireUser();
+  const { user } = await requireProjectRole(projectId, "owner");
   const input = await readJson<PatchBody>(req);
   if (!isTemplateSection(input.section)) {
     throw new ApiError(400, "invalid section");

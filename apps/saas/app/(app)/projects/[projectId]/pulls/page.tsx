@@ -1,57 +1,51 @@
 "use client";
 
 import { useState } from "react";
-import { mergePR, closePR, addPRComment } from "@/lib/demo-workflow";
-import { ProjectNav, PrPanel, useProject } from "../_components";
+import { closePR, mergePR } from "@/lib/workflow";
+import { ProjectPage, PrPanel, describeError, useProject } from "../_components";
 import { useT } from "@/i18n";
 
 export default function PullsPage() {
-  const { projectId, projectName, st, setSt, setRole, reset } = useProject();
+  const { projectId, state, refresh, error } = useProject();
   const { t } = useT();
-  const [reviewPR, setReviewPR] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  if (!st) return <div className="p-6 text-sm text-neutral-500">{t("loading")}</div>;
-
-  const isManager = st.role === "manager";
+  const isOwner = state?.me.role === "owner";
 
   return (
-    <div className="flex h-screen flex-col">
-      <ProjectNav
-        projectId={projectId}
-        projectName={projectName}
-        active="pulls"
-        role={st.role}
-        onRole={setRole}
-        onReset={reset}
-      />
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="mx-auto max-w-3xl p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">{t("pulls.title")}</h2>
-            <span className="text-xs text-neutral-500">
-              {isManager ? t("pulls.managerHint") : t("pulls.memberHint")}
-            </span>
+    <ProjectPage active="pulls" projectId={projectId} state={state} error={error ?? notice}>
+      {state && (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <div className="mx-auto max-w-3xl p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">{t("pulls.title")}</h2>
+              <span className="text-xs text-neutral-500">
+                {isOwner ? t("pulls.ownerHint") : t("pulls.editorHint")}
+              </span>
+            </div>
+            <PrPanel
+              projectId={projectId}
+              state={state}
+              isOwner={isOwner}
+              onMerge={(pr) => {
+                const into = t("pulls.confirmMergeInto", { base: pr.base });
+                if (!window.confirm(t("pulls.confirmMerge", { into }))) return;
+                setNotice(null);
+                mergePR(projectId, pr.number, pr.headSha || undefined)
+                  .then(() => refresh())
+                  .catch((e) => setNotice(describeError(e, t)));
+              }}
+              onClose={(pr) => {
+                if (!window.confirm(t("pulls.confirmClose"))) return;
+                setNotice(null);
+                closePR(projectId, pr.number)
+                  .then(() => refresh())
+                  .catch((e) => setNotice(describeError(e, t)));
+              }}
+            />
           </div>
-          <PrPanel
-            st={st}
-            isManager={isManager}
-            reviewPR={reviewPR}
-            onReview={(id) => setReviewPR(reviewPR === id ? null : id)}
-            onMerge={(id) => {
-              const pr = st.prs.find((p) => p.id === id);
-              const into = pr ? t("pulls.confirmMergeInto", { base: pr.base }) : "";
-              if (!window.confirm(t("pulls.confirmMerge", { into }))) return;
-              setSt(mergePR(projectId, st, id));
-              setReviewPR(null);
-            }}
-            onClose={(id) => {
-              if (!window.confirm(t("pulls.confirmClose"))) return;
-              setSt(closePR(projectId, st, id));
-            }}
-            onComment={(id, text) => setSt(addPRComment(projectId, st, id, text))}
-          />
         </div>
-      </div>
-    </div>
+      )}
+    </ProjectPage>
   );
 }

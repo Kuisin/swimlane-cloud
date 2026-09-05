@@ -26,7 +26,24 @@ export type { RestClient, RestClientOptions, RestRequestOptions } from "./rest.t
 export { createWriteApi } from "./write.ts";
 export type { CommitFilesOptions, CommitResult, FileWrite, WriteApi } from "./write.ts";
 export { createPullsApi } from "./pulls.ts";
-export type { MergeMethod, PullRequest, PullsApi } from "./pulls.ts";
+export type { IssueComment, MergeMethod, PullRequest, PullsApi } from "./pulls.ts";
+export { createReposApi } from "./repos.ts";
+export type {
+  BranchInfo,
+  GitHubAccount,
+  OrgMembership,
+  RepoInfo,
+  RepoPermissions,
+  ReposApi,
+} from "./repos.ts";
+export { createCommitsApi } from "./commits.ts";
+export type {
+  ChangedFile,
+  ChangedFileStatus,
+  CommitSummary,
+  CommitsApi,
+  CompareResult,
+} from "./commits.ts";
 
 import { GitHubNotAccessibleError } from "./errors.ts";
 import { lsRefs } from "./refs.ts";

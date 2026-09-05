@@ -122,6 +122,40 @@ describe("commitFiles", () => {
       api(fetchImpl).commitFiles({ branch: "test", message: "m", files: [] }),
     ).rejects.toThrow(/no files/);
   });
+
+  it("deletes a path with sha:null — omitting it would inherit it from base_tree", async () => {
+    const { fetchImpl, calls } = routed(happyRoutes);
+    await api(fetchImpl).commitFiles({
+      branch: "test",
+      message: "remove",
+      files: [],
+      deletions: ["diagrams/gone.txt"],
+    });
+    const tree = JSON.parse(calls.find(([u]) => u.endsWith("/git/trees"))![1].body as string);
+    expect(tree.tree).toEqual([
+      { path: "diagrams/gone.txt", mode: "100644", type: "blob", sha: null },
+    ]);
+    // A deletion alone is a real commit; no blob is written for it.
+    expect(calls.filter(([u]) => u.endsWith("/git/blobs"))).toHaveLength(0);
+  });
+
+  it("carries writes and deletions in one commit", async () => {
+    const { fetchImpl, calls } = routed(happyRoutes);
+    await api(fetchImpl).commitFiles({
+      branch: "test",
+      message: "move",
+      files: [{ path: "b.txt", text: "B" }],
+      deletions: ["a.txt"],
+    });
+    const tree = JSON.parse(calls.find(([u]) => u.endsWith("/git/trees"))![1].body as string);
+    expect(
+      tree.tree.map((e: { path: string; sha: string | null }) => [e.path, e.sha === null]),
+    ).toEqual([
+      ["b.txt", false],
+      ["a.txt", true],
+    ]);
+    expect(calls.filter(([u]) => u.endsWith("/git/commits"))).toHaveLength(1);
+  });
 });
 
 describe("listTree", () => {

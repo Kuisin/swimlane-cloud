@@ -15,7 +15,9 @@
     "./raw": "./src/raw.ts",
     "./branch-model": "./src/branch-model.ts",
     "./write": "./src/write.ts",
-    "./pulls": "./src/pulls.ts"
+    "./pulls": "./src/pulls.ts",
+    "./repos": "./src/repos.ts",
+    "./commits": "./src/commits.ts"
   },
   "scripts": {
     "test": "vitest run",
