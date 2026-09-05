@@ -49,6 +49,39 @@ describe("ensureBranch", () => {
   });
 });
 
+describe("createBranchAtSha", () => {
+  it("passes the sha as ref — GitLab accepts any revision there", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(url).toContain("ref=abc123");
+      return json({ commit: { id: "abc123" } });
+    });
+    const api = writeApi(fetchImpl as unknown as FetchImpl);
+    await expect(api.createBranchAtSha("release-x", "abc123")).resolves.toBeUndefined();
+  });
+
+  it("treats GitLab's 'branch already exists' 400 as success", async () => {
+    const fetchImpl = vi.fn(async () =>
+      json({ message: "Branch already exists" }, { status: 400 }),
+    );
+    const api = writeApi(fetchImpl as unknown as FetchImpl);
+    await expect(api.createBranchAtSha("release-x", "abc123")).resolves.toBeUndefined();
+  });
+});
+
+describe("tagExists", () => {
+  it("is true when the tag resolves", async () => {
+    const fetchImpl = vi.fn(async () => json({ name: "v1.0.0" }));
+    const api = writeApi(fetchImpl as unknown as FetchImpl);
+    await expect(api.tagExists("v1.0.0")).resolves.toBe(true);
+  });
+
+  it("is false on a 404, not an error", async () => {
+    const fetchImpl = vi.fn(async () => json({}, { status: 404 }));
+    const api = writeApi(fetchImpl as unknown as FetchImpl);
+    await expect(api.tagExists("v1.0.0")).resolves.toBe(false);
+  });
+});
+
 describe("commitFiles", () => {
   const branchesTreeSequence = (tree: Array<{ path: string; type: string }>) =>
     vi.fn(async (url: string) => {

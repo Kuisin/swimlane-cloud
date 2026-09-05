@@ -136,6 +136,9 @@ importers:
       '@swimlane-cloud/github-client':
         specifier: workspace:*
         version: link:../../packages/github-client
+      '@swimlane-cloud/gitlab-client':
+        specifier: workspace:*
+        version: link:../../packages/gitlab-client
       '@swimlane-cloud/mobile-view':
         specifier: workspace:*
         version: link:../../packages/mobile-view

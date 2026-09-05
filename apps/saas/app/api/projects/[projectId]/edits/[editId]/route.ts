@@ -34,7 +34,7 @@ export const DELETE = withApi(
       });
     }
 
-    await project.repos.deleteBranch(project.repo.owner, project.repo.repo, branch);
+    await project.repos.deleteBranch(branch);
     await supabase.from("drafts").delete().eq("project_id", projectId).eq("branch", branch);
     await supabase
       .from("edit_sessions")

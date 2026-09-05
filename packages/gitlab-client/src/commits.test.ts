@@ -62,6 +62,23 @@ describe("compare", () => {
     const result = await commitsApi(fetchImpl as unknown as FetchImpl).compare("main", "main");
     expect(result.status).toBe("identical");
   });
+
+  it("reads mergeBaseSha off the forward compare's commit field, falling back to 'from'", async () => {
+    const withCommit = vi.fn(async (url: string) => {
+      const forward = url.includes("from=main");
+      return json({ commit: forward ? { id: "base-sha" } : null, commits: [], diffs: [] });
+    });
+    expect(
+      (await commitsApi(withCommit as unknown as FetchImpl).compare("main", "feature"))
+        .mergeBaseSha,
+    ).toBe("base-sha");
+
+    const withoutCommit = vi.fn(async () => json({ commits: [], diffs: [] }));
+    expect(
+      (await commitsApi(withoutCommit as unknown as FetchImpl).compare("main", "feature"))
+        .mergeBaseSha,
+    ).toBe("main");
+  });
 });
 
 describe("getCommit", () => {

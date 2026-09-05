@@ -14,7 +14,7 @@
  * compare-and-swap. Acceptable for phase 1 (see the plan's flagged risks).
  */
 
-import { GitLabConflictError } from "./errors.ts";
+import { GitLabConflictError, GitLabNotImplementedError } from "./errors.ts";
 import type { RestClient } from "./rest.ts";
 import type { TreeEntry } from "./types.ts";
 
@@ -84,6 +84,34 @@ export function createWriteApi(rest: RestClient, projectId: number | string) {
         );
       } catch (err) {
         if (err instanceof GitLabConflictError) return;
+        throw err;
+      }
+    },
+
+    /**
+     * GitLab's branch-creation `ref` accepts any revision, including a raw
+     * sha directly — unlike GitHub, no separate "branch at an exact commit"
+     * endpoint is needed. Idempotent, like `ensureBranch`.
+     */
+    async createBranchAtSha(name: string, sha: string): Promise<void> {
+      try {
+        await rest.request(
+          `${base}/repository/branches?branch=${encodeURIComponent(name)}&ref=${encodeURIComponent(sha)}`,
+          { method: "POST" },
+        );
+      } catch (err) {
+        if (err instanceof GitLabConflictError) return;
+        throw err;
+      }
+    },
+
+    /** Whether a tag by this name already exists. */
+    async tagExists(tag: string): Promise<boolean> {
+      try {
+        await rest.request(`${base}/repository/tags/${encodeURIComponent(tag)}`);
+        return true;
+      } catch (err) {
+        if ((err as { status?: number }).status === 404) return false;
         throw err;
       }
     },
@@ -202,6 +230,27 @@ export function createWriteApi(rest: RestClient, projectId: number | string) {
         // single flag — callers should treat a full 100 pages as "verify".
         truncated: raws.length >= 100 * 100,
       };
+    },
+
+    /**
+     * Not implemented: releases belong to the GitHub-only publish flow
+     * (`versions.ts`), reached only after an explicit
+     * `provider !== "github"` guard — these stubs exist purely so the
+     * shared `ProjectCtx` type-checks for every route.
+     */
+    async createTag(_tag: string, _sha: string): Promise<void> {
+      throw new GitLabNotImplementedError(
+        "Releases are not yet supported for GitLab projects — this method should be unreachable here.",
+      );
+    },
+
+    async createRelease(
+      _tag: string,
+      _opts: { name?: string; body?: string; target?: string } = {},
+    ): Promise<{ id: number; html_url: string; tag_name: string }> {
+      throw new GitLabNotImplementedError(
+        "Releases are not yet supported for GitLab projects — this method should be unreachable here.",
+      );
     },
   };
 }

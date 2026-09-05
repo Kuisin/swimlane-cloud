@@ -3,7 +3,7 @@
  * tree so the Push modal and Request-review modal can show a plain "these
  * files will change" list instead of asking the user to imagine a diff.
  */
-import type { RepoApis } from "./github";
+import type { RepoApis } from "./repo-apis";
 import { loadDraftState } from "./repo-files";
 import type { ChangeStatus, PendingChange } from "./types";
 

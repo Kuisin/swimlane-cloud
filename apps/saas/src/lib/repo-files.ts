@@ -7,22 +7,18 @@
  * base64-JSON limit.
  */
 import {
-  GitHubNotAccessibleError,
   isWithinRoot,
   parseRepoConfig,
   REPO_CONFIG_PATH,
   type RepoConfig,
 } from "@swimlane-cloud/github-client";
 import { ApiError } from "./api";
-import type { RepoApis } from "./github";
 import { isSha } from "./guard";
+import { isRepoNotAccessible } from "./repo-errors";
+import type { RepoApis } from "./repo-apis";
 import { getServiceSupabase } from "./supabase/server";
 
 const TEMPLATES_PREFIX = "templates/";
-
-export function encodePath(path: string): string {
-  return path.split("/").map(encodeURIComponent).join("/");
-}
 
 /** Paths the editor may keep drafts for: diagrams and folder markers. */
 export function isDraftablePath(path: string): boolean {
@@ -49,16 +45,7 @@ export function isDiagramPath(path: string, config: RepoConfig): boolean {
 
 /** Text of a file at a ref, or null when it does not exist there. */
 export async function readTextAt(ctx: RepoApis, path: string, ref: string): Promise<string | null> {
-  const base = `/repos/${ctx.repo.owner}/${ctx.repo.repo}`;
-  try {
-    return await ctx.rest.requestText(
-      `${base}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
-      { accept: "application/vnd.github.raw", immutable: isSha(ref) },
-    );
-  } catch (err) {
-    if (err instanceof GitHubNotAccessibleError && err.status === 404) return null;
-    throw err;
-  }
+  return ctx.write.readFile(path, ref);
 }
 
 export async function readConfigAt(ctx: RepoApis, ref: string): Promise<RepoConfig> {
@@ -71,7 +58,7 @@ export async function resolveSha(ctx: RepoApis, ref: string): Promise<string> {
   try {
     return await ctx.write.refSha(ref);
   } catch (err) {
-    if (err instanceof GitHubNotAccessibleError) {
+    if (isRepoNotAccessible(err)) {
       throw new ApiError(404, `Branch "${ref}" does not exist.`);
     }
     throw err;

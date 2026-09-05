@@ -74,7 +74,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     files: changedEntries.map((f) => ({ path: f.id, text: f.dsl })),
     ...(deletions.length ? { deletions } : {}),
     ...(body.expectedHeadSha ? { expectedHeadSha: body.expectedHeadSha } : {}),
-    author: { name: project.login, email: `${project.login}@users.noreply.github.com` },
+    author: { name: project.login, email: project.commitAuthorEmail },
   });
 
   const supabase = getServiceSupabase();

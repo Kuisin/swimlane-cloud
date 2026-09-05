@@ -14,7 +14,8 @@ import {
   type RepoPermissions,
 } from "@swimlane-cloud/github-client";
 import { ApiError } from "./api";
-import { requireGitHubApis, withRepo, type GitHubApis, type RepoApis } from "./github";
+import { requireGitHubApis, withRepo, type GitHubApis } from "./github";
+import type { RepoApis } from "./repo-apis";
 import { getServiceSupabase } from "./supabase/server";
 import {
   type PolicyEntry,
@@ -102,7 +103,7 @@ export async function requireProjectRole(projectId: string, minRole: Role): Prom
     owner: project.owner,
     repo: project.repo,
   });
-  const repoInfo = await apis.repos.getRepo(project.owner, project.repo);
+  const repoInfo = await apis.repos.getRepo();
   const role = roleFromPermissions(repoInfo.permissions);
   if (!roleAtLeast(role, minRole)) {
     throw new ApiError(403, `This action needs the ${minRole} role (you are ${role}).`, {

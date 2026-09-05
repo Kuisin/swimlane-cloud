@@ -11,6 +11,7 @@
  * from the GitHub-only publish flow.
  */
 
+import { GitLabNotImplementedError } from "./errors.ts";
 import type { RestClient } from "./rest.ts";
 
 export type ChangedFileStatus =
@@ -34,6 +35,8 @@ export interface CompareResult {
   status: "identical" | "ahead" | "behind" | "diverged";
   aheadBy: number;
   behindBy: number;
+  /** Where `from` and `to` diverged — GitLab's `commit` field on the compare response. */
+  mergeBaseSha: string;
   files: ChangedFile[];
   /** Commits reachable from `to` but not `from`, oldest first. */
   commits: CommitSummary[];
@@ -57,6 +60,7 @@ interface RawDiff {
 }
 
 interface RawCompare {
+  commit?: { id: string } | null;
   commits: RawCommit[];
   diffs: RawDiff[];
 }
@@ -147,9 +151,23 @@ export function createCommitsApi(rest: RestClient, projectId: number | string) {
         status,
         aheadBy,
         behindBy,
+        mergeBaseSha: forward.commit?.id ?? from,
         files: forward.diffs.map(toFile),
         commits: forward.commits.map((c) => toCommit(c, base)),
       };
+    },
+
+    /**
+     * Not ported: only the GitHub-only publish flow (`versions.ts`) calls
+     * this, gated behind an explicit `provider !== "github"` guard before
+     * any `ProjectCtx` method is reached — this stub exists only so that
+     * shared `ProjectCtx` type-checks for every route, not because it can
+     * ever run for a GitLab project in phase 1.
+     */
+    async isAncestor(_sha: string, _ref: string): Promise<boolean> {
+      throw new GitLabNotImplementedError(
+        "isAncestor is not available for GitLab projects — this method should be unreachable here.",
+      );
     },
   };
 }

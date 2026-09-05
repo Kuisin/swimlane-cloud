@@ -38,7 +38,7 @@ export const POST = withApi(
     const supabase = getServiceSupabase();
     let deletedBranch: string | null = null;
     if (isEditBranch(pull.head)) {
-      await project.repos.deleteBranch(project.repo.owner, project.repo.repo, pull.head);
+      await project.repos.deleteBranch(pull.head);
       deletedBranch = pull.head;
       await supabase.from("drafts").delete().eq("project_id", projectId).eq("branch", pull.head);
       await supabase
