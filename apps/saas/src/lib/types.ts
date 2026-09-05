@@ -4,6 +4,14 @@
  */
 
 export type Role = "owner" | "editor" | "viewer";
+export type ChangeStatus = "added" | "changed" | "removed";
+
+/** One uncommitted file, classified against the branch's current tree. */
+export interface PendingChange {
+  path: string;
+  status: ChangeStatus;
+}
+
 export type BranchKind = "main" | "preview" | "edit" | "release" | "other";
 export type LockReason = "main" | "locked" | "previewOwnerOnly" | "viewer" | "other";
 export type ShareMode = "svg_only" | "svg_and_dsl";

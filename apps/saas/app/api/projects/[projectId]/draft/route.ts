@@ -1,4 +1,5 @@
 import { withApi, json, readJson, ApiError } from "@/lib/api";
+import { listPendingChanges } from "@/lib/changes";
 import { assertRef, assertRepoPath } from "@/lib/guard";
 import {
   assertBranchWritable,
@@ -68,6 +69,22 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   );
   if (error) throw new ApiError(500, `draft upsert failed: ${error.message}`);
   return json({ saved: files.length, paths: files.map((f) => f.id) });
+});
+
+/**
+ * GET /api/projects/[projectId]/draft?branch= — every uncommitted change on
+ * the branch, classified added/changed/removed. Backs the Push and
+ * Request-review modals' file lists.
+ */
+export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
+  const { projectId } = await ctx.params;
+  const branch = new URL(req.url).searchParams.get("branch");
+  if (!branch) throw new ApiError(400, "branch is required");
+  assertRef(branch);
+
+  const project = await requireProjectRole(projectId, "viewer");
+  const { headSha, changes } = await listPendingChanges(project, projectId, branch);
+  return json({ headSha, changes });
 });
 
 /** DELETE /api/projects/[projectId]/draft?branch=[&path=] — discard drafts. */

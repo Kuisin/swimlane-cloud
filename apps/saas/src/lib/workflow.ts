@@ -10,6 +10,7 @@ import type {
   CommitInfo,
   CompareResponse,
   LockReason,
+  PendingChange,
   ProjectState,
   PullDetail,
   ShareMode,
@@ -80,15 +81,23 @@ export const checkpoint = (
   files?: { id: string; dsl: string }[],
   expectedHeadSha?: string,
 ) =>
-  postJson<{ commitSha: string; branch: string; files: number; deleted: number }>(
-    `${base(pid)}/checkpoint`,
-    {
-      branch,
-      message,
-      files,
-      expectedHeadSha,
-    },
-  );
+  postJson<{
+    commitSha: string;
+    branch: string;
+    files: number;
+    deleted: number;
+    changes: PendingChange[];
+    subject: string;
+  }>(`${base(pid)}/checkpoint`, {
+    branch,
+    message,
+    files,
+    expectedHeadSha,
+  });
+
+/** Every uncommitted change on a branch, for the Push / Request-review modals. */
+export const listPendingChanges = (pid: string, branch: string) =>
+  api<{ headSha: string; changes: PendingChange[] }>(`${base(pid)}/draft?${q({ branch })}`);
 
 // ── Branches & pull requests ────────────────────────────────────────────────
 
