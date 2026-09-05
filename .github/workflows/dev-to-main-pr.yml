@@ -1,0 +1,55 @@
+name: Promote dev to main
+
+# Keeps exactly one open "dev → main" pull request. It is created and kept up to
+# date automatically; merging it is the repository owner's decision, so this
+# workflow never merges, and never enables auto-merge.
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: promote-dev-to-main
+  cancel-in-progress: false
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the commit list below is real, not a shallow slice.
+          fetch-depth: 0
+
+      - name: Create or refresh the dev → main pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Nothing to promote is the normal state right after a merge, not a failure.
+          if [ -z "$(git log --oneline origin/main..origin/dev)" ]; then
+            echo "dev has nothing main does not already have — no pull request needed."
+            exit 0
+          fi
+
+          commits="$(git log --oneline --no-merges origin/main..origin/dev | head -50)"
+          count="$(git rev-list --count origin/main..origin/dev)"
+          body="$(printf 'Opened automatically by `.github/workflows/dev-to-main-pr.yml`.\n\nMerging this promotes `dev` to production — Vercel deploys `main`.\n\n**%s commit(s) ahead of `main`:**\n\n```\n%s\n```\n' "$count" "$commits")"
+
+          existing="$(gh pr list --base main --head dev --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            # The PR already tracks dev's head; only the summary needs refreshing.
+            gh pr edit "$existing" --body "$body"
+            echo "Refreshed existing pull request #$existing."
+          else
+            gh pr create \
+              --base main \
+              --head dev \
+              --title "Promote dev to main ($count commit(s))" \
+              --body "$body"
+            echo "Opened a new dev → main pull request."
+          fi

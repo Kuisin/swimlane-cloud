@@ -66,461 +66,112 @@ on Windows) until the app is signed with an Apple Developer ID and notarized.
 ```
 packages/
   diagram-converter/   # @swimlane-cloud/diagram-converter (open-source engine, MIT)
+  editor/              # @swimlane-cloud/editor — the shared GUI/text editor surface
+  github-client/       # zero-dependency GitHub client (REST, git protocol v2, raw CDN)
+  mobile-view/         # card-based mobile rendering of a parsed diagram
 apps/
-  saas/                # Next.js SaaS app (Product B) — to be created
-  desktop/             # Electron desktop app (Product A) — to be created
-nginx/
-  nginx.conf           # Base nginx config (HTTP→HTTPS redirect)
-  conf.d/app.conf      # Gitea virtual host (SSL + security headers)
-docker-compose.yml     # Gitea server stack (Gitea + Postgres + Nginx)
-.env.example           # EC2 environment variables (Gitea server)
-.env.vercel.example    # Vercel environment variables (Next.js app)
+  saas/                # Next.js SaaS: edit diagrams in your GitHub repos (Supabase + GitHub + Vercel)
+  hub/                 # stateless viewer/editor for diagrams in any GitHub repo
+  share/               # static tokened sharing of a folder of diagrams
+  web/                 # standalone editor over browser storage (no backend)
+  desktop/             # Electron shell over a local folder
+  vscode/              # VS Code extension
+.env.vercel.example    # Vercel environment variables for apps/saas
 ```
 
 ---
 
-## Infrastructure overview
+## Infrastructure overview (apps/saas)
 
-| What                     | Where                         | Est. cost          |
-| ------------------------ | ----------------------------- | ------------------ |
-| Gitea + Postgres + Nginx | EC2 t3.small (Docker Compose) | ~$15/mo            |
-| Next.js SaaS app         | Vercel                        | free → ~$20/mo     |
-| SVG blob storage         | S3                            | ~$0.023/GB         |
-| Transactional email      | SES                           | $0.10/1 000 emails |
-| Auth + app database      | Supabase (managed)            | free tier          |
-| DNS                      | Route 53                      | $0.50/zone         |
-| Billing                  | Stripe (managed)              | % of revenue       |
+Everything runs in Japan and nothing is self-hosted.
 
-Gitea is the only service that must be self-hosted (it stores all git repos). Everything else is pay-per-use with no server to operate. Don't want to run EC2? **[Part 1 (Alternative)](#part-1-alternative--gitea-on-flyio)** deploys Gitea on Fly.io (~$5/mo, managed TLS, no servers to patch) instead.
+| What                          | Where                                | Region           | Est. cost      |
+| ----------------------------- | ------------------------------------ | ---------------- | -------------- |
+| Next.js app + API routes      | Vercel (`swimlane-cloud-saas`)       | `hnd1` (Tokyo)   | free → ~$20/mo |
+| Auth, Postgres                | Supabase project `swimlane-cloud`    | `ap-northeast-1` | free tier      |
+| Git history, PRs, permissions | GitHub — the user's own repositories | —                | free           |
+| Billing                       | Stripe (deferred; plan gates only)   | —                | % of revenue   |
 
----
+How it fits together:
 
-## Part 1 — Gitea server (EC2)
-
-### Step 1 — Create the S3 bucket
-
-SVG blobs (canonical diagram renders) go to S3 — no storage server needed.
-
-1. Open [S3 → Create bucket](https://s3.console.aws.amazon.com/s3/bucket/create).
-2. Name: `swimlane-svg-blobs` (set `S3_SVG_BUCKET` in Vercel env to match).
-3. Region: pick the region your EC2 will be in (e.g. `us-east-1`).
-4. Block all public access: **on**.
-5. Click **Create bucket**.
+- **Sign-in is GitHub only.** Supabase Auth's GitHub provider asks for the `repo` scope; the
+  resulting token is stored AES-256-GCM encrypted in Postgres and every GitHub call runs as that
+  user. There is no bot account.
+- **Projects are discovered, not registered.** A repository is a project when it carries the
+  GitHub topic **`swimlane`**; `.swimlane.json` in the repo says where the diagrams live. The
+  dashboard lists every repository the user can access that has the topic.
+- **Roles are GitHub permissions.** `admin` → owner, `push` → editor, `pull` → viewer. Nothing to
+  invite or manage in the app — add people on GitHub.
+- **Postgres holds only what GitHub cannot:** drafts, edit sessions, flagged versions (with a
+  DSL snapshot so the public share page never touches GitHub), section templates and an audit
+  trail. RLS is enabled with no policies: the API routes are the only way in.
+- **No object storage.** SVG is rendered on request from the DSL snapshot; the engine is pure JS.
 
 ---
 
-### Step 2 — Create IAM roles and users
+## Deploying apps/saas
 
-**EC2 IAM role** (for Gitea server — SES email only):
+### 1 — Supabase (Tokyo)
 
-1. [IAM → Roles → Create role](https://console.aws.amazon.com/iam/home#/roles) → EC2.
-2. Attach this inline policy:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "ses:SendRawEmail",
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-3. Name it `swimlane-gitea-role`. Attach it when launching the EC2 instance (Step 4).
-
-**App IAM user** (for Vercel — S3 + SES; Vercel has no IAM role support):
-
-1. [IAM → Users → Create user](https://console.aws.amazon.com/iam/home#/users) → name: `swimlane-app`.
-2. Attach this inline policy:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "SvgBlobs",
-      "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-      "Resource": "arn:aws:s3:::swimlane-svg-blobs/*"
-    },
-    {
-      "Sid": "SvgBlobsList",
-      "Effect": "Allow",
-      "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::swimlane-svg-blobs"
-    },
-    {
-      "Sid": "AppEmail",
-      "Effect": "Allow",
-      "Action": "ses:SendEmail",
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-3. Under **Security credentials**, create an **Access key** (use case: Application running outside AWS). Save the key ID and secret — you'll add them to Vercel in Part 2.
-
----
-
-### Step 3 — (Optional) Set up SES
-
-Skip if you don't need email. Gitea and the app will run without it.
-
-1. [SES → Verified identities → Create identity](https://console.aws.amazon.com/ses/home#/verified-identities) → verify your domain.
-2. Add the DNS records SES provides in Route 53.
-3. If your account is in the **SES sandbox**, request production access.
-4. For Gitea's SMTP relay specifically: [SES → SMTP settings → Create SMTP credentials](https://console.aws.amazon.com/ses/home#/smtp). This creates a separate IAM user; save the SMTP username and password for `.env`.
-
----
-
-### Step 4 — Launch the EC2 instance
-
-1. [EC2 → Launch instance](https://console.aws.amazon.com/ec2).
-2. **AMI:** Ubuntu 24.04 LTS (x86_64).
-3. **Instance type:** t3.small (2 vCPU, 2 GB RAM — sufficient for Gitea + Postgres alone).
-4. **IAM instance profile:** `swimlane-gitea-role` (from Step 2).
-5. **Storage:** 30 GB gp3. Add a CloudWatch alarm on disk at 80% — git repos grow over time.
-6. **Security group** — inbound rules only:
-
-   | Port | Protocol | Source    | Purpose                                   |
-   | ---- | -------- | --------- | ----------------------------------------- |
-   | 22   | TCP      | Your IP   | SSH (remove after setup; use SSM instead) |
-   | 80   | TCP      | 0.0.0.0/0 | HTTP (Let's Encrypt challenge)            |
-   | 443  | TCP      | 0.0.0.0/0 | HTTPS (Gitea)                             |
-
-7. Launch, then **allocate and associate an Elastic IP**:
-   - EC2 → Elastic IPs → Allocate → Associate → select your instance.
-
----
-
-### Step 5 — Point DNS to the instance
-
-In Route 53, create one **A record**:
-
-| Name                 | Type | Value          |
-| -------------------- | ---- | -------------- |
-| `git.yourdomain.com` | A    | `<Elastic IP>` |
-
-Wait a few minutes for propagation before continuing.
-
----
-
-### Step 6 — Install Docker
+The project `swimlane-cloud` (`okrcmywyekqwvgdgoexj`, `ap-northeast-1`) already exists. If it is
+paused, restore it from the dashboard first.
 
 ```bash
-ssh -i your-key.pem ubuntu@<Elastic IP>
-
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  -o /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-
-sudo usermod -aG docker ubuntu
-newgrp docker
+supabase login
+cd apps/saas
+supabase link --project-ref okrcmywyekqwvgdgoexj
+supabase migration list        # remote column must be empty the first time
+supabase db push               # applies supabase/migrations/0001_init.sql, 0002_rls.sql
 ```
 
----
+Then in the dashboard:
 
-### Step 7 — Clone and configure
+1. **Authentication → Providers → GitHub**: enable it with a GitHub OAuth App whose
+   _Authorization callback URL_ is `https://okrcmywyekqwvgdgoexj.supabase.co/auth/v1/callback`
+   (GitHub → Settings → Developer settings → OAuth Apps → New).
+2. **Authentication → URL Configuration**: Site URL = your Vercel production URL; Redirect URLs =
+   `https://<prod>/auth/callback`, `https://*-<team>.vercel.app/auth/callback`,
+   `http://localhost:3000/auth/callback`.
+3. **Project Settings → API**: copy the URL, anon key and service-role key for the next step.
+
+### 2 — Vercel (Tokyo)
+
+`apps/saas/vercel.json` pins functions to `hnd1`. From the repository root:
 
 ```bash
-git clone https://github.com/your-org/swimlane-cloud.git
-cd swimlane-cloud
-
-cp .env.example .env
-nano .env
+vercel link                                   # create project "swimlane-cloud-saas"
+# Dashboard → Settings → General → Root Directory = apps/saas
+for v in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY \
+         TOKEN_ENCRYPTION_KEY NEXT_PUBLIC_APP_URL; do
+  vercel env add "$v" production               # repeat with `preview` as needed
+done
+vercel --prod
 ```
 
-| Variable                              | How to get it                                    |
-| ------------------------------------- | ------------------------------------------------ |
-| `GITEA_DOMAIN`                        | e.g. `git.yourdomain.com`                        |
-| `CERTBOT_EMAIL`                       | Your email for Let's Encrypt expiry notices      |
-| `GITEA_DB_PASSWORD`                   | `openssl rand -hex 20`                           |
-| `GITEA_SECRET_KEY`                    | `openssl rand -hex 32`                           |
-| `GITEA_INTERNAL_TOKEN`                | `openssl rand -hex 32`                           |
-| `AWS_REGION`                          | Region from Step 1                               |
-| `GITEA_MAILER_ENABLED`                | `true` if SES is set up; leave `false` otherwise |
-| `GITEA_SES_FROM`                      | Verified SES sender address                      |
-| `SES_SMTP_USER` / `SES_SMTP_PASSWORD` | SES SMTP credentials from Step 3                 |
-
----
-
-### Step 8 — Configure Nginx and obtain SSL certificate
-
-Substitute the domain placeholder, then issue a certificate:
-
-```bash
-source .env
-sed -i "s/GITEA_DOMAIN_PLACEHOLDER/${GITEA_DOMAIN}/g" nginx/conf.d/app.conf
-
-# Start Nginx in HTTP-only mode for the ACME challenge
-docker compose up -d nginx
-
-# Issue the certificate
-docker compose run --rm certbot
-
-# Restart Nginx with SSL
-docker compose restart nginx
-```
-
----
-
-### Step 9 — Start the full stack
-
-```bash
-docker compose up -d
-docker compose ps        # gitea-db, gitea, nginx should be healthy/running
-```
-
----
-
-### Step 10 — Create the Gitea bot account
-
-```bash
-docker compose exec gitea gitea admin user create \
-  --admin \
-  --username swimlane-bot \
-  --password "$(openssl rand -hex 16)" \
-  --email "bot@yourdomain.com"
-
-docker compose exec gitea gitea admin user generate-access-token \
-  --username swimlane-bot \
-  --token-name saas-api \
-  --raw
-```
-
-Copy the printed token. Add it to `.env` as `GITEA_ADMIN_TOKEN` (for reference) and to Vercel as `GITEA_ADMIN_TOKEN` (Part 2, Step 3).
-
----
-
-### Step 11 — Automate SSL renewal
-
-```bash
-(crontab -l 2>/dev/null; echo "0 3 1 * * cd /home/ubuntu/swimlane-cloud && docker compose run --rm certbot renew && docker compose restart nginx") | crontab -
-```
-
----
-
-## Part 1 (Alternative) — Gitea on Fly.io
-
-Prefer a managed host to operating EC2? [Fly.io](https://fly.io) runs the same Gitea
-container with **built-in TLS and a persistent volume** — no Nginx, no Certbot, no SSL
-cron, nothing to patch. A single shared-CPU machine + 10 GB volume runs ~$5/mo. This
-**replaces all of Part 1 above**; the Amazon S3 / IAM setup is still required because the
-app stores SVG blobs in S3 regardless of where Gitea runs.
-
-A ready-to-edit config lives in [`deploy/fly/fly.toml`](deploy/fly/fly.toml).
-
-### Step 1 — Amazon S3 bucket + app IAM user
-
-Identical to Part 1, **Steps 1–2**, with one change: **skip the EC2 IAM role** (Fly has no
-IAM roles). You only need:
-
-1. The bucket `swimlane-svg-blobs` (Part 1, Step 1).
-2. The `swimlane-app` IAM user + access key with the S3 SVG-blob policy (Part 1, Step 2,
-   "App IAM user"). Its key goes to Vercel in Part 2.
-
-If you want Gitea to send email from Fly, create **SES SMTP credentials** (Part 1, Step 3)
-and add them as Fly secrets in Step 4 below.
-
-### Step 2 — Install flyctl and sign in
-
-```bash
-curl -L https://fly.io/install.sh | sh        # or: brew install flyctl
-fly auth login
-```
-
-### Step 3 — Create the app and its volume
-
-```bash
-cd deploy/fly
-fly apps create swimlane-gitea                # choose your own globally-unique name
-fly volumes create gitea_data --app swimlane-gitea --region iad --size 10
-```
-
-In `fly.toml`, set `app` to your name, `primary_region` to a region near your S3 bucket
-(`iad` ≈ us-east-1), and `GITEA__server__ROOT_URL` to `https://<app>.fly.dev/` (or your
-custom domain — Step 6).
-
-### Step 4 — Set Gitea secrets
-
-```bash
-fly secrets set --app swimlane-gitea \
-  GITEA__security__SECRET_KEY="$(openssl rand -hex 32)" \
-  GITEA__security__INTERNAL_TOKEN="$(openssl rand -hex 32)"
-
-# Optional SES email (from Part 1, Step 3):
-# fly secrets set --app swimlane-gitea \
-#   GITEA__mailer__ENABLED=true GITEA__mailer__PROTOCOL=smtp \
-#   GITEA__mailer__SMTP_ADDR=email-smtp.us-east-1.amazonaws.com GITEA__mailer__SMTP_PORT=587 \
-#   GITEA__mailer__USER=<SES_SMTP_USER> GITEA__mailer__PASSWD=<SES_SMTP_PASSWORD> \
-#   GITEA__mailer__FROM=noreply@yourdomain.com
-```
-
-### Step 5 — Deploy
-
-```bash
-fly deploy --app swimlane-gitea
-```
-
-Gitea is live at `https://<app>.fly.dev`. The `/data` volume persists every repo and the
-SQLite database across deploys and restarts.
-
-### Step 6 — (Optional) Custom domain
-
-```bash
-fly certs add git.yourdomain.com --app swimlane-gitea
-```
-
-Add the DNS records Fly prints (an `A`/`AAAA` to Fly's IPs, or a `CNAME` to
-`<app>.fly.dev`), then point Gitea at it and redeploy:
-
-```bash
-fly secrets set --app swimlane-gitea GITEA__server__ROOT_URL="https://git.yourdomain.com/"
-```
-
-### Step 7 — Create the Gitea bot account
-
-Registration is disabled, so create the admin/bot user and its API token over SSH. The
-official image runs as the `git` user with `GITEA_WORK_DIR=/data`, so run the CLI with
-`su -p git` (the `-p` preserves the `GITEA__*` env so it finds the volume + config):
-
-```bash
-fly ssh console --app swimlane-gitea
-
-# …then, inside the machine:
-su -p git -c "gitea admin user create --admin --username swimlane-bot \
-  --must-change-password=false --password 'unused-bot-uses-token' \
-  --email bot@yourdomain.com"
-
-su -p git -c "gitea admin user generate-access-token \
-  --username swimlane-bot --token-name saas-api --raw"
-```
-
-Copy the printed token. Add it to Vercel as `GITEA_ADMIN_TOKEN`, and set `GITEA_URL` to
-`https://<app>.fly.dev` (or your custom domain) — both in Part 2, Step 3.
-
-> Keep this app at a **single machine**: the volume attaches to one machine only. Don't
-> `fly scale count > 1`. Back up the volume with `fly volumes snapshots` (snapshots are
-> automatic daily; restore with `fly volumes create --snapshot-id`).
-
----
-
-## Part 2 — Next.js app (Vercel)
-
-### Step 1 — Set up Supabase
-
-1. Create a project at [supabase.com](https://supabase.com).
-2. SQL Editor → run migrations from `apps/saas/supabase/migrations/` in order.
-3. Enable **Row Level Security** on all tenant-scoped tables.
-4. Authentication → Providers → enable **Magic Link**.
-5. SVG blobs are stored in S3 (Part 1, Step 1) — no Supabase Storage bucket needed.
-
----
-
-### Step 2 — Deploy to Vercel
-
-```bash
-# From your local machine
-npx vercel --cwd apps/saas
-```
-
-Or use the Vercel dashboard: New Project → Import from GitHub → select this repo → set root to `apps/saas`.
-
----
-
-### Step 3 — Set environment variables in Vercel
-
-Copy `.env.vercel.example` and fill in each value in **Vercel → Project → Settings → Environment Variables**:
-
-| Variable                             | Value                               |
-| ------------------------------------ | ----------------------------------- |
-| `NEXTAUTH_URL`                       | `https://app.yourdomain.com`        |
-| `APP_URL`                            | `https://app.yourdomain.com`        |
-| `GITEA_URL`                          | `https://git.yourdomain.com`        |
-| `GITEA_ADMIN_TOKEN`                  | Token from Part 1, Step 10          |
-| `NEXT_PUBLIC_SUPABASE_URL`           | Supabase → Settings → API           |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`      | Supabase → Settings → API           |
-| `SUPABASE_SERVICE_ROLE_KEY`          | Supabase → Settings → API           |
-| `AWS_REGION`                         | Region from Part 1, Step 1          |
-| `AWS_ACCESS_KEY_ID`                  | IAM user key from Part 1, Step 2    |
-| `AWS_SECRET_ACCESS_KEY`              | IAM user secret from Part 1, Step 2 |
-| `S3_SVG_BUCKET`                      | `swimlane-svg-blobs`                |
-| `SES_FROM_EMAIL`                     | Verified SES sender                 |
-| `NEXTAUTH_SECRET`                    | `openssl rand -hex 32`              |
-| `STRIPE_SECRET_KEY`                  | Stripe → Developers → API keys      |
-| `STRIPE_WEBHOOK_SECRET`              | Stripe → Webhooks                   |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe → Developers → API keys      |
-
----
-
-### Step 4 — Point your app domain to Vercel
-
-In Vercel → Project → Settings → Domains, add `app.yourdomain.com`.
-
-In Route 53, create a **CNAME record** pointing `app.yourdomain.com` to the value Vercel provides (e.g. `cname.vercel-dns.com`).
-
----
-
-### Step 5 — Register the Stripe webhook
-
-In the Stripe dashboard → Webhooks → Add endpoint:
-
-- URL: `https://app.yourdomain.com/api/billing/webhook`
-- Events: `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
-
-Copy the signing secret to `STRIPE_WEBHOOK_SECRET` in Vercel.
-
----
-
-## Updating
-
-**Gitea server:**
-
-```bash
-# On the EC2 instance
-cd swimlane-cloud
-git pull
-docker compose pull gitea
-docker compose up -d gitea
-```
-
-**App:**
-
-Push to the connected GitHub branch — Vercel deploys automatically.
-
----
-
-## Production hardening checklist
-
-- [ ] Disable SSH (port 22) on the EC2 security group after setup; use **AWS Systems Manager Session Manager** instead.
-- [ ] Enable **Amazon CloudWatch** agent on EC2 for container log shipping.
-- [ ] Schedule weekly EBS snapshots via **AWS Backup**.
-- [ ] Set an **S3 lifecycle rule** to expire orphaned SVG blobs after 1 year.
-- [ ] Enable **S3 server-side encryption** (SSE-S3) on the bucket.
-- [ ] Add a **CloudWatch disk alarm** on the EC2 volume at 80% usage (git repos grow steadily).
+`TOKEN_ENCRYPTION_KEY` is `openssl rand -hex 32`. See [`.env.vercel.example`](.env.vercel.example)
+for every variable. `next build` reads no environment at all, so a missing secret is a runtime
+error with a clear message, never a failed deploy.
+
+### 3 — Smoke test
+
+Open the production URL → **Continue with GitHub** → the dashboard lists repositories tagged
+`swimlane` → **New project** creates a private repository with `main`, `test`, a sample diagram
+and `.swimlane.json`, or **Mark an existing repository** adds the topic to one you administer.
 
 ---
 
 ## Local development
 
 ```bash
-# Requires Node 20+ and pnpm
+# Requires Node 20+ and pnpm 10
 pnpm install
+pnpm -r test && pnpm -r typecheck && pnpm format:check && pnpm build   # what CI runs
 
-# Engine tests
-cd packages/diagram-converter
-pnpm test
+# SaaS against a local Supabase (needs Docker)
+cd apps/saas
+supabase start && supabase db reset
+# .env.local: NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321, keys from `supabase status`,
+# TOKEN_ENCRYPTION_KEY, and a second GitHub OAuth App (callback
+# http://127.0.0.1:54321/auth/v1/callback) in SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID / _SECRET.
+pnpm dev:saas
 ```
-
-For local S3 access, set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your shell (or use [LocalStack](https://localstack.cloud) for a fully offline S3 emulator).

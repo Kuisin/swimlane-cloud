@@ -1,130 +1,127 @@
 # @swimlane-cloud/saas
 
-DSL Management SaaS — a Next.js 15 (App Router) app that embeds the shared
-`@swimlane-cloud/editor`, stores diagrams in git via **Gitea**, uses **Supabase**
-for auth + Postgres (with RLS for tenant isolation), renders canonical **SVG**
-server-side on the "new version" flag, deduplicates SVG blobs in **S3**, and
-integrates **Stripe** for billing.
+The DSL Management SaaS: a Next.js 15 (App Router) app that embeds the shared
+`@swimlane-cloud/editor` and turns the user's **own GitHub repositories** into
+diagram projects. Supabase (Tokyo) provides sign-in and the small amount of
+state GitHub cannot hold; Vercel (Tokyo) runs the app. Nothing is self-hosted.
 
-This implements **plan PART B Phase 1 + Phase 2** plus the data/infra foundation.
-Phases 3–6 are documented stubs (see "Implemented vs stubbed" below).
+## How it works
 
-## Architecture at a glance
-
-- **Editor** is storage-agnostic; the SaaS provides an `EditorHost`
-  (`src/lib/saas-host.ts`) that calls the API routes below. The editor is
-  mounted in exactly one client component (`app/(app)/projects/[projectId]/EditorMount.tsx`).
-- **Gitea** is the invisible git backbone. One bot service account; SaaS users
-  never have Gitea accounts. All Gitea calls go through `src/lib/gitea.ts`.
-- **SVG** is rendered **only** when a commit on `test` is flagged as a new
-  version (`src/lib/svg-blobs.ts`), deduped by sha256 of the DSL.
-- **Branch model:** `main` (production / public sharing), `test` (integration;
-  SVG on flag), `tmp-*` (active edits, branched from `test`).
+- **GitHub is the backend.** Sign-in is Supabase Auth's GitHub provider with the
+  `repo` scope. The token Supabase hands back on the OAuth callback is encrypted
+  (AES-256-GCM, `src/lib/token-crypto.ts`) into `github_connections`, and every
+  GitHub call — reads, commits, pull requests, merges, tags — runs with it, via
+  `packages/github-client`. There is no bot account and no service token.
+- **Projects are discovered.** A repository is a project when it carries the
+  GitHub topic `swimlane` (`src/lib/discovery.ts`). `GET /user/repos` returns
+  topics and permissions inline, so the dashboard is one paginated call.
+  Opening a repository upserts a `workspaces` row (per GitHub owner) and a
+  `projects` row (per repository) purely as keys for drafts, versions,
+  templates and audit entries. `.swimlane.json` in the repo names the folder
+  that holds diagrams.
+- **Roles are GitHub permissions.** `requireProjectRole` (`src/lib/projects.ts`)
+  reads the repository's permissions with the caller's token on every request:
+  `admin` → owner, `push` → editor, `pull` → viewer.
+- **Branch model** (`packages/github-client/src/branch-model.ts`): `main` is
+  production and never edited in place; `test` is the integration line, owners
+  only; work happens on `tmp-*` branches cut from `test`; a `tmp-*` branch with
+  an open pull request is locked until it is merged or closed.
+- **Drafts vs. checkpoints.** Save writes a draft row to Postgres. Checkpoint
+  turns every draft on the branch into one commit (`commitFiles`, blob → tree
+  → commit → ref) guarded by `expectedHeadSha`, so two people cannot clobber
+  each other; the loser gets a 409 and a "branch moved" banner.
+- **Versions are releases of the whole folder.** Flagging a commit on `test`
+  snapshots every diagram's DSL into `version_files` and tags the commit.
+  Promoting creates a short-lived `release-*` branch at that sha, opens and
+  merges a pull request into `main`, and deletes the branch. SVG is rendered
+  on request from the snapshot — there is no object storage.
+- **Public sharing** (`/p/[slug]`) reads Postgres only. `svg_only` links never
+  send the DSL to the browser.
+- **Database access.** RLS is enabled on every table with no policies; the
+  service-role client in API routes is the only path in, always after the
+  GitHub permission check. `github_connections` additionally revokes the
+  ciphertext column from client keys.
 
 ## Environment variables
 
-All env is read **lazily inside request handlers** — `next build` runs with **no
-env and no network**. Set these in Vercel → Project → Settings → Environment
-Variables. Cross-reference the canonical list in
-[`../../.env.vercel.example`](../../.env.vercel.example).
+All env is read **at request time** — `next build` runs with no environment.
+Canonical list with notes: [`../../.env.vercel.example`](../../.env.vercel.example).
 
-| Var                                           | Used by                                      | Notes                                   |
-| --------------------------------------------- | -------------------------------------------- | --------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`                    | server + browser Supabase                    |                                         |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`               | browser auth, RLS-scoped reads               |                                         |
-| `SUPABASE_SERVICE_ROLE_KEY`                   | privileged server ops (provisioning, writes) | never exposed to browser                |
-| `GITEA_URL`                                   | Gitea client                                 | base URL, e.g. `https://git.yourco.com` |
-| `GITEA_ADMIN_TOKEN`                           | Gitea client                                 | bot service-account token               |
-| `AWS_REGION`                                  | S3 + SES                                     |                                         |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 + SES                                     | dedicated IAM user                      |
-| `S3_SVG_BUCKET`                               | SVG blob storage                             | e.g. `swimlane-svg-blobs`               |
-| `SES_FROM_EMAIL`                              | transactional email (optional / stub)        |                                         |
-| `STRIPE_SECRET_KEY`                           | billing webhook                              |                                         |
-| `STRIPE_WEBHOOK_SECRET`                       | billing webhook signature verification       |                                         |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`          | client checkout (Phase 5)                    |                                         |
-| `APP_URL` / `NEXTAUTH_URL`                    | absolute URLs                                |                                         |
+| Var                             | Used by                                             |
+| ------------------------------- | --------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | middleware, server + browser Supabase clients       |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | middleware, browser sign-in, cookie-bound sessions  |
+| `SUPABASE_SERVICE_ROLE_KEY`     | every API route (service-role client)               |
+| `TOKEN_ENCRYPTION_KEY`          | sealing / opening stored GitHub tokens (≥ 32 chars) |
+| `NEXT_PUBLIC_APP_URL`           | absolute URLs                                       |
+| `GITHUB_API_ORIGIN` (optional)  | GitHub Enterprise Server                            |
+| `STRIPE_*` (optional)           | billing webhook (deferred)                          |
 
-Public SVG sharing assumes the `S3_SVG_BUCKET` objects are readable (or fronted
-by a CDN); adjust `svgPublicUrl` in `src/lib/svg-blobs.ts` for private buckets.
+## Database
 
-## Database migrations
+`supabase/migrations/`:
 
-SQL lives in `supabase/migrations/`:
+- `0001_init.sql` — `workspaces`, `github_connections`, `projects`, `drafts`,
+  `edit_sessions`, `versions`, `version_files`, `merge_requests`, `audit_log`,
+  `project_section_templates`, `project_template_policies`.
+- `0002_rls.sql` — RLS on with no policies; `updated_at` triggers.
 
-- `0001_init.sql` — full schema (workspaces, members, projects, diagrams,
-  drafts, svg_blobs, versions, edit_sessions, merge_requests, audit_log,
-  notifications, section templates, template policies) with UNIQUE/CHECK
-  constraints; enables RLS on tenant-scoped tables.
-- `0002_rls_helpers.sql` — `SECURITY DEFINER` membership helpers + RLS policies
-  (membership-keyed; service-role key bypasses RLS for server ops).
-
-Apply with the Supabase CLI:
-
-```bash
-supabase db push                      # against a linked project
-# or run each file via the SQL editor / psql in order (0001 then 0002)
-```
+`supabase/config.toml` configures the local stack (GitHub provider via
+`SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID` / `_SECRET`).
 
 ## Run
 
 ```bash
-# from the repo root
-pnpm --filter @swimlane-cloud/saas dev      # next dev
-pnpm --filter @swimlane-cloud/saas build    # next build (works with no env)
-pnpm --filter @swimlane-cloud/saas test     # vitest
-
-# self-verify
-pnpm --filter @swimlane-cloud/saas exec tsc --noEmit
-pnpm --filter @swimlane-cloud/saas exec next build
+pnpm --filter @swimlane-cloud/saas dev        # next dev
+pnpm --filter @swimlane-cloud/saas test       # vitest (offline)
+pnpm --filter @swimlane-cloud/saas typecheck
+pnpm --filter @swimlane-cloud/saas build      # works with no env
 ```
 
-Provision a workspace (creates Gitea org + repo + branches + seed tree +
-templates) with `POST /api/workspaces` while signed in.
+Deployment (Supabase restore/link/push, GitHub OAuth App, Vercel link/env/deploy)
+is documented in the root [`README.md`](../../README.md#deploying-appssaas).
 
 ## API routes
 
-| Method                | Route                                                    | Phase                     |
-| --------------------- | -------------------------------------------------------- | ------------------------- |
-| POST                  | `/api/workspaces`                                        | 1.3 onboarding            |
-| GET                   | `/api/projects/[projectId]/tree?branch=`                 | 1.1 listing               |
-| GET                   | `/api/projects/[projectId]/file?branch=&path=`           | 1.1 read (draft-or-git)   |
-| POST                  | `/api/projects/[projectId]/draft`                        | 1.5 draft save            |
-| POST                  | `/api/projects/[projectId]/checkpoint`                   | 1.5 git commit            |
-| GET                   | `/api/projects/[projectId]/commits?branch=`              | 1.6 history               |
-| GET/POST/PATCH/DELETE | `/api/projects/[projectId]/templates?section=`           | 1.7                       |
-| GET/PATCH             | `/api/projects/[projectId]/template-policies`            | 1.7 force policy          |
-| GET/POST              | `/api/diagrams/[id]/versions`                            | 2.1 flag new version      |
-| POST                  | `/api/diagrams/[id]/versions/[versionId]/promote`        | 2.2 promote               |
-| PATCH                 | `/api/diagrams/[id]/versions/[versionId]/public`         | 2.4 public share          |
-| GET/POST              | `/api/projects/[projectId]/edits`                        | 3.1 start edit (basic)    |
-| POST                  | `/api/projects/[projectId]/edits/[editId]/merge-request` | 3.2 merge to test (basic) |
-| POST                  | `/api/billing/webhook`                                   | 5 stub                    |
+Every project route runs `requireProjectRole(projectId, role)` first.
+
+| Method                | Route                                                    | Role           | Purpose                                            |
+| --------------------- | -------------------------------------------------------- | -------------- | -------------------------------------------------- |
+| GET                   | `/api/me`                                                | user           | who is signed in, GitHub connected?                |
+| POST                  | `/api/auth/signout`                                      | user           | sign out                                           |
+| GET                   | `/api/github/projects`                                   | user           | accessible repos with the `swimlane` topic         |
+| GET                   | `/api/github/owners`                                     | user           | self + organisations (for create)                  |
+| GET                   | `/api/github/repos`                                      | user           | administered repos not yet marked                  |
+| POST                  | `/api/projects` `{mode:"create"\|"mark"}`                | user           | create a seeded repo / mark an existing one        |
+| POST                  | `/api/projects/open` `{owner, repo}`                     | user           | register a marked repo → `projectId`               |
+| GET                   | `…/state`                                                | viewer         | branches, pulls, versions, my role — the UI's feed |
+| GET                   | `…/tree?ref=` · `…/file?branch=&path=`                   | viewer         | listing / read (draft first)                       |
+| GET                   | `…/snapshot?ref=&withDrafts=1` · `…/compare?base=&head=` | viewer         | all diagrams at a ref / changed diagrams with text |
+| GET                   | `…/commits?branch=&page=`                                | viewer         | history                                            |
+| POST · DELETE         | `…/draft`                                                | editor         | save / discard drafts                              |
+| POST                  | `…/checkpoint` `{branch, message?, expectedHeadSha?}`    | editor         | one commit from drafts                             |
+| POST · GET            | `…/edits` · DELETE `…/edits/[editId]`                    | editor         | cut / list / abandon `tmp-*` branches              |
+| POST · GET            | `…/pulls`                                                | editor         | open (reuse) a PR `tmp-*` → `test`                 |
+| GET                   | `…/pulls/[n]`                                            | viewer         | PR + GitHub conversation + changed files           |
+| POST                  | `…/pulls/[n]/comments`                                   | viewer         | comment (as the GitHub user)                       |
+| POST                  | `…/pulls/[n]/merge` · `…/pulls/[n]/close`                | owner / author | merge (deletes the tmp branch) / close             |
+| POST · GET            | `…/versions`                                             | owner          | flag the tip of `test` (or a sha on it)            |
+| GET                   | `…/versions/[id]/svg?path=`                              | viewer         | one file rendered                                  |
+| POST                  | `…/versions/[id]/promote`                                | owner          | land the flagged commit on `main`                  |
+| PATCH                 | `…/versions/[id]/public` `{public, share_mode?}`         | owner          | public link on / off                               |
+| GET/POST/PATCH/DELETE | `…/templates?section=` · GET/PATCH `…/template-policies` | viewer / owner | section template library + force policy            |
+| GET                   | `…/activity`                                             | viewer         | audit trail                                        |
+| POST                  | `/api/billing/webhook`                                   | Stripe         | updates `workspaces.plan` (deferred)               |
+
+`…` = `/api/projects/[projectId]`.
 
 ## Pages
 
-- `/` — landing
-- `/login` — Supabase magic-link sign-in
-- `/dashboard` — workspaces/projects list (server, RLS-scoped)
-- `/projects/[projectId]` — embedded editor + branch switcher
-- `/projects/[projectId]/history` — commits + flagged-version gallery (server SVG)
-- `/projects/[projectId]/settings/templates` — template CRUD + force policy
-- `/p/[slug]` — public share page (no auth)
-
-## Implemented vs stubbed
-
-- **Implemented:** Phase 1 (1.1–1.7), Phase 2 (2.1–2.4), full data model + RLS,
-  Gitea translation layer, SVG dedup, forced-template validation, plus the basic
-  Phase 3 start-edit / open-PR endpoints.
-- **Stubbed / documented only:** Phase 3 review UI + conflict handling, Phase 4
-  (roles enforcement detail, invites, notifications, activity feed UI), Phase 5
-  (full Stripe Checkout / Customer Portal — only the webhook skeleton exists),
-  Phase 6 (SSO, self-hosted bundle, audit export, public API). The email lib
-  (`src/lib/email.ts`) is a working SES stub that no-ops without config.
-
-## Notes / limitations
-
-- The Stripe webhook maps plan tiers from subscription metadata as a placeholder;
-  wire real price-ID → plan mapping in Phase 5.
-- `multiPathCommit` prefers Gitea's batch `/contents` endpoint and falls back to
-  sequential per-file commits on older Gitea versions.
-- No extra dependencies were added beyond those already in `package.json`.
+- `/` landing · `/login` (GitHub only) · `/dashboard` (discovered projects) · `/new`
+  (create / mark)
+- `/projects/[id]/edit` — the editor with branch switcher, Start edit,
+  Checkpoint, Open PR, mobile view
+- `/projects/[id]/branches` · `/pulls` · `/versions` · `/activity` ·
+  `/settings/templates` (owners)
+- `/billing/[workspaceId]` — plan limits (billing itself is deferred)
+- `/p/[slug]` — public share page, no sign-in

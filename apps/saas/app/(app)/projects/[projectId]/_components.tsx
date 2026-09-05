@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import {
@@ -10,10 +10,12 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   Flag,
   FolderOpen,
   Plus,
   Smartphone,
+  Tag,
   Trash2,
   X,
 } from "lucide-react";
@@ -36,73 +38,135 @@ import {
 } from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import { FileTree } from "@/components/file-tree";
+import { GitHubMark } from "@/components/github-mark";
+import { RoleBadge } from "@/components/app-header";
+import { ApiClientError, redirectToLogin } from "@/lib/client";
 import {
-  loadState,
-  setRole as setRoleAction,
-  resetDemo,
-  tipFiles,
-  primaryPath,
-  type Commit,
-  type Files,
-  type WorkflowState,
-  type Role,
-} from "@/lib/demo-workflow";
-import { demoProjectName } from "@/lib/demo";
+  addPRComment,
+  compare,
+  getPR,
+  getSnapshot,
+  getState,
+  listCommits,
+  versionSvgUrl,
+} from "@/lib/workflow";
+import type {
+  CommitInfo,
+  CompareFile,
+  ProjectState,
+  PullComment,
+  PullState,
+  VersionState,
+} from "@/lib/types";
 import { useT, LanguageToggle } from "@/i18n";
 
+export type Files = Record<string, string>;
+
+/** primary diagram = first .txt path (sorted) for thumbnails/version SVG. */
+export function primaryPath(files: Files): string | null {
+  const txt = Object.keys(files)
+    .filter((p) => p.endsWith(".txt"))
+    .sort();
+  return txt[0] ?? null;
+}
+
+/** Turn an API failure into a sentence the user can act on. */
+export function describeError(err: unknown, t: (k: string) => string): string {
+  if (err instanceof ApiClientError) {
+    if (err.needsAuth) return t("error.needsAuth");
+    if (err.conflict) return t("error.conflict");
+    if (err.rateLimited) return t("error.rateLimited");
+    return err.message;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 /**
- * Shared project state hook: loads the localStorage workflow state, exposes the
- * role switch + reset, and the project name. Each split page uses this.
+ * Shared project state hook: loads `ProjectState` from the API and re-fetches
+ * when the tab regains focus (someone else may have merged or pushed).
  */
 export function useProject() {
   const params = useParams();
   const projectId = String(params.projectId);
-  const [st, setSt] = useState<WorkflowState | null>(null);
+  const [state, setState] = useState<ProjectState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const { t } = useT();
 
-  useEffect(() => {
-    setSt(loadState(projectId));
-  }, [projectId]);
+  const refresh = useCallback(async () => {
+    try {
+      setState(await getState(projectId));
+      setError(null);
+    } catch (e) {
+      if (e instanceof ApiClientError && e.needsAuth) return redirectToLogin();
+      setError(describeError(e, t));
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const setRole = (r: Role) => {
-    if (st) setSt(setRoleAction(projectId, st, r));
-  };
-  const reset = () => {
-    if (typeof window !== "undefined" && !window.confirm(t("confirm.resetDemo"))) return;
-    resetDemo(projectId);
-    setSt(loadState(projectId));
-  };
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refresh]);
 
   return {
     projectId,
-    projectName: demoProjectName(projectId),
-    st,
-    setSt,
-    setRole,
-    reset,
+    projectName: state?.project.name ?? "",
+    state,
+    refresh,
+    loading,
+    error,
   };
 }
 
-/**
- * Shared client UI for the split project pages (Edit / Branches / Pull Requests
- * / Versions): the top nav with role switch, plus the History / PR / Version
- * panels and small atoms.
- */
+/** Full-height page shell used by every project tab. */
+export function ProjectPage({
+  active,
+  projectId,
+  state,
+  error,
+  children,
+}: {
+  active: string;
+  projectId: string;
+  state: ProjectState | null;
+  error: string | null;
+  children: React.ReactNode;
+}) {
+  const { t } = useT();
+  return (
+    <div className="flex h-screen flex-col">
+      <ProjectNav projectId={projectId} state={state} active={active} />
+      {error ? (
+        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+      {state ? (
+        children
+      ) : (
+        <div className="p-6 text-sm text-neutral-500">{error ? null : t("loading")}</div>
+      )}
+    </div>
+  );
+}
 
 export function ProjectNav({
   projectId,
-  projectName,
+  state,
   active,
-  role,
-  onRole,
-  onReset,
 }: {
   projectId: string;
-  projectName: string;
+  state: ProjectState | null;
   active: string;
-  role: Role;
-  onRole: (r: Role) => void;
-  onReset: () => void;
 }) {
   const { t } = useT();
   const TABS = [
@@ -110,6 +174,10 @@ export function ProjectNav({
     { key: "branches", label: t("nav.branches"), href: "branches" },
     { key: "pulls", label: t("nav.pulls"), href: "pulls" },
     { key: "versions", label: t("nav.versions"), href: "versions" },
+    { key: "activity", label: t("nav.activity"), href: "activity" },
+    ...(state?.me.role === "owner"
+      ? [{ key: "templates", label: t("nav.templates"), href: "settings/templates" }]
+      : []),
   ];
   return (
     <header className="shrink-0 border-b border-neutral-200">
@@ -119,17 +187,39 @@ export function ProjectNav({
           <Link href="/dashboard" className="shrink-0 text-sm text-neutral-500 hover:underline">
             {t("nav.dashboard")}
           </Link>
-          <h1 className="truncate text-base font-semibold">{projectName}</h1>
+          <h1 className="truncate text-base font-semibold">{state?.project.name ?? ""}</h1>
+          {state ? (
+            <a
+              href={state.project.htmlUrl}
+              target="_blank"
+              rel="noreferrer"
+              title={`${state.project.owner}/${state.project.repo}`}
+              className="hidden shrink-0 items-center gap-1 text-xs text-neutral-400 hover:text-neutral-700 sm:flex"
+            >
+              <GitHubMark className="h-3.5 w-3.5" />
+              {state.project.owner}/{state.project.repo}
+              <ExternalLink size={11} />
+            </a>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <LanguageToggle />
-          <RoleSwitch role={role} onChange={onRole} />
-          <button
-            onClick={onReset}
-            className="whitespace-nowrap text-xs text-neutral-400 hover:text-neutral-600"
-          >
-            {t("nav.resetDemo")}
-          </button>
+          {state ? (
+            <>
+              <RoleBadge role={state.me.role} />
+              <span className="hidden text-xs text-neutral-500 sm:inline">
+                {state.me.githubLogin}
+              </span>
+            </>
+          ) : null}
+          <form action="/api/auth/signout" method="post">
+            <button
+              type="submit"
+              className="whitespace-nowrap text-xs text-neutral-400 hover:text-neutral-600"
+            >
+              {t("nav.signOut")}
+            </button>
+          </form>
         </div>
       </div>
       <nav className="flex gap-1 overflow-x-auto px-3">
@@ -148,25 +238,6 @@ export function ProjectNav({
         ))}
       </nav>
     </header>
-  );
-}
-
-export function RoleSwitch({ role, onChange }: { role: Role; onChange: (r: Role) => void }) {
-  const { t } = useT();
-  return (
-    <div className="flex items-center gap-1 rounded-md border border-neutral-300 p-0.5 text-xs">
-      {(["member", "manager"] as Role[]).map((r) => (
-        <button
-          key={r}
-          onClick={() => onChange(r)}
-          className={`rounded px-2 py-1 ${
-            role === r ? "bg-indigo-600 text-white" : "text-neutral-600"
-          }`}
-        >
-          {r === "manager" ? t("nav.manager") : t("nav.member")}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -236,7 +307,7 @@ export function Modal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-neutral-200 py-2 pl-4 pr-2">
-          <h2 className="text-base font-semibold">{title}</h2>
+          <h2 className="truncate text-base font-semibold">{title}</h2>
           <button
             onClick={onClose}
             className="-mr-1 rounded-md p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
@@ -258,70 +329,111 @@ export function Modal({
   );
 }
 
+const short = (sha: string) => sha.slice(0, 7);
+
+/** Commits of one branch, newest first, with a per-commit snapshot viewer. */
 export function HistoryPanel({
-  st,
+  projectId,
+  state,
   branch,
   onTogglePublish,
 }: {
-  st: WorkflowState;
+  projectId: string;
+  state: ProjectState;
   branch: string;
-  onTogglePublish?: (commitId: string) => void;
+  /** Present on main for owners: publish / unpublish the version promoted at this commit. */
+  onTogglePublish?: (version: VersionState) => void;
 }) {
   const { t } = useT();
-  const all = st.branches[branch]?.commits ?? [];
-  const [detail, setDetail] = useState<{ commit: Commit; parent: Commit | null } | null>(null);
-  if (all.length === 0) return <Empty>{t("history.empty")}</Empty>;
-  const view = [...all].reverse();
+  const [commits, setCommits] = useState<CommitInfo[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<CommitInfo | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCommits(null);
+    setError(null);
+    listCommits(projectId, branch)
+      .then((r) => {
+        if (!cancelled) setCommits(r.commits);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(describeError(e, t));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, branch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const versionAt = (sha: string) =>
+    state.versions.find((v) => v.promotedSha === sha || v.commitSha === sha) ?? null;
+
+  if (error) return <Empty>{error}</Empty>;
+  if (!commits) return <Empty>{t("loading")}</Empty>;
+  if (commits.length === 0) return <Empty>{t("history.empty")}</Empty>;
+
   return (
     <>
       <ol className="space-y-2">
-        {view.map((c) => {
-          const idx = all.indexOf(c);
-          const parent = idx > 0 ? all[idx - 1] : null;
-          const isTip = idx === all.length - 1;
+        {commits.map((c, i) => {
+          const version = versionAt(c.sha);
+          const published = Boolean(version?.public && version.publicSlug);
           return (
-            <li key={c.id} className="rounded-md border border-neutral-200 p-3">
+            <li key={c.sha} className="rounded-md border border-neutral-200 p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 font-medium">
-                    {c.flagged && (
-                      <Flag size={13} className="shrink-0 text-amber-500" fill="currentColor" />
+                    {version && (
+                      <Tag
+                        size={13}
+                        className="shrink-0 text-indigo-500"
+                        aria-label={version.name}
+                      />
                     )}
-                    <span className="truncate">{c.message}</span>
+                    <span className="truncate">{c.message.split("\n")[0]}</span>
                   </div>
                   <div className="text-xs text-neutral-500">
-                    {c.author} · {new Date(c.ts).toLocaleString()}
-                    {isTip && (
+                    <a
+                      href={c.htmlUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono hover:underline"
+                    >
+                      {short(c.sha)}
+                    </a>{" "}
+                    · {c.login ?? c.author} · {c.date ? new Date(c.date).toLocaleString() : ""}
+                    {i === 0 && (
                       <span className="ml-2 rounded bg-green-100 px-1 text-green-700">
                         {t("history.tip")}
                       </span>
                     )}
+                    {version && <span className="ml-2 text-indigo-600">{version.name}</span>}
                   </div>
-                  {c.flagged && c.publicSlug && (
+                  {published && version?.publicSlug && (
                     <a
-                      href={`/p/${c.publicSlug}`}
+                      href={`/p/${version.publicSlug}`}
                       target="_blank"
                       rel="noreferrer"
                       className="mt-0.5 inline-block font-mono text-xs text-emerald-600 underline"
                     >
-                      /p/{c.publicSlug}
+                      /p/{version.publicSlug}
                     </a>
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {onTogglePublish && (
+                  {onTogglePublish && version?.promoted && (
                     <button
-                      onClick={() => onTogglePublish(c.id)}
-                      title={c.flagged ? t("history.unpublish") : t("history.publishHint")}
+                      onClick={() => onTogglePublish(version)}
+                      title={published ? t("history.unpublish") : t("history.publishHint")}
                       className={`rounded p-1.5 ${
-                        c.flagged ? "text-emerald-600" : "text-neutral-300 hover:text-neutral-500"
+                        published ? "text-emerald-600" : "text-neutral-300 hover:text-neutral-500"
                       }`}
                     >
-                      <Flag size={15} fill={c.flagged ? "currentColor" : "none"} />
+                      <Flag size={15} fill={published ? "currentColor" : "none"} />
                     </button>
                   )}
                   <button
-                    onClick={() => setDetail({ commit: c, parent })}
+                    onClick={() => setDetail(c)}
                     className="rounded border border-neutral-300 px-2 py-1 text-xs hover:border-indigo-400 hover:text-indigo-600"
                   >
                     {t("history.view")}
@@ -334,8 +446,10 @@ export function HistoryPanel({
       </ol>
       {detail && (
         <CommitDetailModal
-          commit={detail.commit}
-          parent={detail.parent}
+          projectId={projectId}
+          title={detail.message.split("\n")[0] ?? ""}
+          headRef={detail.sha}
+          baseRef={detail.parents[0] ?? null}
           onClose={() => setDetail(null)}
         />
       )}
@@ -343,30 +457,85 @@ export function HistoryPanel({
   );
 }
 
+type FileStatus = "added" | "removed" | "changed" | "same";
+
 /**
- * Full snapshot of a commit: all files at that point, with per-file Preview
- * (on-device render), Diff (side-by-side vs the previous commit), and raw Text.
+ * Every diagram at `headRef` with per-file Preview (on-device render), Diff
+ * against `baseRef` (a parent commit, or a pull request's base) and raw Text.
  */
-function CommitDetailModal({
-  commit,
-  parent,
+export function CommitDetailModal({
+  projectId,
+  title,
+  headRef,
+  baseRef,
+  preloaded,
   onClose,
 }: {
-  commit: Commit;
-  parent: Commit | null;
+  projectId: string;
+  title: string;
+  headRef: string;
+  baseRef: string | null;
+  /** Already-fetched changed files (pull request review) — skips the compare call. */
+  preloaded?: CompareFile[];
   onClose: () => void;
 }) {
   const { t } = useT();
-  const files = commit.files;
-  const prev = parent?.files ?? {};
-  const paths = Array.from(new Set([...Object.keys(files), ...Object.keys(prev)]))
-    .filter((p) => p.endsWith(".txt"))
-    .sort();
-  const [path, setPath] = useState(primaryPath(files) ?? paths[0] ?? "");
+  const [files, setFiles] = useState<Files | null>(null);
+  const [changes, setChanges] = useState<CompareFile[] | null>(preloaded ?? null);
+  const [error, setError] = useState<string | null>(null);
+  const [path, setPath] = useState("");
   const [mode, setMode] = useState<"preview" | "diff" | "text">("preview");
-  const after = files[path] ?? "";
-  const before = prev[path] ?? "";
-  const changed = before !== after;
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      getSnapshot(projectId, headRef),
+      preloaded ? Promise.resolve(null) : baseRef ? compare(projectId, baseRef, headRef) : null,
+    ])
+      .then(([snap, cmp]) => {
+        if (cancelled) return;
+        setFiles(snap.files);
+        if (cmp) setChanges(cmp.files);
+        else if (!preloaded) setChanges([]);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(describeError(e, t));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, headRef, baseRef]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const changeByPath = useMemo(() => {
+    const m = new Map<string, CompareFile>();
+    for (const c of changes ?? []) m.set(c.path, c);
+    return m;
+  }, [changes]);
+
+  const paths = useMemo(() => {
+    const set = new Set<string>(Object.keys(files ?? {}));
+    for (const c of changes ?? []) set.add(c.path);
+    return [...set].filter((p) => p.endsWith(".txt")).sort();
+  }, [files, changes]);
+
+  useEffect(() => {
+    if (!path && paths.length) {
+      const firstChanged = paths.find((p) => changeByPath.has(p));
+      setPath(firstChanged ?? paths[0]!);
+    }
+  }, [paths, path, changeByPath]);
+
+  const change = changeByPath.get(path);
+  const after = files?.[path] ?? change?.after ?? "";
+  const before = change ? (change.before ?? "") : after;
+  const statusOf = (p: string): FileStatus => {
+    const c = changeByPath.get(p);
+    if (!c) return "same";
+    return c.status === "added" ? "added" : c.status === "removed" ? "removed" : "changed";
+  };
+  const status = statusOf(path);
+  const changed = status !== "same";
+
   const svg = useMemo(() => {
     if (mode !== "preview" || !after) return null;
     try {
@@ -376,9 +545,6 @@ function CommitDetailModal({
     }
   }, [after, mode]);
 
-  const statusOf = (p: string): "added" | "removed" | "changed" | "same" =>
-    !(p in prev) ? "added" : !(p in files) ? "removed" : prev[p] !== files[p] ? "changed" : "same";
-  const status = statusOf(path);
   const statusBadge =
     status === "added"
       ? "bg-green-100 text-green-700"
@@ -389,218 +555,292 @@ function CommitDetailModal({
           : "bg-neutral-100 text-neutral-500";
 
   return (
-    <Modal title={commit.message} onClose={onClose} maxW="max-w-4xl">
-      <div className="flex gap-4">
-        <aside className="max-h-[62vh] w-44 shrink-0 overflow-auto border-r border-neutral-200 pr-2">
-          <FileTree paths={paths} active={path} onPick={setPath} statusOf={statusOf} />
-        </aside>
-        <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="truncate font-mono text-xs text-neutral-500">{path}</span>
-            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${statusBadge}`}>
-              {status}
-            </span>
-            <div className="ml-auto flex gap-1 text-xs">
-              {(["preview", "diff", "text"] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMode(m)}
-                  className={`rounded px-3 py-1 ${
-                    mode === m
-                      ? "bg-neutral-800 text-white"
-                      : "text-neutral-500 hover:bg-neutral-100"
-                  }`}
-                >
-                  {t(`commit.mode.${m}`)}
-                </button>
-              ))}
+    <Modal title={title} onClose={onClose} maxW="max-w-4xl">
+      {error ? (
+        <Empty>{error}</Empty>
+      ) : !files ? (
+        <Empty>{t("loading")}</Empty>
+      ) : (
+        <div className="flex gap-4">
+          <aside className="max-h-[62vh] w-44 shrink-0 overflow-auto border-r border-neutral-200 pr-2">
+            <FileTree paths={paths} active={path} onPick={setPath} statusOf={statusOf} />
+          </aside>
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="truncate font-mono text-xs text-neutral-500">{path}</span>
+              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${statusBadge}`}>
+                {status}
+              </span>
+              <div className="ml-auto flex gap-1 text-xs">
+                {(["preview", "diff", "text"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMode(m)}
+                    className={`rounded px-3 py-1 ${
+                      mode === m
+                        ? "bg-neutral-800 text-white"
+                        : "text-neutral-500 hover:bg-neutral-100"
+                    }`}
+                  >
+                    {t(`commit.mode.${m}`)}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {mode === "preview" &&
-            (svg ? (
-              <div
-                className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
-                dangerouslySetInnerHTML={{ __html: svg }}
-              />
-            ) : (
-              <Empty>{t("commit.renderError")}</Empty>
-            ))}
-          {mode === "diff" &&
-            (changed ? (
-              <Diff path={path} before={before} after={after} />
-            ) : (
-              <Empty>{t("commit.noChange")}</Empty>
-            ))}
-          {mode === "text" && (
-            <pre className="overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-3 font-mono text-xs">
-              {after || "(empty)"}
-            </pre>
-          )}
+            {mode === "preview" &&
+              (svg ? (
+                <div
+                  className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+                  dangerouslySetInnerHTML={{ __html: svg }}
+                />
+              ) : (
+                <Empty>{t("commit.renderError")}</Empty>
+              ))}
+            {mode === "diff" &&
+              (changed ? (
+                <Diff path={path} before={before} after={after} />
+              ) : (
+                <Empty>{t("commit.noChange")}</Empty>
+              ))}
+            {mode === "text" && (
+              <pre className="overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-3 font-mono text-xs">
+                {after || "(empty)"}
+              </pre>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </Modal>
   );
 }
 
 export function PrPanel({
-  st,
-  isManager,
-  reviewPR,
-  onReview,
+  projectId,
+  state,
+  isOwner,
   onMerge,
   onClose,
-  onComment,
 }: {
-  st: WorkflowState;
-  isManager: boolean;
-  reviewPR: string | null;
-  onReview: (id: string) => void;
-  onMerge: (id: string) => void;
-  onClose: (id: string) => void;
-  onComment: (id: string, text: string) => void;
+  projectId: string;
+  state: ProjectState;
+  isOwner: boolean;
+  onMerge: (pr: PullState) => void;
+  onClose: (pr: PullState) => void;
 }) {
   const { t } = useT();
-  const reviewing = reviewPR ? (st.prs.find((p) => p.id === reviewPR) ?? null) : null;
-  if (st.prs.length === 0) return <Empty>{t("pr.empty")}</Empty>;
+  if (state.pulls.length === 0) return <Empty>{t("pr.empty")}</Empty>;
   return (
-    <>
-      <ul className="space-y-3">
-        {st.prs.map((pr) => {
-          const headFiles = tipFiles(st.branches[pr.head]);
-          const baseFiles = tipFiles(st.branches[pr.base]);
-          const changed = Object.keys({ ...headFiles, ...baseFiles }).filter(
-            (p) => (headFiles[p] ?? "") !== (baseFiles[p] ?? ""),
-          );
-          const canClose = pr.status === "open" && (isManager || st.role === pr.author);
-          const badge =
-            pr.status === "merged"
-              ? "bg-purple-100 text-purple-700"
-              : pr.status === "closed"
-                ? "bg-neutral-200 text-neutral-600"
-                : "bg-amber-100 text-amber-700";
-          return (
-            <li key={pr.id} className="rounded-md border border-neutral-200 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate font-medium">{pr.title}</div>
-                  <div className="text-xs text-neutral-500">
-                    {pr.head} → {pr.base} · opened by {pr.author}
-                  </div>
-                </div>
-                <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${badge}`}>
-                  {pr.status}
-                </span>
-              </div>
+    <ul className="space-y-3">
+      {state.pulls.map((pr) => (
+        <PrItem
+          key={pr.number}
+          projectId={projectId}
+          pr={pr}
+          me={state.me.githubLogin}
+          isOwner={isOwner}
+          onMerge={onMerge}
+          onClose={onClose}
+        />
+      ))}
+    </ul>
+  );
+}
 
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => onReview(pr.id)}
-                  className="text-xs text-indigo-600 hover:underline"
-                >
-                  {reviewPR === pr.id
-                    ? t("pr.hideFiles")
-                    : changed.length === 1
-                      ? t("pr.reviewFile")
-                      : t("pr.reviewFiles", { n: String(changed.length) })}
-                </button>
-                {pr.status === "open" && (
-                  <div className="ml-auto flex items-center gap-2">
-                    {canClose && (
-                      <button
-                        onClick={() => onClose(pr.id)}
-                        className="rounded border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-50"
-                      >
-                        {t("pr.close")}
-                      </button>
-                    )}
-                    {isManager ? (
-                      <button
-                        onClick={() => onMerge(pr.id)}
-                        className="rounded bg-purple-600 px-3 py-1 text-xs font-medium text-white hover:bg-purple-500"
-                      >
-                        {t("pr.mergeTo", { base: pr.base })}
-                      </button>
-                    ) : (
-                      <span className="text-xs text-neutral-400">{t("pr.managerMerges")}</span>
-                    )}
-                  </div>
-                )}
-              </div>
+function PrItem({
+  projectId,
+  pr,
+  me,
+  isOwner,
+  onMerge,
+  onClose,
+}: {
+  projectId: string;
+  pr: PullState;
+  me: string;
+  isOwner: boolean;
+  onMerge: (pr: PullState) => void;
+  onClose: (pr: PullState) => void;
+}) {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState<{ comments: PullComment[]; files: CompareFile[] } | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [showFiles, setShowFiles] = useState(false);
 
-              <PrComments pr={pr} role={st.role} onComment={onComment} />
-            </li>
-          );
-        })}
-      </ul>
-      {reviewing && (
+  const load = useCallback(async () => {
+    try {
+      const d = await getPR(projectId, pr.number);
+      setDetail({ comments: d.comments, files: d.files });
+      setError(null);
+    } catch (e) {
+      setError(describeError(e, t));
+    }
+  }, [projectId, pr.number]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (open && !detail) void load();
+  }, [open, detail, load]);
+
+  const canClose = pr.state === "open" && (isOwner || pr.author === me);
+  const badge = pr.merged
+    ? "bg-purple-100 text-purple-700"
+    : pr.state === "closed"
+      ? "bg-neutral-200 text-neutral-600"
+      : "bg-amber-100 text-amber-700";
+  const badgeLabel = pr.merged ? "merged" : pr.state;
+
+  return (
+    <li className="rounded-md border border-neutral-200 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate font-medium">
+            <a href={pr.htmlUrl} target="_blank" rel="noreferrer" className="hover:underline">
+              #{pr.number} {pr.title}
+            </a>
+          </div>
+          <div className="text-xs text-neutral-500">
+            {pr.head} → {pr.base} · {t("pr.openedBy", { login: pr.author })}
+            {pr.createdAt ? ` · ${new Date(pr.createdAt).toLocaleString()}` : ""}
+          </div>
+        </div>
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${badge}`}>{badgeLabel}</span>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="text-xs text-indigo-600 hover:underline"
+        >
+          {open ? t("pr.hide") : t("pr.review")}
+        </button>
+        {open && detail && (
+          <button
+            onClick={() => setShowFiles(true)}
+            className="text-xs text-indigo-600 hover:underline"
+          >
+            {detail.files.length === 1
+              ? t("pr.reviewFile")
+              : t("pr.reviewFiles", { n: String(detail.files.length) })}
+          </button>
+        )}
+        {pr.state === "open" && (
+          <div className="ml-auto flex items-center gap-2">
+            {canClose && (
+              <button
+                onClick={() => onClose(pr)}
+                className="rounded border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-50"
+              >
+                {t("pr.close")}
+              </button>
+            )}
+            {isOwner ? (
+              <button
+                onClick={() => onMerge(pr)}
+                className="rounded bg-purple-600 px-3 py-1 text-xs font-medium text-white hover:bg-purple-500"
+              >
+                {t("pr.mergeTo", { base: pr.base })}
+              </button>
+            ) : (
+              <span className="text-xs text-neutral-400">{t("pr.ownerMerges")}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-3 border-t border-neutral-100 pt-2">
+          {error ? (
+            <p className="text-xs text-red-600">{error}</p>
+          ) : !detail ? (
+            <p className="text-xs text-neutral-400">{t("loading")}</p>
+          ) : (
+            <PrComments
+              projectId={projectId}
+              pr={pr}
+              me={me}
+              comments={detail.comments}
+              onPosted={(c) => setDetail({ ...detail, comments: [...detail.comments, c] })}
+            />
+          )}
+        </div>
+      )}
+
+      {showFiles && detail && (
         <CommitDetailModal
-          commit={{
-            id: reviewing.id,
-            message: `${reviewing.title}  (${reviewing.head} → ${reviewing.base})`,
-            author: reviewing.author,
-            ts: reviewing.ts,
-            files: tipFiles(st.branches[reviewing.head]),
-          }}
-          parent={{
-            id: `${reviewing.id}_base`,
-            message: "",
-            author: reviewing.author,
-            ts: reviewing.ts,
-            files: tipFiles(st.branches[reviewing.base]),
-          }}
-          onClose={() => onReview(reviewing.id)}
+          projectId={projectId}
+          title={`#${pr.number} ${pr.title}  (${pr.head} → ${pr.base})`}
+          headRef={pr.state === "open" ? pr.head : pr.headSha || pr.head}
+          baseRef={pr.state === "open" ? pr.base : pr.baseSha || pr.base}
+          preloaded={detail.files}
+          onClose={() => setShowFiles(false)}
         />
       )}
-    </>
+    </li>
   );
 }
 
 function PrComments({
+  projectId,
   pr,
-  role,
-  onComment,
+  me,
+  comments,
+  onPosted,
 }: {
-  pr: WorkflowState["prs"][number];
-  role: string;
-  onComment: (id: string, text: string) => void;
+  projectId: string;
+  pr: PullState;
+  me: string;
+  comments: PullComment[];
+  onPosted: (c: PullComment) => void;
 }) {
   const { t } = useT();
   const [text, setText] = useState("");
-  const comments = pr.comments ?? [];
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function post() {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { comment } = await addPRComment(projectId, pr.number, text);
+      onPosted(comment);
+      setText("");
+    } catch (e) {
+      setError(describeError(e, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="mt-3 border-t border-neutral-100 pt-2">
+    <div>
       {comments.length > 0 && (
         <ul className="mb-2 space-y-1.5">
-          {comments.map((c, i) => (
-            <li key={i} className="rounded-md bg-neutral-50 px-2 py-1.5 text-sm">
+          {comments.map((c) => (
+            <li key={c.id} className="rounded-md bg-neutral-50 px-2 py-1.5 text-sm">
               <span className="mr-2 text-xs font-medium text-neutral-500">{c.author}</span>
-              {c.text}
+              <span className="whitespace-pre-wrap">{c.body}</span>
             </li>
           ))}
         </ul>
       )}
+      {error && <p className="mb-1 text-xs text-red-600">{error}</p>}
       <div className="flex items-center gap-2">
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && text.trim()) {
-              onComment(pr.id, text);
-              setText("");
-            }
+            if (e.key === "Enter") void post();
           }}
-          placeholder={t("pr.commentAs", { role })}
+          placeholder={t("pr.commentAs", { login: me })}
           className="flex-1 rounded-md border border-neutral-300 px-2 py-1 text-sm"
         />
         <button
-          onClick={() => {
-            if (text.trim()) {
-              onComment(pr.id, text);
-              setText("");
-            }
-          }}
-          disabled={!text.trim()}
+          onClick={() => void post()}
+          disabled={!text.trim() || busy}
           className="rounded-md bg-neutral-800 px-3 py-1 text-xs font-medium text-white disabled:opacity-40"
         >
           {t("pr.comment")}
@@ -645,104 +885,129 @@ function Diff({ path, before, after }: { path: string; before: string; after: st
 }
 
 export function VersionPanel({
-  st,
-  isManager,
+  projectId,
+  state,
+  isOwner,
   onPromote,
   onPublish,
   onUnpublish,
 }: {
-  st: WorkflowState;
-  isManager: boolean;
-  onPromote: (id: string) => void;
-  onPublish: (id: string, shareMode: "svg_only" | "svg_and_dsl") => void;
-  onUnpublish: (id: string) => void;
+  projectId: string;
+  state: ProjectState;
+  isOwner: boolean;
+  onPromote: (v: VersionState) => void;
+  onPublish: (v: VersionState, shareMode: "svg_only" | "svg_and_dsl") => void;
+  onUnpublish: (v: VersionState) => void;
 }) {
   const { t } = useT();
   const [dslEnabled, setDslEnabled] = useState<Record<string, boolean>>({});
-  if (st.versions.length === 0) return <Empty>{t("version.empty")}</Empty>;
+  if (state.versions.length === 0) return <Empty>{t("version.empty")}</Empty>;
   return (
     <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {st.versions.map((v) => (
-        <li key={v.id} className="rounded-md border border-neutral-200 p-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="truncate font-medium">{v.name}</div>
-              {v.note && <div className="truncate text-xs text-neutral-500">{v.note}</div>}
-              <div className="text-xs text-neutral-400">{new Date(v.ts).toLocaleString()}</div>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              {!v.promoted ? (
-                isManager ? (
-                  <button
-                    onClick={() => onPromote(v.id)}
-                    className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500"
+      {state.versions.map((v) => {
+        const first = v.files[0]?.path;
+        return (
+          <li key={v.id} className="rounded-md border border-neutral-200 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 truncate font-medium">
+                  <Tag size={13} className="shrink-0 text-indigo-500" />
+                  {v.name}
+                </div>
+                {v.note && <div className="truncate text-xs text-neutral-500">{v.note}</div>}
+                <div className="text-xs text-neutral-400">
+                  {new Date(v.createdAt).toLocaleString()}
+                  {v.createdBy ? ` · ${v.createdBy}` : ""} ·{" "}
+                  <a
+                    href={`${state.project.htmlUrl}/commit/${v.commitSha}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono hover:underline"
                   >
-                    {t("version.promoteTo")}
-                  </button>
-                ) : (
-                  <span className="text-xs text-neutral-400">{t("version.managerPromotes")}</span>
-                )
-              ) : (
-                <>
-                  <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
-                    {t("version.onMain")}
-                  </span>
-                  {v.published ? (
-                    <>
-                      <a
-                        href={`/p/${v.publicSlug}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-mono text-xs text-indigo-600 underline"
-                      >
-                        /p/{v.publicSlug}
-                      </a>
-                      {isManager && (
-                        <button
-                          onClick={() => onUnpublish(v.id)}
-                          className="text-xs text-neutral-400 hover:text-neutral-600"
-                        >
-                          {t("version.unpublish")}
-                        </button>
-                      )}
-                    </>
-                  ) : isManager ? (
-                    <div className="flex flex-col items-end gap-1.5">
-                      <label className="flex cursor-pointer items-center gap-1.5 text-xs text-neutral-500">
-                        <input
-                          type="checkbox"
-                          className="h-3 w-3"
-                          checked={dslEnabled[v.id] ?? false}
-                          onChange={(e) =>
-                            setDslEnabled((prev) => ({ ...prev, [v.id]: e.target.checked }))
-                          }
-                        />
-                        {t("version.includeDsl")}
-                      </label>
-                      <button
-                        onClick={() =>
-                          onPublish(v.id, dslEnabled[v.id] ? "svg_and_dsl" : "svg_only")
-                        }
-                        className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
-                      >
-                        {t("version.publish")}
-                      </button>
-                    </div>
+                    {short(v.commitSha)}
+                  </a>
+                  {v.tag ? ` · ${v.tag}` : ""} · {t("version.files", { n: String(v.files.length) })}
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                {!v.promoted ? (
+                  isOwner ? (
+                    <button
+                      onClick={() => onPromote(v)}
+                      className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500"
+                    >
+                      {t("version.promoteTo")}
+                    </button>
                   ) : (
-                    <span className="text-xs text-neutral-400">{t("version.notPublished")}</span>
-                  )}
-                </>
-              )}
+                    <span className="text-xs text-neutral-400">{t("version.ownerPromotes")}</span>
+                  )
+                ) : (
+                  <>
+                    <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
+                      {t("version.onMain")}
+                    </span>
+                    {v.public && v.publicSlug ? (
+                      <>
+                        <a
+                          href={`/p/${v.publicSlug}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono text-xs text-indigo-600 underline"
+                        >
+                          /p/{v.publicSlug}
+                        </a>
+                        {isOwner && (
+                          <button
+                            onClick={() => onUnpublish(v)}
+                            className="text-xs text-neutral-400 hover:text-neutral-600"
+                          >
+                            {t("version.unpublish")}
+                          </button>
+                        )}
+                      </>
+                    ) : isOwner ? (
+                      <div className="flex flex-col items-end gap-1.5">
+                        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-neutral-500">
+                          <input
+                            type="checkbox"
+                            className="h-3 w-3"
+                            checked={dslEnabled[v.id] ?? false}
+                            onChange={(e) =>
+                              setDslEnabled((prev) => ({ ...prev, [v.id]: e.target.checked }))
+                            }
+                          />
+                          {t("version.includeDsl")}
+                        </label>
+                        <button
+                          onClick={() =>
+                            onPublish(v, dslEnabled[v.id] ? "svg_and_dsl" : "svg_only")
+                          }
+                          className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
+                        >
+                          {t("version.publish")}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-neutral-400">{t("version.notPublished")}</span>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-          {v.svg && (
-            <div
-              className="mt-2 max-h-48 overflow-auto rounded border border-neutral-100 bg-white p-1 [&_svg]:h-auto [&_svg]:max-w-full"
-              dangerouslySetInnerHTML={{ __html: v.svg }}
-            />
-          )}
-        </li>
-      ))}
+            {first && (
+              <div className="mt-2 max-h-48 overflow-auto rounded border border-neutral-100 bg-white p-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={versionSvgUrl(projectId, v.id, first)}
+                  alt={first}
+                  className="mx-auto h-auto max-w-full"
+                  loading="lazy"
+                />
+              </div>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

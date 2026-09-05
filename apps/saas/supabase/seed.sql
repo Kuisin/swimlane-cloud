@@ -1,0 +1,2 @@
+-- Local development seed. Intentionally empty: projects are discovered from
+-- GitHub, and every other row is created by signing in and opening a repo.

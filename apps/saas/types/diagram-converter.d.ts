@@ -35,69 +35,6 @@ declare module "@swimlane-cloud/diagram-converter/themes" {
   export const THEMES: Record<string, unknown>;
 }
 
-// The shared editor package is built concurrently and may not ship types yet.
-declare module "@swimlane-cloud/editor" {
-  import type { ComponentType } from "react";
-  // Storage-agnostic host contract (plan §A4); kept loose to match the editor.
-  export const DslEditor: ComponentType<{
-    host: unknown;
-    projectId?: string;
-    [key: string]: unknown;
-  }>;
-  // GUI-model helpers used by the mobile edit modal.
-  export interface GuiRow {
-    kind: string;
-    empty?: boolean;
-    role?: string | null;
-    text?: string;
-    name?: string;
-    description?: string;
-    remark?: string;
-    arrowLine?: string;
-    blockRef?: string | null;
-    mergeId?: string;
-    props?: string[];
-    [key: string]: unknown;
-  }
-  export interface GuiModel {
-    rows: GuiRow[];
-    lanes: Array<{ id: string; label?: string }>;
-    blocks: Record<string, { id: string; label?: string }>;
-    props: Record<string, { id: string; label?: string }>;
-    [key: string]: unknown;
-  }
-  export function parseGuiModel(src: string): GuiModel;
-  export function applyModelEdit(
-    src: string,
-    edit: (draft: { rows: GuiRow[]; [k: string]: unknown }) => void,
-  ): string;
-  export function extractPartsCode(
-    src: string,
-    section?: "block" | "prop" | "both",
-    onlyId?: string | null,
-  ): string;
-  export interface FolderTreeNode {
-    name: string;
-    path: string;
-    folders: FolderTreeNode[];
-    files: { id: string; name: string }[];
-  }
-  export function buildFolderTree(files: { id: string; name?: string }[]): FolderTreeNode;
-  export function findAdjacentStepIndex(
-    rows: GuiRow[],
-    rowIndex: number,
-    direction: "up" | "down",
-  ): number;
-  export function moveRow(
-    rows: GuiRow[],
-    from: number,
-    to: number,
-  ): { rows: GuiRow[]; index: number };
-  export function sameReorderFrame(rows: GuiRow[], a: number, b: number): boolean;
-  export function getFrameStepIndices(rows: GuiRow[], rowIndex: number): number[];
-  export function serializeDSL(model: { rows: GuiRow[]; [key: string]: unknown }): string;
-}
-
 declare module "@swimlane-cloud/editor/styles.css";
 
 // Mobile-view package (separate, JSX, no bundled types).

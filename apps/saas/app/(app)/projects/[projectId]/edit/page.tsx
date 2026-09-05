@@ -1,30 +1,33 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, GitPullRequest, Lock, Monitor, Plus, Smartphone } from "lucide-react";
+import { Check, GitPullRequest, Lock, Monitor, Plus, RefreshCw, Smartphone } from "lucide-react";
 import { DslEditor } from "@swimlane-cloud/editor";
 import "@swimlane-cloud/editor/styles.css";
+import { createSaasHost } from "@/lib/saas-host";
 import {
-  setActiveBranch,
-  startEdit,
-  checkpoint,
-  openPR,
-  isBranchDirty,
-  createWorkflowHost,
+  branchOf,
   canEditBranch,
-  isLocked,
+  checkpoint,
+  defaultBranch,
   editLockReason,
-  getWorking,
-} from "@/lib/demo-workflow";
+  getSnapshot,
+  isLocked,
+  openPR,
+  saveDrafts,
+  startEdit,
+} from "@/lib/workflow";
 import {
-  ProjectNav,
+  ProjectPage,
   Action,
   Badge,
   MobileView,
   MobilePrompt,
+  describeError,
   isMobileDevice,
   useProject,
+  type Files,
 } from "../_components";
 import { useT } from "@/i18n";
 
@@ -44,32 +47,54 @@ export default function EditPage() {
 }
 
 function EditPageInner() {
-  const { projectId, projectName, st, setSt, setRole, reset } = useProject();
+  const { projectId, state, refresh, error } = useProject();
   const { t, lang } = useT();
   const router = useRouter();
   const sp = useSearchParams();
 
+  const [branchParam, setBranchParam] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const [mobile, setMobile] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
   const [mFile, setMFile] = useState<string | undefined>(undefined);
   const [mStep, setMStep] = useState<number | null>(null);
+  const [mobileFiles, setMobileFiles] = useState<Files | null>(null);
+  const [localDirty, setLocalDirty] = useState(false);
+  const [headMoved, setHeadMoved] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const restored = useRef(false);
   // Gates the editor/mobile content until URL state is restored, so the editor
   // doesn't auto-open the first file before `?file=` is applied.
   const [ready, setReady] = useState(false);
 
-  const role = st?.role ?? "member";
-  const branch = st && st.branches[st.activeBranch] ? st.activeBranch : "test";
+  const branch = state ? defaultBranch(state, branchParam) : "test";
+  const branchState = state ? branchOf(state, branch) : undefined;
+  const role = state?.me.role ?? "viewer";
   const onMain = branch === "main";
-  const readOnly = st ? !canEditBranch(st, branch, role) : true;
+  const editable = state ? canEditBranch(state, branch) : false;
+  const readOnly = !editable;
+  const versioning = role === "owner" && branch === "test";
+
   const host = useMemo(
-    () => createWorkflowHost(projectId, branch, readOnly),
-    [projectId, branch, readOnly, reload],
+    () =>
+      createSaasHost({
+        projectId,
+        branch,
+        editable,
+        versioning,
+        onHeadChange: (sha) => setHeadMoved((prev) => prev ?? sha),
+        onDraftSaved: () => setLocalDirty(true),
+        onCheckpoint: () => {
+          setLocalDirty(false);
+          void refresh();
+        },
+      }),
+    [projectId, branch, editable, versioning, reload], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   useEffect(() => {
-    if (!st || restored.current) return;
+    if (!state || restored.current) return;
     restored.current = true;
     const v = sp.get("view");
     if (v === "mobile") setMobile(true);
@@ -82,7 +107,7 @@ function EditPageInner() {
       }
     }
     const b = sp.get("branch");
-    if (b && st.branches[b] && b !== st.activeBranch) setSt(setActiveBranch(projectId, st, b));
+    if (b) setBranchParam(b);
     const f = sp.get("file");
     if (f) setMFile(f);
     const s = sp.get("step");
@@ -91,7 +116,7 @@ function EditPageInner() {
       if (!Number.isNaN(n)) setMStep(n);
     }
     setReady(true);
-  }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!restored.current) return;
@@ -105,7 +130,14 @@ function EditPageInner() {
     router.replace(`?${params.toString()}`, { scroll: false });
   }, [branch, mobile, mFile, mStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dirty = st ? isBranchDirty(projectId, st, branch) : false;
+  // Switching branch resets per-branch UI state.
+  useEffect(() => {
+    setHeadMoved(null);
+    setLocalDirty(false);
+    setMobileFiles(null);
+  }, [branch]);
+
+  const dirty = localDirty || Boolean(branchState?.dirty);
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (!dirty) return;
@@ -115,6 +147,20 @@ function EditPageInner() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
+
+  // Mobile view edits a full snapshot (committed text + drafts).
+  const loadMobile = useCallback(async () => {
+    try {
+      const snap = await getSnapshot(projectId, branch, true);
+      setMobileFiles(snap.files);
+    } catch (e) {
+      setNotice(describeError(e, t));
+    }
+  }, [projectId, branch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (mobile && ready && !mobileFiles) void loadMobile();
+  }, [mobile, ready, mobileFiles, loadMobile]);
 
   const chooseMobile = () => {
     localStorage.setItem(VIEW_PREF, "mobile");
@@ -134,38 +180,59 @@ function EditPageInner() {
     });
   };
 
-  if (!st) return <div className="p-6 text-sm text-neutral-500">{t("loading")}</div>;
-
-  const onTmp = branch.startsWith("tmp-");
-  const locked = isLocked(st, branch);
-  const lockReason = editLockReason(st, branch, role);
-  const branchNames = Object.keys(st.branches).sort((a, b) => {
-    const ord = (n: string) => (n === "main" ? 0 : n === "test" ? 1 : 2);
-    return ord(a) - ord(b) || a.localeCompare(b);
-  });
+  const run = async (key: string, fn: () => Promise<void>) => {
+    setBusy(key);
+    setNotice(null);
+    try {
+      await fn();
+    } catch (e) {
+      setNotice(describeError(e, t));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const doStartEdit = () => {
     const name = window.prompt(t("edit.prompt.startEdit"), t("edit.prompt.startEditDefault"));
     if (!name) return;
-    setSt(startEdit(projectId, st, name));
-    setReload((r) => r + 1);
+    void run("start", async () => {
+      const res = await startEdit(projectId, name);
+      await refresh();
+      setBranchParam(res.branch);
+      setReload((r) => r + 1);
+    });
   };
+
   const doCheckpoint = () => {
     const msg = window.prompt(t("edit.prompt.checkpoint"), t("edit.prompt.checkpointDefault"));
     if (msg === null) return;
-    setSt(checkpoint(projectId, st, branch, msg));
+    void run("checkpoint", async () => {
+      await checkpoint(projectId, branch, msg, undefined, branchState?.sha);
+      setLocalDirty(false);
+      setHeadMoved(null);
+      await refresh();
+      setReload((r) => r + 1);
+    });
   };
-  const prBase = onTmp ? "test" : branch === "test" ? "main" : null;
-  const canOpenPR = prBase !== null && !locked;
+
+  const onTmp = branch.startsWith("tmp-");
+  const locked = state ? isLocked(state, branch) : false;
+  const lockReasonKey = state ? editLockReason(state, branch) : null;
+  const lockReason = lockReasonKey ? t(`edit.lock.${lockReasonKey}`) : null;
+  const canOpenPR = onTmp && !locked && role !== "viewer";
+
   const doOpenPR = () => {
-    if (!prBase) return;
+    if (!state || !canOpenPR) return;
     const title = window.prompt(
       t("edit.prompt.prTitle"),
-      t("edit.prompt.prTitleDefault", { branch, prBase }),
+      t("edit.prompt.prTitleDefault", { branch, prBase: "test" }),
     );
     if (title === null) return;
-    setSt(openPR(projectId, st, branch, title));
-    window.alert(t("edit.prompt.prOpened", { branch, base: prBase }));
+    void run("pr", async () => {
+      const res = await openPR(projectId, state, branch, title);
+      await refresh();
+      window.alert(t("edit.prompt.prOpened", { branch, base: res.base }));
+    });
   };
 
   const statusLabel = onMain
@@ -173,122 +240,158 @@ function EditPageInner() {
     : locked
       ? t("edit.status.locked")
       : branch === "test"
-        ? role === "manager"
+        ? editable
           ? t("edit.status.integration")
           : t("edit.status.integrationReadonly")
-        : t("edit.status.editBranch");
+        : role === "viewer"
+          ? t("edit.status.viewer")
+          : t("edit.status.editBranch");
 
   return (
-    <div className="flex h-screen flex-col">
-      <ProjectNav
-        projectId={projectId}
-        projectName={projectName}
-        active="edit"
-        role={st.role}
-        onRole={setRole}
-        onReset={reset}
-      />
-
-      {/* One compact row that scrolls horizontally on phones (wrapping stacked the
-          buttons three rows tall above the mobile cards); wraps normally on sm+. */}
-      <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-sm sm:flex-wrap sm:overflow-x-visible [&>*]:shrink-0">
-        <select
-          value={branch}
-          onChange={(e) => setSt(setActiveBranch(projectId, st, e.target.value))}
-          className="rounded-md border border-neutral-300 bg-white px-2 py-1"
-        >
-          {branchNames.map((b) => (
-            <option key={b} value={b}>
-              {b}
-              {isLocked(st, b) ? " 🔒" : ""}
-            </option>
-          ))}
-        </select>
-        <Badge>{statusLabel}</Badge>
-        <div className="mx-1 h-5 w-px bg-neutral-300" />
-        <Action onClick={doStartEdit}>
-          <Plus size={14} /> {t("edit.startEdit")}
-        </Action>
-        <Action onClick={doCheckpoint} disabled={readOnly} title={lockReason ?? undefined}>
-          <Check size={14} /> {t("edit.checkpoint")}
-        </Action>
-        <Action
-          onClick={doOpenPR}
-          disabled={!canOpenPR}
-          title={
-            prBase === null
-              ? t("edit.prompt.openPrHint")
-              : locked
-                ? t("edit.prompt.prAlreadyOpen")
-                : undefined
-          }
-        >
-          <GitPullRequest size={14} />{" "}
-          {prBase ? t("edit.openPrTo", { base: prBase }) : t("edit.openPr")}
-        </Action>
-        <Action onClick={toggleView}>
-          {mobile ? (
-            <>
-              <Monitor size={14} /> {t("edit.editor")}
-            </>
-          ) : (
-            <>
-              <Smartphone size={14} /> {t("edit.mobile")}
-            </>
-          )}
-        </Action>
-        <span className="ml-auto inline-flex items-center gap-2 text-xs text-neutral-500">
-          {dirty && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">
-              {t("edit.unsaved")}
-            </span>
-          )}
-          <b>{role === "manager" ? t("nav.manager") : t("nav.member")}</b>
-        </span>
-      </div>
-
-      {readOnly && (
-        <div className="flex shrink-0 items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-          <span className="inline-flex items-center gap-1.5">
-            <Lock size={14} /> {t("edit.readonly", { reason: lockReason ?? "" })}
-          </span>
-          {!onMain && !locked && (
-            <button
-              onClick={doStartEdit}
-              className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-500"
+    <ProjectPage active="edit" projectId={projectId} state={state} error={error}>
+      {state && (
+        <>
+          {/* One compact row that scrolls horizontally on phones; wraps normally on sm+. */}
+          <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-sm sm:flex-wrap sm:overflow-x-visible [&>*]:shrink-0">
+            <select
+              value={branch}
+              onChange={(e) => setBranchParam(e.target.value)}
+              className="rounded-md border border-neutral-300 bg-white px-2 py-1"
             >
-              <Plus size={13} /> {t("edit.startEditBranch")}
-            </button>
+              {state.branches.map((b) => (
+                <option key={b.name} value={b.name}>
+                  {b.name}
+                  {b.locked ? " 🔒" : ""}
+                  {b.dirty ? " •" : ""}
+                </option>
+              ))}
+            </select>
+            <Badge>{statusLabel}</Badge>
+            <div className="mx-1 h-5 w-px bg-neutral-300" />
+            <Action onClick={doStartEdit} disabled={role === "viewer" || busy !== null}>
+              <Plus size={14} /> {t("edit.startEdit")}
+            </Action>
+            <Action
+              onClick={doCheckpoint}
+              disabled={readOnly || busy !== null}
+              title={lockReason ?? undefined}
+            >
+              <Check size={14} /> {t("edit.checkpoint")}
+            </Action>
+            <Action
+              onClick={doOpenPR}
+              disabled={!canOpenPR || busy !== null}
+              title={
+                !onTmp
+                  ? t("edit.prompt.openPrHint")
+                  : locked
+                    ? t("edit.prompt.prAlreadyOpen")
+                    : undefined
+              }
+            >
+              <GitPullRequest size={14} /> {t("edit.openPrTo", { base: "test" })}
+            </Action>
+            <Action onClick={toggleView}>
+              {mobile ? (
+                <>
+                  <Monitor size={14} /> {t("edit.editor")}
+                </>
+              ) : (
+                <>
+                  <Smartphone size={14} /> {t("edit.mobile")}
+                </>
+              )}
+            </Action>
+            <span className="ml-auto inline-flex items-center gap-2 text-xs text-neutral-500">
+              {busy && <RefreshCw size={12} className="animate-spin" />}
+              {dirty && (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">
+                  {t("edit.unsaved")}
+                </span>
+              )}
+              <b>{t(`nav.role.${role}`)}</b>
+            </span>
+          </div>
+
+          {notice && (
+            <div className="flex shrink-0 items-center justify-between border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              <span>{notice}</span>
+              <button onClick={() => setNotice(null)} className="text-xs underline">
+                {t("close")}
+              </button>
+            </div>
           )}
-        </div>
+
+          {headMoved && (
+            <div className="flex shrink-0 items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+              <span>{t("edit.branchMoved")}</span>
+              <button
+                onClick={() => {
+                  setHeadMoved(null);
+                  void refresh();
+                  setReload((r) => r + 1);
+                }}
+                className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-500"
+              >
+                <RefreshCw size={13} /> {t("edit.reload")}
+              </button>
+            </div>
+          )}
+
+          {readOnly && (
+            <div className="flex shrink-0 items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+              <span className="inline-flex items-center gap-1.5">
+                <Lock size={14} /> {t("edit.readonly", { reason: lockReason ?? "" })}
+              </span>
+              {!onMain && !locked && role !== "viewer" && (
+                <button
+                  onClick={doStartEdit}
+                  className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-500"
+                >
+                  <Plus size={13} /> {t("edit.startEditBranch")}
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="min-h-0 flex-1">
+            {!ready ? null : mobile ? (
+              mobileFiles ? (
+                <MobileView
+                  files={mobileFiles}
+                  editable={!readOnly}
+                  onSave={(p, d) => {
+                    setMobileFiles((f) => ({ ...(f ?? {}), [p]: d }));
+                    void saveDrafts(projectId, branch, [{ id: p, dsl: d }])
+                      .then(() => setLocalDirty(true))
+                      .catch((e) => setNotice(describeError(e, t)));
+                  }}
+                  path={mFile}
+                  onPath={setMFile}
+                  editStep={mStep}
+                  onEditStep={setMStep}
+                />
+              ) : (
+                <LoadingFallback />
+              )
+            ) : (
+              <DslEditor
+                key={`${branch}:${reload}`}
+                host={host}
+                projectId={projectId}
+                options={{
+                  lang,
+                  showLanguageToggle: false,
+                  initialDocumentId: mFile,
+                  onActiveDocument: setMFile,
+                }}
+              />
+            )}
+          </div>
+
+          {showPrompt && <MobilePrompt onMobile={chooseMobile} onStay={stayEditor} />}
+        </>
       )}
-
-      <div className="min-h-0 flex-1">
-        {!ready ? null : mobile ? (
-          <MobileView
-            files={getWorking(projectId, branch)}
-            editable={!readOnly}
-            onSave={(p, d) => host.writeDraft(p, d)}
-            path={mFile}
-            onPath={setMFile}
-            editStep={mStep}
-            onEditStep={setMStep}
-          />
-        ) : (
-          <DslEditor
-            key={`${branch}:${reload}`}
-            host={host}
-            options={{
-              lang,
-              showLanguageToggle: false,
-              initialDocumentId: mFile,
-              onActiveDocument: setMFile,
-            }}
-          />
-        )}
-      </div>
-
-      {showPrompt && <MobilePrompt onMobile={chooseMobile} onStay={stayEditor} />}
-    </div>
+    </ProjectPage>
   );
 }

@@ -39,6 +39,12 @@ export interface CommitFilesOptions {
   message: string;
   files: FileWrite[];
   /**
+   * Paths to remove in the same commit. A tree entry with `sha: null` deletes
+   * the path — the only way to express a removal against `base_tree`, since an
+   * omitted path is inherited rather than dropped.
+   */
+  deletions?: string[];
+  /**
    * Refuse the write unless the branch still points here. Omit only when the
    * caller genuinely does not care what it is overwriting.
    */
@@ -98,8 +104,8 @@ export function createWriteApi(rest: RestClient, repo: RepoRef) {
      * domain model calls for.
      */
     async commitFiles(options: CommitFilesOptions): Promise<CommitResult> {
-      const { branch, message, files, expectedHeadSha, author } = options;
-      if (files.length === 0) {
+      const { branch, message, files, deletions = [], expectedHeadSha, author } = options;
+      if (files.length === 0 && deletions.length === 0) {
         throw new Error("commitFiles called with no files");
       }
 
@@ -128,11 +134,18 @@ export function createWriteApi(rest: RestClient, repo: RepoRef) {
         }),
       );
 
+      const removals = deletions.map((path) => ({
+        path,
+        mode: FILE_MODE,
+        type: "blob" as const,
+        sha: null,
+      }));
+
       // `base_tree` makes this a delta: every path not listed is inherited.
       // Without it the commit would delete the rest of the repository.
       const tree = await rest.request<{ sha: string }>(`${base}/git/trees`, {
         method: "POST",
-        body: { base_tree: headCommit.tree.sha, tree: blobs },
+        body: { base_tree: headCommit.tree.sha, tree: [...blobs, ...removals] },
       });
 
       const commit = await rest.request<{ sha: string }>(`${base}/git/commits`, {

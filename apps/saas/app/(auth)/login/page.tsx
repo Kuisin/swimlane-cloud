@@ -1,65 +1,86 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useT } from "@/i18n";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { GitHubMark } from "@/components/github-mark";
+import { getBrowserSupabase } from "@/lib/supabase/client";
+import { useT, LanguageToggle } from "@/i18n";
 
-/**
- * Demo login. The UI is kept for show, but authentication is bypassed — any
- * input (or none) just proceeds to the dashboard. No Supabase call is made.
- */
+/** Same-origin paths only, so `next` cannot be turned into an open redirect. */
+function safeNext(value: string | null): string {
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
+}
+
 export default function LoginPage() {
-  const router = useRouter();
-  const { t } = useT();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
+  );
+}
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    router.push("/dashboard");
+function LoginInner() {
+  const { t } = useT();
+  const params = useSearchParams();
+  const next = safeNext(params.get("next"));
+  const errorCode = params.get("error");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function signIn() {
+    setBusy(true);
+    setError(null);
+    try {
+      const supabase = getBrowserSupabase();
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "github",
+        // `repo` is what lets the app read and commit diagrams in private
+        // repositories the user already has access to.
+        options: { scopes: "repo", redirectTo },
+      });
+      if (error) throw error;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
   }
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6">
       <div className="space-y-2 text-center">
         <h1 className="text-2xl font-semibold">{t("login.title")}</h1>
-        <p className="text-sm text-neutral-500">{t("login.demoHint")}</p>
+        <p className="text-sm text-neutral-500">{t("login.subtitle")}</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input
-          type="email"
-          autoComplete="email"
-          placeholder={t("login.emailPlaceholder")}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-        <input
-          type="password"
-          autoComplete="current-password"
-          placeholder={t("login.passwordPlaceholder")}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-        <button
-          type="submit"
-          className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-        >
-          {t("login.continue")}
-        </button>
-      </form>
+      {errorCode ? (
+        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {t(`login.error.${errorCode}`) === `login.error.${errorCode}`
+            ? t("login.error.auth")
+            : t(`login.error.${errorCode}`)}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      ) : null}
 
-      <p className="text-center text-sm text-neutral-500">
-        <button
-          type="button"
-          onClick={() => router.push("/dashboard")}
-          className="font-medium text-indigo-600 hover:underline"
-        >
-          {t("login.skip")}
-        </button>
-      </p>
+      <button
+        type="button"
+        onClick={signIn}
+        disabled={busy}
+        className="flex w-full items-center justify-center gap-2 rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-60"
+      >
+        <GitHubMark className="h-4 w-4" />
+        {busy ? t("login.redirecting") : t("login.github")}
+      </button>
+
+      <p className="text-center text-xs text-neutral-500">{t("login.scopeNote")}</p>
+
+      <div className="flex justify-center">
+        <LanguageToggle />
+      </div>
     </main>
   );
 }

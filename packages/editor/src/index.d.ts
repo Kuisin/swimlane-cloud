@@ -104,3 +104,62 @@ export declare const TEMPLATE_SECTIONS: readonly TemplateSection[];
 export declare function hostHas(host: EditorHost, method: string): boolean;
 export declare function hostSupportsVersioning(host: EditorHost): boolean;
 export declare function hostIsReadOnly(host: EditorHost): boolean;
+
+// ── Document model helpers (used by the SaaS mobile view and share pages) ────
+
+export interface GuiRow {
+  kind: string;
+  empty?: boolean;
+  role?: string | null;
+  text?: string;
+  name?: string;
+  description?: string;
+  remark?: string;
+  arrowLine?: string;
+  blockRef?: string | null;
+  mergeId?: string;
+  props?: string[];
+  [key: string]: unknown;
+}
+
+export interface GuiModel {
+  rows: GuiRow[];
+  lanes: Array<{ id: string; label?: string }>;
+  blocks: Record<string, { id: string; label?: string }>;
+  props: Record<string, { id: string; label?: string }>;
+  [key: string]: unknown;
+}
+
+export declare function parseGuiModel(src: string): GuiModel;
+export declare function applyModelEdit(
+  src: string,
+  edit: (draft: { rows: GuiRow[]; [k: string]: unknown }) => void,
+): string;
+export declare function serializeDSL(model: { rows: GuiRow[]; [key: string]: unknown }): string;
+export declare function formatDsl(src: string): string;
+export declare function extractPartsCode(
+  src: string,
+  section?: "block" | "prop" | "both",
+  onlyId?: string | null,
+): string;
+
+export interface FolderTreeNode {
+  name: string;
+  path: string;
+  folders: FolderTreeNode[];
+  files: { id: string; name: string }[];
+}
+export declare function buildFolderTree(files: { id: string; name?: string }[]): FolderTreeNode;
+
+export declare function findAdjacentStepIndex(
+  rows: GuiRow[],
+  rowIndex: number,
+  direction: "up" | "down",
+): number;
+export declare function moveRow(
+  rows: GuiRow[],
+  from: number,
+  to: number,
+): { rows: GuiRow[]; index: number };
+export declare function sameReorderFrame(rows: GuiRow[], a: number, b: number): boolean;
+export declare function getFrameStepIndices(rows: GuiRow[], rowIndex: number): number[];
