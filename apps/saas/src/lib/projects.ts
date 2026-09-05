@@ -55,9 +55,13 @@ export interface ProjectRow {
   ownerType?: "user" | "org";
   repo?: string;
   githubRepoId?: number;
-  // GitLab-backed projects only.
+  // GitLab-backed projects only. The instance's host is deliberately absent:
+  // `gitlab.ts` resolves it from the connection row it has to read anyway, and
+  // embedding it here would be ambiguous — `workspaces` and `gitlab_instances`
+  // reference each other (workspaces.gitlab_instance_id, and
+  // gitlab_instances.workspace_id), so PostgREST cannot pick a relationship
+  // and fails the whole query.
   gitlabInstanceId?: string;
-  gitlabInstanceHost?: string;
   gitlabProjectId?: number;
   gitlabProjectPath?: string;
   gitlabNamespacePath?: string;
@@ -78,7 +82,6 @@ interface ProjectRowQuery {
     gitlab_instance_id: string | null;
     gitlab_namespace_path: string | null;
     plan: ProjectRow["plan"];
-    gitlab_instances: { host: string } | null;
   } | null;
 }
 
@@ -89,7 +92,7 @@ export async function getProjectRow(projectId: string): Promise<ProjectRow> {
     .from("projects")
     .select(
       "id, name, workspace_id, github_repo, github_repo_id, gitlab_project_id, gitlab_project_path, " +
-        "workspaces(provider, github_owner, github_owner_type, gitlab_instance_id, gitlab_namespace_path, plan, gitlab_instances(host))",
+        "workspaces(provider, github_owner, github_owner_type, gitlab_instance_id, gitlab_namespace_path, plan)",
     )
     .eq("id", projectId)
     .maybeSingle();
@@ -107,11 +110,10 @@ export async function getProjectRow(projectId: string): Promise<ProjectRow> {
     plan: ws.plan,
   };
   if (ws.provider === "gitlab") {
-    if (!ws.gitlab_instances) throw new ApiError(500, "Workspace has no GitLab instance");
+    if (!ws.gitlab_instance_id) throw new ApiError(500, "Workspace has no GitLab instance");
     return {
       ...base,
-      gitlabInstanceId: ws.gitlab_instance_id ?? undefined,
-      gitlabInstanceHost: ws.gitlab_instances.host,
+      gitlabInstanceId: ws.gitlab_instance_id,
       gitlabProjectId: row.gitlab_project_id ?? undefined,
       gitlabProjectPath: row.gitlab_project_path ?? undefined,
       gitlabNamespacePath: ws.gitlab_namespace_path ?? undefined,
