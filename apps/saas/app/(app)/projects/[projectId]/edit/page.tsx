@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, GitPullRequest, Lock, Monitor, Plus, RefreshCw, Smartphone } from "lucide-react";
-import { DslEditor } from "@swimlane-cloud/editor";
+import { clearLocalMirror, DslEditor } from "@swimlane-cloud/editor";
 import "@swimlane-cloud/editor/styles.css";
 import { INTEGRATION_BRANCH, isEditBranch } from "@swimlane-cloud/github-client";
 import { createSaasHost } from "@/lib/saas-host";
@@ -61,6 +61,7 @@ function EditPageInner() {
   const [mStep, setMStep] = useState<number | null>(null);
   const [mobileFiles, setMobileFiles] = useState<Files | null>(null);
   const [localDirty, setLocalDirty] = useState(false);
+  const [autosavePending, setAutosavePending] = useState(false);
   const [headMoved, setHeadMoved] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -75,7 +76,7 @@ function EditPageInner() {
   const onMain = branch === "main";
   const editable = state ? canEditBranch(state, branch) : false;
   const readOnly = !editable;
-  const versioning = role === "owner" && branch === INTEGRATION_BRANCH;
+  const mirrorScope = `${projectId}:${branch}`;
 
   const host = useMemo(
     () =>
@@ -83,15 +84,15 @@ function EditPageInner() {
         projectId,
         branch,
         editable,
-        versioning,
         onHeadChange: (sha) => setHeadMoved((prev) => prev ?? sha),
         onDraftSaved: () => setLocalDirty(true),
         onCheckpoint: () => {
           setLocalDirty(false);
+          clearLocalMirror(mirrorScope);
           void refresh();
         },
       }),
-    [projectId, branch, editable, versioning, reload], // eslint-disable-line react-hooks/exhaustive-deps
+    [projectId, branch, editable, mirrorScope, reload], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   useEffect(() => {
@@ -138,7 +139,7 @@ function EditPageInner() {
     setMobileFiles(null);
   }, [branch]);
 
-  const dirty = localDirty || Boolean(branchState?.dirty);
+  const dirty = autosavePending || localDirty || Boolean(branchState?.dirty);
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (!dirty) return;
@@ -385,6 +386,10 @@ function EditPageInner() {
                   showLanguageToggle: false,
                   initialDocumentId: mFile,
                   onActiveDocument: setMFile,
+                  autosaveDelayMs: 1500,
+                  localMirrorKey: mirrorScope,
+                  onPendingChange: setAutosavePending,
+                  onAutosaveError: setNotice,
                 }}
               />
             )}

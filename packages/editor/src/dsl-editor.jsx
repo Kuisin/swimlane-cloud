@@ -53,6 +53,8 @@ function DslEditorInner({ options }) {
   const {
     host,
     readOnly,
+    autosave,
+    autosaveStatus,
     isHydrated,
     loadError,
     files,
@@ -352,8 +354,10 @@ function DslEditorInner({ options }) {
           canCreate={hostHas(host, "create")}
           canMkdir={hostHas(host, "mkdir")}
           canFormat={model.errors.length === 0}
-          canCheckpoint={hostHas(host, "checkpoint")}
-          canVersion={hostSupportsVersioning(host) && hostHas(host, "flagNewVersion")}
+          autosave={autosave}
+          autosaveStatus={autosaveStatus}
+          canCheckpoint={!autosave && hostHas(host, "checkpoint")}
+          canVersion={!autosave && hostSupportsVersioning(host) && hostHas(host, "flagNewVersion")}
           hasSvg={Boolean(svg)}
           shortcuts={shortcuts}
           onSave={() => saveDocuments()}
