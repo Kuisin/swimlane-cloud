@@ -21,8 +21,10 @@ owner's decision, not the agent's.
 
 > Not to be confused with the **product's** branch model (`main` 公開済み / `preview` 承認済み /
 > `<login>/<timestamp>/<key>` edit branches), which is what `apps/saas` creates inside a _user's_
-> diagram repository. That is application behaviour, defined in
-> `packages/github-client/src/branch-model.ts`; this section is about this repository's own history.
+> diagram repository — GitHub by default, or a self-hosted GitLab instance an org opts into per
+> workspace (`packages/gitlab-client` re-exports the same rules unchanged). That is application
+> behaviour, defined in `packages/github-client/src/branch-model.ts`; this section is about this
+> repository's own history.
 
 ## Checks
 

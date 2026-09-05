@@ -55,6 +55,36 @@ publishRelease`) snapshots every diagram on `preview` into `version_files`,
   GitHub permission check. `github_connections` additionally revokes the
   ciphertext column from client keys.
 
+## GitLab (self-hosted, or gitlab.com) — per-org, opt-in
+
+A workspace can be backed by a self-hosted GitLab instance (or gitlab.com)
+instead of GitHub, chosen per org. This is a separate, opt-in setting, not a
+replacement for GitHub — most workspaces stay GitHub-backed.
+
+- **No shared OAuth App.** GitHub sign-in works because everyone shares one
+  OAuth App registered by us; that model doesn't fit "an org's own self-hosted
+  server we don't control". Instead, an org admin registers **their own**
+  OAuth Application (created on their GitLab instance's admin settings, scope
+  `api`) with Swimlane Cloud at `/workspaces/new-gitlab`, then connects and
+  picks the GitLab group the workspace represents. See `src/lib/gitlab.ts`
+  (per-user client + transparent token refresh — GitLab's OAuth tokens expire,
+  unlike GitHub's), `src/lib/gitlab-instances.ts` (register/claim), and
+  `src/lib/gitlab-discovery.ts` (create/attach a project, the workspace-scoped
+  analogue of `discovery.ts`).
+- **Needs zero new environment variables.** Every instance's host and OAuth
+  credentials are stored per org in Postgres (`gitlab_instances`,
+  `gitlab_connections`, both AES-256-GCM sealed), never in env — deliberate,
+  to keep `next build`'s no-env guarantee intact.
+- **Phase 1 scope: read + create/attach + edit + autosave + push.** Merge
+  request review and the one-step Publish flow are GitHub-only for now; a
+  GitLab project's `…/pulls/*` and `…/versions/publish`|`…/versions`(flag)|
+  `…/versions/[id]/promote` routes return a clear 400 instead of running
+  (`provider !== "github"` guards in each route). `packages/gitlab-client`
+  mirrors `packages/github-client`'s shape so both providers satisfy one
+  `RepoApis` contract (`src/lib/repo-apis.ts`) — `requireProjectRole`
+  (`src/lib/projects.ts`) is the only place that knows which provider a
+  project uses.
+
 ## Environment variables
 
 All env is read **at request time** — `next build` runs with no environment.
@@ -78,6 +108,12 @@ Canonical list with notes: [`../../.env.vercel.example`](../../.env.vercel.examp
   `edit_sessions`, `versions`, `version_files`, `merge_requests`, `audit_log`,
   `project_section_templates`, `project_template_policies`.
 - `0002_rls.sql` — RLS on with no policies; `updated_at` triggers.
+- `0005_gitlab_provider.sql` — `gitlab_instances` (a registered OAuth
+  Application, unclaimed until a workspace picks it), `gitlab_connections`
+  (per-user token + refresh token + expiry + email), a `provider` column plus
+  GitLab identity columns on `workspaces`/`projects` (GitHub's own columns
+  become nullable rather than partial-indexed — Postgres already treats every
+  `NULL` as distinct in a unique index, so GitHub rows are unaffected).
 
 `supabase/config.toml` configures the local stack (GitHub provider via
 `SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID` / `_SECRET`).
@@ -129,10 +165,26 @@ Every project route runs `requireProjectRole(projectId, role)` first.
 
 `…` = `/api/projects/[projectId]`.
 
+GitLab (see the section above; unauthenticated routes below are the OAuth
+round trip itself, so they redirect rather than requiring a signed-in caller
+via `requireProjectRole`):
+
+| Method     | Route                                | Purpose                                                    |
+| ---------- | ------------------------------------ | ---------------------------------------------------------- |
+| POST       | `/api/gitlab/instances`              | register an org's instance + OAuth Application (unclaimed) |
+| GET        | `/api/gitlab/connect?instanceId=`    | redirect into the instance's OAuth authorize screen        |
+| GET        | `/api/gitlab/callback`               | exchange the code, upsert `gitlab_connections`             |
+| GET        | `/api/gitlab/namespaces?instanceId=` | the caller's Owner-level groups (claim/create picker)      |
+| POST       | `/api/gitlab/instances/[id]/claim`   | bind an unclaimed instance to a new workspace              |
+| GET · POST | `/api/gitlab/projects`               | discover `swimlane`-topic projects / create or attach one  |
+
 ## Pages
 
 - `/` landing · `/login` (GitHub only) · `/dashboard` (discovered projects) · `/new`
   (create / mark)
+- `/workspaces/new-gitlab` — connect a self-hosted (or gitlab.com) GitLab
+  instance: register its OAuth Application, connect, pick a group, then
+  create or attach the first project
 - `/projects/[id]/edit` — three branch chips (承認済み / 公開済み / 自分の編集)
   instead of a raw branch picker; one primary action at a time (Start
   editing, Push to GitHub, Request review); autosave replaces Save/Save all;
