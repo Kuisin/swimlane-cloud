@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Check, GitPullRequest, Lock, Monitor, Plus, RefreshCw, Smartphone } from "lucide-react";
 import { DslEditor } from "@swimlane-cloud/editor";
 import "@swimlane-cloud/editor/styles.css";
+import { INTEGRATION_BRANCH, isEditBranch } from "@swimlane-cloud/github-client";
 import { createSaasHost } from "@/lib/saas-host";
 import {
   branchOf,
@@ -68,13 +69,13 @@ function EditPageInner() {
   // doesn't auto-open the first file before `?file=` is applied.
   const [ready, setReady] = useState(false);
 
-  const branch = state ? defaultBranch(state, branchParam) : "test";
+  const branch = state ? defaultBranch(state, branchParam) : INTEGRATION_BRANCH;
   const branchState = state ? branchOf(state, branch) : undefined;
   const role = state?.me.role ?? "viewer";
   const onMain = branch === "main";
   const editable = state ? canEditBranch(state, branch) : false;
   const readOnly = !editable;
-  const versioning = role === "owner" && branch === "test";
+  const versioning = role === "owner" && branch === INTEGRATION_BRANCH;
 
   const host = useMemo(
     () =>
@@ -215,7 +216,7 @@ function EditPageInner() {
     });
   };
 
-  const onTmp = branch.startsWith("tmp-");
+  const onTmp = isEditBranch(branch);
   const locked = state ? isLocked(state, branch) : false;
   const lockReasonKey = state ? editLockReason(state, branch) : null;
   const lockReason = lockReasonKey ? t(`edit.lock.${lockReasonKey}`) : null;
@@ -225,7 +226,7 @@ function EditPageInner() {
     if (!state || !canOpenPR) return;
     const title = window.prompt(
       t("edit.prompt.prTitle"),
-      t("edit.prompt.prTitleDefault", { branch, prBase: "test" }),
+      t("edit.prompt.prTitleDefault", { branch, prBase: INTEGRATION_BRANCH }),
     );
     if (title === null) return;
     void run("pr", async () => {
@@ -239,7 +240,7 @@ function EditPageInner() {
     ? t("edit.status.production")
     : locked
       ? t("edit.status.locked")
-      : branch === "test"
+      : branch === INTEGRATION_BRANCH
         ? editable
           ? t("edit.status.integration")
           : t("edit.status.integrationReadonly")
@@ -289,7 +290,7 @@ function EditPageInner() {
                     : undefined
               }
             >
-              <GitPullRequest size={14} /> {t("edit.openPrTo", { base: "test" })}
+              <GitPullRequest size={14} /> {t("edit.openPrTo", { base: INTEGRATION_BRANCH })}
             </Action>
             <Action onClick={toggleView}>
               {mobile ? (

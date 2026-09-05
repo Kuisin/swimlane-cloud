@@ -32,7 +32,7 @@ export interface SaasHostOptions {
   branch: string;
   /** Whether the caller may write to this branch (from ProjectState). */
   editable: boolean;
-  /** Owners on `test` may flag a version straight from the editor. */
+  /** Owners on `preview` may flag a version straight from the editor. */
   versioning: boolean;
   /** Fired when the branch tip differs from the last one seen. */
   onHeadChange?: (sha: string) => void;

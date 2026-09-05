@@ -40,6 +40,7 @@ import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import { FileTree } from "@/components/file-tree";
 import { GitHubMark } from "@/components/github-mark";
 import { RoleBadge } from "@/components/app-header";
+import { branchLabel } from "@/lib/branch-label";
 import { ApiClientError, redirectToLogin } from "@/lib/client";
 import {
   addPRComment,
@@ -702,7 +703,8 @@ function PrItem({
             </a>
           </div>
           <div className="text-xs text-neutral-500">
-            {pr.head} → {pr.base} · {t("pr.openedBy", { login: pr.author })}
+            {branchLabel(pr.head, t)} → {branchLabel(pr.base, t)} ·{" "}
+            {t("pr.openedBy", { login: pr.author })}
             {pr.createdAt ? ` · ${new Date(pr.createdAt).toLocaleString()}` : ""}
           </div>
         </div>
@@ -771,7 +773,7 @@ function PrItem({
       {showFiles && detail && (
         <CommitDetailModal
           projectId={projectId}
-          title={`#${pr.number} ${pr.title}  (${pr.head} → ${pr.base})`}
+          title={`#${pr.number} ${pr.title}  (${branchLabel(pr.head, t)} → ${branchLabel(pr.base, t)})`}
           headRef={pr.state === "open" ? pr.head : pr.headSha || pr.head}
           baseRef={pr.state === "open" ? pr.base : pr.baseSha || pr.base}
           preloaded={detail.files}

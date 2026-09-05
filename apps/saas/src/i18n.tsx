@@ -54,23 +54,23 @@ export const EN: Record<string, string> = {
   // workflow
   "landing.flow.title": "How a change reaches production",
   "landing.flow.lead":
-    "The workflow mirrors how software ships, with the git vocabulary kept out of the way. Three branches: main is production, test is where work is integrated, and each edit gets its own short-lived branch.",
-  "landing.flow.branches": "Edit branches merge into test; only released versions reach main.",
+    "The workflow mirrors how software ships, with the git vocabulary kept out of the way. Three branches: main is published, preview is where work is approved, and each edit gets its own short-lived branch.",
+  "landing.flow.branches": "Edit branches merge into preview; only released versions reach main.",
   "landing.flow.s1": "Connect a repository",
   "landing.flow.s1Desc":
     "Add the swimlane topic to a repository you already have, or let the app create one — seeded with a sample diagram, section templates and a .swimlane.json that says where diagrams live.",
   "landing.flow.s2": "Edit",
   "landing.flow.s2Desc":
-    "Start an edit and the app cuts a tmp-* branch from test for you. Save as often as you like: drafts are stored instantly and never clutter git history.",
+    "Start an edit and the app cuts a new branch from preview for you. Save as often as you like: drafts are stored instantly and never clutter git history.",
   "landing.flow.s3": "Checkpoint",
   "landing.flow.s3Desc":
     "When a piece of work is done, one checkpoint turns every changed file into a single commit — created, edited and deleted files together, authored as you on GitHub.",
   "landing.flow.s4": "Review",
   "landing.flow.s4Desc":
-    "Open a pull request into test. Reviewers see a real diff plus a side-by-side render of before and after, and the conversation is a normal GitHub thread.",
+    "Open a pull request into preview. Reviewers see a real diff plus a side-by-side render of before and after, and the conversation is a normal GitHub thread.",
   "landing.flow.s5": "Release",
   "landing.flow.s5Desc":
-    "Flag a commit on test as a version: every diagram is snapshotted and the commit is tagged. Promoting merges exactly that commit into main — only flagged versions can reach production.",
+    "Flag a commit on preview as a version: every diagram is snapshotted and the commit is tagged. Promoting merges exactly that commit into main — only flagged versions can reach production.",
   "landing.flow.s6": "Share",
   "landing.flow.s6Desc":
     "Publish a promoted version to a stable read-only link for people outside the repository. Choose whether the DSL source is visible or only the rendered diagram.",
@@ -188,11 +188,11 @@ export const EN: Record<string, string> = {
   "new.owner": "Owner",
   "new.name": "Repository name",
   "new.createHint":
-    "Creates a private repository with main and test branches, a sample diagram, section templates and .swimlane.json, tagged with the swimlane topic. Needs a team or enterprise plan — for an organisation, you must be a team admin there. Free-plan workspaces can mark an existing repository instead.",
+    "Creates a private repository with main and preview branches, a sample diagram, section templates and .swimlane.json, tagged with the swimlane topic. Needs a team or enterprise plan — for an organisation, you must be a team admin there. Free-plan workspaces can mark an existing repository instead.",
   "new.createButton": "Create repository",
   "new.creating": "Creating…",
   "new.markHint":
-    "Repositories you administer that are not yet marked. Marking adds the swimlane topic, a test branch and .swimlane.json — nothing else changes.",
+    "Repositories you administer that are not yet marked. Marking adds the swimlane topic, a preview branch and .swimlane.json — nothing else changes.",
   "new.search": "Search repositories…",
   "new.markButton": "Mark",
   "new.noRepos": "No repositories to mark.",
@@ -228,9 +228,9 @@ export const EN: Record<string, string> = {
   "edit.readonly": "Read-only: {reason}",
   "edit.lock.main": "main is production and is never edited directly",
   "edit.lock.locked": "this branch has an open pull request",
-  "edit.lock.testOwnerOnly": "test can only be edited by a repository admin",
+  "edit.lock.previewOwnerOnly": "preview can only be edited by a repository admin",
   "edit.lock.viewer": "you have read-only access to this repository",
-  "edit.lock.other": "only test and tmp-* branches can be edited here",
+  "edit.lock.other": "only preview and edit branches can be edited here",
   "edit.branchMoved": "This branch moved on GitHub. Reload before checkpointing.",
   "edit.reload": "Reload",
   "edit.startEditBranch": "Start an edit branch",
@@ -259,8 +259,8 @@ export const EN: Record<string, string> = {
   "pulls.confirmClose": "Close this pull request without merging?",
   // versions page
   "versions.title": "Versions",
-  "versions.description": "Flagged from the test branch; promote to main to ship.",
-  "versions.testDirty": "test has unsaved drafts — checkpoint them before flagging.",
+  "versions.description": "Flagged from the preview branch; promote to main to ship.",
+  "versions.previewDirty": "preview has unsaved drafts — checkpoint them before flagging.",
   "versions.flagNew": "Flag new version",
   "versions.ownerHint": "A repository admin flags versions",
   "versions.confirmPromote": 'Promote "{name}" to main?',
@@ -281,7 +281,7 @@ export const EN: Record<string, string> = {
   "commit.mode.text": "text",
   // pr panel
   "pr.empty":
-    "No pull requests yet. On the Edit page, open a PR from a tmp-* branch (→ test) or from test (→ main).",
+    "No pull requests yet. On the Edit page, open a PR from an edit branch (→ preview) or from preview (→ main).",
   "pr.review": "Review & comments",
   "pr.hide": "Hide",
   "pr.openedBy": "opened by {login}",
@@ -293,7 +293,7 @@ export const EN: Record<string, string> = {
   "pr.commentAs": "Comment as {login}…",
   "pr.comment": "Comment",
   // version panel
-  "version.empty": "No versions yet. A repository admin flags one from the test branch above.",
+  "version.empty": "No versions yet. A repository admin flags one from the preview branch above.",
   "version.files": "{n} files",
   "version.promoteTo": "Promote → main",
   "version.ownerPromotes": "An admin promotes",
@@ -390,6 +390,10 @@ export const EN: Record<string, string> = {
   "billing.upgradeSoon": "Upgrade — coming soon",
   // language
   "lang.label": "Language",
+  // branch labels
+  "branch.preview": "Approved",
+  "branch.main": "Published",
+  "branch.edit": "{user}'s edit",
 };
 
 export const JA: Record<string, string> = {
@@ -437,24 +441,24 @@ export const JA: Record<string, string> = {
   // workflow
   "landing.flow.title": "変更が本番に届くまで",
   "landing.flow.lead":
-    "ソフトウェアのリリースと同じ流れを、git の用語を表に出さずに実現します。ブランチは 3 種類。main は本番、test は作業の統合先、そして各編集には専用の短命ブランチが割り当てられます。",
+    "ソフトウェアのリリースと同じ流れを、git の用語を表に出さずに実現します。ブランチは 3 種類。main は公開済み、preview は承認済み、そして各編集には専用の短命ブランチが割り当てられます。",
   "landing.flow.branches":
-    "編集ブランチは test にマージされ、main に届くのはリリース済みバージョンだけです。",
+    "編集ブランチは preview にマージされ、main に届くのはリリース済みバージョンだけです。",
   "landing.flow.s1": "リポジトリを接続",
   "landing.flow.s1Desc":
     "既存のリポジトリに swimlane トピックを付けるか、アプリに作成させます。サンプル図・セクションテンプレート・図の場所を示す .swimlane.json が用意されます。",
   "landing.flow.s2": "編集",
   "landing.flow.s2Desc":
-    "編集を開始すると test から tmp-* ブランチが自動で作られます。保存は何度でも。草稿は即座に保存され、git の履歴を汚しません。",
+    "編集を開始すると preview から新しいブランチが自動で作られます。保存は何度でも。草稿は即座に保存され、git の履歴を汚しません。",
   "landing.flow.s3": "チェックポイント",
   "landing.flow.s3Desc":
     "作業の区切りで 1 回チェックポイントすると、変更されたすべてのファイルが 1 つのコミットになります。作成・編集・削除がまとめて、あなた名義で GitHub に記録されます。",
   "landing.flow.s4": "レビュー",
   "landing.flow.s4Desc":
-    "test へプルリクエストを開きます。レビュアーは実際の差分に加えて、変更前後を並べたレンダリングを確認でき、議論は通常の GitHub スレッドで行われます。",
+    "preview へプルリクエストを開きます。レビュアーは実際の差分に加えて、変更前後を並べたレンダリングを確認でき、議論は通常の GitHub スレッドで行われます。",
   "landing.flow.s5": "リリース",
   "landing.flow.s5Desc":
-    "test 上のコミットをバージョンとしてフラグすると、全図がスナップショットされ、コミットにタグが付きます。昇格ではそのコミットだけが main にマージされ、フラグ済みのバージョンだけが本番に到達します。",
+    "preview 上のコミットをバージョンとしてフラグすると、全図がスナップショットされ、コミットにタグが付きます。昇格ではそのコミットだけが main にマージされ、フラグ済みのバージョンだけが本番に到達します。",
   "landing.flow.s6": "共有",
   "landing.flow.s6Desc":
     "昇格済みのバージョンを、リポジトリ外の人向けに読み取り専用の固定リンクとして公開できます。DSL ソースを見せるか、描画された図だけにするかを選べます。",
@@ -572,11 +576,11 @@ export const JA: Record<string, string> = {
   "new.owner": "オーナー",
   "new.name": "リポジトリ名",
   "new.createHint":
-    "main / test ブランチ、サンプル図、セクションテンプレート、.swimlane.json を含むプライベートリポジトリを作成し、swimlane トピックを付けます。チーム / エンタープライズプランが必要です（組織の場合はそのチームの管理者である必要があります）。フリープランのワークスペースは既存のリポジトリをマークしてください。",
+    "main / preview ブランチ、サンプル図、セクションテンプレート、.swimlane.json を含むプライベートリポジトリを作成し、swimlane トピックを付けます。チーム / エンタープライズプランが必要です（組織の場合はそのチームの管理者である必要があります）。フリープランのワークスペースは既存のリポジトリをマークしてください。",
   "new.createButton": "リポジトリを作成",
   "new.creating": "作成中…",
   "new.markHint":
-    "管理者権限があり、まだマークされていないリポジトリです。マークすると swimlane トピック、test ブランチ、.swimlane.json が追加されます。それ以外は変更しません。",
+    "管理者権限があり、まだマークされていないリポジトリです。マークすると swimlane トピック、preview ブランチ、.swimlane.json が追加されます。それ以外は変更しません。",
   "new.search": "リポジトリを検索…",
   "new.markButton": "マーク",
   "new.noRepos": "マークできるリポジトリがありません。",
@@ -613,9 +617,9 @@ export const JA: Record<string, string> = {
   "edit.readonly": "読み取り専用：{reason}",
   "edit.lock.main": "main は本番のため直接編集できません",
   "edit.lock.locked": "このブランチにはプルリクエストが開かれています",
-  "edit.lock.testOwnerOnly": "test はリポジトリ管理者のみ編集できます",
+  "edit.lock.previewOwnerOnly": "preview はリポジトリ管理者のみ編集できます",
   "edit.lock.viewer": "このリポジトリへのアクセスは読み取り専用です",
-  "edit.lock.other": "編集できるのは test と tmp-* ブランチだけです",
+  "edit.lock.other": "編集できるのは preview と編集ブランチだけです",
   "edit.branchMoved":
     "このブランチは GitHub 上で更新されました。チェックポイントの前に再読み込みしてください。",
   "edit.reload": "再読み込み",
@@ -646,8 +650,9 @@ export const JA: Record<string, string> = {
   // versions page
   "versions.title": "バージョン",
   "versions.description":
-    "テストブランチからフラグを立て、リリースするには main に昇格してください。",
-  "versions.testDirty": "test に未保存の草稿があります。フラグの前にチェックポイントしてください。",
+    "preview ブランチからフラグを立て、リリースするには main に昇格してください。",
+  "versions.previewDirty":
+    "preview に未保存の草稿があります。フラグの前にチェックポイントしてください。",
   "versions.flagNew": "新しいバージョンをフラグ",
   "versions.ownerHint": "リポジトリ管理者がバージョンをフラグします",
   "versions.confirmPromote": "「{name}」を main に昇格しますか？",
@@ -668,7 +673,7 @@ export const JA: Record<string, string> = {
   "commit.mode.text": "テキスト",
   // pr panel
   "pr.empty":
-    "プルリクエストはまだありません。編集ページで、tmp-* ブランチから PR を開いてください（→ test）またはテストから（→ main）。",
+    "プルリクエストはまだありません。編集ページで、編集ブランチから PR を開いてください（→ preview）または preview から（→ main）。",
   "pr.review": "レビューとコメント",
   "pr.hide": "閉じる",
   "pr.openedBy": "{login} が作成",
@@ -681,7 +686,7 @@ export const JA: Record<string, string> = {
   "pr.comment": "コメント",
   // version panel
   "version.empty":
-    "バージョンはまだありません。リポジトリ管理者が上のテストブランチからフラグを立てます。",
+    "バージョンはまだありません。リポジトリ管理者が上の preview ブランチからフラグを立てます。",
   "version.files": "{n} ファイル",
   "version.promoteTo": "main に昇格",
   "version.ownerPromotes": "管理者が昇格します",
@@ -776,6 +781,10 @@ export const JA: Record<string, string> = {
   "billing.upgradeSoon": "アップグレード — 近日公開",
   // language
   "lang.label": "言語",
+  // branch labels
+  "branch.preview": "承認済み",
+  "branch.main": "公開済み",
+  "branch.edit": "{user} の編集",
 };
 
 const DICTS: Record<string, Record<string, string>> = { en: EN, ja: JA };

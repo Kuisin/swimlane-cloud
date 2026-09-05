@@ -11,13 +11,13 @@ preview, backed by your own git history and by GitHub for review and release.
 
 ## Commands
 
-| Command                                  | What it does                                          |
-| ---------------------------------------- | ----------------------------------------------------- |
-| `Swimlane: Open Diagram Editor`          | Opens the editor over the workspace's `.txt` diagrams |
-| `Swimlane: Start Edit (new branch)`      | Cuts a `tmp-*` branch from the integration branch     |
-| `Swimlane: Checkpoint (commit diagrams)` | Commits the changed diagrams, and only those          |
-| `Swimlane: Push and Open Pull Request`   | Pushes the edit branch and opens a PR                 |
-| `Swimlane: Show Git Log`                 | Every git command the extension ran                   |
+| Command                                  | What it does                                                                |
+| ---------------------------------------- | --------------------------------------------------------------------------- |
+| `Swimlane: Open Diagram Editor`          | Opens the editor over the workspace's `.txt` diagrams                       |
+| `Swimlane: Start Edit (new branch)`      | Cuts a new branch (`<login>/<timestamp>/<key>`) from the integration branch |
+| `Swimlane: Checkpoint (commit diagrams)` | Commits the changed diagrams, and only those                                |
+| `Swimlane: Push and Open Pull Request`   | Pushes the edit branch and opens a PR                                       |
+| `Swimlane: Show Git Log`                 | Every git command the extension ran                                         |
 
 ## How it treats your repository
 
@@ -39,11 +39,11 @@ Every git invocation is logged to the `Swimlane Git` output channel.
 
 ## Configuration
 
-| Setting                      | Default | Meaning                                                                  |
-| ---------------------------- | ------- | ------------------------------------------------------------------------ |
-| `swimlane.diagramsRoot`      | `""`    | Folder holding the diagrams. Overridden by `.swimlane.json` in the repo. |
-| `swimlane.integrationBranch` | `test`  | Branch edit branches are cut from and merged back into.                  |
-| `swimlane.productionBranch`  | `main`  | Release branch. Never a direct edit target.                              |
+| Setting                      | Default   | Meaning                                                                  |
+| ---------------------------- | --------- | ------------------------------------------------------------------------ |
+| `swimlane.diagramsRoot`      | `""`      | Folder holding the diagrams. Overridden by `.swimlane.json` in the repo. |
+| `swimlane.integrationBranch` | `preview` | Branch edit branches are cut from and merged back into.                  |
+| `swimlane.productionBranch`  | `main`    | Release branch. Never a direct edit target.                              |
 
 ## Installing
 

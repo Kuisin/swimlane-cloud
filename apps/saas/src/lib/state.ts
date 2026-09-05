@@ -3,7 +3,13 @@
  * (branches, tips, pull requests) and Postgres (drafts, edit sessions,
  * versions) in parallel; the shape is `ProjectState` in types.ts.
  */
-import { isIntegrationBranch, isProdBranch, isTmpBranch } from "@swimlane-cloud/github-client";
+import {
+  INTEGRATION_BRANCH,
+  isEditBranch,
+  isIntegrationBranch,
+  isProdBranch,
+  PROD_BRANCH,
+} from "@swimlane-cloud/github-client";
 import { branchLockReason, type ProjectCtx } from "./projects";
 import { mapLimit, readConfigAt } from "./repo-files";
 import { getServiceSupabase } from "./supabase/server";
@@ -14,20 +20,43 @@ const PULL_CAP = 50;
 
 function kindOf(name: string): BranchKind {
   if (isProdBranch(name)) return "main";
-  if (isIntegrationBranch(name)) return "test";
-  if (isTmpBranch(name)) return "tmp";
+  if (isIntegrationBranch(name)) return "preview";
+  if (isEditBranch(name)) return "edit";
   if (name.startsWith("release-")) return "release";
   return "other";
 }
 
-const KIND_ORDER: Record<BranchKind, number> = { main: 0, test: 1, tmp: 2, release: 3, other: 4 };
+const KIND_ORDER: Record<BranchKind, number> = {
+  main: 0,
+  preview: 1,
+  edit: 2,
+  release: 3,
+  other: 4,
+};
 
 export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> {
   const supabase = getServiceSupabase();
   const projectId = ctx.project.id;
 
-  const [branches, pulls, config, draftRows, sessionRows, versionRows, mrRows] = await Promise.all([
-    ctx.repos.listBranches(ctx.repo.owner, ctx.repo.repo),
+  let branchList = await ctx.repos.listBranches(ctx.repo.owner, ctx.repo.repo);
+  // Self-heal: a project reached without going through /api/projects/open (a
+  // stale bookmark, a repo marked before this rename) may still be missing
+  // `preview`. Create it from `main` once, best-effort, rather than leaving
+  // every tab reporting a two-branch repository forever.
+  if (
+    ctx.role !== "viewer" &&
+    !branchList.some((b) => b.name === INTEGRATION_BRANCH) &&
+    branchList.some((b) => b.name === PROD_BRANCH)
+  ) {
+    try {
+      await ctx.write.ensureBranch(INTEGRATION_BRANCH, PROD_BRANCH);
+      branchList = await ctx.repos.listBranches(ctx.repo.owner, ctx.repo.repo);
+    } catch {
+      /* best-effort; the branch simply stays absent until it succeeds */
+    }
+  }
+
+  const [pulls, config, draftRows, sessionRows, versionRows, mrRows] = await Promise.all([
     ctx.pulls.listPullRequests({ state: "all" }),
     readConfigAt(ctx, ctx.repoInfo.defaultBranch),
     supabase.from("drafts").select("branch").eq("project_id", projectId),
@@ -67,9 +96,9 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
 
   const openPrByHead = new Map<string, number>();
   for (const p of pulls) if (p.state === "open") openPrByHead.set(p.head, p.number);
-  const locked = new Set([...openPrByHead.keys()].filter(isTmpBranch));
+  const locked = new Set([...openPrByHead.keys()].filter(isEditBranch));
 
-  const listed = branches.slice(0, BRANCH_CAP);
+  const listed = branchList.slice(0, BRANCH_CAP);
   const tips = await mapLimit(listed, 8, async (b) => {
     try {
       const [c] = await ctx.commits.listCommits(b.sha, { perPage: 1 });

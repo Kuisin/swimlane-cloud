@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isWithinRoot, parseRepoConfig } from "@swimlane-cloud/github-client";
+import { INTEGRATION_BRANCH, isWithinRoot, parseRepoConfig } from "@swimlane-cloud/github-client";
 import { requireRepoApis, toResponse } from "@/lib/api";
 import { assertRef } from "@/lib/guard";
 
@@ -13,7 +13,7 @@ export async function GET(
 ) {
   const { owner, repo } = await params;
   try {
-    const branch = new URL(req.url).searchParams.get("branch") ?? "test";
+    const branch = new URL(req.url).searchParams.get("branch") ?? INTEGRATION_BRANCH;
     assertRef(branch);
     const { rest, write } = await requireRepoApis(owner, repo);
 

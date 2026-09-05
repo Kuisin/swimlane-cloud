@@ -3,6 +3,7 @@
  * pure branch-rule helpers the pages use. Replaces the localStorage demo
  * (`demo-workflow.ts`) with the same names where the UX is the same.
  */
+import { INTEGRATION_BRANCH, PROD_BRANCH } from "@swimlane-cloud/github-client";
 import { api, del, patchJson, postJson } from "./client";
 import type {
   BranchState,
@@ -171,9 +172,14 @@ export function editLockReason(state: ProjectState, name: string): LockReason | 
   return b.lockReason;
 }
 
-/** The branch the Edit tab should open: the URL's, else my active edit, else test. */
+/**
+ * The branch the Edit tab should open: the URL's, else my active edit, else
+ * preview (承認済み), else main (公開済み), else whatever the repository has.
+ */
 export function defaultBranch(state: ProjectState, requested?: string | null): string {
   if (requested && branchOf(state, requested)) return requested;
   if (state.activeEdit && branchOf(state, state.activeEdit.branch)) return state.activeEdit.branch;
-  return branchOf(state, "test") ? "test" : (state.branches[0]?.name ?? "main");
+  if (branchOf(state, INTEGRATION_BRANCH)) return INTEGRATION_BRANCH;
+  if (branchOf(state, PROD_BRANCH)) return PROD_BRANCH;
+  return state.branches[0]?.name ?? PROD_BRANCH;
 }

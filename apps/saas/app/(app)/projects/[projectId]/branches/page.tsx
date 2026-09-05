@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { branchKindOf, branchLabel } from "@/lib/branch-label";
 import { publishVersion, unpublishVersion } from "@/lib/workflow";
 import { ProjectPage, HistoryPanel, describeError, useProject } from "../_components";
 import { useT } from "@/i18n";
@@ -35,14 +36,19 @@ export default function BranchesPage() {
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="truncate font-mono">
-                          {b.name}
+                        <span className="truncate">
+                          {branchLabel(b.name, t)}
                           {b.locked ? " 🔒" : ""}
                         </span>
                         <span className="shrink-0 font-mono text-[10px] text-neutral-400">
                           {b.sha.slice(0, 7)}
                         </span>
                       </div>
+                      {branchKindOf(b.name) !== "other" && (
+                        <div className="truncate font-mono text-[10px] text-neutral-400">
+                          {b.name}
+                        </div>
+                      )}
                       {b.message && (
                         <div className="truncate text-xs text-neutral-500">{b.message}</div>
                       )}
@@ -67,7 +73,7 @@ export default function BranchesPage() {
             </div>
             <div>
               <h2 className="mb-2 text-sm font-semibold text-neutral-700">
-                {t("branches.historyOf", { branch: view })}
+                {t("branches.historyOf", { branch: branchLabel(view, t) })}
               </h2>
               {view && (
                 <HistoryPanel

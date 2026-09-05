@@ -28,7 +28,7 @@ async function ensureBranchAtSha(ctx: ProjectCtx, name: string, sha: string): Pr
  * POST /api/projects/[projectId]/versions/[versionId]/promote — land exactly
  * the flagged commit on main: a short-lived `release-*` branch at that sha,
  * a pull request into main, merge, branch gone. Only flagged versions can
- * reach main; `test` itself never merges directly.
+ * reach main; `preview` itself never merges directly.
  */
 export const POST = withApi(
   async (_req, ctx: { params: Promise<{ projectId: string; versionId: string }> }) => {

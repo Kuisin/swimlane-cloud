@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { RefreshCw, Tag } from "lucide-react";
+import { INTEGRATION_BRANCH } from "@swimlane-cloud/github-client";
 import { flagVersion, promoteVersion, publishVersion, unpublishVersion } from "@/lib/workflow";
 import { ProjectPage, VersionPanel, describeError, useProject } from "../_components";
 import { useT } from "@/i18n";
@@ -13,7 +14,7 @@ export default function VersionsPage() {
   const [busy, setBusy] = useState(false);
 
   const isOwner = state?.me.role === "owner";
-  const test = state?.branches.find((b) => b.name === "test");
+  const preview = state?.branches.find((b) => b.name === INTEGRATION_BRANCH);
 
   const run = (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -46,7 +47,7 @@ export default function VersionsPage() {
                 <h2 className="text-lg font-semibold">{t("versions.title")}</h2>
                 <p className="text-xs text-neutral-500">
                   {t("versions.description")}
-                  {test?.dirty ? ` ${t("versions.testDirty")}` : ""}
+                  {preview?.dirty ? ` ${t("versions.previewDirty")}` : ""}
                 </p>
               </div>
               {isOwner ? (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
+import { branchLabel } from "@/lib/branch-label";
 import { ProjectPage, Empty, describeError, useProject } from "../_components";
 import { useT } from "@/i18n";
 
@@ -50,7 +51,7 @@ export default function ActivityPage() {
                       <span className="text-neutral-600">{t(`activity.action.${e.action}`)}</span>
                       {e.entityId && (
                         <span className="ml-1 font-mono text-xs text-neutral-500">
-                          {e.entityId}
+                          {e.entityType === "branch" ? branchLabel(e.entityId, t) : e.entityId}
                         </span>
                       )}
                       {e.commitSha && (

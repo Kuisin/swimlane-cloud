@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { INTEGRATION_BRANCH } from "@swimlane-cloud/github-client";
 import { requireRepoApis, toResponse } from "@/lib/api";
 import { assertDiagramPath, assertRef, BadRequestError } from "@/lib/guard";
 
@@ -12,7 +13,7 @@ export async function GET(
   const { owner, repo } = await params;
   try {
     const url = new URL(req.url);
-    const branch = url.searchParams.get("branch") ?? "test";
+    const branch = url.searchParams.get("branch") ?? INTEGRATION_BRANCH;
     const path = url.searchParams.get("path");
     if (!path) throw new BadRequestError("path is required.");
     assertRef(branch);
