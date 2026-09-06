@@ -5,9 +5,11 @@ import {
   GitBranch,
   HelpCircle,
   LayoutTemplate,
+  Redo2,
   Save,
   SaveAll,
   Tag,
+  Undo2,
   Wand2,
 } from "lucide-react";
 import { useT } from "../i18n.jsx";
@@ -36,10 +38,14 @@ export function ActionBar({
   canFormat,
   canCheckpoint,
   canVersion,
+  canUndo,
+  canRedo,
   hasSvg,
   shortcuts,
   onSave,
   onSaveAll,
+  onUndo,
+  onRedo,
   onNewFile,
   onNewFolder,
   onExport,
@@ -84,6 +90,28 @@ export function ActionBar({
         <button type="button" className="sw-btn" onClick={onOpenTemplates}>
           <LayoutTemplate size={14} /> {t("action.templates")}
         </button>
+        {!readOnly && (
+          <>
+            <button
+              type="button"
+              className="sw-icon-btn"
+              disabled={!canUndo}
+              onClick={onUndo}
+              title={withShortcut(t("action.undo"), sc.undo)}
+            >
+              <Undo2 size={15} />
+            </button>
+            <button
+              type="button"
+              className="sw-icon-btn"
+              disabled={!canRedo}
+              onClick={onRedo}
+              title={withShortcut(t("action.redo"), sc.redo)}
+            >
+              <Redo2 size={15} />
+            </button>
+          </>
+        )}
         {mode === "text" && canFormat && (
           <button
             type="button"

@@ -76,6 +76,10 @@ function DslEditorInner({ options }) {
     hasAnyUnsavedChanges,
     updateActiveDocumentSrc,
     replaceActiveDocumentSrc,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     saveDocuments,
     saveAllDocuments,
     createNewFile,
@@ -134,6 +138,8 @@ function DslEditorInner({ options }) {
       save: shortcutLabel("s", { mod: true }),
       saveAll: shortcutLabel("s", { mod: true, shift: true }),
       format: shortcutLabel("f", { mod: true, shift: true }),
+      undo: shortcutLabel("z", { mod: true }),
+      redo: shortcutLabel("z", { mod: true, shift: true }),
       help: "?",
     }),
     [],
@@ -153,6 +159,20 @@ function DslEditorInner({ options }) {
       shift: true,
       enabled: !readOnly && hasAnyUnsavedChanges,
       handler: () => saveAllDocuments(),
+    },
+    {
+      key: "z",
+      mod: true,
+      shift: false,
+      enabled: !readOnly && canUndo,
+      handler: () => undo(),
+    },
+    {
+      key: "z",
+      mod: true,
+      shift: true,
+      enabled: !readOnly && canRedo,
+      handler: () => redo(),
     },
     {
       key: "?",
@@ -370,10 +390,14 @@ function DslEditorInner({ options }) {
           autosaveStatus={autosaveStatus}
           canCheckpoint={!autosave && hostHas(host, "checkpoint")}
           canVersion={!autosave && hostSupportsVersioning(host) && hostHas(host, "flagNewVersion")}
+          canUndo={canUndo}
+          canRedo={canRedo}
           hasSvg={Boolean(svg)}
           shortcuts={shortcuts}
           onSave={() => saveDocuments()}
           onSaveAll={saveAllDocuments}
+          onUndo={() => undo()}
+          onRedo={() => redo()}
           onNewFile={() => createNewFile(selectedDir)}
           onNewFolder={() => createNewFolder(selectedDir)}
           onExport={handleExport}

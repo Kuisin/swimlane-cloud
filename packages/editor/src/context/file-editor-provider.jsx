@@ -15,6 +15,15 @@ import {
 import { createFlushScheduler } from "../lib/debounce-flush.js";
 import { fetchImports, missingImports, resolversFrom, withEntries } from "../lib/import-cache.js";
 import { clearMirror, readMirror, reconcileMirror, writeMirror } from "../lib/local-mirror.js";
+import {
+  createHistory,
+  pushHistory,
+  undo as undoHistory,
+  redo as redoHistory,
+  canUndo as canUndoHistory,
+  canRedo as canRedoHistory,
+  currentSrc as currentHistorySrc,
+} from "../lib/undo-stack.js";
 import { hostAutosaves, hostHas, hostIsReadOnly } from "../host.js";
 import { useDialogHost } from "../hooks/use-dialog-host.js";
 import { DialogHost } from "../components/dialog-host.jsx";
@@ -62,6 +71,14 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
   const activeDocumentIdRef = useRef(activeDocumentId);
   useEffect(() => void (documentsRef.current = documents), [documents]);
   useEffect(() => void (activeDocumentIdRef.current = activeDocumentId), [activeDocumentId]);
+
+  // Per-document undo/redo history (lib/undo-stack.js), keyed by document id.
+  // A ref, not state — mutated directly on every edit for performance;
+  // `historyTick` is bumped only when the *active* document's history changes,
+  // to force a re-render for canUndo/canRedo without re-rendering on every
+  // background document's edits.
+  const historiesRef = useRef(new Map());
+  const [historyTick, setHistoryTick] = useState(0);
 
   // Report the active file id so a host can persist it (e.g. in the URL). Kept
   // in a ref so an inline `options` object doesn't re-fire the notify effect.
@@ -122,6 +139,20 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     };
   }, [src, activeDocumentId, importCache, host]);
   const activeParseErrorPolicy = activeDocument?.parseErrorPolicy ?? null;
+
+  // Recomputed only when `historyTick` bumps (see updateDocumentSrc/undo/redo
+  // above) — `historiesRef` is a plain ref, so nothing else would notice it
+  // changed.
+  const canUndo = useMemo(() => {
+    const history = activeDocumentId ? historiesRef.current.get(activeDocumentId) : null;
+    return history ? canUndoHistory(history) : false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDocumentId, historyTick]);
+  const canRedo = useMemo(() => {
+    const history = activeDocumentId ? historiesRef.current.get(activeDocumentId) : null;
+    return history ? canRedoHistory(history) : false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDocumentId, historyTick]);
 
   const hasUnsavedChanges = isDocumentDirty(activeDocument);
   const hasAnyUnsavedChanges = documents.some(isDocumentDirty);
@@ -220,8 +251,8 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [host]);
 
-  function updateDocumentSrc(documentId, nextSrc) {
-    if (readOnly) return;
+  /** Apply `nextSrc` to a document's state (mirror + revision bump), without touching undo history. */
+  function applyDocumentSrc(documentId, nextSrc) {
     setDocuments((cur) =>
       cur.map((doc) => {
         if (doc.id !== documentId) return doc;
@@ -233,9 +264,48 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     );
   }
 
-  function updateActiveDocumentSrc(nextSrc) {
+  /**
+   * `meta.tag` tags the push for undo coalescing (lib/undo-stack.js):
+   * `"typing"` (default — text-mode keystrokes) coalesces with adjacent
+   * typing pushes within the idle window; `"structural"` (GUI-mode row
+   * mutations) is always its own discrete undo step.
+   */
+  function updateDocumentSrc(documentId, nextSrc, meta) {
+    if (readOnly) return;
+    const prevSrc = documentsRef.current.find((d) => d.id === documentId)?.src ?? nextSrc;
+    const history = historiesRef.current.get(documentId) ?? createHistory(prevSrc);
+    historiesRef.current.set(documentId, pushHistory(history, nextSrc, meta));
+    applyDocumentSrc(documentId, nextSrc);
+    if (documentId === activeDocumentIdRef.current) setHistoryTick((t) => t + 1);
+  }
+
+  function updateActiveDocumentSrc(nextSrc, meta) {
     if (!activeDocumentId) return;
-    updateDocumentSrc(activeDocumentId, nextSrc);
+    updateDocumentSrc(activeDocumentId, nextSrc, meta);
+  }
+
+  function undo() {
+    const id = activeDocumentIdRef.current;
+    if (readOnly || !id) return;
+    const history = historiesRef.current.get(id);
+    if (!history) return;
+    const next = undoHistory(history);
+    if (next === history) return;
+    historiesRef.current.set(id, next);
+    applyDocumentSrc(id, currentHistorySrc(next));
+    setHistoryTick((t) => t + 1);
+  }
+
+  function redo() {
+    const id = activeDocumentIdRef.current;
+    if (readOnly || !id) return;
+    const history = historiesRef.current.get(id);
+    if (!history) return;
+    const next = redoHistory(history);
+    if (next === history) return;
+    historiesRef.current.set(id, next);
+    applyDocumentSrc(id, currentHistorySrc(next));
+    setHistoryTick((t) => t + 1);
   }
 
   /** Replace both src and savedSrc (used by formatter to avoid dirtying). */
@@ -282,6 +352,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
           clearMirror(storage, mirrorScope, id);
         }
       }
+      historiesRef.current.set(id, createHistory(doc.src));
       setDocuments((cur) => [...cur, doc]);
       setOpenDocumentIds((cur) => (cur.includes(id) ? cur : [...cur, id]));
       setActiveDocumentIdState(id);
@@ -318,6 +389,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
         }
       }
     }
+    historiesRef.current.delete(documentId);
     setOpenDocumentIds((cur) => {
       const next = cur.filter((id) => id !== documentId);
       setActiveDocumentIdState((curId) =>
@@ -607,6 +679,10 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     updateActiveDocumentSrc,
     updateDocumentSrc,
     replaceActiveDocumentSrc,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     saveDocuments,
     saveAllDocuments,
     createNewFile,
