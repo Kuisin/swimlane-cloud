@@ -5,18 +5,21 @@ A complete diagram repository in version 2 of the DSL, byte-identical to
 [dsl-rule.md](../../dsl-rule.md) can be read against files the engine actually renders.
 
 Every diagram here parses with zero errors and renders to SVG through `textToSvg`, in both
-declared languages. `examples/kai-swimlane-2.test.js` asserts that on every run.
+declared languages. The converter package's `examples.test.js` asserts that on
+every run, resolving the imports the way a host must.
 
 ## Layout
 
 ```
 .swimlane.json                   diagramsRoot, title, theme, integration branch, dslVersion
 diagrams/
+  brand/asset-showcase.txt       imported images used as lane and block icons
   sales/order-to-cash.txt        intake → credit and approval → shipping ∥ billing ∥ notice → closing
   sales/shipping-prep.txt        sub-process linked from the shipping path
   support/incident-response.txt  detection → response (Sev1 fork / Sev2 loop) → retrospective
   support/rollback.txt           sub-process linked from the Sev1 mitigation path
   hr/onboarding.txt              offer → pre-boarding fork → day one phase
+assets/                          images imported with `@use` and drawn as icons
 templates/                       the section-template mirror a project seeds
 ```
 
@@ -47,12 +50,15 @@ diagram.
 | Prop chips on both sides | `+PO`, `+CR`, `+INV`, `+TICKET`, `+RUNBOOK`, `+NDA`, `+PC` |
 | Block styles | `<external>` subroutine, `<terminal>` rounded |
 | Flag form of a boolean key | `skip;` on a final step |
+| Imported vector and raster images | `@use ../../assets/kai-mark.svg;` and `… warehouse-badge.png as badge;` in `brand/asset-showcase.txt`, used as `icon: @kai-mark;` and `icon: @badge;` |
 
 ## Notes
 
-- Definitions are written in each diagram rather than imported. `@use` is part of the grammar and
-  the reader supports it through a host-provided resolver, but no app supplies one yet: parsing is
-  synchronous while a host's file read is async, so each host needs a prefetch cache first.
-  `templates/` therefore holds the project's section-template mirror only.
+- Definitions are written in each diagram rather than imported, so the five process diagrams need
+  no resolver. `@use` is part of the grammar and the reader supports both forms through
+  host-provided resolvers, but no app supplies one yet: parsing is synchronous while a host's file
+  read is async, so each host needs a prefetch cache, for which `scanImports` lists the targets.
+  Until then `brand/asset-showcase.txt` renders without its icons in the apps, and `templates/`
+  holds the project's section-template mirror only.
 - `phase` currently draws as a frame rather than a horizontal band, and `note:` parses but is not
   drawn.

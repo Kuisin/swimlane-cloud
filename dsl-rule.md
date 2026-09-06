@@ -277,7 +277,9 @@ error. `；` is **never** a terminator in any position, and `「」｛｝［］`
 Inside any run, value, string, fence, id, path or comment every full-width character is content and
 is never rewritten; a full-width delimiter is emitted ASCII, and that rewrite is reported.
 
-**Colours and icons.** `#` is a sigil in exactly three positions: after a control keyword or its
+**Colours and icons.** An `icon:` value takes one of three forms: `#name`, a Lucide glyph;
+`@id`, an image imported with `@use`; or any other run, shown literally, which is how an emoji or
+a single character becomes an icon. `#` is a sigil in exactly three positions: after a control keyword or its
 `(…)` run, as the first character of a `-color` value, and as the first character of an `icon:`
 value; everywhere else it is content. `colorToken := "#" [A-Za-z0-9-]+`, `iconToken` likewise,
 maximal munch. A colour is valid iff its body is a palette name or a hex of exactly 3, 4, 6 or 8
@@ -529,6 +531,65 @@ dotted, `-.>` dash-dot, `-->` long-dash. The glyph is the only spelling of the a
 
 ## Imports (`@use`)
 
+`@use` imports one of two things, decided by the target's extension: an **image**, bound to an id
+and drawn as an icon, or a **fragment**, whose definition sections merge into this file. The image
+extensions are the closed set `svg png jpg jpeg gif webp avif`; every other extension is a
+fragment. Both forms take the same paths and the same checks.
+
+### Images
+
+```
+@use assets/kai-mark.svg;
+@use assets/warehouse-badge.png as badge;
+```
+
+An image import binds an **asset id**: the file's stem by default — `kai-mark.svg` gives
+`kai-mark` — or the name after `as`, which is how two folders holding one file name stop
+colliding. Two imports resolving to one id is `duplicateAsset`, not a silent winner. `as` on a
+fragment import is an error, since a fragment has no name to bind.
+
+`icon: @<id>;` uses an asset wherever `icon:` is legal, so a lane and a step block can carry a
+company mark instead of a Lucide glyph:
+
+```
+/role/
+<brand>
+  label: ブランド | Brand;
+  icon: @kai-mark;
+
+/block/
+<marked>
+  shape: rounded;
+  icon: @kai-mark;
+```
+
+Four rules govern how an asset reaches the page.
+
+- **The reference is what the file stores.** `icon:` holds `@kai-mark`, never the image, so a save
+  writes back the reference it read and a diagram stays as small as its text.
+- **The renderer embeds, it does not link.** The image is emitted as an `<image>` element carrying
+  a `data:` URI, so an exported SVG is self-contained: it renders with no network access, from a
+  share page or a private repository alike, and its content hash covers the image.
+- **Markup is never inlined.** An imported drawing is drawn *as an image*, never spliced into the
+  document as SVG elements, so a script, an event handler or an external reference inside a file
+  someone committed cannot execute in the page that displays the diagram.
+- **Size is capped:** 2 MiB for one image and 8 MiB across a diagram, counted over the decoded
+  bytes. Past either, the import is an error rather than a page nobody can load.
+
+An image the host cannot supply is a warning, `assetNotFound`, and the icon is omitted: a missing
+picture never costs a rendered diagram. A reference to an id nothing imported is `unknownAsset`,
+also a warning, and draws nothing — `@kai-mark` is a reference, so there is no glyph to fall back
+on.
+
+**Resolution is the host's.** The parser never reads a file: it validates the path, then asks the
+host through `resolveAsset(path)`, which returns a base64 `data:` URI or null. A value that is not
+one is an error, so a host cannot smuggle a remote URL into a diagram that is supposed to be
+self-contained. Because parsing is synchronous and reading a repository is not, a host prefetches
+with `scanImports(text, filename)`, which lists every `@use` target and whether it is an image,
+without parsing the file.
+
+### Fragments
+
 `@use` is recursive and prologue-only. Resolution is two passes: a depth-first pre-order closure
 with dedup at first visit, then a merge in **post-order of that spanning tree** — each file after
 all of its imports, siblings in written order, later application overriding earlier. Granularity is
@@ -723,7 +784,7 @@ file         := bom? header prologue section* end?
 header       := "@kai-swimlane" ([ \t]+ version)?    -- a statement, not a line; prefix-matched
 version      := [0-9]+ ("." [0-9]+)?                 end := "@end"
 prologue     := (directive | comment)*               -- at most one "@lang"
-directive    := "@lang" tag ("," tag)* ";" | "@use" path ";"
+directive    := "@lang" tag ("," tag)* ";" | "@use" path ("as" id)? ";"
 
 section      := "/meta/" property*  | "/title/" text ";" | "/page/"   property*
               | "/option/" property* | "/role/"  def*    | "/block/"  def*
@@ -827,7 +888,12 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | `icon: ;` vs `icon: "";` vs `icon: none;` (P08) | error, explicitly empty, clears an inherited value and is always re-emitted | `emptyValue` |
 | `[sales: 見積作成] +RQ` with no definitions (P09); `desc:` under a `case`, `note:` after `end-if` (P10) | stubbed from the id and flagged provisional; closers, jumps, `[]` and markers take no properties | `undefinedReference`; `keyNotAllowedHere` |
 | `shape: arrow-down;`, `shape: hexagon;` (P11); two `note:`, `note-side:` with no `note:` (P12) | documented and parses; falls back to `rounded`; a note is single assignment, the default side the constant `right` | `badValue`; `duplicateKey`, `noteSideWithoutNote` |
-| **Imports.** `@use ./templates/role/standard.swim` with no `;` (I01) | the directive is `;`-terminated; the `;` is inserted only by the quick-fix, never by a save | `missingSemicolon` |
+| **Imports.** `@use assets/logo.png;` then `icon: @logo;` | the stem binds the id; the image is embedded as a `data:` URI in an `<image>`, never inlined as markup | none |
+| Two imports whose stems agree; `@use a/logo.png as brand;` | refused rather than one silently winning; `as` names it | `duplicateAsset` |
+| An image the host cannot supply; `icon: @nope;` | the icon is omitted and the diagram still renders; a reference has no glyph to fall back on | `assetNotFound`; `unknownAsset` |
+| An image over 2 MiB, or a resolver returning a URL | refused, so a diagram stays loadable and self-contained | `assetTooLarge`, `assetNotAnImage` |
+| `@use ../../assets/a.svg;` from `diagrams/brand/` | `../` resolves against the importing file, so this is inside the repository and legal | none |
+| `@use ./templates/role/standard.swim` with no `;` (I01) | the directive is `;`-terminated; the `;` is inserted only by the quick-fix, never by a save | `missingSemicolon` |
 | A root importing `base` and `role/standard`, `base` also importing `role/standard` (I02) | merge order is `standard, base, root` — the diamond is merged once, at first visit | `redundantOverride` on a directive with no effect |
 | `@use /templates/role/standard.swim;` (I03); `@use templates/role/standard;` (I04) | `./` and `../` resolve against the importing file, everything else against the repository root; exactly one lookup, no probing | `absoluteImportPath`; `missingExtension`, `importNotFound` |
 | `@use diagrams/sales/order.swim;` (I05) | the six mergeable sections merge; `/title/`, `/meta/` and `/line/` never do | `importIsDiagram`, `redundantOverride` |
@@ -930,12 +996,17 @@ delimiter or a key — exactly the value-level codes listed below as errors.
 | `forbiddenImportPath` | error | format | "…" is not importable | — |
 | `missingExtension` | error | format | a path must include a file extension | Append `.swim` |
 | `notAFragment` | error | format | "…" is not a swimlane fragment, or its catalog's source language is "…" | Insert `/role/` / `/block/` / `/prop/` |
+| `duplicateAsset` | error | format | two imported images resolve to the id "…" | Name one with `as` |
+| `assetTooLarge` | error | format | "…" is larger than the 2 MiB limit, or the diagram's images exceed 8 MiB | — |
+| `assetNotAnImage` | error | format | "…" did not resolve to a base64 image data URI | — |
 | `misplacedDirective` | error | none | `@use` and `@lang` must come before the first section | Move to the prologue |
 | `importNotFound` | error | none | cannot resolve "…" — definitions fall back to theme defaults | did-you-mean / Delete |
 | `importCycle` | error | none | import cycle a → b → a, or nesting or closure too large (8 deep, 32 files, 1 MiB) | Delete this directive |
 | `forcedTemplateMissing` | error | none | `/…/` must `@use` project template "…", and directly where the policy says so | Add `@use "…";` |
 | `forcedTemplateOverride` | error | none | "…" overrides or shadows project template "…", or adds a key outside it | Delete this line / Pin the bundle |
 | `unknownColor` | warning | none | unknown colour or icon "…" — theme default used, icon omitted | Change to `#gray` / did-you-mean |
+| `assetNotFound` | warning | none | cannot resolve the image "…" — the icon is omitted | did-you-mean / Delete |
+| `unknownAsset` | warning | none | no imported image named "…" | Add `@use <path>;` / did-you-mean |
 | `badValue` | warning | none | "…": expected a boolean, one of an enum, a date, a number, a side, an arrow or a shape | Use the first legal value |
 | `unknownKey` | warning | none | unknown key "…" — kept, not rendered; `/meta/` keys are untyped and take no flag form | did-you-mean / Rename to `x-…` |
 | `unknownDirective` | warning | none | unknown directive "@…" — kept verbatim, not applied | did-you-mean |

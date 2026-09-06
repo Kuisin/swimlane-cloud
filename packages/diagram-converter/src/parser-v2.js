@@ -50,6 +50,86 @@ const CLOSERS = {
 };
 const BOOLS = { true: true, false: false };
 
+/**
+ * `@use` imports an image instead of merging sections when the path ends in
+ * one of these. Raster and vector alike are embedded as a `data:` URI in an
+ * `<image>` element, never as inline SVG markup, so a script inside an
+ * imported drawing cannot run in the page that displays the diagram.
+ */
+export const ASSET_EXTENSIONS = {
+  svg: "image/svg+xml",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+};
+
+/** Per-asset and per-diagram ceilings, counted over the decoded data URI. */
+export const ASSET_MAX_BYTES = 2 * 1024 * 1024;
+export const ASSET_TOTAL_MAX_BYTES = 8 * 1024 * 1024;
+
+/** The extension of `path`, lowercased, or "". */
+function extensionOf(path) {
+  const last = path.slice(path.lastIndexOf("/") + 1);
+  const dot = last.lastIndexOf(".");
+  return dot <= 0 ? "" : last.slice(dot + 1).toLowerCase();
+}
+
+/** An id from a file name: the stem, with every run outside the id set as "-". */
+function slugOf(path) {
+  const last = path.slice(path.lastIndexOf("/") + 1);
+  const dot = last.lastIndexOf(".");
+  const stem = dot <= 0 ? last : last.slice(0, dot);
+  const out = stem
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}_]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return out || "asset";
+}
+
+/**
+ * The seven ordered checks every import path passes before any I/O. The first
+ * failure is the only diagnostic, and each message quotes the path and nothing
+ * else, so a mis-aimed import cannot leak file content through an error.
+ *
+ * `./` and `../` resolve against the directory of the importing file, so
+ * `fromDir` is that file's repository-relative directory; without it the
+ * importing file is taken to sit at the repository root. Resolution is
+ * lexical, never through a file system, so the answer does not depend on the
+ * host. A host that can follow links re-checks containment after resolving.
+ */
+export function checkImportPath(path, fromDir = "") {
+  if (!path) return "an import path must not be empty";
+  if (path.includes(":")) return `a path must not contain ":": "${path}"`;
+  if (path.includes("\\")) return `path separators are "/": "${path}"`;
+  if (path.startsWith("/")) return `a path is relative to the repository root: "${path}"`;
+  const relative = path.startsWith("./") || path.startsWith("../");
+  const segments = relative ? `${fromDir}/${path}`.split("/") : path.split("/");
+  const parts = [];
+  for (const seg of segments) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      if (!parts.length) return `"${path}" is outside the repository`;
+      parts.pop();
+      continue;
+    }
+    parts.push(seg);
+  }
+  if (!parts.length) return `"${path}" is outside the repository`;
+  if (parts[0] === ".git" || parts[0] === ".github") return `"${path}" is not importable`;
+  if (!extensionOf(path)) return `a path must include a file extension: "${path}"`;
+  return null;
+}
+
+/** The directory part of a repository-relative file path. */
+export function dirOf(filename) {
+  const cut = String(filename ?? "").lastIndexOf("/");
+  return cut < 0 ? "" : filename.slice(0, cut);
+}
+
 const PAGE_MAP = {
   description: "description",
   "left-title": "leftTitle",
@@ -277,6 +357,7 @@ export function parseDSLv2(src, options = {}) {
   const providedColumnTitles = new Set();
   const providedPageKeys = new Set();
   const roles = {};
+  const assets = {};
   const blocks = {};
   const props = {};
   const meta = {};
@@ -471,10 +552,20 @@ export function parseDSLv2(src, options = {}) {
       continue;
     }
     if (name === "use") {
-      const path = readRun(sc, [";"], null);
+      const operand = readRun(sc, [";"], null);
       if (sc.s[sc.i] === ";") sc.i++;
       else err(pos, "@use must end with ';'");
-      uses.push({ path, pos });
+      // `@use <path> as <id>;` names an imported image; without it the id is
+      // the file's stem, which collides when two folders hold one name.
+      const as = /^(.*\S)\s+as\s+([^\s]+)$/u.exec(operand);
+      const path = as ? as[1] : operand;
+      const alias = as ? as[2] : null;
+      const bad = checkImportPath(path, dirOf(options.filename));
+      if (bad) {
+        err(pos, bad);
+        continue;
+      }
+      uses.push({ path, alias, pos });
       continue;
     }
     if (name === "end") break;
@@ -482,7 +573,14 @@ export function parseDSLv2(src, options = {}) {
   }
 
   // Imports merge first so a local definition overrides them key by key.
+  let assetBytes = 0;
   for (const use of uses) {
+    const mime = ASSET_EXTENSIONS[extensionOf(use.path)];
+    if (mime) {
+      registerAsset(use, mime);
+      continue;
+    }
+    if (use.alias) err(use.pos, "as names an image import, not a fragment");
     const text = options.resolveImport ? options.resolveImport(use.path) : null;
     if (text == null) {
       errors.push({
@@ -657,6 +755,7 @@ export function parseDSLv2(src, options = {}) {
       textColor: (roles[id] && roles[id].textColor) || null,
       bg: (roles[id] && roles[id].bg) || null,
       icon: (roles[id] && roles[id].icon) || null,
+      iconAsset: (roles[id] && roles[id].iconAsset) || null,
     }));
 
   return {
@@ -671,6 +770,7 @@ export function parseDSLv2(src, options = {}) {
     errors,
     trailingLineComments: pendingComments,
     providedPageKeys: [...providedPageKeys],
+    assets,
     roles,
     meta,
     languages: langs,
@@ -679,6 +779,42 @@ export function parseDSLv2(src, options = {}) {
   };
 
   // ------------------------------------------------------------- statements
+
+  /** Bind one imported image to an id and record its data URI. */
+  function registerAsset(use, mime) {
+    const id = use.alias || slugOf(use.path);
+    if (assets[id]) {
+      err(use.pos, `duplicate asset id "${id}" — name one of them with "as"`);
+      return;
+    }
+    const dataUri = options.resolveAsset ? options.resolveAsset(use.path) : null;
+    if (dataUri == null) {
+      errors.push({
+        line: sc.lineAt(use.pos),
+        text: `@use ${use.path};`,
+        msg: `cannot resolve "${use.path}" — the image is omitted`,
+        severity: "warning",
+      });
+      assets[id] = { id, path: use.path, mime, dataUri: null };
+      return;
+    }
+    if (typeof dataUri !== "string" || !/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUri)) {
+      err(use.pos, `"${use.path}" did not resolve to a base64 image data URI`);
+      return;
+    }
+    const bytes = Math.floor(((dataUri.length - dataUri.indexOf(",") - 1) * 3) / 4);
+    if (bytes > ASSET_MAX_BYTES) {
+      err(use.pos, `"${use.path}" is larger than the ${ASSET_MAX_BYTES / 1024 / 1024} MiB limit`);
+      return;
+    }
+    assetBytes += bytes;
+    if (assetBytes > ASSET_TOTAL_MAX_BYTES) {
+      err(use.pos, "the imported images exceed the total size limit for one diagram");
+      return;
+    }
+    assets[id] = { id, path: use.path, mime, dataUri };
+  }
+
   function applyDefProp(kind, id, prop) {
     const bag = kind === "role" ? roles : kind === "block" ? blocks : props;
     const map = kind === "role" ? ROLE_MAP : kind === "block" ? BLOCK_MAP : PROP_MAP;
@@ -717,6 +853,22 @@ export function parseDSLv2(src, options = {}) {
         return;
       }
       bag[id].side = side;
+      return;
+    }
+    if (field === "icon" && prop.value.startsWith("@")) {
+      const assetId = prop.value.slice(1);
+      const asset = assets[assetId];
+      if (!asset) {
+        errors.push({
+          line: sc.lineAt(prop.pos),
+          text: prop.value,
+          msg: `no imported image named "${assetId}"`,
+          severity: "warning",
+        });
+      }
+      bag[id].icon = prop.value;
+      if (asset?.dataUri) bag[id].iconAsset = { id: assetId, dataUri: asset.dataUri };
+      else delete bag[id].iconAsset;
       return;
     }
     if (kind === "prop" && field === "maxChars") {
@@ -1171,6 +1323,38 @@ function emptyModel(errors) {
     trailingLineComments: [],
     dslVersion: 2,
   };
+}
+
+/**
+ * Every `@use` target in `src`, without parsing it.
+ *
+ * Resolving an import is asynchronous — a host reads it from a repository or a
+ * disk — while parsing is synchronous, so a host prefetches with this and then
+ * hands the results to `parseDSL` through `resolveImport` and `resolveAsset`.
+ *
+ * @param {string} src
+ * @param {string} [filename] the diagram's repository-relative path, so that
+ *   `./` and `../` targets resolve the way the parser resolves them
+ * @returns {{ path: string, alias: string | null, kind: "fragment" | "asset" }[]}
+ */
+export function scanImports(src, filename = "") {
+  const out = [];
+  // Deliberately loose: the parser is authoritative, so over-fetching one path
+  // costs a read while missing one leaves an image blank.
+  const re = /@use[ \t]+([^;\n]+);/gu;
+  const fromDir = dirOf(filename);
+  for (const m of String(src ?? "").matchAll(re)) {
+    const operand = m[1].trim();
+    const as = /^(.*\S)\s+as\s+([^\s]+)$/u.exec(operand);
+    const path = as ? as[1] : operand;
+    if (checkImportPath(path, fromDir)) continue;
+    out.push({
+      path,
+      alias: as ? as[2] : null,
+      kind: ASSET_EXTENSIONS[extensionOf(path)] ? "asset" : "fragment",
+    });
+  }
+  return out;
 }
 
 /** A header-less fragment: definitions and catalog entries only. */

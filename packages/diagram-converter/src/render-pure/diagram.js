@@ -1941,7 +1941,7 @@ function renderDiagramSvg({
             fill: bg,
             opacity: "0.9",
           }),
-          lane.icon &&
+          (lane.icon || lane.iconAsset) &&
             /* @__PURE__ */ h(
               "g",
               null,
@@ -1955,6 +1955,7 @@ function renderDiagramSvg({
               }),
               /* @__PURE__ */ h(BlockIcon, {
                 icon: lane.icon,
+                iconAsset: lane.iconAsset,
                 x: x + gutterInnerPad,
                 y: topPad + headerH / 2,
                 size: 22,
@@ -2424,6 +2425,7 @@ function renderDiagramSvg({
         const stroke = (block && block.borderColor) || theme.stroke;
         const shape = (block && block.shape) || "rounded";
         const blockIcon = block && block.icon;
+        const blockIconAsset = block && block.iconAsset;
         const { left: leftProps, right: rightProps } = splitPropsBySide(r.props);
         const docY = cy + boxH / 2 - 8;
         return /* @__PURE__ */ h(
@@ -2438,9 +2440,10 @@ function renderDiagramSvg({
             fill,
             stroke,
           }),
-          blockIcon &&
+          (blockIcon || blockIconAsset) &&
             /* @__PURE__ */ h(BlockIcon, {
               icon: blockIcon,
+              iconAsset: blockIconAsset,
               x: cx - boxW / 2,
               y: cy,
               size: 16,

@@ -8,16 +8,22 @@ import { renderDiagramSvg } from "./diagram.js";
  * Platform-free: works in Node.js, browsers, and workers — no React, no DOM.
  *
  * `lang` picks the render language of a version 2 diagram that declares
- * several; `resolveImport` is how a host supplies the text of an `@use`
- * target. Both are ignored by the version 1 reader.
+ * several. `resolveImport` supplies the text of an `@use` fragment and
+ * `resolveAsset` the `data:` URI of an `@use` image. All three are ignored by
+ * the version 1 reader.
  *
  * @param {string} src
  * @param {{ theme?: object, themeKey?: string, lang?: string,
- *   resolveImport?: (path: string) => string | null }} [options]
+ *   resolveImport?: (path: string) => string | null,
+ *   resolveAsset?: (path: string) => string | null,
+ *   filename?: string }} [options]
  * @returns {{ svg: string | null, model: object, errors: Array }}
  */
-export function textToSvg(src, { theme, themeKey, lang, resolveImport } = {}) {
-  const model = parseDSL(src, { lang, resolveImport });
+export function textToSvg(
+  src,
+  { theme, themeKey, lang, resolveImport, resolveAsset, filename } = {},
+) {
+  const model = parseDSL(src, { lang, resolveImport, resolveAsset, filename });
   const resolvedTheme = theme ?? (themeKey ? THEMES[themeKey] : null) ?? THEMES.basic;
   const opts = resolveDiagramOptions(model.options);
   try {

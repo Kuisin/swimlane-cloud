@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseDSL } from "./parser.js";
-import { dslVersion } from "./parser-v2.js";
+import { dslVersion, scanImports, checkImportPath } from "./parser-v2.js";
 
 const doc = (body) => `@kai-swimlane 2\n${body}\n@end\n`;
 
@@ -110,5 +110,107 @@ describe("kai-swimlane 2", () => {
   it("reports a jump whose target does not exist", () => {
     const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  goto @nope\nend-if"));
     expect(m.errors.map((e) => e.msg)).toContain('no node with id "nope"');
+  });
+});
+
+describe("imported images", () => {
+  const PNG =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const SVG = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=";
+  const withAsset = (body, resolveAsset = () => PNG, extra = {}) =>
+    parseDSL(doc(body), { resolveAsset, ...extra });
+
+  it("binds an image to the file's stem and resolves an icon reference", () => {
+    const m = withAsset(
+      "@use assets/company-logo.png;\n\n/role/\n<a>\n  icon: @company-logo;\n\n/line/\n[a: x]",
+    );
+    expect(m.errors).toEqual([]);
+    expect(m.assets["company-logo"]).toMatchObject({
+      path: "assets/company-logo.png",
+      mime: "image/png",
+    });
+    expect(m.lanes[0].icon).toBe("@company-logo");
+    expect(m.lanes[0].iconAsset.dataUri).toBe(PNG);
+  });
+
+  it("takes vector and raster alike", () => {
+    const m = withAsset("@use a/mark.svg;\n@use a/photo.jpg;\n\n/line/\n[a: x]", (p) =>
+      p.endsWith(".svg") ? SVG : PNG,
+    );
+    expect(m.errors).toEqual([]);
+    expect(m.assets.mark.mime).toBe("image/svg+xml");
+    expect(m.assets.photo.mime).toBe("image/jpeg");
+  });
+
+  it("names an import with `as`, which is how two stems stop colliding", () => {
+    const m = withAsset("@use a/logo.svg as brand;\n@use b/logo.png as mark;\n\n/line/\n[a: x]");
+    expect(m.errors).toEqual([]);
+    expect(Object.keys(m.assets).sort()).toEqual(["brand", "mark"]);
+  });
+
+  it("reports a collision rather than letting one image win silently", () => {
+    const m = withAsset("@use a/logo.svg;\n@use b/logo.png;\n\n/line/\n[a: x]");
+    expect(m.errors.map((e) => e.msg)).toContain(
+      'duplicate asset id "logo" — name one of them with "as"',
+    );
+  });
+
+  it("keeps the reference in `icon` so a save writes `@id`, not the image", () => {
+    const m = withAsset("@use a/logo.png;\n\n/block/\n<b>\n  icon: @logo;\n\n/line/\n[a: x] <b>");
+    expect(m.blocks.b.icon).toBe("@logo");
+    expect(m.blocks.b.iconAsset.dataUri).toBe(PNG);
+  });
+
+  it("warns and omits the image when the import does not resolve", () => {
+    const m = withAsset(
+      "@use a/logo.png;\n\n/role/\n<a>\n  icon: @logo;\n\n/line/\n[a: x]",
+      () => null,
+    );
+    expect(m.errors.map((e) => e.msg)).toEqual([
+      'cannot resolve "a/logo.png" — the image is omitted',
+    ]);
+    expect(m.lanes[0].iconAsset).toBeNull();
+  });
+
+  it("warns on a reference to an image nothing imported", () => {
+    const m = withAsset("/role/\n<a>\n  icon: @nope;\n\n/line/\n[a: x]");
+    expect(m.errors.map((e) => e.msg)).toEqual(['no imported image named "nope"']);
+  });
+
+  it("refuses anything that is not a base64 image data URI", () => {
+    const m = withAsset("@use a/logo.png;\n\n/line/\n[a: x]", () => "https://example.com/logo.png");
+    expect(m.errors[0].msg).toMatch(/did not resolve to a base64 image data URI/);
+  });
+
+  it("refuses an image past the size limit", () => {
+    const big = "data:image/png;base64," + "A".repeat(3 * 1024 * 1024);
+    const m = withAsset("@use a/logo.png;\n\n/line/\n[a: x]", () => big);
+    expect(m.errors[0].msg).toMatch(/larger than the 2 MiB limit/);
+  });
+
+  it("checks the path before any read, and resolves `../` against the file", () => {
+    expect(checkImportPath("../../assets/a.svg", "diagrams/brand")).toBeNull();
+    expect(checkImportPath("../../etc/passwd.png", "")).toMatch(/outside the repository/);
+    expect(checkImportPath("https://example.com/a.png", "")).toMatch(/must not contain ":"/);
+    expect(checkImportPath(".github/x.png", "")).toMatch(/is not importable/);
+    expect(checkImportPath("assets/logo", "")).toMatch(/must include a file extension/);
+  });
+
+  it("never reads a path that failed a check", () => {
+    const reads = [];
+    withAsset("@use ../../etc/passwd.png;\n\n/line/\n[a: x]", (p) => {
+      reads.push(p);
+      return PNG;
+    });
+    expect(reads).toEqual([]);
+  });
+
+  it("lists every import for a host to prefetch, in both layouts", () => {
+    expect(scanImports("@use assets/a.svg;\n@use t/b.txt;\n@use c/d.png as pic;")).toEqual([
+      { path: "assets/a.svg", alias: null, kind: "asset" },
+      { path: "t/b.txt", alias: null, kind: "fragment" },
+      { path: "c/d.png", alias: "pic", kind: "asset" },
+    ]);
+    expect(scanImports("@kai-swimlane 2@use a/b.svg;/line/[a:x]@end")).toHaveLength(1);
   });
 });
