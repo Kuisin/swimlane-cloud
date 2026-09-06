@@ -43,6 +43,8 @@ export const EN = {
   "common.unsaved": "unsaved",
   "common.loading": "Loading…",
   "common.delete": "Delete",
+  "common.ok": "OK",
+  "common.cancel": "Cancel",
   // tree
   "tree.files": "Files",
   "tree.noFiles": "No files",
@@ -301,6 +303,8 @@ export const JA = {
   "common.unsaved": "未保存",
   "common.loading": "読み込み中…",
   "common.delete": "削除",
+  "common.ok": "OK",
+  "common.cancel": "キャンセル",
   // tree
   "tree.files": "ファイル",
   "tree.noFiles": "ファイルなし",

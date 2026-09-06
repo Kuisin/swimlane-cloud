@@ -3,7 +3,15 @@
 import { useState } from "react";
 import { branchKindOf, branchLabel } from "@/lib/branch-label";
 import { publishVersion, unpublishVersion } from "@/lib/workflow";
-import { ProjectPage, HistoryPanel, describeError, useProject } from "../_components";
+import {
+  ProjectPage,
+  HistoryPanel,
+  Modal,
+  ModalFooter,
+  describeError,
+  useProject,
+} from "../_components";
+import type { VersionState } from "@/lib/types";
 import { useT } from "@/i18n";
 
 export default function BranchesPage() {
@@ -11,6 +19,8 @@ export default function BranchesPage() {
   const { t } = useT();
   const [selected, setSelected] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmPublish, setConfirmPublish] = useState<VersionState | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const branches = state?.branches ?? [];
   const view =
@@ -81,24 +91,46 @@ export default function BranchesPage() {
                   state={state}
                   branch={view}
                   onTogglePublish={
-                    view === "main" && isOwner
-                      ? (version) => {
-                          const msg = version.public
-                            ? t("branches.confirmUnshare")
-                            : t("branches.confirmShare");
-                          if (!window.confirm(msg)) return;
-                          const action = version.public
-                            ? unpublishVersion(projectId, version.id)
-                            : publishVersion(projectId, version.id, "svg_only");
-                          action.then(() => refresh()).catch((e) => setNotice(describeError(e, t)));
-                        }
-                      : undefined
+                    view === "main" && isOwner ? (version) => setConfirmPublish(version) : undefined
                   }
                 />
               )}
             </div>
           </div>
         </div>
+      )}
+
+      {confirmPublish && (
+        <Modal
+          title={confirmPublish.public ? t("branches.unshare") : t("branches.share")}
+          onClose={() => setConfirmPublish(null)}
+          maxW="max-w-sm"
+          footer={
+            <ModalFooter
+              onCancel={() => setConfirmPublish(null)}
+              onConfirm={() => {
+                const version = confirmPublish;
+                const action = version.public
+                  ? unpublishVersion(projectId, version.id)
+                  : publishVersion(projectId, version.id, "svg_only");
+                setBusy(true);
+                action
+                  .then(() => refresh())
+                  .catch((e) => setNotice(describeError(e, t)))
+                  .finally(() => {
+                    setBusy(false);
+                    setConfirmPublish(null);
+                  });
+              }}
+              confirmLabel={confirmPublish.public ? t("branches.unshare") : t("branches.share")}
+              busy={busy}
+            />
+          }
+        >
+          <p className="text-sm text-neutral-600">
+            {confirmPublish.public ? t("branches.confirmUnshare") : t("branches.confirmShare")}
+          </p>
+        </Modal>
       )}
     </ProjectPage>
   );

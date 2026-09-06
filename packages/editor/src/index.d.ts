@@ -127,6 +127,28 @@ export declare const FileEditorProvider: ComponentType<DslEditorProps & { childr
 
 export declare function useEditor(): Record<string, unknown>;
 
+/**
+ * In-app alert/confirm/prompt, exported so a host app can reuse the same
+ * themed dialogs outside `<DslEditor>` (e.g. a page that isn't rendering the
+ * editor at all) instead of native `window.confirm`/`alert`/`prompt`.
+ */
+export interface DialogHostRequest {
+  kind: "alert" | "confirm" | "prompt";
+  message: string;
+  defaultValue?: string;
+}
+export declare const DialogHost: ComponentType<{
+  request: DialogHostRequest | null;
+  onOk(value?: string): void;
+  onCancel(): void;
+}>;
+export declare function useDialogHost(): {
+  request: DialogHostRequest | null;
+  dialogs: Required<EditorDialogs>;
+  handleOk(value?: string): void;
+  handleCancel(): void;
+};
+
 export declare const TEMPLATE_SECTIONS: readonly TemplateSection[];
 export declare function hostHas(host: EditorHost, method: string): boolean;
 export declare function hostSupportsVersioning(host: EditorHost): boolean;
