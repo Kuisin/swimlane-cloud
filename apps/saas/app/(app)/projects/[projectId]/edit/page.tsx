@@ -98,6 +98,12 @@ function EditPageInner() {
   const [mobile, setMobile] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
   const [mFile, setMFile] = useState<string | undefined>(undefined);
+  // Read through a ref so the host identity does not change per open file:
+  // rebuilding it would remount the editor and drop its state.
+  const activeFileRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    activeFileRef.current = mFile;
+  }, [mFile]);
   const [mStep, setMStep] = useState<number | null>(null);
   const [mobileFiles, setMobileFiles] = useState<Files | null>(null);
   const [localDirty, setLocalDirty] = useState(false);
@@ -138,6 +144,7 @@ function EditPageInner() {
         projectId,
         branch,
         editable,
+        activeDocumentId: () => activeFileRef.current ?? "",
         onHeadChange: (sha) => setHeadMoved((prev) => prev ?? sha),
         onDraftSaved: () => setLocalDirty(true),
         onCheckpoint: () => {

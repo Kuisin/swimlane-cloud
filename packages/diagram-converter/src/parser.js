@@ -2,6 +2,19 @@ import { normalizeArrowLine, ARROW_LINE_TYPES } from "./arrow-line.js";
 import { getLucideIconNode } from "./render-pure/icon-paths.js";
 import { BLOCK_SHAPE_WIDTH_FACTOR, BRANCH_COLOR_STYLES } from "./render-pure/diagram-layout.js";
 import { parseDSLv2, dslVersion } from "./parser-v2.js";
+
+// The version 2 reader's public surface, re-exported so a host that imports
+// the parser entry point gets the whole DSL API from one module.
+export {
+  ASSET_EXTENSIONS,
+  ASSET_MAX_BYTES,
+  ASSET_TOTAL_MAX_BYTES,
+  checkImportPath,
+  dirOf,
+  dslVersion,
+  parseDSLv2,
+  scanImports,
+} from "./parser-v2.js";
 import {
   DEFAULT_COLUMN_TITLES,
   DIAGRAM_OPTION_DSL_MAP,

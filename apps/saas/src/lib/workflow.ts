@@ -36,6 +36,10 @@ export const getTree = (pid: string, ref: string) =>
 export const getFile = (pid: string, branch: string, path: string) =>
   api<{ dsl: string; source: "draft" | "git" }>(`${base(pid)}/file?${q({ branch, path })}`);
 
+/** One `@use` target: `{ text }` for a fragment, `{ dataUri }` for an image. */
+export const getImport = (pid: string, branch: string, from: string, path: string) =>
+  api<{ text?: string; dataUri?: string }>(`${base(pid)}/import?${q({ branch, from, path })}`);
+
 export const getSnapshot = (pid: string, ref: string, withDrafts = false) =>
   api<SnapshotResponse>(
     `${base(pid)}/snapshot?${q({ ref, withDrafts: withDrafts ? "1" : undefined })}`,

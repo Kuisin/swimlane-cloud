@@ -41,6 +41,11 @@
  * @property {() => Promise<string|null>} [root]
  * @property {() => Promise<FileRef[]>} list
  * @property {(id: string) => Promise<string>} read
+ * @property {(path: string) => Promise<string|null>} [readImport] Text of an
+ *   `@use` fragment, by repository-relative path. Without it a diagram still
+ *   renders; its imported definitions simply do not resolve.
+ * @property {(path: string) => Promise<string|null>} [readAsset] An `@use`
+ *   image as a base64 `data:` URI. Same degradation: no image, no error.
  * @property {(id: string, dsl: string) => Promise<void>} writeDraft
  * @property {(updates: {id: string, dsl: string}[]) => Promise<void>} [writeDraftMany]
  * @property {(opts: {message?: string, files?: {id: string, dsl: string}[]}) => Promise<void>} [checkpoint]

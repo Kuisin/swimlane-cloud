@@ -21,6 +21,7 @@ import {
   checkpoint as checkpointRequest,
   deleteFile,
   getFile,
+  getImport,
   getTree,
   removeFolder,
   renameFile,
@@ -38,12 +39,16 @@ export interface SaasHostOptions {
   onDraftSaved?: () => void;
   /** Fired after a successful checkpoint. */
   onCheckpoint?: (commitSha: string) => void;
+  /** The open file's path, so `@use` targets resolve relative to it. */
+  activeDocumentId?: () => string;
 }
 
 export function createSaasHost(opts: SaasHostOptions): EditorHost {
   const { projectId, branch } = opts;
   const base = `/api/projects/${encodeURIComponent(projectId)}`;
   let knownHeadSha: string | null = null;
+  // The importing file, so `./` and `../` resolve the way the parser does.
+  const activeId = () => opts.activeDocumentId?.() ?? "";
 
   async function write(files: { id: string; dsl: string }[]) {
     await saveDrafts(projectId, branch, files);
@@ -66,6 +71,25 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
 
     async read(id) {
       return (await getFile(projectId, branch, id)).dsl;
+    },
+
+    // `@use` targets. The editor reads them here because parsing is
+    // synchronous; a failure is null, so a diagram renders without its
+    // imports rather than not at all.
+    async readImport(path) {
+      try {
+        return (await getImport(projectId, branch, activeId(), path)).text ?? null;
+      } catch {
+        return null;
+      }
+    },
+
+    async readAsset(path) {
+      try {
+        return (await getImport(projectId, branch, activeId(), path)).dataUri ?? null;
+      } catch {
+        return null;
+      }
     },
 
     async writeDraft(id, dsl) {

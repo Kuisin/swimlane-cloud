@@ -29,6 +29,14 @@ declare module "@swimlane-cloud/diagram-converter/parser" {
     props: Record<string, unknown>;
     errors: Array<{ line?: number; text?: string; msg?: string }>;
   };
+  export const ASSET_EXTENSIONS: Record<string, string>;
+  export function checkImportPath(path: string, fromDir?: string): string | null;
+  export function dirOf(filename: string): string;
+  export function dslVersion(src: string): number | null;
+  export function scanImports(
+    src: string,
+    filename?: string,
+  ): Array<{ path: string; alias: string | null; kind: "fragment" | "asset" }>;
 }
 
 declare module "@swimlane-cloud/diagram-converter/themes" {

@@ -252,6 +252,33 @@ export function createWriteApi(rest: RestClient, repo: RepoRef) {
       }
     },
 
+    /**
+     * A file at a ref as base64, or null when missing.
+     *
+     * The Contents API already answers in base64, so an image needs no binary
+     * handling on the way through; over its 1 MB inline ceiling it returns an
+     * empty body and a blob sha, and the blob API answers the same way.
+     */
+    async readFileBase64(path: string, ref: string): Promise<string | null> {
+      try {
+        const res = await rest.request<{ content?: string; encoding?: string; sha?: string }>(
+          `${base}/contents/${encodeContentsPath(path)}?ref=${encodeURIComponent(ref)}`,
+          { immutable: SHA_RE.test(ref) },
+        );
+        if (res.encoding === "base64" && res.content) return res.content.replace(/\s+/g, "");
+        if (!res.sha) return null;
+        const blob = await rest.request<{ content?: string; encoding?: string }>(
+          `${base}/git/blobs/${res.sha}`,
+          { immutable: true },
+        );
+        if (blob.encoding !== "base64" || !blob.content) return null;
+        return blob.content.replace(/\s+/g, "");
+      } catch (err) {
+        if (err instanceof GitHubNotAccessibleError && err.status === 404) return null;
+        throw err;
+      }
+    },
+
     /** Lightweight tag. Releases are cut from `main` only. */
     async createTag(tag: string, sha: string): Promise<void> {
       await rest.request(`${base}/git/refs`, {
