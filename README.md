@@ -70,6 +70,9 @@ packages/
   github-client/       # zero-dependency GitHub client (REST, git protocol v2, raw CDN)
   gitlab-client/       # zero-dependency GitLab client, for a self-hosted (or gitlab.com) org instance
   mobile-view/         # card-based mobile rendering of a parsed diagram
+dsl-rule.md            # kai-swimlane 2 — the DSL specification (version 2 only)
+dsl-proposals.md       # the grammar candidates it was chosen from, plus the shared i18n / squash rules
+examples/kai-swimlane-2/ # a complete worked example of the DSL and the fragments it imports
 apps/
   saas/                # Next.js SaaS: edit diagrams in your GitHub repos (Supabase + GitHub + Vercel);
                        #   a workspace can opt into a self-hosted GitLab instance instead, per org

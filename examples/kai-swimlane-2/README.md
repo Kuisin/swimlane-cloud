@@ -1,8 +1,8 @@
 # `kai-swimlane 2` — worked example
 
-A complete order-to-cash flow written in the proposed `kai-swimlane 2` grammar
-(grammar **A** in [`dsl-proposals.md`](../../dsl-proposals.md)). It exists so the
-proposal can be read against a realistic file rather than fragments. No shipped tool
+A complete order-to-cash flow written in `kai-swimlane 2`, the DSL specified in
+[`dsl-rule.md`](../../dsl-rule.md). It exists so the specification can be read against a
+realistic file rather than fragments. No shipped tool
 parses version 2 yet; every file here is in the **canonical formatted layout** the
 proposal's formatter would write.
 
@@ -49,7 +49,7 @@ the converter rewrites them once. And the canonical form never contains the soli
 `@id` on nodes nothing references, full-width delimiters, or `/* */` comments (those appear only
 in the compact one-line form).
 
-## Reading it against the proposal
+## Reading it against the specification
 
 - Import paths beginning with `./` resolve against this directory, so the fragments under
   `templates/` are what `@use` merges; local `/role/` rows override them key by key.
