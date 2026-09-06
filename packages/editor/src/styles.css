@@ -1045,6 +1045,26 @@
   margin: 0 0 10px;
   white-space: pre-wrap;
 }
+.sw-help-guide-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--sw-text);
+}
+.sw-help-view-toggle {
+  display: inline-block;
+  margin-bottom: 12px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--sw-accent);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .sw-help-dl {
   margin: 0;
 }
@@ -1770,26 +1790,64 @@
   border: 1px solid var(--sw-border-strong);
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  padding: 4px 0;
-  min-width: 160px;
+  padding: 6px 0;
+  min-width: 260px;
+  max-width: 300px;
+}
+.sw-add-block-group + .sw-add-block-group {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--sw-border);
+}
+.sw-add-block-group-heading {
+  padding: 2px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sw-text-faint);
 }
 .sw-add-block-item {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 2px;
   width: 100%;
   padding: 6px 12px;
   background: none;
   border: none;
   color: var(--sw-text);
-  font-size: 12px;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
 }
 .sw-add-block-item:hover {
   background: var(--sw-bg-sunken);
+}
+.sw-add-block-item-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+.sw-add-block-item-desc {
+  font-size: 11px;
+  color: var(--sw-text-muted);
+}
+
+/* ---- step inspector progressive disclosure ---- */
+.sw-inspector-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sw-inspector-advanced summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sw-text-muted);
+  margin-bottom: 2px;
+}
+.sw-inspector-advanced summary:hover {
+  color: var(--sw-text);
 }
 
 /* ---- onboarding tour (first-run orientation card) ---- */

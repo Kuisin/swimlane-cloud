@@ -444,7 +444,7 @@ function DslEditorInner({ options }) {
         )}
       </div>
 
-      <HelpModal open={showHelp} onClose={() => setShowHelp(false)} />
+      <HelpModal open={showHelp} onClose={() => setShowHelp(false)} mode={effectiveMode} />
       <TemplatePanel
         open={showTemplates}
         host={host}

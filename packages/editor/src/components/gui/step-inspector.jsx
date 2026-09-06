@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowDown, ArrowUp, Eye, ListOrdered, Trash2 } from "lucide-react";
 import { ARROW_LINE_TYPES } from "@swimlane-cloud/diagram-converter";
 import { useT } from "../../i18n.jsx";
+import { usePersistentState } from "../../hooks/use-persistent-state.js";
 import { PartsPreviewPopup } from "./parts-preview-popup.jsx";
 import { PartsPreviewTooltip } from "../parts-preview-tooltip.jsx";
 
@@ -38,6 +39,11 @@ export function StepInspector({
   const { t } = useT();
   const [preview, setPreview] = useState(null); // "block" | "prop" | null
   const [hoverPreview, setHoverPreview] = useState(null);
+  const [advancedOpen, setAdvancedOpen] = usePersistentState(
+    "sw-editor:step-advanced-open",
+    false,
+    { parse: (v) => v === "true" },
+  );
 
   if (!row || row.kind !== "step" || row.empty) {
     return <div className="sw-gui-empty">{t("gui.selectStep")}</div>;
@@ -137,137 +143,145 @@ export function StepInspector({
         />
       </label>
 
-      <label className="sw-field">
-        <span className="sw-field-label">{t("step.label")}</span>
-        <input
-          type="text"
-          className="sw-input"
-          value={row.name || ""}
-          disabled={fieldDisabled}
-          onChange={(e) => set("name")(e.target.value || "")}
-        />
-      </label>
+      <details
+        className="sw-inspector-advanced"
+        open={advancedOpen}
+        onToggle={(e) => setAdvancedOpen(e.target.open)}
+      >
+        <summary>{t("step.moreOptions")}</summary>
 
-      <label className="sw-field">
-        <span className="sw-field-label">{t("step.description")}</span>
-        <textarea
-          className="sw-input sw-textarea-sm"
-          rows={2}
-          value={row.description || ""}
-          disabled={fieldDisabled}
-          onChange={(e) => set("description")(e.target.value || "")}
-        />
-      </label>
+        <label className="sw-field">
+          <span className="sw-field-label">{t("step.label")}</span>
+          <input
+            type="text"
+            className="sw-input"
+            value={row.name || ""}
+            disabled={fieldDisabled}
+            onChange={(e) => set("name")(e.target.value || "")}
+          />
+        </label>
 
-      <label className="sw-field">
-        <span className="sw-field-label">{t("step.remark")}</span>
-        <textarea
-          className="sw-input sw-textarea-sm"
-          rows={2}
-          value={row.remark || ""}
-          disabled={fieldDisabled}
-          onChange={(e) => set("remark")(e.target.value || "")}
-        />
-      </label>
+        <label className="sw-field">
+          <span className="sw-field-label">{t("step.description")}</span>
+          <textarea
+            className="sw-input sw-textarea-sm"
+            rows={2}
+            value={row.description || ""}
+            disabled={fieldDisabled}
+            onChange={(e) => set("description")(e.target.value || "")}
+          />
+        </label>
 
-      <div className="sw-field-row">
-        <div className="sw-field">
-          <span className="sw-field-label">{t("step.block")}</span>
-          <div className="sw-field-with-action">
+        <label className="sw-field">
+          <span className="sw-field-label">{t("step.remark")}</span>
+          <textarea
+            className="sw-input sw-textarea-sm"
+            rows={2}
+            value={row.remark || ""}
+            disabled={fieldDisabled}
+            onChange={(e) => set("remark")(e.target.value || "")}
+          />
+        </label>
+
+        <div className="sw-field-row">
+          <div className="sw-field">
+            <span className="sw-field-label">{t("step.block")}</span>
+            <div className="sw-field-with-action">
+              <select
+                className="sw-input"
+                value={row.blockRef || ""}
+                disabled={fieldDisabled}
+                onChange={(e) => set("blockRef")(e.target.value || null)}
+              >
+                <option value="">{t("step.none")}</option>
+                {Object.values(blocks || {}).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label || b.id}
+                  </option>
+                ))}
+              </select>
+              {row.blockRef ? (
+                <code
+                  className="sw-ref-badge"
+                  onMouseEnter={(e) => showHoverPreview("block", row.blockRef, e)}
+                  onMouseMove={(e) => showHoverPreview("block", row.blockRef, e)}
+                  onMouseLeave={() => setHoverPreview(null)}
+                >
+                  &lt;{row.blockRef}&gt;
+                </code>
+              ) : null}
+              <button
+                type="button"
+                className="sw-icon-btn"
+                disabled={!hasBlocks}
+                title={t("step.viewDesign")}
+                onClick={() => setPreview("block")}
+              >
+                <Eye size={14} />
+              </button>
+            </div>
+          </div>
+          <label className="sw-field">
+            <span className="sw-field-label">{t("step.arrow")}</span>
             <select
               className="sw-input"
-              value={row.blockRef || ""}
+              value={row.arrowLine || "solid"}
               disabled={fieldDisabled}
-              onChange={(e) => set("blockRef")(e.target.value || null)}
+              onChange={(e) => set("arrowLine")(e.target.value)}
             >
-              <option value="">{t("step.none")}</option>
-              {Object.values(blocks || {}).map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.label || b.id}
+              {ARROW_OPTIONS.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
                 </option>
               ))}
             </select>
-            {row.blockRef ? (
-              <code
-                className="sw-ref-badge"
-                onMouseEnter={(e) => showHoverPreview("block", row.blockRef, e)}
-                onMouseMove={(e) => showHoverPreview("block", row.blockRef, e)}
-                onMouseLeave={() => setHoverPreview(null)}
-              >
-                &lt;{row.blockRef}&gt;
-              </code>
-            ) : null}
-            <button
-              type="button"
-              className="sw-icon-btn"
-              disabled={!hasBlocks}
-              title={t("step.viewDesign")}
-              onClick={() => setPreview("block")}
-            >
-              <Eye size={14} />
-            </button>
-          </div>
+          </label>
         </div>
+
         <label className="sw-field">
-          <span className="sw-field-label">{t("step.arrow")}</span>
-          <select
+          <span className="sw-field-label">{t("step.mergeId")}</span>
+          <input
+            type="text"
             className="sw-input"
-            value={row.arrowLine || "solid"}
+            value={row.mergeId || ""}
             disabled={fieldDisabled}
-            onChange={(e) => set("arrowLine")(e.target.value)}
-          >
-            {ARROW_OPTIONS.map((a) => (
-              <option key={a.value} value={a.value}>
-                {a.label}
-              </option>
-            ))}
-          </select>
+            onChange={(e) => set("mergeId")(e.target.value || "")}
+          />
         </label>
-      </div>
 
-      <label className="sw-field">
-        <span className="sw-field-label">{t("step.mergeId")}</span>
-        <input
-          type="text"
-          className="sw-input"
-          value={row.mergeId || ""}
-          disabled={fieldDisabled}
-          onChange={(e) => set("mergeId")(e.target.value || "")}
-        />
-      </label>
-
-      {propList.length > 0 && (
-        <div className="sw-field">
-          <span className="sw-field-label sw-field-label-row">
-            {t("step.props")}
-            <button
-              type="button"
-              className="sw-icon-btn sw-icon-btn-xs"
-              title={t("step.viewDesign")}
-              onClick={() => setPreview("prop")}
-            >
-              <Eye size={13} />
-            </button>
-          </span>
-          <div className="sw-prop-chips">
-            {propList.map((p) => (
+        {propList.length > 0 && (
+          <div className="sw-field">
+            <span className="sw-field-label sw-field-label-row">
+              {t("step.props")}
               <button
-                key={p.id}
                 type="button"
-                disabled={fieldDisabled}
-                className={`sw-chip ${selectedProps.has(p.id) ? "sw-chip-on" : ""}`}
-                onClick={() => toggleProp(p.id)}
-                onMouseEnter={(e) => showHoverPreview("prop", p.id, e)}
-                onMouseMove={(e) => showHoverPreview("prop", p.id, e)}
-                onMouseLeave={() => setHoverPreview(null)}
-                title={`<${p.id}>`}
+                className="sw-icon-btn sw-icon-btn-xs"
+                title={t("step.viewDesign")}
+                onClick={() => setPreview("prop")}
               >
-                &lt;{p.label || p.id}&gt;
+                <Eye size={13} />
               </button>
-            ))}
+            </span>
+            <div className="sw-prop-chips">
+              {propList.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={fieldDisabled}
+                  className={`sw-chip ${selectedProps.has(p.id) ? "sw-chip-on" : ""}`}
+                  onClick={() => toggleProp(p.id)}
+                  onMouseEnter={(e) => showHoverPreview("prop", p.id, e)}
+                  onMouseMove={(e) => showHoverPreview("prop", p.id, e)}
+                  onMouseLeave={() => setHoverPreview(null)}
+                  title={`<${p.id}>`}
+                >
+                  &lt;{p.label || p.id}&gt;
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </details>
 
       <PartsPreviewPopup
         open={preview === "block"}

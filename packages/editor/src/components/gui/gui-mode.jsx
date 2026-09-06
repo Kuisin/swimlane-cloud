@@ -16,6 +16,7 @@ import {
   moveRow,
 } from "../../lib/flow-rows.js";
 import { buildLockedGuiRowIndices } from "../../lib/parse-error-policy.js";
+import { AddStepMenu } from "./add-step-menu.jsx";
 import { FlowStepList } from "./flow-step-list.jsx";
 import { StepInspector } from "./step-inspector.jsx";
 import { BranchInspector } from "./branch-inspector.jsx";
@@ -329,27 +330,15 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOpti
                     <ChevronDown size={12} />
                   </button>
                   {dropOpen && (
-                    <div
-                      className="sw-add-block-menu"
-                      style={{ top: dropPos.top, left: dropPos.left }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      <button type="button" className="sw-add-block-item" onClick={addIfBranch}>
-                        {t("gui.addIf")}
-                      </button>
-                      <button type="button" className="sw-add-block-item" onClick={addSwitch}>
-                        {t("gui.addSwitch")}
-                      </button>
-                      <button type="button" className="sw-add-block-item" onClick={addFork}>
-                        {t("gui.addFork")}
-                      </button>
-                      <button type="button" className="sw-add-block-item" onClick={addSection}>
-                        {t("gui.addSection")}
-                      </button>
-                      <button type="button" className="sw-add-block-item" onClick={addSubBranch}>
-                        {t("gui.addBranch")}
-                      </button>
-                    </div>
+                    <AddStepMenu
+                      position={dropPos}
+                      onClose={() => setDropOpen(false)}
+                      onAddIf={addIfBranch}
+                      onAddSwitch={addSwitch}
+                      onAddFork={addFork}
+                      onAddSection={addSection}
+                      onAddBranch={addSubBranch}
+                    />
                   )}
                 </div>
               )}
