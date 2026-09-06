@@ -1,0 +1,176 @@
+@kai-swimlane 2
+@lang ja, en;
+@use ./templates/page/corporate.swim;
+@use ./templates/role/standard.swim;
+@use ./templates/i18n/glossary.swim;
+
+/meta/
+owner: sales-ops;
+status: review;
+tags: order, credit, shipping, billing;
+version: 3;
+updated: 2026-09-06;
+
+/title/
+受注から請求まで | Order to cash;
+
+/page/
+description: ```
+Web と電話の両チャネルで受けた注文を、与信・承認・出荷・請求まで一本の流れで示す。
+```;
+description.en: ```
+One flow from an order received by web or phone, through credit check, approval,
+shipping and billing.
+```;
+
+/option/
+show-right-gutter: true;
+lang: ja;
+right-title: 備考 | Remarks;
+
+/role/
+<sales>
+  background-color: #fff7e6;
+  unset: icon;
+
+<credit>
+  label: 与信担当 | Credit desk;
+  icon: none;
+
+/block/
+<external>
+  border-color: #b45309;
+  shape: subroutine;
+  icon: #cloud;
+
+<terminal>
+  background-color: #ecfdf5;
+  border-color: #059669;
+  shape: rounded;
+
+/prop/
+<PO>
+  label: 注文書 | Purchase order;
+  side: right;
+
+<CR>
+  label: 与信結果 | Credit report;
+  side: left;
+  max-chars: 12;
+
+<INV>
+  label: 請求書 | Invoice;
+  side: right;
+
+/line/
+// 受付チャネルで入口が分かれる
+phase (受付 | Intake) @intake #gray
+  if [sales] (受注チャネルは？ | Order channel?) @channel
+    desc: Web 注文はシステムが自動取込;
+    desc.en: Web orders are imported automatically;
+  case (Web) #blue
+    [system: 注文データ取込 | Import order] <external> @import +PO
+      remark: 夜間バッチと即時取込の両方;
+      remark.en: Both the nightly batch and on-demand import;
+  case (電話 | Phone) #orange
+    [sales: 注文内容の聞き取り | Take the order by phone] @phone-order
+      desc: 品目・数量・納期を確認;
+      desc.en: Confirm items, quantity and delivery date;
+      remark: 記録形式は「品目 \| 数量 \| 納期」;
+      remark.en: Record as "item \| quantity \| date";
+    [sales: 注文書（控え）を起票 | Draft the purchase order (copy)] +PO ~>
+  else #gray
+    [sales: 受付不可を連絡 | Decline the order]
+    goto @closed
+  end-if
+  [system: 注文を登録 | Register the order] @registered
+    label: 受注登録;
+end-phase
+
+phase (与信と承認) @approval #teal
+  [credit: 与信チェック | Credit check] @credit-check +CR ..>
+    desc: ```
+    取引先マスタの与信枠と未回収残高を照合する。
+    枠超過なら上長判断へ回す。
+    ```;
+    desc.en: ```
+    Compare the credit limit with the outstanding balance.
+    Over the limit goes to the manager.
+    ```;
+    remark: 与信ポリシー第 3 条を参照;
+  if [credit] (与信枠内？ | Within the credit limit?) @credit-ok
+  case (はい | Yes) #green
+    [system: 与信 OK を記録 | Record credit OK]
+  case (いいえ | No) #red
+    note: 枠超過は月 5 件程度;
+    note.en: About five orders a month exceed the limit;
+    if [manager] (特別承認する？ | Special approval?) @special
+    case (承認 | Approve) #green
+      [manager: 承認理由を記録 | Record the reason] +CR
+    case (条件付き | With conditions) #yellow
+      [sales: 前払い条件を提示 | Offer prepayment terms]
+      [sales: 顧客の回答を待つ | Wait for the customer] -.>
+      // 回答が届いたら与信チェックからやり直す
+      loop @credit-check
+    else #red
+      [sales: 受注を辞退 | Decline the order]
+      goto @closed
+    end-if
+  end-if
+  branch (監査記録 | Audit trail) #gray
+    [system: 与信判断ログを保存 | Store the credit log] +CR
+      note: 保存期間は 7 年;
+      note.en: Kept for seven years;
+      note-side: left;
+  end-branch
+  [manager: 受注を承認 | Approve the order] @approved
+end-phase
+
+fork (出荷 | Shipping) @fulfil #purple
+  [warehouse: 在庫引当 | Allocate stock] @allocate
+  if [warehouse] (在庫は十分？ | Enough stock?)
+  case (はい | Yes) #green
+    [warehouse: ピッキングと梱包 | Pick and pack] => ./shipping-prep.swim
+  case (いいえ | No) #red
+    [warehouse: 入荷待ちを登録 | Register a backorder]
+    [sales: 納期変更を連絡 | Notify the new delivery date] -->
+  end-if
+  [warehouse: 出荷 | Ship] @shipped
+and (請求 | Billing) #blue
+  [billing: 請求書を発行 | Issue the invoice] +INV
+    remark: 出荷日基準で計上;
+    remark.en: Booked on the shipping date;
+  [billing: 入金を待つ | Wait for payment]
+and (通知 | Notification) #teal
+  [system: 出荷通知メール | Shipping notice mail] @notify
+  if [system] (メール送信に失敗？ | Mail failed?)
+  case (はい | Yes) #red
+    [sales: 電話で連絡 | Call the customer]
+  else #green
+    [system: 送信済みを記録 | Record as sent]
+  end-if
+end-fork
+
+section (クロージング | Closing) @closing #blue
+  if [billing] (入金確認できた？ | Payment received?) @paid
+  case (はい | Yes) #green
+    [billing: 消込を実行 | Reconcile the payment] +INV
+  case (いいえ、期日超過 | No, overdue) #orange
+    [sales: 督促] ~>
+    [sales: 回答を待つ | Wait for the reply]
+    loop
+  end-if
+  [system: 受注をクローズ | Close the order] <terminal> @closed
+end-section
+
+[sales: 完了] <terminal> @done
+  skip;
+
+/i18n/
+approval.name.en: Credit and approval;
+
+credit-check.remark.en: "See credit policy, article 3; the limit table is in the customer master";
+
+"督促".en: Send a reminder;
+
+@end
