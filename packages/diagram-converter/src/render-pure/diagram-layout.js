@@ -138,9 +138,14 @@ export const DIAGRAM_LAYOUT = {
   decisionYOffset: -15,
   branchCaseBendYOffset: 10,
   caseLabelOffsetY: 18,
-  caseLabelHeight: 28,
+  caseLabelHeight: 20,
   caseLabelPadX: 8,
-  caseLabelPadY: 14,
+  caseLabelPadY: 11,
+  // Minimum clearance kept between a case label's drawn bottom edge and
+  // whatever it points at (the first step's arrowhead, or the join). A
+  // fork's gateway circle is shorter than an `if`'s diamond, so without this
+  // floor the label sat almost on top of the block below it.
+  caseLabelGapBelow: 12,
   caseLabelCharWidth: 8.5,
   caseLaneSafeInset: 16,
   branchConnectorElbowThreshold: 0.5,

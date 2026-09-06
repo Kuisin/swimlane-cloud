@@ -87,6 +87,14 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
   useEffect(() => {
     onAutosaveErrorRef.current = options?.onAutosaveError;
   });
+  // Fired when `initialDocumentId` doesn't match anything in the file list —
+  // e.g. a URL built around a path the file has since moved away from — so a
+  // host can tell the user instead of the requested file silently opening
+  // whatever sorts first.
+  const onDocumentNotFoundRef = useRef(options?.onDocumentNotFound);
+  useEffect(() => {
+    onDocumentNotFoundRef.current = options?.onDocumentNotFound;
+  });
   const onPendingChangeRef = useRef(options?.onPendingChange);
   useEffect(() => {
     onPendingChangeRef.current = options?.onPendingChange;
@@ -173,7 +181,9 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
         // Open the host-requested file if it still exists, else the first one,
         // so the editor always has content to show.
         const wanted = options?.initialDocumentId;
-        const target = (wanted && (list || []).find((f) => f.id === wanted)) || (list || [])[0];
+        const found = wanted ? (list || []).find((f) => f.id === wanted) : null;
+        if (wanted && !found) onDocumentNotFoundRef.current?.(wanted);
+        const target = found || (list || [])[0];
         if (target && !cancelled) {
           await openFile(target.id);
         }

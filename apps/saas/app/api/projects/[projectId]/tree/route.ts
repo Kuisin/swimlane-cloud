@@ -1,6 +1,7 @@
 import { INTEGRATION_BRANCH } from "@swimlane-cloud/github-client";
 import { withApi, json } from "@/lib/api";
 import { assertRef, isSha } from "@/lib/guard";
+import { ensureFileIds } from "@/lib/file-ids";
 import { requireProjectRole } from "@/lib/projects";
 import { isDraftablePath, listDiagramFiles, loadDraftState, resolveSha } from "@/lib/repo-files";
 import type { TreeResponse } from "@/lib/types";
@@ -38,10 +39,17 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
     }
   }
 
+  const sortedIds = ids.sort();
+  const fidByPath = await ensureFileIds(projectId, sortedIds);
+
   const body: TreeResponse = {
     ref,
     sha,
-    files: ids.sort().map((id) => ({ id, name: id.split("/").pop() ?? id })),
+    files: sortedIds.map((id) => ({
+      id,
+      name: id.split("/").pop() ?? id,
+      fid: fidByPath[id],
+    })),
     truncated,
     diagramsRoot: config.diagramsRoot,
   };

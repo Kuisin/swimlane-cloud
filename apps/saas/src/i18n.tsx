@@ -278,6 +278,7 @@ export const EN: Record<string, string> = {
   "edit.lock.other": "only preview and edit branches can be edited here",
   "edit.branchMoved": "This branch moved on GitHub. Reload before pushing.",
   "edit.reload": "Reload",
+  "edit.fileNotFound": "The linked file could not be found; opened the first file instead.",
   // branches page
   "branches.title": "Branches",
   "branches.historyOf": "History · {branch}",
@@ -710,6 +711,7 @@ export const JA: Record<string, string> = {
   "edit.branchMoved":
     "このブランチは GitHub 上で更新されました。保存の前に再読み込みしてください。",
   "edit.reload": "再読み込み",
+  "edit.fileNotFound": "リンク先のファイルが見つからなかったため、最初のファイルを開きました。",
   // branches page
   "branches.title": "ブランチ",
   "branches.historyOf": "履歴 · {branch}",

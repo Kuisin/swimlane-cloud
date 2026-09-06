@@ -41,6 +41,12 @@ export interface SaasHostOptions {
   onCheckpoint?: (commitSha: string) => void;
   /** The open file's path, so `@use` targets resolve relative to it. */
   activeDocumentId?: () => string;
+  /**
+   * Fired with the raw tree listing every time `list()` resolves, so the page
+   * can keep a path -> fid map for writing `?fid=` into the URL (the editor's
+   * own `FileRef` doesn't carry `fid` — that's a SaaS-only concept).
+   */
+  onFileList?: (files: { id: string; name: string; fid: string }[]) => void;
 }
 
 export function createSaasHost(opts: SaasHostOptions): EditorHost {
@@ -66,6 +72,7 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
       const tree = await getTree(projectId, branch);
       if (knownHeadSha && tree.sha !== knownHeadSha) opts.onHeadChange?.(tree.sha);
       knownHeadSha = tree.sha;
+      opts.onFileList?.(tree.files);
       return tree.files;
     },
 
