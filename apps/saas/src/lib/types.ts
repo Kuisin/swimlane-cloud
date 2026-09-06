@@ -99,7 +99,10 @@ export interface CommitInfo {
 export interface TreeResponse {
   ref: string;
   sha: string;
-  files: { id: string; name: string }[];
+  // `id` is the editor's document id (the POSIX path) — see @swimlane-cloud/editor.
+  // `fid` is this project's stable file identity for that path (file_identities),
+  // used to build a URL that keeps opening the same file after it moves.
+  files: { id: string; name: string; fid: string }[];
   truncated: boolean;
   diagramsRoot: string;
 }

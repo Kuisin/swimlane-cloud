@@ -1110,6 +1110,7 @@ export function MobileView({
   onSave,
   path: pathProp,
   onPath,
+  onPathNotFound,
   editStep: editStepProp,
   onEditStep,
   readImport,
@@ -1120,6 +1121,10 @@ export function MobileView({
   onSave?: (path: string, dsl: string) => void;
   path?: string;
   onPath?: (p: string) => void;
+  /** Fired when `path` doesn't match any loaded file, just before falling
+   * back to the first one — e.g. a URL built around a path the file has
+   * since moved away from. */
+  onPathNotFound?: (path: string) => void;
   editStep?: number | null;
   onEditStep?: (i: number | null) => void;
   /** `@use` targets, read at the branch tip. Without these a diagram still
@@ -1135,6 +1140,10 @@ export function MobileView({
   const path = pathProp ?? pathState;
   const setPath = (p: string) => (onPath ? onPath(p) : setPathState(p));
   const active = files[path] !== undefined ? path : (paths[0] ?? "");
+  useEffect(() => {
+    if (path && files[path] === undefined) onPathNotFound?.(path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, files]);
   const [dsl, setDsl] = useState(files[active] ?? "");
   const [stepState, setStepState] = useState<number | null>(null);
   const editStep = editStepProp !== undefined ? editStepProp : stepState;

@@ -26,6 +26,7 @@ import {
   editLockReason,
   getSnapshot,
   isLocked,
+  resolveFileId,
   saveDrafts,
   startEdit,
 } from "@/lib/workflow";
@@ -104,6 +105,10 @@ function EditPageInner() {
   useEffect(() => {
     activeFileRef.current = mFile;
   }, [mFile]);
+  // Path -> stable file id for whatever the tree last listed, so the URL can
+  // carry `fid` alongside the human-readable `file` path (saas-host.ts fires
+  // this from the same tree fetch the editor already makes).
+  const [fidByPath, setFidByPath] = useState<Record<string, string>>({});
   const [mStep, setMStep] = useState<number | null>(null);
   const [mobileFiles, setMobileFiles] = useState<Files | null>(null);
   const [localDirty, setLocalDirty] = useState(false);
@@ -145,6 +150,7 @@ function EditPageInner() {
         branch,
         editable,
         activeDocumentId: () => activeFileRef.current ?? "",
+        onFileList: (files) => setFidByPath(Object.fromEntries(files.map((f) => [f.id, f.fid]))),
         onHeadChange: (sha) => setHeadMoved((prev) => prev ?? sha),
         onDraftSaved: () => setLocalDirty(true),
         onCheckpoint: () => {
@@ -172,12 +178,35 @@ function EditPageInner() {
     const b = sp.get("branch");
     if (b) setBranchParam(b);
     const f = sp.get("file");
-    if (f) setMFile(f);
     const s = sp.get("step");
     if (s != null && s !== "") {
       const n = Number(s);
       if (!Number.isNaN(n)) setMStep(n);
     }
+
+    // `fid` (a stable file id) takes priority over `file` (a folder path):
+    // it is the only one of the two that keeps pointing at the same file
+    // once that file has moved. Fall back to `file` — and, failing that, to
+    // whatever the editor opens by default — when `fid` doesn't resolve
+    // (garbage id, or the file was deleted), same as an old `?file=` link
+    // whose path no longer exists.
+    const fid = sp.get("fid");
+    if (fid) {
+      resolveFileId(projectId, fid)
+        .then((res) => {
+          if (res.path) setMFile(res.path);
+          else {
+            if (f) setMFile(f);
+            setNotice(t("edit.fileNotFound"));
+          }
+        })
+        .catch(() => {
+          if (f) setMFile(f);
+        })
+        .finally(() => setReady(true));
+      return;
+    }
+    if (f) setMFile(f);
     setReady(true);
   }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -188,10 +217,13 @@ function EditPageInner() {
     params.set("view", mobile ? "mobile" : "editor");
     if (mFile) params.set("file", mFile);
     else params.delete("file");
+    const fid = mFile ? fidByPath[mFile] : undefined;
+    if (fid) params.set("fid", fid);
+    else params.delete("fid");
     if (mStep != null) params.set("step", String(mStep));
     else params.delete("step");
     router.replace(`?${params.toString()}`, { scroll: false });
-  }, [branch, mobile, mFile, mStep]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [branch, mobile, mFile, mStep, fidByPath]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Switching branch resets per-branch UI state.
   useEffect(() => {
@@ -457,6 +489,7 @@ function EditPageInner() {
                   }}
                   path={mFile}
                   onPath={setMFile}
+                  onPathNotFound={() => setNotice(t("edit.fileNotFound"))}
                   editStep={mStep}
                   onEditStep={setMStep}
                   readImport={host.readImport}
@@ -475,6 +508,7 @@ function EditPageInner() {
                   showLanguageToggle: false,
                   initialDocumentId: mFile,
                   onActiveDocument: setMFile,
+                  onDocumentNotFound: () => setNotice(t("edit.fileNotFound")),
                   autosaveDelayMs: 1500,
                   localMirrorKey: mirrorScope,
                   onPendingChange: setAutosavePending,

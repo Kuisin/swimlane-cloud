@@ -332,6 +332,7 @@ function renderDiagramSvg({
     caseLabelHeight,
     caseLabelPadX,
     caseLabelPadY,
+    caseLabelGapBelow,
     caseLabelCharWidth,
     caseLaneSafeInset,
     branchConnectorElbowThreshold,
@@ -510,6 +511,15 @@ function renderDiagramSvg({
   }
   rows.forEach((r, i) => {
     if (r.kind === "branchStart") {
+      // v2 DSL emits an explicit `branchCase` row for a fork's own first path
+      // (e.g. `fork (label)`), right after the `branchStart` row. v1 never
+      // does — a v1 fork's first path has no row of its own, so the implicit
+      // case below is still needed there. Synthesizing it unconditionally
+      // (regardless of DSL version) double-counts the v2 fork's first path,
+      // producing an extra, unlabeled, step-less rail in the rendered fork.
+      const nextRow = rows[i + 1];
+      const firstPathHasOwnRow =
+        Boolean(r.parallel) && nextRow?.kind === "branchCase" && nextRow.id === r.id;
       const f = {
         id: r.id,
         depth: r.depth,
@@ -518,26 +528,29 @@ function renderDiagramSvg({
         yDecision: y,
         decisionColor: r.branchColor || null,
         // A fork's first concurrent path opens at the `fork` line itself (no
-        // condition/firstCase), mirroring how an `if` opens its first case.
-        cases: r.parallel
-          ? [
-              {
-                label: "",
-                color: r.branchColor || null,
-                rowIndices: [],
-                startRow: i,
-              },
-            ]
-          : r.firstCase && String(r.firstCase).trim()
+        // condition/firstCase), mirroring how an `if` opens its first case —
+        // unless the model already supplied that row (v2's labeled fork).
+        cases: firstPathHasOwnRow
+          ? []
+          : r.parallel
             ? [
                 {
-                  label: r.firstCase.trim(),
+                  label: "",
                   color: r.branchColor || null,
                   rowIndices: [],
                   startRow: i,
                 },
               ]
-            : [],
+            : r.firstCase && String(r.firstCase).trim()
+              ? [
+                  {
+                    label: r.firstCase.trim(),
+                    color: r.branchColor || null,
+                    rowIndices: [],
+                    startRow: i,
+                  },
+                ]
+              : [],
         parentCase: null,
         anchorX: null,
       };
@@ -661,6 +674,46 @@ function renderDiagramSvg({
       x: li >= 0 ? nodeCenterX(stepIdx, row.role) : width / 2,
       y: stepBlockCenterY(stepIdx) - 22,
       showArrow: true,
+    };
+  }
+  /**
+   * Position + width for a branch/fork case label chip, shared by the drawn
+   * chip and its click target so the two can never drift apart. `dH` (the
+   * gateway's half-height) is parallel-aware: a fork's gateway is a
+   * FORK_GATEWAY_RADIUS*2 circle, shorter than an `if`'s decisionDiamondH
+   * diamond, so treating both the same left a fork's label almost touching
+   * the block below it. The result is also clamped upward (never pushed
+   * down) so the label's drawn bottom edge keeps at least caseLabelGapBelow
+   * clearance from whatever it points at.
+   */
+  function caseLabelPosition(f, c) {
+    const dCy = branchDecisionCy(f);
+    const dH = f.parallel ? FORK_GATEWAY_RADIUS * 2 : decisionDiamondH;
+    const startY = dCy + dH / 2;
+    const bendY = startY + branchCaseBendYOffset;
+    let labelY = bendY + caseLabelOffsetY;
+    let targetX = c.x;
+    let targetY = null;
+    const firstStepIdx = firstStepIdxInCase(c);
+    if (firstStepIdx != null) {
+      const stepTarget = caseStepLineTarget(firstStepIdx, c);
+      if (stepTarget) {
+        targetX = stepTarget.x;
+        targetY = stepTarget.y;
+      } else {
+        targetY = stepBlockCenterY(firstStepIdx) - 22;
+      }
+    } else if (f.yMerge != null) {
+      targetY = f.yMerge + mergeH / 2 - mergeNodeH / 2 - mergeArrowClearance;
+    }
+    if (targetY != null) {
+      const labelBottomOffset = caseLabelHeight - caseLabelPadY;
+      labelY = Math.min(labelY, targetY - caseLabelGapBelow - labelBottomOffset);
+    }
+    return {
+      labelX: targetX,
+      labelY,
+      labelW: (stringDisplayColumnWidth(c.label || "") + 2) * caseLabelCharWidth,
     };
   }
   function caseStepLineSource(stepIdx, caseHint) {
@@ -2515,41 +2568,19 @@ function renderDiagramSvg({
       }),
       frames.map((f) => {
         if (f.yMerge == null) return null;
-        const dCy = branchDecisionCy(f);
-        const dH = decisionDiamondH;
         return f.cases.map((c, ci) => {
           if (!(c.label || "").trim()) return null;
           if (/^else$/i.test((c.label || "").trim())) return null;
-          const firstStepIdx = firstStepIdxInCase(c);
-          let targetY;
-          let targetX = c.x;
-          if (firstStepIdx != null) {
-            const stepTarget = caseStepLineTarget(firstStepIdx, c);
-            if (stepTarget) {
-              targetX = stepTarget.x;
-              targetY = stepTarget.y;
-            } else {
-              targetY = stepBlockCenterY(firstStepIdx) - 22;
-            }
-          } else {
-            const mCy = f.yMerge + mergeH / 2;
-            const mH = mergeNodeH;
-            targetY = mCy - mH / 2 - mergeArrowClearance;
-          }
-          const startY = dCy + dH / 2;
-          const bendY = startY + branchCaseBendYOffset;
-          const labelX = targetX;
-          const labelY = bendY + caseLabelOffsetY;
-          const labelW = (c.label.length + 2) * caseLabelCharWidth;
+          const { labelX, labelY, labelW } = caseLabelPosition(f, c);
           const caseStyle = resolveBranchStyle(c.color);
           return /* @__PURE__ */ h(
             "g",
             { key: `case-label-overlay-${f.id}-${ci}` },
             /* @__PURE__ */ h("rect", {
               x: labelX - labelW / 2,
-              y: labelY - 11,
+              y: labelY - caseLabelPadY,
               width: labelW,
-              height: 20,
+              height: caseLabelHeight,
               rx: "3",
               fill: caseStyle.bg,
               fillOpacity: "0.8",
@@ -2751,18 +2782,7 @@ function renderDiagramSvg({
             const f = frames.find((fr) => fr.cases.some((c2) => c2.startRow === i));
             const c = f?.cases.find((ca) => ca.startRow === i);
             if (!f || !c) return null;
-            const labelW = ((c.label || "").length + 2) * caseLabelCharWidth;
-            const dCy = branchDecisionCy(f);
-            const dH = decisionDiamondH;
-            const startY = dCy + dH / 2;
-            const bendY = startY + branchCaseBendYOffset;
-            const labelY = bendY + caseLabelOffsetY;
-            let targetX = c.x;
-            const firstStepIdx = firstStepIdxInCase(c);
-            if (firstStepIdx != null) {
-              const stepTarget = caseStepLineTarget(firstStepIdx, c);
-              if (stepTarget) targetX = stepTarget.x;
-            }
+            const { labelX, labelY, labelW } = caseLabelPosition(f, c);
             const edgeD = buildCaseFanOutEdgeD(f, c);
             return /* @__PURE__ */ h(
               "g",
@@ -2774,7 +2794,7 @@ function renderDiagramSvg({
               }),
               /* @__PURE__ */ h(RowHitTarget, {
                 rowIndex: i,
-                x: targetX - labelW / 2 - caseLabelPadX,
+                x: labelX - labelW / 2 - caseLabelPadX,
                 y: labelY - caseLabelPadY,
                 w: labelW + caseLabelPadX * 2,
                 h: caseLabelHeight,

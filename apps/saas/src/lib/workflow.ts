@@ -36,6 +36,10 @@ export const getTree = (pid: string, ref: string) =>
 export const getFile = (pid: string, branch: string, path: string) =>
   api<{ dsl: string; source: "draft" | "git" }>(`${base(pid)}/file?${q({ branch, path })}`);
 
+/** A file id's current path, or null if unknown — for a `?fid=` deep link. */
+export const resolveFileId = (pid: string, fid: string) =>
+  api<{ path: string | null }>(`${base(pid)}/files/resolve?${q({ fid })}`);
+
 /** One `@use` target: `{ text }` for a fragment, `{ dataUri }` for an image. */
 export const getImport = (pid: string, branch: string, from: string, path: string) =>
   api<{ text?: string; dataUri?: string }>(`${base(pid)}/import?${q({ branch, from, path })}`);

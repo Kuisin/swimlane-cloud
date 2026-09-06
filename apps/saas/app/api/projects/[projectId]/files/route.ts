@@ -1,5 +1,7 @@
+import { isEditBranch } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { assertRef, assertRepoPath } from "@/lib/guard";
+import { moveFileId } from "@/lib/file-ids";
 import {
   assertBranchWritable,
   loadProjectTemplates,
@@ -141,6 +143,10 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     );
     if (error) throw new ApiError(500, `rename failed: ${error.message}`);
     await markDeleted([body.from]);
+    // Only repoint the file's identity when the rename is visible to everyone
+    // (the integration branch), not a private, possibly-abandoned tmp-* edit
+    // branch — see the comment on moveFileId.
+    if (!isEditBranch(body.branch)) await moveFileId(projectId, body.from, to);
     return json({ renamed: true, from: body.from, to });
   }
 

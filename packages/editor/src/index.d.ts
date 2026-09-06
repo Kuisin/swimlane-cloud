@@ -105,6 +105,12 @@ export interface EditorOptions {
   onPendingChange?(pending: boolean): void;
   /** Fired when a background autosave flush fails. */
   onAutosaveError?(message: string): void;
+  /**
+   * Fired when `initialDocumentId` doesn't match anything in the file list
+   * (e.g. a URL built around a path the file has since moved away from), just
+   * before the editor falls back to opening the first file instead.
+   */
+  onDocumentNotFound?(requestedId: string): void;
   [key: string]: unknown;
 }
 
