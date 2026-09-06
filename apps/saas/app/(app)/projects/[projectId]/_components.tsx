@@ -1585,11 +1585,11 @@ function PartsPreview({
     try {
       const code = extractPartsCode(dsl, section, id);
       if (!code) return "";
-      return renderPartsPreviewHtml(code, THEMES.basic);
+      return renderPartsPreviewHtml(code, THEMES.basic, { compact });
     } catch {
       return "";
     }
-  }, [dsl, section, id]);
+  }, [dsl, section, id, compact]);
   if (!html) return null;
   const cls = compact
     ? "[&_svg]:h-7 [&_svg]:w-auto [&_svg]:max-w-[140px]"

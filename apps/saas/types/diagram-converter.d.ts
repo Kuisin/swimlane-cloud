@@ -11,7 +11,11 @@ declare module "@swimlane-cloud/diagram-converter" {
     src: string,
     options?: { theme?: object; themeKey?: string },
   ): TextToSvgResult;
-  export function renderPartsPreviewHtml(code: string, theme: unknown): string;
+  export function renderPartsPreviewHtml(
+    code: string,
+    theme: unknown,
+    options?: { compact?: boolean },
+  ): string;
   export const ARROW_LINE_TYPES: string[];
   export function normalizeArrowLine(value: string): string | null;
   export function arrowLineDasharray(lineType: string): string | null;
