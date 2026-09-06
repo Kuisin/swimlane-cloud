@@ -378,6 +378,7 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOpti
           ) : inspectorRow ? (
             <BranchInspector
               row={inspectorRow}
+              rows={rows}
               readOnly={readOnly}
               onPatch={patchRow}
               onDelete={deleteRow}

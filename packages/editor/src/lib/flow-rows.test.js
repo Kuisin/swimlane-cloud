@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { moveRow, getFrameStepIndices, sameReorderFrame, rowBadgeLabel } from "./flow-rows.js";
+import {
+  moveRow,
+  getFrameStepIndices,
+  sameReorderFrame,
+  rowBadgeLabel,
+  collectMergeTargetOptions,
+} from "./flow-rows.js";
 import { EN, JA, tr } from "../i18n.jsx";
 
 const steps = (...texts) => texts.map((text) => ({ kind: "step", role: "r", text }));
@@ -62,5 +68,24 @@ describe("rowBadgeLabel localization", () => {
     expect(rowBadgeLabel(ifRow, jaT)).toBe("分岐");
     const step = { kind: "step", role: "r", text: "x" };
     expect(rowBadgeLabel(step, jaT)).toBe("ステップ");
+  });
+});
+
+describe("collectMergeTargetOptions", () => {
+  it("lists every named step, flagging its merge id when set", () => {
+    const rows = [
+      { kind: "step", role: "r", text: "start" },
+      { kind: "step", role: "r", text: "done step", mergeId: "done" },
+      { kind: "step", role: "", text: "no role" }, // excluded: no role
+      { kind: "branchStart", id: "x", cond: "?" }, // excluded: not a step
+    ];
+    const options = collectMergeTargetOptions(rows);
+    expect(options).toHaveLength(2);
+    expect(options[0]).toMatchObject({ stepIndex: 0, mergeId: "", blockName: "start" });
+    expect(options[1]).toMatchObject({
+      stepIndex: 1,
+      mergeId: "done",
+      label: "done step (id: done)",
+    });
   });
 });
