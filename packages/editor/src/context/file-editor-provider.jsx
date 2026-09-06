@@ -177,6 +177,28 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     });
   }, [model.errors.length, activeDocumentId]);
 
+  // Mirror image of the effect above: a document opened clean already has
+  // `parseErrorPolicy: null` (dsl-document.js only ever sets "continue" on
+  // load), so introducing a typo *mid-session* previously left the policy
+  // unset — `canUseGuiEditing` then forced a silent bounce to text mode
+  // instead of the same locked-row "continue" experience a file opened
+  // already-broken gets. Default every new error to "continue" so both
+  // paths behave the same; "fix in text mode" stays one click away via the
+  // GUI-mode error banner rather than being the forced-only outcome.
+  useEffect(() => {
+    if (model.errors.length === 0) return;
+    setDocuments((current) => {
+      if (!current.some((doc) => doc.id === activeDocumentId && !doc.parseErrorPolicy)) {
+        return current;
+      }
+      return current.map((doc) =>
+        doc.id === activeDocumentId && !doc.parseErrorPolicy
+          ? { ...doc, parseErrorPolicy: "continue" }
+          : doc,
+      );
+    });
+  }, [model.errors.length, activeDocumentId]);
+
   // Initial hydration: list files, load template policies.
   const refreshFileList = useCallback(async () => {
     if (!hostHas(host, "list")) return;

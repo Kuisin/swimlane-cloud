@@ -30,6 +30,7 @@ export function StepInspector({
   src,
   theme,
   reorder,
+  locked,
   onPatch,
   onMove,
   onOpenMove,
@@ -49,7 +50,10 @@ export function StepInspector({
     return <div className="sw-gui-empty">{t("gui.selectStep")}</div>;
   }
   const set = (key) => (value) => onPatch({ [key]: value });
-  const fieldDisabled = readOnly;
+  // A row with a syntax error is still viewable (fields show its current
+  // values) but not editable from here — fixing a broken line has to happen
+  // where the actual text is, in Text mode.
+  const fieldDisabled = readOnly || locked;
 
   const ARROW_OPTIONS = ARROW_LINE_TYPES.map((value) => ({
     value,
@@ -114,6 +118,8 @@ export function StepInspector({
           </button>
         </div>
       </div>
+
+      {locked && <p className="sw-inspector-locked-notice">{t("errors.rowLockedNotice")}</p>}
 
       <label className="sw-field">
         <span className="sw-field-label">{t("step.role")}</span>

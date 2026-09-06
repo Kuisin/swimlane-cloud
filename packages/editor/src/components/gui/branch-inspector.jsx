@@ -4,7 +4,7 @@ import { collectMergeTargetOptions } from "../../lib/flow-rows.js";
 import { BranchColorField } from "./branch-color-field.jsx";
 
 /** Inspector for branch/case/group/merge rows (condition, case label, accent color, merge target). */
-export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readOnly }) {
+export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readOnly, locked }) {
   const { t } = useT();
   if (!row) return <div className="sw-gui-empty">{t("gui.selectRow")}</div>;
 
@@ -17,6 +17,9 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
   const mergeTargets = isMerge
     ? collectMergeTargetOptions(rows || []).filter((o) => o.mergeId)
     : [];
+  // A row with a syntax error is still viewable but not editable from here —
+  // fixing a broken line has to happen where the actual text is, in Text mode.
+  const fieldDisabled = readOnly || locked;
 
   return (
     <div className="sw-inspector">
@@ -29,7 +32,7 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
           {!isStart && !isCase && !isGroup && !isMerge && t("branch.row")}
         </h3>
         <div className="sw-inspector-tools">
-          {!readOnly && canAddCase && onAddCase && (
+          {!fieldDisabled && canAddCase && onAddCase && (
             <button
               type="button"
               className="sw-btn sw-btn-sm"
@@ -39,7 +42,7 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
               <Plus size={12} /> {addCaseLabel}
             </button>
           )}
-          {!readOnly && onDelete && (
+          {!fieldDisabled && onDelete && (
             <button
               type="button"
               className="sw-icon-btn sw-icon-danger"
@@ -52,6 +55,8 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
         </div>
       </div>
 
+      {locked && <p className="sw-inspector-locked-notice">{t("errors.rowLockedNotice")}</p>}
+
       {isStart && !row.parallel && (
         <label className="sw-field">
           <span className="sw-field-label">{t("branch.condition")}</span>
@@ -59,7 +64,7 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
             type="text"
             className="sw-input"
             value={row.cond || ""}
-            disabled={readOnly}
+            disabled={fieldDisabled}
             onChange={(e) => onPatch({ cond: e.target.value })}
           />
         </label>
@@ -72,7 +77,7 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
             type="text"
             className="sw-input"
             value={row.label || ""}
-            disabled={readOnly}
+            disabled={fieldDisabled}
             placeholder={t("branch.elsePlaceholder")}
             onChange={(e) => onPatch({ label: e.target.value })}
           />
@@ -86,7 +91,7 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
             type="text"
             className="sw-input"
             value={row.sectionName || ""}
-            disabled={readOnly}
+            disabled={fieldDisabled}
             onChange={(e) => onPatch({ sectionName: e.target.value })}
           />
         </label>
@@ -101,7 +106,7 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
             <select
               className="sw-input"
               value={row.mergeTarget || ""}
-              disabled={readOnly}
+              disabled={fieldDisabled}
               onChange={(e) => onPatch({ mergeTarget: e.target.value || "" })}
             >
               <option value="">{t("branch.mergeTargetChoose")}</option>
@@ -121,7 +126,7 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
           <span className="sw-field-label">{t("branch.accent")}</span>
           <BranchColorField
             value={(isGroup ? row.sectionColor : row.branchColor) || null}
-            disabled={readOnly}
+            disabled={fieldDisabled}
             onChange={(next) => onPatch(isGroup ? { sectionColor: next } : { branchColor: next })}
           />
         </label>
