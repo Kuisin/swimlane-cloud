@@ -8,6 +8,12 @@ export { DslEditor } from "./dsl-editor.jsx";
 export { FileEditorProvider } from "./context/file-editor-provider.jsx";
 export { useEditor } from "./context/editor-context.js";
 
+// In-app alert/confirm/prompt modal, replacing native browser dialogs.
+// Exported so a host app can reuse the same themed dialogs outside the
+// editor surface (e.g. apps/saas pages that aren't rendering <DslEditor>).
+export { DialogHost } from "./components/dialog-host.jsx";
+export { useDialogHost } from "./hooks/use-dialog-host.js";
+
 // EditorHost contract + capability helpers.
 export {
   TEMPLATE_SECTIONS,

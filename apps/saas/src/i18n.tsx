@@ -14,6 +14,7 @@ export const EN: Record<string, string> = {
   loading: "Loading…",
   close: "Close",
   "common.cancel": "Cancel",
+  "common.delete": "Delete",
   // nav
   "nav.dashboard": "← Dashboard",
   "nav.signOut": "Sign out",
@@ -284,6 +285,8 @@ export const EN: Record<string, string> = {
   "branches.historyOf": "History · {branch}",
   "branches.confirmUnshare": "Unshare this commit (remove its public link)?",
   "branches.confirmShare": "Share this commit as a public link?",
+  "branches.unshare": "Unshare",
+  "branches.share": "Share",
   // pulls page
   "pulls.title": "Pull requests",
   "pulls.ownerHint": "You can approve or reject requests.",
@@ -444,6 +447,7 @@ export const JA: Record<string, string> = {
   loading: "読み込み中…",
   close: "閉じる",
   "common.cancel": "キャンセル",
+  "common.delete": "削除",
   // nav
   "nav.dashboard": "← ダッシュボード",
   "nav.signOut": "サインアウト",
@@ -717,6 +721,8 @@ export const JA: Record<string, string> = {
   "branches.historyOf": "履歴 · {branch}",
   "branches.confirmUnshare": "このコミットの共有を解除しますか（公開リンクを削除します）？",
   "branches.confirmShare": "このコミットを公開リンクとして共有しますか？",
+  "branches.unshare": "共有解除",
+  "branches.share": "共有",
   // pulls page
   "pulls.title": "プルリクエスト",
   "pulls.ownerHint": "リクエストの承認・却下ができます。",

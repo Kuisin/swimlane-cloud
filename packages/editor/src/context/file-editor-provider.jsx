@@ -16,22 +16,8 @@ import { createFlushScheduler } from "../lib/debounce-flush.js";
 import { fetchImports, missingImports, resolversFrom, withEntries } from "../lib/import-cache.js";
 import { clearMirror, readMirror, reconcileMirror, writeMirror } from "../lib/local-mirror.js";
 import { hostAutosaves, hostHas, hostIsReadOnly } from "../host.js";
-
-// Default dialog implementations use the host window; consumers can override
-// via the `dialogs` prop for non-browser shells.
-const defaultDialogs = {
-  alert: async (msg) => {
-    if (typeof window !== "undefined" && window.alert) window.alert(msg);
-  },
-  confirm: async (msg) => {
-    if (typeof window !== "undefined" && window.confirm) return window.confirm(msg);
-    return true;
-  },
-  prompt: async (msg, def = "") => {
-    if (typeof window !== "undefined" && window.prompt) return window.prompt(msg, def);
-    return null;
-  },
-};
+import { useDialogHost } from "../hooks/use-dialog-host.js";
+import { DialogHost } from "../components/dialog-host.jsx";
 
 const DEFAULT_AUTOSAVE_DELAY_MS = 1500;
 
@@ -52,7 +38,11 @@ function localStorageOrNull() {
  * inert unless `capabilities.autosave` is true.
  */
 export function FileEditorProvider({ host, projectId, options, dialogs, children }) {
-  const dialog = useMemo(() => ({ ...defaultDialogs, ...(dialogs || {}) }), [dialogs]);
+  const dialogHost = useDialogHost();
+  const dialog = useMemo(
+    () => ({ ...dialogHost.dialogs, ...(dialogs || {}) }),
+    [dialogHost.dialogs, dialogs],
+  );
   const readOnly = hostIsReadOnly(host);
   const autosave = hostAutosaves(host) && !readOnly;
   const mirrorScope = options?.localMirrorKey ?? null;
@@ -629,7 +619,19 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     dialog,
   };
 
-  return <EditorContext.Provider value={editorValue}>{children}</EditorContext.Provider>;
+  return (
+    <EditorContext.Provider value={editorValue}>
+      {children}
+      {/* Only ever activates for the alert/confirm/prompt methods a host's
+          `dialogs` override (if any) didn't replace — a fully-overriding host
+          (e.g. the VS Code webview) never triggers a request here. */}
+      <DialogHost
+        request={dialogHost.request}
+        onOk={dialogHost.handleOk}
+        onCancel={dialogHost.handleCancel}
+      />
+    </EditorContext.Provider>
+  );
 }
 
 /** Prepend forced section bodies into freshly created file content. */
