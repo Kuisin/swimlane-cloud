@@ -1,8 +1,5 @@
 @kai-swimlane 2
 @lang ja, en;
-@use ./templates/page/corporate.swim;
-@use ./templates/role/standard.swim;
-@use ./templates/i18n/glossary.swim;
 
 /meta/
 owner: sales-ops;
@@ -15,27 +12,46 @@ updated: 2026-09-06;
 受注から請求まで | Order to cash;
 
 /page/
+header-left: 株式会社カイ | Kai Corp.;
+header-right: 社外秘 | Confidential;
+footer-center: 業務フロー標準 v3 | Process standard v3;
 description: ```
 Web と電話の両チャネルで受けた注文を、与信・承認・出荷・請求まで一本の流れで示す。
 ```;
-description.en: ```
-One flow from an order received by web or phone, through credit check, approval,
-shipping and billing.
-```;
 
 /option/
+show-left-gutter: true;
 show-right-gutter: true;
-lang: ja;
+left-title: 手順 | Procedure;
 right-title: 備考 | Remarks;
 
 /role/
 <sales>
-  background-color: #fff7e6;
-  unset: icon;
+  label: 営業 | Sales;
+  background-color: #e6f2ff;
+  icon: #user;
+
+<manager>
+  label: 上長 | Manager;
+  icon: #user-check;
 
 <credit>
   label: 与信担当 | Credit desk;
-  icon: none;
+  background-color: #fff7e6;
+  icon: #shield-check;
+
+<system>
+  label: システム | System;
+  background-color: #f1f5f9;
+  icon: #database;
+
+<warehouse>
+  label: 倉庫 | Warehouse;
+  icon: #package;
+
+<billing>
+  label: 経理 | Billing;
+  icon: #credit-card;
 
 /block/
 <external>
@@ -66,8 +82,6 @@ right-title: 備考 | Remarks;
 // 受付チャネルで入口が分かれる
 phase (受付 | Intake) @intake #gray
   if [sales] (受注チャネルは？ | Order channel?) @channel
-    desc: Web 注文はシステムが自動取込;
-    desc.en: Web orders are imported automatically;
   case (Web) #blue
     [system: 注文データ取込 | Import order] <external> @import +PO
       remark: 夜間バッチと即時取込の両方;
@@ -84,26 +98,21 @@ phase (受付 | Intake) @intake #gray
     goto @closed
   end-if
   [system: 注文を登録 | Register the order] @registered
-    label: 受注登録;
+    label: 受注登録 | Order registration;
 end-phase
 
-phase (与信と承認) @approval #teal
+phase (与信と承認 | Credit and approval) @approval #teal
   [credit: 与信チェック | Credit check] @credit-check +CR ..>
     desc: ```
     取引先マスタの与信枠と未回収残高を照合する。
     枠超過なら上長判断へ回す。
     ```;
-    desc.en: ```
-    Compare the credit limit with the outstanding balance.
-    Over the limit goes to the manager.
-    ```;
     remark: 与信ポリシー第 3 条を参照;
+    remark.en: See credit policy, article 3;
   if [credit] (与信枠内？ | Within the credit limit?) @credit-ok
   case (はい | Yes) #green
     [system: 与信 OK を記録 | Record credit OK]
   case (いいえ | No) #red
-    note: 枠超過は月 5 件程度;
-    note.en: About five orders a month exceed the limit;
     if [manager] (特別承認する？ | Special approval?) @special
     case (承認 | Approve) #green
       [manager: 承認理由を記録 | Record the reason] +CR
@@ -119,9 +128,8 @@ phase (与信と承認) @approval #teal
   end-if
   branch (監査記録 | Audit trail) #gray
     [system: 与信判断ログを保存 | Store the credit log] +CR
-      note: 保存期間は 7 年;
-      note.en: Kept for seven years;
-      note-side: left;
+      remark: 保存期間は 7 年;
+      remark.en: Kept for seven years;
   end-branch
   [manager: 受注を承認 | Approve the order] @approved
 end-phase
@@ -130,7 +138,7 @@ fork (出荷 | Shipping) @fulfil #purple
   [warehouse: 在庫引当 | Allocate stock] @allocate
   if [warehouse] (在庫は十分？ | Enough stock?)
   case (はい | Yes) #green
-    [warehouse: ピッキングと梱包 | Pick and pack] => ./shipping-prep.swim
+    [warehouse: ピッキングと梱包 | Pick and pack] => ./shipping-prep.txt
   case (いいえ | No) #red
     [warehouse: 入荷待ちを登録 | Register a backorder]
     [sales: 納期変更を連絡 | Notify the new delivery date] -->
@@ -156,21 +164,14 @@ section (クロージング | Closing) @closing #blue
   case (はい | Yes) #green
     [billing: 消込を実行 | Reconcile the payment] +INV
   case (いいえ、期日超過 | No, overdue) #orange
-    [sales: 督促] ~>
+    [sales: 督促 | Send a reminder] ~>
     [sales: 回答を待つ | Wait for the reply]
     loop
   end-if
   [system: 受注をクローズ | Close the order] <terminal> @closed
 end-section
 
-[sales: 完了] <terminal> @done
+[sales: 完了 | Done] <terminal> @done
   skip;
-
-/i18n/
-approval.name.en: Credit and approval;
-
-credit-check.remark.en: "See credit policy, article 3; the limit table is in the customer master";
-
-"督促".en: Send a reminder;
 
 @end

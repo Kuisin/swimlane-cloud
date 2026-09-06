@@ -1,0 +1,45 @@
+@kai-swimlane 2
+@lang ja, en;
+
+/meta/
+owner: sre;
+status: approved;
+tags: sre, runbook;
+updated: 2026-09-06;
+
+/title/
+ロールバック手順 | Rollback runbook;
+
+/page/
+header-left: 株式会社カイ | Kai Corp.;
+header-right: 社外秘 | Confidential;
+footer-center: 業務フロー標準 v3 | Process standard v3;
+
+/option/
+show-left-gutter: true;
+show-right-gutter: true;
+left-title: 手順 | Procedure;
+right-title: 備考 | Remarks;
+
+/role/
+<engineer>
+  label: エンジニア | Engineer;
+  background-color: #e6f2ff;
+  icon: #settings;
+
+/line/
+[engineer: 直前の安定版を特定 | Identify the last stable release]
+
+[engineer: 切り戻しを実行 | Redeploy the stable release]
+
+if [engineer] (ヘルスチェック OK？ | Health check OK?)
+case (はい | Yes) #green
+  [engineer: 監視を継続 | Keep monitoring]
+case (いいえ | No) #red
+  [engineer: 設定差分を確認 | Check configuration drift]
+  loop
+end-if
+
+[engineer: 完了 | Done]
+
+@end

@@ -1,0 +1,4 @@
+<terminal>
+  background-color: #ecfdf5;
+  border-color: #059669;
+  shape: rounded;

@@ -1,62 +1,58 @@
 # `kai-swimlane 2` — worked example
 
-A complete order-to-cash flow written in `kai-swimlane 2`, the DSL specified in
-[`dsl-rule.md`](../../dsl-rule.md). It exists so the specification can be read against a
-realistic file rather than fragments. No shipped tool
-parses version 2 yet; every file here is in the **canonical formatted layout** the
-proposal's formatter would write.
+A complete diagram repository in version 2 of the DSL, byte-identical to
+[Kuisin/swimlane-sample](https://github.com/Kuisin/swimlane-sample) so the specification in
+[dsl-rule.md](../../dsl-rule.md) can be read against files the engine actually renders.
 
-| File                          | What it is                                                         |
-| ----------------------------- | ------------------------------------------------------------------ |
-| `order-to-cash.swim`          | the main diagram: two phases, a three-path fork, a section, jumps  |
-| `shipping-prep.swim`          | the sub-process linked from the fork with `=> ./shipping-prep.swim` |
-| `templates/page/corporate.swim` | a `/page/` fragment: header and footer, imported with `@use`      |
-| `templates/role/standard.swim`  | the shared lane catalogue, imported with `@use`                    |
-| `templates/i18n/glossary.swim`  | the project glossary: source-string translations reused everywhere |
+Every diagram here parses with zero errors and renders to SVG through `textToSvg`, in both
+declared languages. `examples/kai-swimlane-2.test.js` asserts that on every run.
 
-## What the main file exercises
+## Layout
 
-| Feature                                         | Where in `order-to-cash.swim`                                   |
-| ----------------------------------------------- | --------------------------------------------------------------- |
-| Prologue directives, all `;`-terminated         | `@lang ja, en;`, three `@use …;` lines                          |
-| `/meta/` reserved keys                          | `owner`, `status`, `tags`, `version`, `updated`                 |
-| `;`-terminated `/title/` with inline segments   | `受注から請求まで \| Order to cash;`                             |
-| Fenced multi-line values with a `.lang` variant | `/page/ description` and the `desc` of `@credit-check`          |
-| Overriding an import and clearing a key         | `/role/ <sales>` with `unset: icon;`, `<credit>` with `icon: none;` |
-| Definitions in expanded canonical form          | `/block/`, `/prop/`                                             |
-| Phases at root scope                            | `phase (受付 \| Intake) @intake #gray`, `phase (与信と承認) @approval` |
-| `if` with a lane, an id and its own property block | `if [sales] (受注チャネルは？ …) @channel` + `desc:` lines     |
-| Uniform `case` / `else`, colours per case       | every `if`                                                      |
-| Notes on a control statement                    | `note:` / `note.en:` under `case (いいえ \| No)`                |
-| Nested `if` inside a case, `loop @id` to an upstream step | `loop @credit-check` inside `case (条件付き …)`        |
-| Forward jump to a downstream step               | `goto @closed` (twice)                                          |
-| `branch` merging into the next row              | `branch (監査記録 \| Audit trail)` before `[manager: 受注を承認]` |
-| `fork` with labelled paths and a nested `if`    | `fork (出荷 \| Shipping)` / `and (請求 …)` / `and (通知 …)`      |
-| Sub-process link                                | `=> ./shipping-prep.swim`                                       |
-| Every step suffix in canonical order            | `<external> @import +PO`, `+CR ..>`, `<terminal> @closed`       |
-| All five arrow glyphs except the default        | `~>`, `..>`, `-.>`, `-->`                                       |
-| `section` frame, bare `loop`                    | `section (クロージング \| Closing)`                              |
-| Escaped literal bars in a translatable value    | `remark: 記録形式は「品目 \| 数量 \| 納期」;`                    |
-| Content parentheses inside step text            | `[sales: 注文書（控え）を起票 …]`                                |
-| Flag form of a boolean key                      | `skip;` on the final step                                       |
-| The three translation layers                    | inline `a \| b`; `desc.en:` lines; `/i18n/` id-keyed, string-keyed and imported entries |
-| A quoted `/i18n/` value containing `;`          | `credit-check.remark.en: "…; …";`                               |
-| Comments attached to the next statement         | `// 受付チャネルで入口が分かれる`, one inside a case             |
+```
+.swimlane.json                   diagramsRoot, title, theme, integration branch, dslVersion
+diagrams/
+  sales/order-to-cash.txt        intake → credit and approval → shipping ∥ billing ∥ notice → closing
+  sales/shipping-prep.txt        sub-process linked from the shipping path
+  support/incident-response.txt  detection → response (Sev1 fork / Sev2 loop) → retrospective
+  support/rollback.txt           sub-process linked from the Sev1 mitigation path
+  hr/onboarding.txt              offer → pre-boarding fork → day one phase
+templates/                       the section-template mirror a project seeds
+```
 
-Two kinds of thing are absent on purpose. Version 1 spellings (`is … than`, `elseif`, `[loop]`,
-`merge:`, `id:`, `props:`, `arrow:`, un-hyphenated closers) are not part of the grammar at all;
-the converter rewrites them once. And the canonical form never contains the solid `->` glyph,
-`@id` on nodes nothing references, full-width delimiters, or `/* */` comments (those appear only
-in the compact one-line form).
+Files carry `.txt` because that is what the product stores. The extension is not semantic: the
+reader takes the version from the first line, so `@kai-swimlane 2` in a `.txt` file is a version 2
+diagram.
 
-## Reading it against the specification
+## What the diagrams exercise
 
-- Import paths beginning with `./` resolve against this directory, so the fragments under
-  `templates/` are what `@use` merges; local `/role/` rows override them key by key.
-- `goto @closed` from the intake phase lands on a step inside a later `section`; sections and
-  phases are layout frames, so they never block a jump.
-- `loop @credit-check` jumps out of two nested `if` bodies to a root-scope step, which the
-  containment rule allows (leaving a scope is always allowed, entering one is not).
-- `phase (与信と承認)` has no inline English on purpose: its name comes from the id-keyed
-  `/i18n/` entry `approval.name.en`, and `[sales: 完了]` and `[sales: 督促]` come from the
-  string-keyed glossary and local catalog respectively.
+| Feature | Where |
+| --- | --- |
+| Declared languages and inline segments | `@lang ja, en;` and `受注から請求まで \| Order to cash` in every file |
+| Per-field translation | `desc.en:` and `remark.en:` throughout `order-to-cash.txt` |
+| Escaped literal bar | `remark: 記録形式は「品目 \| 数量 \| 納期」;` |
+| `/meta/` reserved keys | owner, status, tags, version, updated |
+| Fenced multi-line value | `/page/ description` and the credit-check `desc` |
+| Phases at root scope | `phase (受付 \| Intake) @intake #gray` |
+| `if` with a lane, an id and cases | `if [sales] (受注チャネルは？ …) @channel` |
+| Nested `if` inside a case | the special-approval decision in `order-to-cash.txt` |
+| `loop` to a named upstream step | `loop @credit-check`, `loop @mitigate`, `loop @orientation` |
+| Bare `loop` back to its own decision | the overdue-payment case, and both sub-processes |
+| Forward `goto` past a phase | `goto @closed`, `goto @close`, `goto @wrap-up` |
+| `branch` merging into the next row | `branch (監査記録 …)`, `branch (記録 …)` |
+| `fork` with labelled paths | `fork (出荷 …)` / `and (請求 …)` / `and (通知 …)` |
+| `fork` nested inside a case | the Sev1 case of `incident-response.txt` |
+| Sub-process link | `=> ./shipping-prep.txt`, `=> ./rollback.txt` |
+| Every arrow glyph but the default | `~>`, `..>`, `-.>`, `-->` |
+| Prop chips on both sides | `+PO`, `+CR`, `+INV`, `+TICKET`, `+RUNBOOK`, `+NDA`, `+PC` |
+| Block styles | `<external>` subroutine, `<terminal>` rounded |
+| Flag form of a boolean key | `skip;` on a final step |
+
+## Notes
+
+- Definitions are written in each diagram rather than imported. `@use` is part of the grammar and
+  the reader supports it through a host-provided resolver, but no app supplies one yet: parsing is
+  synchronous while a host's file read is async, so each host needs a prefetch cache first.
+  `templates/` therefore holds the project's section-template mirror only.
+- `phase` currently draws as a frame rather than a horizontal band, and `note:` parses but is not
+  drawn.

@@ -1,0 +1,133 @@
+@kai-swimlane 2
+@lang ja, en;
+
+/meta/
+owner: sre;
+status: approved;
+tags: incident, support, sre;
+version: 2;
+updated: 2026-09-06;
+
+/title/
+インシデント対応 | Incident response;
+
+/page/
+header-left: 株式会社カイ | Kai Corp.;
+header-right: 社外秘 | Confidential;
+footer-center: 業務フロー標準 v3 | Process standard v3;
+
+/option/
+show-left-gutter: true;
+show-right-gutter: true;
+left-title: 手順 | Procedure;
+right-title: 備考 | Remarks;
+
+/role/
+<support>
+  label: サポート | Support;
+  background-color: #fef3c7;
+  icon: #phone;
+
+<engineer>
+  label: エンジニア | Engineer;
+  background-color: #e6f2ff;
+  icon: #settings;
+
+<system>
+  label: システム | System;
+  background-color: #f1f5f9;
+  icon: #database;
+
+<manager>
+  label: 上長 | Manager;
+  icon: #user-check;
+
+<exec>
+  label: 経営 | Executives;
+  icon: #star;
+
+/block/
+<external>
+  border-color: #b45309;
+  shape: subroutine;
+  icon: #cloud;
+
+<terminal>
+  background-color: #ecfdf5;
+  border-color: #059669;
+  shape: rounded;
+
+/prop/
+<TICKET>
+  label: チケット | Ticket;
+  side: right;
+
+<RUNBOOK>
+  label: 手順書 | Runbook;
+  side: left;
+  max-chars: 12;
+
+/line/
+phase (検知 | Detection) @detect #gray
+  if [support] (検知経路は？ | Detected by?) @source
+  case (監視アラート | Monitoring alert) #blue
+    [system: アラートをチケット化 | Open a ticket from the alert] <external> +TICKET
+  case (顧客報告 | Customer report) #orange
+    [support: 事象を聞き取り | Take the report] +TICKET
+      desc: 発生時刻・影響範囲・再現手順;
+      desc.en: Time, blast radius and reproduction steps;
+  end-if
+  [support: 重大度を判定 | Triage severity] @triage
+    remark: 判定基準は運用規程 4.2;
+    remark.en: Criteria in operations policy 4.2;
+end-phase
+
+phase (対応 | Response) @respond #red
+  if [support] (重大度は？ | Severity?) @severity
+  case (Sev1) #red
+    fork (顧客連絡 | Customer notice) #purple
+      [support: ステータスページ更新 | Update the status page]
+    and (暫定対処 | Mitigation) #orange
+      [engineer: ロールバック | Roll back] => ./rollback.txt
+    and (経営報告 | Escalation) #gray
+      [exec: 経営会議へ報告 | Report to the executive meeting]
+        remark: 30 分以内;
+        remark.en: Within 30 minutes;
+    end-fork
+  case (Sev2) #orange
+    [engineer: 暫定対処 | Mitigate] @mitigate
+    if [engineer] (収束した？ | Contained?)
+    case (はい | Yes) #green
+      [support: 顧客へ経過連絡 | Send a progress update]
+    case (いいえ | No) #red
+      [engineer: 原因調査を継続 | Keep investigating] ~>
+      loop @mitigate
+    end-if
+  else #green
+    [support: 通常サポートで対応 | Handle as regular support]
+    goto @close
+  end-if
+  branch (記録 | Record) #gray
+    [system: 対応ログを保存 | Store the response log] +TICKET
+  end-branch
+  [engineer: 恒久対策を実施 | Apply the permanent fix] @fix
+end-phase
+
+section (振り返り | Retrospective) @retro #blue
+  [engineer: ポストモーテムを作成 | Write the postmortem] +RUNBOOK
+    desc: ```
+    時系列、根本原因、再発防止策。
+    非難しないことを原則とする。
+    ```;
+  if [manager] (再発防止策は十分？ | Prevention sufficient?)
+  case (はい | Yes) #green
+    [manager: 承認 | Approve]
+  case (いいえ | No) #red
+    [engineer: 対策を見直す | Revise the actions]
+    loop
+  end-if
+end-section
+
+[support: インシデントをクローズ | Close the incident] <terminal> @close
+
+@end

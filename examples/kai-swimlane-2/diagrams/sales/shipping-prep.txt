@@ -1,9 +1,30 @@
 @kai-swimlane 2
 @lang ja, en;
-@use ./templates/role/standard.swim;
+
+/meta/
+owner: sales-ops;
+status: review;
+tags: shipping;
+updated: 2026-09-06;
 
 /title/
 出荷準備 | Shipping preparation;
+
+/page/
+header-left: 株式会社カイ | Kai Corp.;
+header-right: 社外秘 | Confidential;
+footer-center: 業務フロー標準 v3 | Process standard v3;
+
+/option/
+show-left-gutter: true;
+show-right-gutter: true;
+left-title: 手順 | Procedure;
+right-title: 備考 | Remarks;
+
+/role/
+<warehouse>
+  label: 倉庫 | Warehouse;
+  icon: #package;
 
 /line/
 [warehouse: ピッキングリスト出力 | Print the picking list]
@@ -19,5 +40,7 @@ case (なし | No) #green
 end-if
 
 [warehouse: 出荷ラベル貼付 | Attach the shipping label]
+
+[warehouse: 完了 | Done]
 
 @end
