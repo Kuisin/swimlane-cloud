@@ -87,7 +87,9 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOpti
 
   function commit(editFn) {
     if (readOnly) return;
-    onChange(applyModelEdit(src, editFn));
+    // Every GUI-mode mutation is its own discrete undo step — never
+    // coalesced with adjacent edits, unlike text-mode typing.
+    onChange(applyModelEdit(src, editFn), { tag: "structural" });
   }
 
   function patchRow(patch) {
@@ -130,7 +132,7 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOpti
     const after = parseDSL(next).errors?.length ?? 0;
     setShowMove(false);
     if (after > before) return;
-    onChange(next);
+    onChange(next, { tag: "structural" });
     setSelectedIndex(landed);
   }
 
