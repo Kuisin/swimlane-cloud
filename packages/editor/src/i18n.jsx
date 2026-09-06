@@ -167,6 +167,7 @@ export const EN = {
   "branch.case": "Case",
   "branch.section": "Visual group (no flow change)",
   "branch.subbranch": "Side path (rejoins later)",
+  "branch.merge": "Merge",
   "branch.row": "Row",
   "branch.condition": "Condition",
   "branch.caseLabel": "Case label",
@@ -176,6 +177,11 @@ export const EN = {
   "branch.name": "Name",
   "branch.accent": "Highlight color",
   "branch.default": "(default)",
+  "branch.mergeTarget": "Jump to step",
+  "branch.mergeTargetChoose": "(choose a step)",
+  "branch.mergeTargetEmpty":
+    "No steps have a landing point name yet. Give a step one in its Step inspector first.",
+  "branch.mergeTargetHint": "This case skips the usual join point and jumps straight to that step.",
   // gui – add block dropdown
   "gui.addSwitch": "Switch / multi-case",
   // color
@@ -420,6 +426,7 @@ export const JA = {
   "branch.case": "ケース",
   "branch.section": "見た目のグループ（流れは変わらない）",
   "branch.subbranch": "横道（後で合流する支線）",
+  "branch.merge": "マージ",
   "branch.row": "行",
   "branch.condition": "条件",
   "branch.caseLabel": "ケースのラベル",
@@ -429,6 +436,12 @@ export const JA = {
   "branch.name": "名前",
   "branch.accent": "強調色",
   "branch.default": "（デフォルト）",
+  "branch.mergeTarget": "ジャンプ先のステップ",
+  "branch.mergeTargetChoose": "（ステップを選択）",
+  "branch.mergeTargetEmpty":
+    "まだ名前の付いたステップがありません。まずステップ詳細で合流先の名前を付けてください。",
+  "branch.mergeTargetHint":
+    "このケースは通常の合流地点を通らず、選んだステップへ直接ジャンプします。",
   // color
   "color.presets": "プリセット…",
   // preview

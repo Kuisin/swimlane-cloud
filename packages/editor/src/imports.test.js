@@ -24,6 +24,7 @@ describe("public entry imports cleanly", () => {
     await import("./components/gui/branch-inspector.jsx");
     await import("./components/gui/flow-step-list.jsx");
     await import("./components/gui/color-field.jsx");
+    await import("./components/gui/branch-color-field.jsx");
     await import("./components/template-panel.jsx");
     await import("./components/action-bar.jsx");
     await import("./components/folder-tree.jsx");
