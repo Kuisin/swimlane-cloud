@@ -432,6 +432,7 @@ function DslEditorInner({ options }) {
             svg={svg}
             errors={errors}
             parseOptions={parseOptions}
+            onSwitchToText={() => setMode("text")}
           />
         ) : (
           <div className="sw-split" ref={containerRef}>

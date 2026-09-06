@@ -36,7 +36,16 @@ import { ErrorList } from "../error-list.jsx";
  * inspector each own a saved pixel width (resizable from their right edge), and
  * the live preview fills whatever space is left. Widths persist in localStorage.
  */
-export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOptions }) {
+export function GuiMode({
+  src,
+  onChange,
+  readOnly,
+  theme,
+  svg,
+  errors,
+  parseOptions,
+  onSwitchToText,
+}) {
   const { t } = useT();
   const stepList = useDragWidth(260, {
     min: 180,
@@ -93,7 +102,9 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOpti
   }
 
   function patchRow(patch) {
-    if (saveIndex < 0) return;
+    // Defense-in-depth: the inspectors already disable every field for a
+    // locked row, but a mutation landing here for one is a no-op regardless.
+    if (saveIndex < 0 || lockedRows.has(saveIndex)) return;
     commit((draft) => {
       if (draft.rows[saveIndex]) {
         draft.rows[saveIndex] = { ...draft.rows[saveIndex], ...patch };
@@ -102,7 +113,7 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOpti
   }
 
   function deleteRow() {
-    if (saveIndex < 0) return;
+    if (saveIndex < 0 || lockedRows.has(saveIndex)) return;
     commit((draft) => {
       draft.rows.splice(saveIndex, 1);
     });
@@ -282,6 +293,7 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOpti
 
   const isStep = inspectorRow?.kind === "step" && !inspectorRow.empty;
   const reorder = isStep ? getReorderBounds(rows, saveIndex) : null;
+  const isLocked = saveIndex >= 0 && lockedRows.has(saveIndex);
 
   // A brand-new file already seeds one step (see DEFAULT_TAB_TEMPLATE), so
   // zero rows here means the flow was emptied out (e.g. the last step was
@@ -305,6 +317,20 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOpti
 
   return (
     <div className="sw-gui-wrap">
+      {errors?.length > 0 && (
+        <div className="sw-gui-error-banner">
+          <span>
+            {lockedRows.size > 0
+              ? t("errors.gutterBanner", { n: lockedRows.size })
+              : t("errors.definitionsBanner")}
+          </span>
+          {onSwitchToText && (
+            <button type="button" className="sw-btn sw-btn-sm" onClick={onSwitchToText}>
+              {t("errors.fixInText")}
+            </button>
+          )}
+        </div>
+      )}
       <div className="sw-gui">
         <div className="sw-gui-list-pane" style={{ width: stepList.width, flex: "0 0 auto" }}>
           <div className="sw-gui-list-head">
@@ -382,6 +408,7 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOpti
               theme={theme}
               reorder={reorder}
               readOnly={readOnly}
+              locked={isLocked}
               onPatch={patchRow}
               onMove={moveStep}
               onOpenMove={() => setShowMove(true)}
@@ -392,10 +419,11 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOpti
               row={inspectorRow}
               rows={rows}
               readOnly={readOnly}
+              locked={isLocked}
               onPatch={patchRow}
               onDelete={deleteRow}
               onAddCase={
-                !readOnly && ["branchStart", "branchCase"].includes(inspectorRow?.kind)
+                !readOnly && !isLocked && ["branchStart", "branchCase"].includes(inspectorRow?.kind)
                   ? addCaseToBranch
                   : undefined
               }

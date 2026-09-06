@@ -105,6 +105,13 @@ export const EN = {
   "settings.rightSubtitle": "Right gutter subtitle",
   // errors
   "errors.title": "Parse errors",
+  "errors.rowLocked": "This row has a syntax error — edit in Text mode to fix.",
+  "errors.rowLockedNotice":
+    "This row has a syntax error. It's shown as-is but can't be edited here — switch to Text mode to fix it.",
+  "errors.gutterBanner": "{n} row(s) have a syntax error and are locked.",
+  "errors.definitionsBanner":
+    "There's a syntax error outside the flow (e.g. in Roles, Blocks, or Settings).",
+  "errors.fixInText": "Fix in Text mode",
   // gui
   "gui.flow": "Flow",
   "gui.addStep": "Add step",
@@ -410,6 +417,13 @@ export const JA = {
   "settings.rightSubtitle": "右ガターサブタイトル",
   // errors
   "errors.title": "構文エラー",
+  "errors.rowLocked": "この行には構文エラーがあります — テキストモードで修正してください。",
+  "errors.rowLockedNotice":
+    "この行には構文エラーがあります。内容はそのまま表示されますが、ここでは編集できません — テキストモードで修正してください。",
+  "errors.gutterBanner": "{n} 行に構文エラーがあり、ロックされています。",
+  "errors.definitionsBanner":
+    "フロー以外の場所（ロール・ブロック・設定など）に構文エラーがあります。",
+  "errors.fixInText": "テキストモードで修正",
   // gui
   "gui.flow": "フロー",
   "gui.addStep": "ステップを追加",
