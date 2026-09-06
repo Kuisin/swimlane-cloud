@@ -13,7 +13,7 @@ export function applyModelEdit(prevSrc, editFn) {
 }
 
 /** GUI view model: branchStart.firstCase always shown as its own branchCase row. */
-export function parseGuiModel(src) {
-  const model = parseDSL(src);
+export function parseGuiModel(src, options) {
+  const model = parseDSL(src, options);
   return { ...model, rows: normalizeBranchRows(model.rows) };
 }

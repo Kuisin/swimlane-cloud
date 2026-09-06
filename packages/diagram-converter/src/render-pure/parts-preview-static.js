@@ -2,20 +2,16 @@ import { parseDSLParts } from "../parser.js";
 import { htmlEl } from "./html-utils.js";
 import { renderBlockPreviewSvg, renderPropPreviewSvg } from "./parts-preview-core.js";
 
-function renderPropPreviewItem(prop, theme) {
-  return htmlEl(
-    "div",
-    {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "4px",
-        flexShrink: "0",
-      },
-    },
-    [
-      renderPropPreviewSvg(prop, theme),
+/**
+ * `showLabel: false` renders just the shape — the id caption is dropped, not
+ * hidden, because a caller using this as a small inline icon next to its own
+ * text label (the id, absent a `label:` property) would otherwise show that
+ * same string twice right next to each other.
+ */
+function renderPropPreviewItem(prop, theme, showLabel = true) {
+  const children = [renderPropPreviewSvg(prop, theme)];
+  if (showLabel) {
+    children.push(
       htmlEl(
         "span",
         {
@@ -27,11 +23,8 @@ function renderPropPreviewItem(prop, theme) {
         },
         prop.id,
       ),
-    ],
-  );
-}
-
-function renderBlockPreviewItem(block, theme) {
+    );
+  }
   return htmlEl(
     "div",
     {
@@ -43,8 +36,15 @@ function renderBlockPreviewItem(block, theme) {
         flexShrink: "0",
       },
     },
-    [
-      renderBlockPreviewSvg(block, theme),
+    children,
+  );
+}
+
+/** Same trade-off as `renderPropPreviewItem`, for a block. */
+function renderBlockPreviewItem(block, theme, showLabel = true) {
+  const children = [renderBlockPreviewSvg(block, theme)];
+  if (showLabel) {
+    children.push(
       htmlEl(
         "span",
         {
@@ -56,12 +56,33 @@ function renderBlockPreviewItem(block, theme) {
         },
         block.id,
       ),
-    ],
+    );
+  }
+  return htmlEl(
+    "div",
+    {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "4px",
+        flexShrink: "0",
+      },
+    },
+    children,
   );
 }
 
-/** SSR / VS Code preview — inline styles only (no Tailwind). */
-export function renderPartsPreviewHtml(code, theme) {
+/**
+ * SSR / VS Code preview — inline styles only (no Tailwind).
+ *
+ * `compact: true` drops the id caption under each shape and the outer
+ * padding, for a caller that shows a preview as a small inline icon beside
+ * its own text label — a design gallery wants the caption, an icon next to
+ * a label does not, since blocks and props are commonly left without a
+ * `label:` property and the caption then repeats the id twice.
+ */
+export function renderPartsPreviewHtml(code, theme, { compact = false } = {}) {
   const { blocks, props, errors } = parseDSLParts(code);
 
   if (errors.length > 0) {
@@ -96,7 +117,7 @@ export function renderPartsPreviewHtml(code, theme) {
             justifyContent: "center",
           },
         },
-        blockList.map((block) => renderBlockPreviewItem(block, theme)),
+        blockList.map((block) => renderBlockPreviewItem(block, theme, !compact)),
       ),
     );
   }
@@ -112,7 +133,7 @@ export function renderPartsPreviewHtml(code, theme) {
             justifyContent: "center",
           },
         },
-        propList.map((prop) => renderPropPreviewItem(prop, theme)),
+        propList.map((prop) => renderPropPreviewItem(prop, theme, !compact)),
       ),
     );
   }
@@ -123,9 +144,9 @@ export function renderPartsPreviewHtml(code, theme) {
       style: {
         display: "flex",
         flexDirection: "column",
-        gap: "16px",
-        padding: "12px",
-        background: theme.bg,
+        gap: compact ? "0" : "16px",
+        padding: compact ? "0" : "12px",
+        background: compact ? "transparent" : theme.bg,
       },
     },
     sections,
