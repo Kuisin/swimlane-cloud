@@ -43,10 +43,11 @@ proposal's formatter would write.
 | A quoted `/i18n/` value containing `;`          | `credit-check.remark.en: "…; …";`                               |
 | Comments attached to the next statement         | `// 受付チャネルで入口が分かれる`, one inside a case             |
 
-Things deliberately **not** in the file, because the canonical form never contains them:
-deprecated spellings (`is … than`, `elseif`, `[loop]`, `merge:`, `id:`, `props:`, `arrow:`),
-un-hyphenated closers, the solid `->` glyph, `@id` on nodes nothing references, full-width
-delimiters, and `/* */` comments (those appear only in the compact one-line form).
+Two kinds of thing are absent on purpose. Version 1 spellings (`is … than`, `elseif`, `[loop]`,
+`merge:`, `id:`, `props:`, `arrow:`, un-hyphenated closers) are not part of the grammar at all;
+the converter rewrites them once. And the canonical form never contains the solid `->` glyph,
+`@id` on nodes nothing references, full-width delimiters, or `/* */` comments (those appear only
+in the compact one-line form).
 
 ## Reading it against the proposal
 
