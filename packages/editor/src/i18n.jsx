@@ -111,6 +111,16 @@ export const EN = {
   "gui.addFork": "Parallel fork",
   "gui.addSection": "Group visually (no flow change)",
   "gui.addBranch": "Side path that rejoins later",
+  // add-menu groups + one-line descriptions
+  "gui.addGroupDecision": "One path only",
+  "gui.addGroupParallel": "All paths at once",
+  "gui.addGroupVisual": "Visual only",
+  "gui.addGroupSidePath": "Side path",
+  "gui.addIfDesc": "Pick exactly one path based on a condition.",
+  "gui.addSwitchDesc": "Like If/else, but with several named options instead of two.",
+  "gui.addForkDesc": "Every path runs together, then rejoins.",
+  "gui.addSectionDesc": "Draws a box around steps for clarity — the flow itself doesn't change.",
+  "gui.addBranchDesc": "Splits off from the main flow and reconnects further down.",
   "gui.selectRow": "Select a row to edit it.",
   "gui.selectStep": "Select a step to edit it.",
   "gui.noRows": "No flow rows yet. Add a step below.",
@@ -140,6 +150,7 @@ export const EN = {
   "step.role": "Who does this (role)",
   "step.chooseRole": "(choose who does this)",
   "step.text": "Text",
+  "step.moreOptions": "More options",
   "step.label": "Label (optional)",
   "step.description": "Description",
   "step.remark": "Remark",
@@ -211,6 +222,21 @@ export const EN = {
   "preview.label": "Diagram preview",
   // help
   "help.title": "DSL quick reference",
+  "help.guideTitle": "How the GUI editor works",
+  "help.guideLayout":
+    "Three columns: your flow (left), details for whatever's selected (middle), and a live preview (right).",
+  "help.guideAddStep":
+    "“+ Add step” adds a plain step. The arrow next to it opens decisions, parallel tasks, visual grouping, and side paths.",
+  "help.guideBasicFields":
+    "Every step needs who does it and what happens. Everything else is optional, under “More options” in the step details.",
+  "help.guideAddMenu":
+    "One path only (if/switch) picks a single path; all paths at once (parallel) runs every path together; visual only draws a box with no effect on the flow; a side path splits off and reconnects later.",
+  "help.guideReusable":
+    "Reusable styles, side notes, and page settings live in the gear-icon Settings panel — they don't change the flow itself.",
+  "help.guideModeToggle":
+    "Switch to Text mode anytime to see the raw source — your GUI edits carry over exactly, and switching back loses nothing.",
+  "help.viewDslRef": "View DSL syntax reference instead",
+  "help.viewGuiGuide": "View GUI guide instead",
   "help.markers": "Every document is wrapped in these markers.",
   "help.title2": "One line: the diagram title.",
   "help.page": "description / header-* / footer-* metadata.",
@@ -389,6 +415,16 @@ export const JA = {
   "gui.addSection": "見た目のグループ枠（流れは変わらない）",
   "gui.addBranch": "本流から外れて後で合流する支線",
   "gui.addSwitch": "スイッチ／多分岐",
+  // add-menu groups + one-line descriptions
+  "gui.addGroupDecision": "一本だけ選ぶ",
+  "gui.addGroupParallel": "すべて同時に",
+  "gui.addGroupVisual": "見た目だけ",
+  "gui.addGroupSidePath": "横道（支線）",
+  "gui.addIfDesc": "条件に応じて、いずれか一つの道を選びます。",
+  "gui.addSwitchDesc": "if/else と同じですが、選択肢が2つより多い場合に使います。",
+  "gui.addForkDesc": "すべての道を同時に実行し、その後合流します。",
+  "gui.addSectionDesc": "見やすくするためにステップを枠で囲むだけで、流れ自体は変わりません。",
+  "gui.addBranchDesc": "本流から分かれて、後で本流に合流する道です。",
   "gui.selectRow": "編集する行を選択してください。",
   "gui.selectStep": "編集するステップを選択してください。",
   "gui.noRows": "フロー行がまだありません。下からステップを追加してください。",
@@ -418,6 +454,7 @@ export const JA = {
   "step.role": "誰が行うか（担当）",
   "step.chooseRole": "（担当を選択）",
   "step.text": "テキスト",
+  "step.moreOptions": "詳細オプション",
   "step.label": "ラベル（任意）",
   "step.description": "説明",
   "step.remark": "備考",
@@ -488,6 +525,21 @@ export const JA = {
   "preview.label": "図のプレビュー",
   // help
   "help.title": "DSL クイックリファレンス",
+  "help.guideTitle": "GUIエディタの使い方",
+  "help.guideLayout":
+    "3つの列があります：フロー（左）、選択中の項目の詳細（中央）、ライブプレビュー（右）。",
+  "help.guideAddStep":
+    "「＋ステップを追加」で通常のステップを追加します。横の矢印から、条件分岐・並行処理・見た目のグループ・横道を追加できます。",
+  "help.guideBasicFields":
+    "どのステップにも「誰が」「何を」が必要です。それ以外はすべて任意で、ステップ詳細の「詳細オプション」にまとまっています。",
+  "help.guideAddMenu":
+    "「一本だけ選ぶ」（if/switch）は一つの道を選びます。「すべて同時に」（並行）はすべての道を同時に実行します。「見た目だけ」は流れに影響しない枠です。「横道」は本流から分かれて後で合流します。",
+  "help.guideReusable":
+    "共通スタイル・補足チップ・ページ設定は、歯車アイコンの設定パネルにあります。これらはフロー自体を変えません。",
+  "help.guideModeToggle":
+    "いつでもテキストモードに切り替えて元のソースを確認できます。GUIでの編集内容はそのまま引き継がれ、戻しても失われません。",
+  "help.viewDslRef": "DSL構文リファレンスを見る",
+  "help.viewGuiGuide": "GUIガイドを見る",
   "help.markers": "すべての文書はこのマーカーで囲みます。",
   "help.title2": "1行：図のタイトル。",
   "help.page": "description / header-* / footer-* などのメタ情報。",

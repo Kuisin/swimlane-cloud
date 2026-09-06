@@ -43,6 +43,7 @@ describe("public entry imports cleanly", () => {
     await import("./hooks/use-dialog-host.js");
     await import("./components/gui/starter-gallery.jsx");
     await import("./components/gui/onboarding-tour.jsx");
+    await import("./components/gui/add-step-menu.jsx");
     await import("./i18n.jsx");
     await import("./lib/parts-extract.js");
     await import("./hooks/use-drag-width.js");
