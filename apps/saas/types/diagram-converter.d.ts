@@ -27,7 +27,15 @@ declare module "@swimlane-cloud/diagram-converter/parser" {
     errors: Array<{ line?: number; text?: string; msg?: string }>;
     [key: string]: unknown;
   }
-  export function parseDSL(src: string): ParseResult;
+  export function parseDSL(
+    src: string,
+    options?: {
+      lang?: string;
+      filename?: string;
+      resolveImport?: (path: string) => string | null;
+      resolveAsset?: (path: string) => string | null;
+    },
+  ): ParseResult;
   export function parseDSLParts(src: string): {
     blocks: Record<string, unknown>;
     props: Record<string, unknown>;

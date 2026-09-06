@@ -31,10 +31,15 @@ import {
   parseGuiModel,
   applyModelEdit,
   extractPartsCode,
+  fetchImports,
   findAdjacentStepIndex,
+  missingImports,
   moveRow,
+  resolversFrom,
   serializeDSL,
+  withEntries,
   type GuiRow,
+  type ImportCacheEntry,
 } from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import { FileTree } from "@/components/file-tree";
@@ -1107,6 +1112,8 @@ export function MobileView({
   onPath,
   editStep: editStepProp,
   onEditStep,
+  readImport,
+  readAsset,
 }: {
   files: Files;
   editable?: boolean;
@@ -1115,6 +1122,10 @@ export function MobileView({
   onPath?: (p: string) => void;
   editStep?: number | null;
   onEditStep?: (i: number | null) => void;
+  /** `@use` targets, read at the branch tip. Without these a diagram still
+   * renders; its imported definitions and images simply do not resolve. */
+  readImport?: (path: string) => Promise<string | null>;
+  readAsset?: (path: string) => Promise<string | null>;
 }) {
   const { t, lang } = useT();
   const paths = Object.keys(files)
@@ -1136,7 +1147,28 @@ export function MobileView({
     setDsl(files[active] ?? "");
   }, [active, files]);
 
-  const gui = useMemo(() => parseGuiModel(dsl), [dsl]);
+  // `@use` targets already read, keyed by importing file and path. Parsing is
+  // synchronous and reading one is not, so the diagram renders with whatever
+  // has arrived and re-renders when the rest does — same pattern as the
+  // desktop editor's FileEditorProvider.
+  const [importCache, setImportCache] = useState(() => new Map<string, ImportCacheEntry>());
+  useEffect(() => {
+    const pending = missingImports(dsl, active, importCache);
+    if (!pending.length) return undefined;
+    let cancelled = false;
+    void (async () => {
+      const entries = await fetchImports(pending, { readImport, readAsset });
+      if (cancelled || !entries.length) return;
+      setImportCache((prev) => withEntries(prev, active, entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dsl, active, importCache, readImport, readAsset]);
+  const parseOptions = useMemo(() => resolversFrom(active, importCache), [active, importCache]);
+
+  const gui = useMemo(() => parseGuiModel(dsl, parseOptions), [dsl, parseOptions]);
+  const model = useMemo(() => parseDSL(dsl, parseOptions), [dsl, parseOptions]);
   const editing =
     editStep != null
       ? (() => {
@@ -1250,6 +1282,7 @@ export function MobileView({
       <div className="min-h-0 flex-1 overflow-auto">
         <MobileDiagram
           dsl={dsl}
+          model={model}
           lang={lang}
           editable={editable}
           onEditStep={editable ? (i) => setEditStep(i) : undefined}

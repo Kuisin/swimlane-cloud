@@ -459,6 +459,8 @@ function EditPageInner() {
                   onPath={setMFile}
                   editStep={mStep}
                   onEditStep={setMStep}
+                  readImport={host.readImport}
+                  readAsset={host.readAsset}
                 />
               ) : (
                 <LoadingFallback />

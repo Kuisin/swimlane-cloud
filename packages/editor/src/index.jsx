@@ -31,6 +31,13 @@ export {
 export { buildFolderTree } from "./lib/folder-tree.js";
 export { clearLocalMirror } from "./lib/local-mirror.js";
 export { parseGuiModel, applyModelEdit } from "./lib/gui-model.js";
+export {
+  cacheKey,
+  fetchImports,
+  missingImports,
+  resolversFrom,
+  withEntries,
+} from "./lib/import-cache.js";
 export { extractPartsCode } from "./lib/parts-extract.js";
 export {
   findAdjacentStepIndex,

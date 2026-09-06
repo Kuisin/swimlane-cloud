@@ -155,11 +155,51 @@ export interface GuiModel {
   [key: string]: unknown;
 }
 
-export declare function parseGuiModel(src: string): GuiModel;
+export interface DslParseOptions {
+  lang?: string;
+  filename?: string;
+  resolveImport?: (path: string) => string | null;
+  resolveAsset?: (path: string) => string | null;
+}
+
+export declare function parseGuiModel(src: string, options?: DslParseOptions): GuiModel;
 export declare function applyModelEdit(
   src: string,
   edit: (draft: { rows: GuiRow[]; [k: string]: unknown }) => void,
 ): string;
+
+/** One `@use` target found by scanning `src`, without parsing it. */
+export interface ImportUse {
+  path: string;
+  alias: string | null;
+  kind: "fragment" | "asset";
+}
+
+/** A cache entry: `{ text }` for a fragment, `{ dataUri }` for an image, or `{ missing: true }`. */
+export type ImportCacheEntry = { text: string } | { dataUri: string } | { missing: true };
+
+export declare function cacheKey(filename: string | undefined, path: string): string;
+export declare function missingImports(
+  src: string,
+  filename: string | undefined,
+  cache: Map<string, ImportCacheEntry>,
+): ImportUse[];
+export declare function resolversFrom(
+  filename: string | undefined,
+  cache: Map<string, ImportCacheEntry>,
+): DslParseOptions;
+export declare function fetchImports(
+  uses: ImportUse[],
+  host: {
+    readImport?: (path: string) => Promise<string | null>;
+    readAsset?: (path: string) => Promise<string | null>;
+  },
+): Promise<Array<[string, ImportCacheEntry]>>;
+export declare function withEntries(
+  cache: Map<string, ImportCacheEntry>,
+  filename: string | undefined,
+  entries: Array<[string, ImportCacheEntry]>,
+): Map<string, ImportCacheEntry>;
 export declare function serializeDSL(model: { rows: GuiRow[]; [key: string]: unknown }): string;
 export declare function formatDsl(src: string): string;
 export declare function extractPartsCode(
