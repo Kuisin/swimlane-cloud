@@ -40,6 +40,7 @@
     "HackGen35 Console NF", "HackGen", "HackGen35", var(--sw-mono);
 
   display: flex;
+  position: relative;
   height: 100%;
   min-height: 0;
   width: 100%;
@@ -170,6 +171,14 @@
   color: var(--sw-text-faint);
   font-size: 12px;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.sw-tree-empty p,
+.sw-gui-empty p {
+  margin: 0;
 }
 .sw-tree-folder,
 .sw-tree-file {
@@ -615,6 +624,69 @@
   display: flex;
   min-height: 0;
   min-width: 0;
+}
+/* ---- starter gallery (beginner onboarding) ---- */
+.sw-starter-gallery {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 32px 16px;
+  text-align: center;
+  overflow: auto;
+}
+.sw-starter-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.sw-starter-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--sw-text-muted);
+  max-width: 420px;
+}
+.sw-starter-cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 620px;
+}
+.sw-starter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 180px;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid var(--sw-border-strong);
+  border-radius: 8px;
+  background: var(--sw-bg);
+  cursor: pointer;
+}
+.sw-starter-card:hover {
+  border-color: var(--sw-accent);
+  background: var(--sw-accent-bg);
+}
+.sw-starter-card-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.sw-starter-card-desc {
+  font-size: 11px;
+  color: var(--sw-text-muted);
+}
+.sw-starter-skip {
+  margin-top: 12px;
+  border: none;
+  background: transparent;
+  color: var(--sw-text-muted);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
 }
 .sw-gui-list-pane {
   display: flex;
@@ -1718,4 +1790,37 @@
 }
 .sw-add-block-item:hover {
   background: var(--sw-bg-sunken);
+}
+
+/* ---- onboarding tour (first-run orientation card) ---- */
+.sw-onboarding-tour {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 500;
+  width: 260px;
+  padding: 14px;
+  border: 1px solid var(--sw-border-strong);
+  border-radius: 10px;
+  background: var(--sw-bg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+.sw-onboarding-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.sw-onboarding-title {
+  margin: 0 0 8px;
+  padding-right: 20px;
+  font-size: 13px;
+}
+.sw-onboarding-list {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--sw-text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }

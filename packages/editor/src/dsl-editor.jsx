@@ -24,6 +24,7 @@ import { ErrorList } from "./components/error-list.jsx";
 import { HelpModal } from "./components/help-modal.jsx";
 import { TemplatePanel } from "./components/template-panel.jsx";
 import { GuiMode } from "./components/gui/gui-mode.jsx";
+import { OnboardingTour } from "./components/gui/onboarding-tour.jsx";
 
 /**
  * The shared DSL editor surface. Mounts a folder tree + tabs, a resizable split
@@ -334,6 +335,7 @@ function DslEditorInner({ options }) {
         onSelectDir={(d) => setSelectedDir((cur) => (cur === d ? "" : d))}
         onOpenFile={openFile}
         onNewFile={createNewFile}
+        onNewFileFromStarter={createNewFile}
         onNewFolder={createNewFolder}
         onDeleteFile={deleteFile}
         onDeleteFolder={deleteFolder}
@@ -451,6 +453,7 @@ function DslEditorInner({ options }) {
         onClose={() => setShowTemplates(false)}
         onInsert={handleInsertTemplate}
       />
+      {effectiveMode === "gui" && activeDocument && <OnboardingTour />}
     </div>
   );
 }
