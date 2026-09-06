@@ -34,7 +34,7 @@ import { ErrorList } from "../error-list.jsx";
  * inspector each own a saved pixel width (resizable from their right edge), and
  * the live preview fills whatever space is left. Widths persist in localStorage.
  */
-export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
+export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOptions }) {
   const { t } = useT();
   const stepList = useDragWidth(260, {
     min: 180,
@@ -54,7 +54,9 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
   const [dropOpen, setDropOpen] = useState(false);
   const [dropPos, setDropPos] = useState({ top: 0, left: 0 });
   const chevronRef = useRef(null);
-  const guiModel = useMemo(() => parseGuiModel(src), [src]);
+  // Same resolved imports as the visible error list, or a row near an @use
+  // line can be locked here for an error the banner above no longer shows.
+  const guiModel = useMemo(() => parseGuiModel(src, parseOptions), [src, parseOptions]);
   const rows = guiModel.rows;
   const lockedRows = useMemo(
     () => buildLockedGuiRowIndices(rows, guiModel.errors),
