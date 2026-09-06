@@ -32,8 +32,27 @@ function renderLucideIcon(name, x, y, size, color) {
   );
 }
 
-export function renderBlockIcon({ icon, x, y, size, color, shape }) {
-  if (!icon) return "";
+/**
+ * An imported image, drawn as `<image>` with its `data:` URI.
+ *
+ * Deliberately not inlined as SVG markup: an `<image>` is a replaced element,
+ * so a script, an event handler or an external reference inside an imported
+ * drawing never executes in the page showing the diagram. The aspect ratio is
+ * preserved and the image is centred in the square an icon occupies.
+ */
+function renderAssetIcon(dataUri, x, y, size) {
+  return el("image", {
+    href: dataUri,
+    x: x - size / 2,
+    y: y - size / 2,
+    width: size,
+    height: size,
+    preserveAspectRatio: "xMidYMid meet",
+  });
+}
+
+export function renderBlockIcon({ icon, iconAsset, x, y, size, color, shape }) {
+  if (!icon && !iconAsset) return "";
 
   let iconX;
   let iconY;
@@ -61,6 +80,11 @@ export function renderBlockIcon({ icon, x, y, size, color, shape }) {
       iconY = y;
       break;
   }
+
+  if (iconAsset?.dataUri) return renderAssetIcon(iconAsset.dataUri, iconX, iconY, size);
+  // An image reference whose import did not resolve draws nothing; the `@id`
+  // spelling is a reference, never a glyph to fall back on.
+  if (!icon || icon.startsWith("@")) return "";
 
   if (icon.startsWith("#")) {
     const name = icon.slice(1);

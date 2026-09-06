@@ -1,0 +1,105 @@
+@kai-swimlane 2
+@lang ja, en;
+
+/meta/
+owner: hr;
+status: draft;
+tags: hr, onboarding;
+updated: 2026-09-06;
+
+/title/
+入社手続き | Employee onboarding;
+
+/page/
+header-left: 株式会社カイ | Kai Corp.;
+header-right: 社外秘 | Confidential;
+footer-center: 業務フロー標準 v3 | Process standard v3;
+
+/option/
+show-left-gutter: true;
+show-right-gutter: true;
+left-title: 手順 | Procedure;
+right-title: 備考 | Remarks;
+
+/role/
+<hr>
+  label: 人事 | HR;
+  background-color: #fce7f3;
+  icon: #file-text;
+
+<employee>
+  label: 入社者 | New hire;
+  background-color: #e6f2ff;
+  icon: #user;
+
+<manager>
+  label: 上長 | Manager;
+  icon: #user-check;
+
+<it>
+  label: 情シス | IT;
+  background-color: #f1f5f9;
+  icon: #server;
+
+/block/
+<external>
+  border-color: #b45309;
+  shape: subroutine;
+  icon: #cloud;
+
+<terminal>
+  background-color: #ecfdf5;
+  border-color: #059669;
+  shape: rounded;
+
+/prop/
+<NDA>
+  label: 契約書類 | Contract;
+  side: right;
+
+<PC>
+  label: 端末 | Laptop;
+  side: left;
+
+/line/
+[hr: 内定通知を送付 | Send the offer letter] @offer +NDA
+
+if [employee] (承諾する？ | Accept?) @accept
+case (はい | Yes) #green
+  [employee: 承諾書を返送 | Return the acceptance] +NDA
+case (いいえ | No) #red
+  [hr: 辞退を記録 | Record the decline]
+  goto @wrap-up
+end-if
+
+section (入社前 | Before day one) @prep #gray
+  fork (アカウント | Accounts) #purple
+    [it: アカウント発行 | Create accounts] +PC
+  and (備品 | Equipment) #blue
+    [it: PC を手配 | Order a laptop] +PC
+      remark: 標準機は 3 営業日;
+      remark.en: Standard models take three business days;
+  and (書類 | Paperwork) #orange
+    [hr: 雇用契約書を準備 | Prepare the employment contract] +NDA
+  end-fork
+end-section
+
+phase (初日 | Day one) @day-one #teal
+  [hr: オリエンテーション | Orientation] @orientation
+    desc: 就業規則、セキュリティ研修;
+    desc.en: Work rules and security training;
+  [manager: 業務説明 | Role briefing] ..>
+  [employee: 初期設定 | Initial setup] +PC
+  if [it] (ログインできた？ | Able to log in?)
+  case (はい | Yes) #green
+    [employee: 研修を開始 | Start training]
+  case (いいえ | No) #red
+    [it: アカウントを修正 | Fix the account]
+    loop @orientation
+  end-if
+end-phase
+
+[hr: 試用期間の面談を予定 | Schedule the probation review] <terminal> @wrap-up
+  skip;
+
+@end

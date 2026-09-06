@@ -113,13 +113,30 @@ describe("parser validation — definition sections", () => {
 });
 
 describe("parser validation — branch colors", () => {
+  it("accepts every published palette name", () => {
+    for (const ok of [
+      "blue",
+      "green",
+      "red",
+      "orange",
+      "purple",
+      "gray",
+      "black",
+      "pink",
+      "teal",
+      "yellow",
+    ]) {
+      expect(msgs(DOC(`section (S) #${ok}\n  [a: s1]\nend-section`))).toEqual([]);
+    }
+  });
+
   it("errors on unknown #color tokens on if/elseif/fork/and/section", () => {
     const m = msgs(
       DOC(
-        `if (確認) is (OK) than #pink\n  [a: 手順]\nelseif (NG) than #magenta\n  [a: 差戻]\nendif\nfork #cyan\n  [a: p1]\nand #teal\n  [a: p2]\nendfork\nsection (S) #ivory\n  [a: s1]\nend-section`,
+        `if (確認) is (OK) than #salmon\n  [a: 手順]\nelseif (NG) than #magenta\n  [a: 差戻]\nendif\nfork #cyan\n  [a: p1]\nand #indigo\n  [a: p2]\nendfork\nsection (S) #ivory\n  [a: s1]\nend-section`,
       ),
     );
-    for (const bad of ["#pink", "#magenta", "#cyan", "#teal", "#ivory"]) {
+    for (const bad of ["#salmon", "#magenta", "#cyan", "#indigo", "#ivory"]) {
       expect(m.some((x) => x.includes(`unknown color "${bad}"`))).toBe(true);
     }
   });

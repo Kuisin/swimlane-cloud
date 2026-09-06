@@ -13,6 +13,7 @@ import {
   syncDocumentFromDisk,
 } from "../lib/dsl-document.js";
 import { createFlushScheduler } from "../lib/debounce-flush.js";
+import { fetchImports, missingImports, resolversFrom, withEntries } from "../lib/import-cache.js";
 import { clearMirror, readMirror, reconcileMirror, writeMirror } from "../lib/local-mirror.js";
 import { hostAutosaves, hostHas, hostIsReadOnly } from "../host.js";
 
@@ -94,7 +95,29 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
   const activeDocument = documents.find((doc) => doc.id === activeDocumentId) || null;
   const src = activeDocument?.src ?? "";
   const theme = THEMES[themeKey] ?? THEMES.basic;
-  const model = useMemo(() => parseDSL(src), [src]);
+  // `@use` targets already read, keyed by importing file and path. Parsing is
+  // synchronous and a host read is not, so the diagram renders with whatever
+  // has arrived and re-renders when the rest does.
+  const [importCache, setImportCache] = useState(() => new Map());
+  const model = useMemo(
+    () => parseDSL(src, resolversFrom(activeDocumentId, importCache)),
+    [src, activeDocumentId, importCache],
+  );
+
+  useEffect(() => {
+    if (!activeDocumentId) return undefined;
+    const pending = missingImports(src, activeDocumentId, importCache);
+    if (!pending.length) return undefined;
+    let cancelled = false;
+    void (async () => {
+      const entries = await fetchImports(pending, host);
+      if (cancelled || !entries.length) return;
+      setImportCache((prev) => withEntries(prev, activeDocumentId, entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [src, activeDocumentId, importCache, host]);
   const activeParseErrorPolicy = activeDocument?.parseErrorPolicy ?? null;
 
   const hasUnsavedChanges = isDocumentDirty(activeDocument);

@@ -59,6 +59,10 @@ export interface EditorHost {
   root?(): Promise<string | null>;
   list(): Promise<FileRef[]>;
   read(id: string): Promise<string>;
+  /** Text of an `@use` fragment; without it imports simply do not resolve. */
+  readImport?(path: string): Promise<string | null>;
+  /** An `@use` image as a base64 `data:` URI. Same degradation. */
+  readAsset?(path: string): Promise<string | null>;
   writeDraft(id: string, dsl: string): Promise<void>;
   writeDraftMany?(updates: { id: string; dsl: string }[]): Promise<void>;
   checkpoint?(opts: { message?: string; files?: { id: string; dsl: string }[] }): Promise<void>;

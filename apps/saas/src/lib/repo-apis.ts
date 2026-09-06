@@ -49,6 +49,8 @@ export interface WriteApi {
   putFile(path: string, text: string, branch: string, message: string): Promise<string>;
   /** Text of a file at a ref, or null when it does not exist there. */
   readFile(path: string, ref: string): Promise<string | null>;
+  /** The same file as base64, for an imported image. GitHub-only in practice. */
+  readFileBase64?(path: string, ref: string): Promise<string | null>;
   listTree(sha: string, recursive?: boolean): Promise<{ entries: TreeEntry[]; truncated: boolean }>;
   /** Point a new branch at an exact sha rather than another ref's tip. */
   createBranchAtSha(name: string, sha: string): Promise<void>;
