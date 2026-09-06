@@ -52,6 +52,7 @@ export const EN = {
   "tree.expand": "Expand files",
   "tree.deleteFile": "Delete file",
   "tree.deleteFolder": "Delete folder",
+  "tree.createFirst": "Create your first diagram",
   // file settings
   "file.settings": "Settings",
   "settings.title": "File settings",
@@ -115,6 +116,22 @@ export const EN = {
   "gui.noRows": "No flow rows yet. Add a step below.",
   "gui.newStepText": "New step",
   "gui.openFile": "Open or create a file to start.",
+  // starter gallery (beginner onboarding)
+  "starter.title": "Create your first flow",
+  "starter.hint": "Pick a starting point, or start blank and add steps yourself.",
+  "starter.startBlank": "Start blank",
+  "starter.simpleApproval": "Simple approval",
+  "starter.simpleApprovalDesc": "One request, reviewed, then approved.",
+  "starter.yesNoDecision": "Yes/No decision",
+  "starter.yesNoDecisionDesc": "A request that's either approved or rejected.",
+  "starter.parallelTasks": "Parallel tasks",
+  "starter.parallelTasksDesc": "Several things happen at the same time, then continue.",
+  // onboarding tour (first-run orientation card)
+  "tour.title": "Quick orientation",
+  "tour.step1": "Switch between GUI and Text mode anytime — your work carries over.",
+  "tour.step2": "Use “+ Add step” (and its arrow) to build the flow.",
+  "tour.step3": "Your diagram updates live in the preview as you edit.",
+  "tour.gotIt": "Got it",
   // step inspector
   "step.title": "Step",
   "step.moveUp": "Move up",
@@ -312,6 +329,7 @@ export const JA = {
   "tree.expand": "ツリーを展開",
   "tree.deleteFile": "ファイルを削除",
   "tree.deleteFolder": "フォルダを削除",
+  "tree.createFirst": "最初の図を作成",
   // file settings
   "file.settings": "設定",
   "settings.title": "ファイル設定",
@@ -376,6 +394,22 @@ export const JA = {
   "gui.noRows": "フロー行がまだありません。下からステップを追加してください。",
   "gui.newStepText": "新しいステップ",
   "gui.openFile": "ファイルを開くか作成して始めましょう。",
+  // starter gallery (beginner onboarding)
+  "starter.title": "最初のフローを作成",
+  "starter.hint": "テンプレートから始めるか、空の状態から自分でステップを追加できます。",
+  "starter.startBlank": "空の状態で始める",
+  "starter.simpleApproval": "シンプルな承認フロー",
+  "starter.simpleApprovalDesc": "申請を確認し、承認する一連の流れ。",
+  "starter.yesNoDecision": "はい／いいえの判断",
+  "starter.yesNoDecisionDesc": "申請を承認するか却下するかの分岐。",
+  "starter.parallelTasks": "並行タスク",
+  "starter.parallelTasksDesc": "複数の処理を同時に行い、その後合流する流れ。",
+  // onboarding tour (first-run orientation card)
+  "tour.title": "かんたんガイド",
+  "tour.step1": "GUIとテキストはいつでも切り替えられます。編集内容はそのまま引き継がれます。",
+  "tour.step2": "「＋ステップを追加」（横の矢印も）でフローを組み立てます。",
+  "tour.step3": "編集内容はプレビューにリアルタイムで反映されます。",
+  "tour.gotIt": "わかりました",
   // step inspector
   "step.title": "ステップ",
   "step.moveUp": "上へ移動",

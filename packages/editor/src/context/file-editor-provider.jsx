@@ -436,7 +436,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autosave]);
 
-  async function createNewFile(dir = "") {
+  async function createNewFile(dir = "", starterDsl) {
     if (readOnly || !hostHas(host, "create")) return;
     const suggested = suggestNewTxtFileName(
       files.map((f) => f.id),
@@ -453,7 +453,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
       await dialog.alert("A file with that name already exists.");
       return;
     }
-    let content = dslContentFromTemplate(relPath, DEFAULT_TAB_TEMPLATE);
+    let content = dslContentFromTemplate(relPath, starterDsl || DEFAULT_TAB_TEMPLATE);
     // Apply a forced /role/ etc. on create if policies demand it.
     content = applyForcedSections(content, policies);
     try {

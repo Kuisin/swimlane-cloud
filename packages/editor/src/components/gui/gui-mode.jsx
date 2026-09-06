@@ -21,6 +21,7 @@ import { StepInspector } from "./step-inspector.jsx";
 import { BranchInspector } from "./branch-inspector.jsx";
 import { MoveStepModal } from "./move-step-modal.jsx";
 import { FileSettingsModal } from "./file-settings-modal.jsx";
+import { StarterGallery } from "./starter-gallery.jsx";
 import { PreviewPane } from "../preview-pane.jsx";
 import { ErrorList } from "../error-list.jsx";
 
@@ -278,6 +279,26 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors, parseOpti
 
   const isStep = inspectorRow?.kind === "step" && !inspectorRow.empty;
   const reorder = isStep ? getReorderBounds(rows, saveIndex) : null;
+
+  // A brand-new file already seeds one step (see DEFAULT_TAB_TEMPLATE), so
+  // zero rows here means the flow was emptied out (e.g. the last step was
+  // deleted) rather than "never touched" — still exactly the moment a
+  // starter shape is most useful, so offer the same gallery either way.
+  // Picking "start blank" is just the normal add-step action: it makes
+  // rows.length > 0, which is what hides this state, so no extra flag needed.
+  if (!readOnly && rows.length === 0) {
+    return (
+      <div className="sw-gui-wrap">
+        <StarterGallery
+          title={t("starter.title")}
+          hint={t("starter.hint")}
+          onSelect={(dsl) => onChange(dsl)}
+          onSkip={addStep}
+          skipLabel={t("gui.addStep")}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="sw-gui-wrap">
