@@ -99,10 +99,15 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
   // synchronous and a host read is not, so the diagram renders with whatever
   // has arrived and re-renders when the rest does.
   const [importCache, setImportCache] = useState(() => new Map());
-  const model = useMemo(
-    () => parseDSL(src, resolversFrom(activeDocumentId, importCache)),
-    [src, activeDocumentId, importCache],
+  // The single resolved-imports view every parse of `src` must use — the
+  // context's own `model` and any other parse a consumer runs (the live SVG
+  // preview debounces its own) both need this, or they can disagree about
+  // whether an import resolved.
+  const parseOptions = useMemo(
+    () => resolversFrom(activeDocumentId, importCache),
+    [activeDocumentId, importCache],
   );
+  const model = useMemo(() => parseDSL(src, parseOptions), [src, parseOptions]);
 
   useEffect(() => {
     if (!activeDocumentId) return undefined;
@@ -594,6 +599,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     theme,
     src,
     model,
+    parseOptions,
     activeParseErrorPolicy,
     setActiveDocumentParseErrorPolicy,
     hasUnsavedChanges,
