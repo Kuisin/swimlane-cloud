@@ -69,6 +69,7 @@ function DslEditorInner({ options }) {
     theme,
     src,
     model,
+    parseOptions,
     activeParseErrorPolicy,
     hasUnsavedChanges,
     hasAnyUnsavedChanges,
@@ -95,7 +96,16 @@ function DslEditorInner({ options }) {
     parse: (v) => v === "true",
   });
 
-  const { svg, errors } = useLivePreview(src, { themeKey, theme });
+  // Same resolved imports as the context's own `model`, or this debounced
+  // parse would show an @use error the text editor's live error list already
+  // cleared (or vice versa).
+  const { svg, errors } = useLivePreview(src, {
+    themeKey,
+    theme,
+    resolveImport: parseOptions.resolveImport,
+    resolveAsset: parseOptions.resolveAsset,
+    filename: parseOptions.filename,
+  });
   const { leftPct, containerRef, onDividerMouseDown } = useSplitPane(options?.initialSplit ?? 52, {
     storageKey: "sw-editor:split-pct",
   });
@@ -395,6 +405,7 @@ function DslEditorInner({ options }) {
             theme={theme}
             svg={svg}
             errors={errors}
+            parseOptions={parseOptions}
           />
         ) : (
           <div className="sw-split" ref={containerRef}>
