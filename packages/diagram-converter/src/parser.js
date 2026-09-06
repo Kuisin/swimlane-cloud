@@ -1,6 +1,7 @@
 import { normalizeArrowLine, ARROW_LINE_TYPES } from "./arrow-line.js";
 import { getLucideIconNode } from "./render-pure/icon-paths.js";
 import { BLOCK_SHAPE_WIDTH_FACTOR, BRANCH_COLOR_STYLES } from "./render-pure/diagram-layout.js";
+import { parseDSLv2, dslVersion } from "./parser-v2.js";
 import {
   DEFAULT_COLUMN_TITLES,
   DIAGRAM_OPTION_DSL_MAP,
@@ -187,7 +188,33 @@ export function buildStepRowDisplayInfo(rows) {
   return out;
 }
 
-export function parseDSL(src) {
+export function parseDSL(src, parseOptions = {}) {
+  // Version 2 is a different language, read by its own module; the bare
+  // `@kai-swimlane` header below still selects version 1.
+  const version = dslVersion(src);
+  if (version !== null && version >= 2) {
+    if (version > 2) {
+      return {
+        title: "",
+        page: emptyPage(),
+        options: emptyDiagramOptions(),
+        providedColumnTitles: [],
+        lanes: [],
+        rows: [],
+        blocks: {},
+        props: {},
+        errors: [
+          {
+            line: 1,
+            text: "",
+            msg: `unsupported version ${version} — this file needs a newer build`,
+          },
+        ],
+        trailingLineComments: [],
+      };
+    }
+    return parseDSLv2(src, parseOptions);
+  }
   const allLines = src.split(/\r?\n/);
   const errors = [];
 

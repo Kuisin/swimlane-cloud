@@ -12,6 +12,9 @@ export const BRANCH_COLOR_STYLES = {
   purple: { stroke: "#7e22ce", bg: "#f3e8ff" },
   gray: { stroke: "#374151", bg: "#f3f4f6" },
   black: { stroke: "#111827", bg: "#e5e7eb" },
+  pink: { stroke: "#be185d", bg: "#fce7f3" },
+  teal: { stroke: "#0f766e", bg: "#ccfbf1" },
+  yellow: { stroke: "#a16207", bg: "#fef9c3" },
 };
 
 /** Parallel fork gateway circle radius. */
