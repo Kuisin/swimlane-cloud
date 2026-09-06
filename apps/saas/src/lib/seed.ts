@@ -3,7 +3,11 @@
  * templates every project row is seeded with. Kept in one place so the
  * repository seed and the database seed cannot drift apart.
  */
-import { REPO_CONFIG_PATH, type FileWrite } from "@swimlane-cloud/github-client";
+import {
+  INTEGRATION_BRANCH,
+  REPO_CONFIG_PATH,
+  type FileWrite,
+} from "@swimlane-cloud/github-client";
 import { getServiceSupabase } from "./supabase/server";
 import { TEMPLATE_SECTIONS, templateRepoPath, type TemplateSection } from "./templates";
 
@@ -61,7 +65,7 @@ background-color: #e6f2ff;
 /** `.swimlane.json` for a repository this app created. */
 export function repoConfigJson(title: string, diagramsRoot = DIAGRAMS_ROOT): string {
   return `${JSON.stringify(
-    { diagramsRoot, title, themeKey: "basic", integrationBranch: "test" },
+    { diagramsRoot, title, themeKey: "basic", integrationBranch: INTEGRATION_BRANCH },
     null,
     2,
   )}\n`;

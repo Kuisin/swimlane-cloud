@@ -3,10 +3,11 @@
  * over the project API. The editor never sees GitHub or Supabase; it sees a
  * folder of `.txt` files it can read, save, create and checkpoint.
  *
- * Drafts (Save / Save all / New file) go to Postgres; Checkpoint turns every
- * draft on the branch into one commit. `expectedHeadSha` is the head we last
- * listed, so two people checkpointing the same branch cannot clobber each
- * other — the second gets a 409 and a "branch moved" banner.
+ * Every writable branch is `autosave: true`, so the editor debounce-saves
+ * drafts to Postgres itself; the page's own "Push to GitHub" turns every
+ * draft on the branch into one commit via `checkpoint`. `expectedHeadSha` is
+ * the head we last listed, so two people pushing the same branch cannot
+ * clobber each other — the second gets a 409 and a "branch moved" banner.
  */
 import type {
   EditorHost,
@@ -19,8 +20,8 @@ import { api } from "./client";
 import {
   checkpoint as checkpointRequest,
   deleteFile,
-  flagVersion,
   getFile,
+  getImport,
   getTree,
   removeFolder,
   renameFile,
@@ -32,20 +33,28 @@ export interface SaasHostOptions {
   branch: string;
   /** Whether the caller may write to this branch (from ProjectState). */
   editable: boolean;
-  /** Owners on `test` may flag a version straight from the editor. */
-  versioning: boolean;
   /** Fired when the branch tip differs from the last one seen. */
   onHeadChange?: (sha: string) => void;
   /** Fired after any draft write, so the page can show "unsaved" without a round trip. */
   onDraftSaved?: () => void;
   /** Fired after a successful checkpoint. */
   onCheckpoint?: (commitSha: string) => void;
+  /** The open file's path, so `@use` targets resolve relative to it. */
+  activeDocumentId?: () => string;
+  /**
+   * Fired with the raw tree listing every time `list()` resolves, so the page
+   * can keep a path -> fid map for writing `?fid=` into the URL (the editor's
+   * own `FileRef` doesn't carry `fid` — that's a SaaS-only concept).
+   */
+  onFileList?: (files: { id: string; name: string; fid: string }[]) => void;
 }
 
 export function createSaasHost(opts: SaasHostOptions): EditorHost {
   const { projectId, branch } = opts;
   const base = `/api/projects/${encodeURIComponent(projectId)}`;
   let knownHeadSha: string | null = null;
+  // The importing file, so `./` and `../` resolve the way the parser does.
+  const activeId = () => opts.activeDocumentId?.() ?? "";
 
   async function write(files: { id: string; dsl: string }[]) {
     await saveDrafts(projectId, branch, files);
@@ -53,7 +62,7 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
   }
 
   const host: EditorHost = {
-    capabilities: { readOnly: !opts.editable, versioning: opts.versioning },
+    capabilities: { readOnly: !opts.editable, autosave: opts.editable },
 
     async root() {
       return `${branch}`;
@@ -63,11 +72,31 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
       const tree = await getTree(projectId, branch);
       if (knownHeadSha && tree.sha !== knownHeadSha) opts.onHeadChange?.(tree.sha);
       knownHeadSha = tree.sha;
+      opts.onFileList?.(tree.files);
       return tree.files;
     },
 
     async read(id) {
       return (await getFile(projectId, branch, id)).dsl;
+    },
+
+    // `@use` targets. The editor reads them here because parsing is
+    // synchronous; a failure is null, so a diagram renders without its
+    // imports rather than not at all.
+    async readImport(path) {
+      try {
+        return (await getImport(projectId, branch, activeId(), path)).text ?? null;
+      } catch {
+        return null;
+      }
+    },
+
+    async readAsset(path) {
+      try {
+        return (await getImport(projectId, branch, activeId(), path)).dataUri ?? null;
+      } catch {
+        return null;
+      }
     },
 
     async writeDraft(id, dsl) {
@@ -135,12 +164,6 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
       return res.policies;
     },
   };
-
-  if (opts.versioning) {
-    host.flagNewVersion = async (_commitSha, { name, note }) => {
-      await flagVersion(projectId, name, note);
-    };
-  }
 
   return host;
 }

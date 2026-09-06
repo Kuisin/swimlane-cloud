@@ -1,0 +1,52 @@
+@kai-swimlane 2
+@lang ja, en;
+@use ../../assets/kai-mark.svg;
+@use ../../assets/warehouse-badge.png as badge;
+
+/meta/
+owner: brand;
+status: draft;
+tags: brand, assets;
+updated: 2026-09-06;
+
+/title/
+社内アイコンの利用例 | Imported image icons;
+
+/page/
+description: 社内のロゴや記号を @use で読み込み、レーンとブロックのアイコンに使う。;
+description.en: Import a company mark or a badge with @use and use it as a lane or block icon.;
+
+/option/
+show-left-gutter: true;
+show-right-gutter: true;
+left-title: 手順 | Procedure;
+right-title: 備考 | Remarks;
+
+/role/
+<brand>
+  label: ブランド | Brand;
+  background-color: #e6f2ff;
+  icon: @kai-mark;
+
+<warehouse>
+  label: 倉庫 | Warehouse;
+  background-color: #fff7e6;
+  icon: @badge;
+
+/block/
+<marked>
+  background-color: #eff6ff;
+  border-color: #1d4ed8;
+  shape: rounded;
+  icon: @kai-mark;
+
+/line/
+[brand: 社章入りの手順書を配布 | Publish the branded procedure] <marked>
+  remark: SVG はベクタなので拡大しても崩れない;
+  remark.en: The mark is vector, so it stays sharp at any size;
+
+[warehouse: 現場掲示用に印刷 | Print it for the floor]
+  remark: PNG はラスタ。掲示サイズに合わせて用意する;
+  remark.en: The badge is raster, so supply it at the size you post;
+
+@end

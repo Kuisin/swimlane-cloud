@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, Tag } from "lucide-react";
-import { flagVersion, promoteVersion, publishVersion, unpublishVersion } from "@/lib/workflow";
+import { Tag } from "lucide-react";
+import { INTEGRATION_BRANCH } from "@swimlane-cloud/github-client";
+import { promoteVersion, publishVersion, unpublishVersion } from "@/lib/workflow";
 import { ProjectPage, VersionPanel, describeError, useProject } from "../_components";
+import { PromoteModal, PublishModal } from "./_modals";
+import type { VersionState } from "@/lib/types";
 import { useT } from "@/i18n";
 
 export default function VersionsPage() {
@@ -11,9 +14,11 @@ export default function VersionsPage() {
   const { t } = useT();
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showPublish, setShowPublish] = useState(false);
+  const [promoting, setPromoting] = useState<VersionState | null>(null);
 
   const isOwner = state?.me.role === "owner";
-  const test = state?.branches.find((b) => b.name === "test");
+  const preview = state?.branches.find((b) => b.name === INTEGRATION_BRANCH);
 
   const run = (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -22,18 +27,6 @@ export default function VersionsPage() {
       .then(() => refresh())
       .catch((e) => setNotice(describeError(e, t)))
       .finally(() => setBusy(false));
-  };
-
-  const doFlag = () => {
-    const name = window.prompt(t("versions.prompt.name"), "");
-    if (!name) return;
-    const note = window.prompt(t("versions.prompt.note"), "") ?? "";
-    run(async () => {
-      const res = await flagVersion(projectId, name, note || undefined);
-      if (res.renderFailures.length) {
-        window.alert(t("versions.renderFailures", { files: res.renderFailures.join(", ") }));
-      }
-    });
   };
 
   return (
@@ -46,17 +39,15 @@ export default function VersionsPage() {
                 <h2 className="text-lg font-semibold">{t("versions.title")}</h2>
                 <p className="text-xs text-neutral-500">
                   {t("versions.description")}
-                  {test?.dirty ? ` ${t("versions.testDirty")}` : ""}
+                  {preview?.dirty ? ` ${t("versions.previewDirty")}` : ""}
                 </p>
               </div>
               {isOwner ? (
                 <button
-                  onClick={doFlag}
-                  disabled={busy}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+                  onClick={() => setShowPublish(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
                 >
-                  {busy ? <RefreshCw size={15} className="animate-spin" /> : <Tag size={15} />}{" "}
-                  {t("versions.flagNew")}
+                  <Tag size={15} /> {t("versions.publish")}
                 </button>
               ) : (
                 <span className="text-xs text-neutral-400">{t("versions.ownerHint")}</span>
@@ -66,15 +57,38 @@ export default function VersionsPage() {
               projectId={projectId}
               state={state}
               isOwner={isOwner}
-              onPromote={(v) => {
-                if (!window.confirm(t("versions.confirmPromote", { name: v.name }))) return;
-                run(() => promoteVersion(projectId, v.id));
-              }}
+              onPromote={(v) => setPromoting(v)}
               onPublish={(v, shareMode) => run(() => publishVersion(projectId, v.id, shareMode))}
               onUnpublish={(v) => run(() => unpublishVersion(projectId, v.id))}
             />
           </div>
         </div>
+      )}
+      {showPublish && (
+        <PublishModal
+          projectId={projectId}
+          existingNames={state?.versions.map((v) => v.name) ?? []}
+          onClose={() => setShowPublish(false)}
+          onPublished={(res) => {
+            setShowPublish(false);
+            if (res.renderFailures.length) {
+              setNotice(t("versions.renderFailures", { files: res.renderFailures.join(", ") }));
+            }
+            void refresh();
+          }}
+        />
+      )}
+      {promoting && (
+        <PromoteModal
+          name={promoting.name}
+          busy={busy}
+          onClose={() => setPromoting(null)}
+          onConfirm={() => {
+            const v = promoting;
+            setPromoting(null);
+            run(() => promoteVersion(projectId, v.id));
+          }}
+        />
       )}
     </ProjectPage>
   );

@@ -1,4 +1,4 @@
-import { isIntegrationBranch, isTmpBranch } from "@swimlane-cloud/github-client";
+import { isEditBranch, isIntegrationBranch } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { parsePullNumber } from "@/lib/guard";
 import { audit, requireProjectRole } from "@/lib/projects";
@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * POST {expectedHeadSha?} — merge a tmp-* → test pull request (owner only),
- * then delete the edit branch and close its session. Anything targeting main
- * is refused here: promotion has its own gated route.
+ * POST {expectedHeadSha?} — merge an edit branch → preview pull request (owner
+ * only), then delete the edit branch and close its session. Anything
+ * targeting main is refused here: promotion has its own gated route.
  */
 export const POST = withApi(
   async (req, ctx: { params: Promise<{ projectId: string; number: string }> }) => {
@@ -20,12 +20,18 @@ export const POST = withApi(
       () => ({}) as { expectedHeadSha?: string },
     );
     const project = await requireProjectRole(projectId, "owner");
+    if (project.project.provider !== "github") {
+      throw new ApiError(
+        400,
+        "Pull request review is only available for GitHub-backed projects in this release.",
+      );
+    }
 
     const pull = await project.pulls.getPullRequest(n);
     if (!isIntegrationBranch(pull.base)) {
       throw new ApiError(
         400,
-        "Only pull requests into test are merged here. Promote versions from the Versions tab.",
+        "Only pull requests into preview are merged here. Promote versions from the Versions tab.",
       );
     }
     if (pull.state !== "open") throw new ApiError(409, "This pull request is not open.");
@@ -37,8 +43,8 @@ export const POST = withApi(
 
     const supabase = getServiceSupabase();
     let deletedBranch: string | null = null;
-    if (isTmpBranch(pull.head)) {
-      await project.repos.deleteBranch(project.repo.owner, project.repo.repo, pull.head);
+    if (isEditBranch(pull.head)) {
+      await project.repos.deleteBranch(pull.head);
       deletedBranch = pull.head;
       await supabase.from("drafts").delete().eq("project_id", projectId).eq("branch", pull.head);
       await supabase

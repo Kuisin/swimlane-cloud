@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Lock } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
-import { api, ApiClientError, postJson, redirectToLogin } from "@/lib/client";
+import { api, ApiClientError, postJson, redirectToReconnect } from "@/lib/client";
 import { useT } from "@/i18n";
 
 interface Owner {
@@ -41,7 +41,7 @@ export default function NewProjectPage() {
         setOwner((o) => o || r.owners[0]?.login || "");
       })
       .catch((e) => {
-        if (e instanceof ApiClientError && e.needsAuth) return redirectToLogin();
+        if (e instanceof ApiClientError && e.needsAuth) return redirectToReconnect(e);
         setError(e instanceof Error ? e.message : String(e));
       });
   }, []);
@@ -51,7 +51,7 @@ export default function NewProjectPage() {
     api<{ repos: Candidate[] }>("/api/github/repos")
       .then((r) => setCandidates(r.repos))
       .catch((e) => {
-        if (e instanceof ApiClientError && e.needsAuth) return redirectToLogin();
+        if (e instanceof ApiClientError && e.needsAuth) return redirectToReconnect(e);
         setError(e instanceof Error ? e.message : String(e));
       });
   }, [tab, candidates]);
@@ -68,7 +68,7 @@ export default function NewProjectPage() {
       const res = await postJson<{ projectId: string }>("/api/projects", body);
       router.push(`/projects/${res.projectId}`);
     } catch (e) {
-      if (e instanceof ApiClientError && e.needsAuth) return redirectToLogin();
+      if (e instanceof ApiClientError && e.needsAuth) return redirectToReconnect(e);
       setError(e instanceof Error ? e.message : String(e));
       setBusy(null);
     }

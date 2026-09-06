@@ -176,3 +176,39 @@ describe("ensureBranch", () => {
     expect(calls.some(([, i]) => i.method === "POST")).toBe(false);
   });
 });
+
+describe("createBranchAtSha", () => {
+  it("treats an existing branch (409/422) as success", async () => {
+    const { fetchImpl } = routed({ "/git/refs": {} }, { "/git/refs": 422 });
+    await expect(api(fetchImpl).createBranchAtSha("release-abc", HEAD)).resolves.toBeUndefined();
+  });
+});
+
+describe("tagExists", () => {
+  it("is true when the tag ref resolves", async () => {
+    const { fetchImpl } = routed({ "/git/ref/tags/": { object: { sha: HEAD } } });
+    await expect(api(fetchImpl).tagExists("v1.0.0")).resolves.toBe(true);
+  });
+
+  it("is false on a 404, not an error", async () => {
+    const { fetchImpl } = routed({ "/git/ref/tags/": {} }, { "/git/ref/tags/": 404 });
+    await expect(api(fetchImpl).tagExists("v1.0.0")).resolves.toBe(false);
+  });
+});
+
+describe("readFile", () => {
+  it("returns the raw file body, encoding each path segment separately", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      // A literal `/` must survive as a path separator, not become %2F —
+      // otherwise this would look for one oddly-named file, not a nested one.
+      expect(url).toContain("/contents/dir/sub%20dir/a.txt");
+      return new Response("diagram text", { status: 200 });
+    }) as unknown as FetchImpl;
+    expect(await api(fetchImpl).readFile("dir/sub dir/a.txt", "main")).toBe("diagram text");
+  });
+
+  it("returns null on a missing path instead of throwing", async () => {
+    const fetchImpl = vi.fn(async () => new Response("", { status: 404 })) as unknown as FetchImpl;
+    await expect(api(fetchImpl).readFile("missing.txt", "main")).resolves.toBeNull();
+  });
+});

@@ -28,6 +28,9 @@
  * @typedef {Object} EditorCapabilities
  * @property {boolean} [readOnly]
  * @property {boolean} [versioning]
+ * @property {boolean} [autosave] Debounce-save every change instead of
+ *   requiring Save / Save all; hides those buttons and Checkpoint / Version
+ *   in the action bar in favour of a small "saved" status.
  *
  * @typedef {Object} WatchEvent
  * @property {string} id
@@ -38,6 +41,11 @@
  * @property {() => Promise<string|null>} [root]
  * @property {() => Promise<FileRef[]>} list
  * @property {(id: string) => Promise<string>} read
+ * @property {(path: string) => Promise<string|null>} [readImport] Text of an
+ *   `@use` fragment, by repository-relative path. Without it a diagram still
+ *   renders; its imported definitions simply do not resolve.
+ * @property {(path: string) => Promise<string|null>} [readAsset] An `@use`
+ *   image as a base64 `data:` URI. Same degradation: no image, no error.
  * @property {(id: string, dsl: string) => Promise<void>} writeDraft
  * @property {(updates: {id: string, dsl: string}[]) => Promise<void>} [writeDraftMany]
  * @property {(opts: {message?: string, files?: {id: string, dsl: string}[]}) => Promise<void>} [checkpoint]
@@ -63,6 +71,11 @@ export function hostHas(host, method) {
 /** True when host capabilities permit version-control actions. */
 export function hostSupportsVersioning(host) {
   return Boolean(host?.capabilities?.versioning);
+}
+
+/** True when the host wants drafts saved automatically rather than on demand. */
+export function hostAutosaves(host) {
+  return Boolean(host?.capabilities?.autosave);
 }
 
 export function hostIsReadOnly(host) {

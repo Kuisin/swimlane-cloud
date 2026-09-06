@@ -35,7 +35,7 @@ export function FlowStepList({
     return <div className="sw-gui-empty">{t("gui.noRows")}</div>;
   }
 
-  const draggable = (i) => Boolean(canReorder) && isStepRow(rows[i]);
+  const draggable = (i) => Boolean(canReorder) && isStepRow(rows[i]) && !lockedRows?.has(i);
   // Any other row is a candidate drop point (insert before it). The host move
   // validates the result, so cross-group drags that would break stay no-ops.
   const validTarget = (i) => dragIndex >= 0 && i !== dragIndex;
@@ -62,8 +62,8 @@ export function FlowStepList({
               isOver ? "sw-flow-row-over" : ""
             }`}
             style={{ paddingLeft: 10 + rowListIndentDepth(rows, index) * 16 }}
-            onClick={() => !locked && onSelect(index)}
-            title={locked ? t("errors.title") : undefined}
+            onClick={() => onSelect(index)}
+            title={locked ? t("errors.rowLocked") : undefined}
             draggable={draggable(index)}
             onDragStart={(e) => {
               if (!draggable(index)) return;

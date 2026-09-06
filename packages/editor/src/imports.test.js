@@ -15,6 +15,8 @@ describe("public entry imports cleanly", () => {
     expect(typeof mod.LanguageProvider).toBe("function");
     expect(typeof mod.useT).toBe("function");
     expect(Array.isArray(mod.LANGUAGES)).toBe(true);
+    expect(typeof mod.DialogHost).toBe("function");
+    expect(typeof mod.useDialogHost).toBe("function");
   });
 
   it("loads every component module (JSX compiles, imports resolve)", async () => {
@@ -24,6 +26,7 @@ describe("public entry imports cleanly", () => {
     await import("./components/gui/branch-inspector.jsx");
     await import("./components/gui/flow-step-list.jsx");
     await import("./components/gui/color-field.jsx");
+    await import("./components/gui/branch-color-field.jsx");
     await import("./components/template-panel.jsx");
     await import("./components/action-bar.jsx");
     await import("./components/folder-tree.jsx");
@@ -36,6 +39,11 @@ describe("public entry imports cleanly", () => {
     await import("./components/language-toggle.jsx");
     await import("./components/gui/parts-preview-popup.jsx");
     await import("./components/gui/move-step-modal.jsx");
+    await import("./components/dialog-host.jsx");
+    await import("./hooks/use-dialog-host.js");
+    await import("./components/gui/starter-gallery.jsx");
+    await import("./components/gui/onboarding-tour.jsx");
+    await import("./components/gui/add-step-menu.jsx");
     await import("./i18n.jsx");
     await import("./lib/parts-extract.js");
     await import("./hooks/use-drag-width.js");

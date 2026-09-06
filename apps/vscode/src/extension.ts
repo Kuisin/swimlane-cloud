@@ -1,14 +1,14 @@
 import * as vscode from "vscode";
 import {
+  editBranchName,
   INTEGRATION_BRANCH,
-  PROD_BRANCH,
-  createPullsApi,
-  createRestClient,
-  isTmpBranch,
+  isEditBranch,
   isWritableBranch,
   parseRemoteUrl,
   parseRepoConfig,
-  tmpBranchName,
+  PROD_BRANCH,
+  createPullsApi,
+  createRestClient,
 } from "@swimlane-cloud/github-client";
 import { FsHost } from "./fs-host";
 import { Git, NotWritableError } from "./git/git-cli";
@@ -342,7 +342,7 @@ async function checkpoint(git: Git, ctx: Context, message?: string): Promise<voi
  */
 async function offerEditBranch(git: Git, ctx: Context, currentBranch: string): Promise<void> {
   const choice = await vscode.window.showWarningMessage(
-    `"${currentBranch}" is not an edit branch. Diagrams are edited on a tmp-* branch cut from "${INTEGRATION_BRANCH}".`,
+    `"${currentBranch}" is not an edit branch. Diagrams are edited on a branch cut from "${INTEGRATION_BRANCH}".`,
     { modal: true },
     "Start an edit branch",
     "Open Source Control",
@@ -361,14 +361,8 @@ async function startEdit(git: Git): Promise<void> {
     return;
   }
 
-  const name = await vscode.window.showInputBox({
-    prompt: "What are you changing?",
-    placeHolder: "expense approval",
-  });
-  if (!name) return;
-
   const session = await peekSession();
-  const branch = tmpBranchName(session?.account.label ?? "local", name);
+  const branch = editBranchName(session?.account.label ?? "local");
 
   try {
     await ctx.repo.startEditBranch(branch, INTEGRATION_BRANCH, ctx.diagramsRoot);
@@ -401,7 +395,7 @@ async function publish(git: Git): Promise<void> {
   }
 
   const branch = await git.currentBranch(ctx.repo.root);
-  if (!branch || !isTmpBranch(branch)) {
+  if (!branch || !isEditBranch(branch)) {
     void vscode.window.showErrorMessage(
       `Publish from an edit branch, not "${branch ?? "a detached HEAD"}".`,
     );
@@ -467,7 +461,7 @@ async function publish(git: Git): Promise<void> {
   const existing = await pulls.listPullRequests({ head: branch, state: "open" });
   const pull =
     existing[0] ??
-    // assertMergeTarget inside the client refuses tmp-* -> main, so this can
+    // assertMergeTarget inside the client refuses an edit branch -> main, so this can
     // only ever target the integration branch.
     (await pulls.createPullRequest({
       head: branch,

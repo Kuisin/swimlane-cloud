@@ -70,7 +70,10 @@ export const POST = withApi(async (req) => {
       autoInit: true,
       description: "kai-swimlane diagrams, managed with Swimlane Cloud",
     });
-    const { write } = withRepo(ctx, { owner: created.owner, repo: created.name });
+    const { write, commitAuthorEmail } = withRepo(ctx, {
+      owner: created.owner,
+      repo: created.name,
+    });
 
     // auto_init's first commit lands asynchronously; the Git Data API needs it.
     let ready = false;
@@ -92,7 +95,7 @@ export const POST = withApi(async (req) => {
       branch: created.defaultBranch,
       message: "Seed diagrams, section templates and .swimlane.json",
       files: seedRepoFiles(created.name),
-      author: { name: ctx.login, email: `${ctx.login}@users.noreply.github.com` },
+      author: { name: ctx.login, email: commitAuthorEmail },
     });
     if (created.defaultBranch !== PROD_BRANCH) {
       await write.ensureBranch(PROD_BRANCH, created.defaultBranch);

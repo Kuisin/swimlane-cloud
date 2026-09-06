@@ -1,18 +1,25 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useT } from "../../i18n.jsx";
+import { collectMergeTargetOptions } from "../../lib/flow-rows.js";
+import { BranchColorField } from "./branch-color-field.jsx";
 
-const BRANCH_COLORS = ["", "blue", "green", "red", "orange", "purple", "gray", "black"];
-
-/** Inspector for branch/case/group rows (condition, case label, accent color). */
-export function BranchInspector({ row, onPatch, onDelete, onAddCase, readOnly }) {
+/** Inspector for branch/case/group/merge rows (condition, case label, accent color, merge target). */
+export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readOnly, locked }) {
   const { t } = useT();
   if (!row) return <div className="sw-gui-empty">{t("gui.selectRow")}</div>;
 
   const isStart = row.kind === "branchStart";
   const isCase = row.kind === "branchCase";
   const isGroup = row.kind === "groupStart";
+  const isMerge = row.kind === "branchMerge";
   const canAddCase = (isStart || isCase) && !isGroup;
   const addCaseLabel = row.parallel ? t("branch.addPath") : t("branch.addCase");
+  const mergeTargets = isMerge
+    ? collectMergeTargetOptions(rows || []).filter((o) => o.mergeId)
+    : [];
+  // A row with a syntax error is still viewable but not editable from here —
+  // fixing a broken line has to happen where the actual text is, in Text mode.
+  const fieldDisabled = readOnly || locked;
 
   return (
     <div className="sw-inspector">
@@ -21,10 +28,11 @@ export function BranchInspector({ row, onPatch, onDelete, onAddCase, readOnly })
           {isStart && (row.parallel ? t("branch.fork") : t("branch.if"))}
           {isCase && (row.parallel ? t("branch.parallelPath") : t("branch.case"))}
           {isGroup && (row.groupMode === "section" ? t("branch.section") : t("branch.subbranch"))}
-          {!isStart && !isCase && !isGroup && t("branch.row")}
+          {isMerge && t("branch.merge")}
+          {!isStart && !isCase && !isGroup && !isMerge && t("branch.row")}
         </h3>
         <div className="sw-inspector-tools">
-          {!readOnly && canAddCase && onAddCase && (
+          {!fieldDisabled && canAddCase && onAddCase && (
             <button
               type="button"
               className="sw-btn sw-btn-sm"
@@ -34,7 +42,7 @@ export function BranchInspector({ row, onPatch, onDelete, onAddCase, readOnly })
               <Plus size={12} /> {addCaseLabel}
             </button>
           )}
-          {!readOnly && onDelete && (
+          {!fieldDisabled && onDelete && (
             <button
               type="button"
               className="sw-icon-btn sw-icon-danger"
@@ -47,6 +55,8 @@ export function BranchInspector({ row, onPatch, onDelete, onAddCase, readOnly })
         </div>
       </div>
 
+      {locked && <p className="sw-inspector-locked-notice">{t("errors.rowLockedNotice")}</p>}
+
       {isStart && !row.parallel && (
         <label className="sw-field">
           <span className="sw-field-label">{t("branch.condition")}</span>
@@ -54,7 +64,7 @@ export function BranchInspector({ row, onPatch, onDelete, onAddCase, readOnly })
             type="text"
             className="sw-input"
             value={row.cond || ""}
-            disabled={readOnly}
+            disabled={fieldDisabled}
             onChange={(e) => onPatch({ cond: e.target.value })}
           />
         </label>
@@ -67,7 +77,7 @@ export function BranchInspector({ row, onPatch, onDelete, onAddCase, readOnly })
             type="text"
             className="sw-input"
             value={row.label || ""}
-            disabled={readOnly}
+            disabled={fieldDisabled}
             placeholder={t("branch.elsePlaceholder")}
             onChange={(e) => onPatch({ label: e.target.value })}
           />
@@ -81,33 +91,44 @@ export function BranchInspector({ row, onPatch, onDelete, onAddCase, readOnly })
             type="text"
             className="sw-input"
             value={row.sectionName || ""}
-            disabled={readOnly}
+            disabled={fieldDisabled}
             onChange={(e) => onPatch({ sectionName: e.target.value })}
           />
+        </label>
+      )}
+
+      {isMerge && (
+        <label className="sw-field">
+          <span className="sw-field-label">{t("branch.mergeTarget")}</span>
+          {mergeTargets.length === 0 ? (
+            <p className="sw-field-hint">{t("branch.mergeTargetEmpty")}</p>
+          ) : (
+            <select
+              className="sw-input"
+              value={row.mergeTarget || ""}
+              disabled={fieldDisabled}
+              onChange={(e) => onPatch({ mergeTarget: e.target.value || "" })}
+            >
+              <option value="">{t("branch.mergeTargetChoose")}</option>
+              {mergeTargets.map((opt) => (
+                <option key={opt.stepIndex} value={opt.mergeId}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          )}
+          <p className="sw-field-hint">{t("branch.mergeTargetHint")}</p>
         </label>
       )}
 
       {(isStart || isCase || isGroup) && (
         <label className="sw-field">
           <span className="sw-field-label">{t("branch.accent")}</span>
-          <select
-            className="sw-input"
-            value={(isGroup ? row.sectionColor : row.branchColor) || ""}
-            disabled={readOnly}
-            onChange={(e) =>
-              onPatch(
-                isGroup
-                  ? { sectionColor: e.target.value || null }
-                  : { branchColor: e.target.value || null },
-              )
-            }
-          >
-            {BRANCH_COLORS.map((c) => (
-              <option key={c} value={c}>
-                {c || t("branch.default")}
-              </option>
-            ))}
-          </select>
+          <BranchColorField
+            value={(isGroup ? row.sectionColor : row.branchColor) || null}
+            disabled={fieldDisabled}
+            onChange={(next) => onPatch(isGroup ? { sectionColor: next } : { branchColor: next })}
+          />
         </label>
       )}
     </div>

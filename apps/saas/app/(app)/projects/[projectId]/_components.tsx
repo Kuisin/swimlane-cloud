@@ -31,16 +31,22 @@ import {
   parseGuiModel,
   applyModelEdit,
   extractPartsCode,
+  fetchImports,
   findAdjacentStepIndex,
+  missingImports,
   moveRow,
+  resolversFrom,
   serializeDSL,
+  withEntries,
   type GuiRow,
+  type ImportCacheEntry,
 } from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import { FileTree } from "@/components/file-tree";
 import { GitHubMark } from "@/components/github-mark";
 import { RoleBadge } from "@/components/app-header";
-import { ApiClientError, redirectToLogin } from "@/lib/client";
+import { branchLabel } from "@/lib/branch-label";
+import { ApiClientError, redirectToReconnect } from "@/lib/client";
 import {
   addPRComment,
   compare,
@@ -53,6 +59,7 @@ import {
 import type {
   CommitInfo,
   CompareFile,
+  PendingChange,
   ProjectState,
   PullComment,
   PullState,
@@ -98,7 +105,7 @@ export function useProject() {
       setState(await getState(projectId));
       setError(null);
     } catch (e) {
-      if (e instanceof ApiClientError && e.needsAuth) return redirectToLogin();
+      if (e instanceof ApiClientError && e.needsAuth) return redirectToReconnect(e);
       setError(describeError(e, t));
     } finally {
       setLoading(false);
@@ -329,6 +336,44 @@ export function Modal({
   );
 }
 
+/** Cancel + a single coloured confirm action, for every confirmation modal on this app. */
+export function ModalFooter({
+  onCancel,
+  onConfirm,
+  confirmLabel,
+  disabled,
+  busy,
+  danger,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+  confirmLabel: string;
+  disabled?: boolean;
+  busy?: boolean;
+  danger?: boolean;
+}) {
+  const { t } = useT();
+  return (
+    <div className="flex justify-end gap-2">
+      <button
+        onClick={onCancel}
+        className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+      >
+        {t("common.cancel")}
+      </button>
+      <button
+        onClick={onConfirm}
+        disabled={disabled || busy}
+        className={`rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${
+          danger ? "bg-red-600 hover:bg-red-500" : "bg-indigo-600 hover:bg-indigo-500"
+        }`}
+      >
+        {busy ? t("loading") : confirmLabel}
+      </button>
+    </div>
+  );
+}
+
 const short = (sha: string) => sha.slice(0, 7);
 
 /** Commits of one branch, newest first, with a per-commit snapshot viewer. */
@@ -424,7 +469,7 @@ export function HistoryPanel({
                   {onTogglePublish && version?.promoted && (
                     <button
                       onClick={() => onTogglePublish(version)}
-                      title={published ? t("history.unpublish") : t("history.publishHint")}
+                      title={published ? t("history.unshare") : t("history.shareHint")}
                       className={`rounded p-1.5 ${
                         published ? "text-emerald-600" : "text-neutral-300 hover:text-neutral-500"
                       }`}
@@ -462,22 +507,20 @@ type FileStatus = "added" | "removed" | "changed" | "same";
 /**
  * Every diagram at `headRef` with per-file Preview (on-device render), Diff
  * against `baseRef` (a parent commit, or a pull request's base) and raw Text.
+ * The body of `CommitDetailModal`, factored out so the Push, Request-review,
+ * Approve and Publish flows can each drop it into their own modal shell.
  */
-export function CommitDetailModal({
+export function ChangeBrowser({
   projectId,
-  title,
   headRef,
   baseRef,
   preloaded,
-  onClose,
 }: {
   projectId: string;
-  title: string;
   headRef: string;
   baseRef: string | null;
   /** Already-fetched changed files (pull request review) — skips the compare call. */
   preloaded?: CompareFile[];
-  onClose: () => void;
 }) {
   const { t } = useT();
   const [files, setFiles] = useState<Files | null>(null);
@@ -554,64 +597,100 @@ export function CommitDetailModal({
           ? "bg-amber-100 text-amber-700"
           : "bg-neutral-100 text-neutral-500";
 
-  return (
-    <Modal title={title} onClose={onClose} maxW="max-w-4xl">
-      {error ? (
-        <Empty>{error}</Empty>
-      ) : !files ? (
-        <Empty>{t("loading")}</Empty>
-      ) : (
-        <div className="flex gap-4">
-          <aside className="max-h-[62vh] w-44 shrink-0 overflow-auto border-r border-neutral-200 pr-2">
-            <FileTree paths={paths} active={path} onPick={setPath} statusOf={statusOf} />
-          </aside>
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="truncate font-mono text-xs text-neutral-500">{path}</span>
-              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${statusBadge}`}>
-                {status}
-              </span>
-              <div className="ml-auto flex gap-1 text-xs">
-                {(["preview", "diff", "text"] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setMode(m)}
-                    className={`rounded px-3 py-1 ${
-                      mode === m
-                        ? "bg-neutral-800 text-white"
-                        : "text-neutral-500 hover:bg-neutral-100"
-                    }`}
-                  >
-                    {t(`commit.mode.${m}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
+  if (error) return <Empty>{error}</Empty>;
+  if (!files) return <Empty>{t("loading")}</Empty>;
 
-            {mode === "preview" &&
-              (svg ? (
-                <div
-                  className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
-                  dangerouslySetInnerHTML={{ __html: svg }}
-                />
-              ) : (
-                <Empty>{t("commit.renderError")}</Empty>
-              ))}
-            {mode === "diff" &&
-              (changed ? (
-                <Diff path={path} before={before} after={after} />
-              ) : (
-                <Empty>{t("commit.noChange")}</Empty>
-              ))}
-            {mode === "text" && (
-              <pre className="overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-3 font-mono text-xs">
-                {after || "(empty)"}
-              </pre>
-            )}
+  return (
+    <div className="flex gap-4">
+      <aside className="max-h-[62vh] w-44 shrink-0 overflow-auto border-r border-neutral-200 pr-2">
+        <FileTree paths={paths} active={path} onPick={setPath} statusOf={statusOf} />
+      </aside>
+      <div className="min-w-0 flex-1 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-mono text-xs text-neutral-500">{path}</span>
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${statusBadge}`}>
+            {status}
+          </span>
+          <div className="ml-auto flex gap-1 text-xs">
+            {(["preview", "diff", "text"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`rounded px-3 py-1 ${
+                  mode === m ? "bg-neutral-800 text-white" : "text-neutral-500 hover:bg-neutral-100"
+                }`}
+              >
+                {t(`commit.mode.${m}`)}
+              </button>
+            ))}
           </div>
         </div>
-      )}
+
+        {mode === "preview" &&
+          (svg ? (
+            <div
+              className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          ) : (
+            <Empty>{t("commit.renderError")}</Empty>
+          ))}
+        {mode === "diff" &&
+          (changed ? (
+            <Diff path={path} before={before} after={after} />
+          ) : (
+            <Empty>{t("commit.noChange")}</Empty>
+          ))}
+        {mode === "text" && (
+          <pre className="overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-3 font-mono text-xs">
+            {after || "(empty)"}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function CommitDetailModal({
+  title,
+  onClose,
+  ...browserProps
+}: {
+  projectId: string;
+  title: string;
+  headRef: string;
+  baseRef: string | null;
+  preloaded?: CompareFile[];
+  onClose: () => void;
+}) {
+  return (
+    <Modal title={title} onClose={onClose} maxW="max-w-4xl">
+      <ChangeBrowser {...browserProps} />
     </Modal>
+  );
+}
+
+const CHANGE_BADGE: Record<PendingChange["status"], string> = {
+  added: "bg-green-100 text-green-700",
+  removed: "bg-red-100 text-red-700",
+  changed: "bg-amber-100 text-amber-700",
+};
+
+/** A plain colour-coded file list, for modals that only need "what changed" without a diff viewer. */
+export function ChangeList({ changes }: { changes: PendingChange[] }) {
+  const { t } = useT();
+  if (changes.length === 0) return <Empty>{t("changes.empty")}</Empty>;
+  return (
+    <ul className="max-h-64 space-y-1 overflow-auto rounded-md border border-neutral-200 p-2">
+      {changes.map((c) => (
+        <li key={c.path} className="flex items-center gap-2 text-sm">
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${CHANGE_BADGE[c.status]}`}>
+            {t(`changes.status.${c.status}`)}
+          </span>
+          <span className="truncate font-mono text-xs">{c.path}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -702,7 +781,8 @@ function PrItem({
             </a>
           </div>
           <div className="text-xs text-neutral-500">
-            {pr.head} → {pr.base} · {t("pr.openedBy", { login: pr.author })}
+            {branchLabel(pr.head, t)} → {branchLabel(pr.base, t)} ·{" "}
+            {t("pr.openedBy", { login: pr.author })}
             {pr.createdAt ? ` · ${new Date(pr.createdAt).toLocaleString()}` : ""}
           </div>
         </div>
@@ -733,7 +813,7 @@ function PrItem({
                 onClick={() => onClose(pr)}
                 className="rounded border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-50"
               >
-                {t("pr.close")}
+                {t("pr.reject")}
               </button>
             )}
             {isOwner ? (
@@ -741,7 +821,7 @@ function PrItem({
                 onClick={() => onMerge(pr)}
                 className="rounded bg-purple-600 px-3 py-1 text-xs font-medium text-white hover:bg-purple-500"
               >
-                {t("pr.mergeTo", { base: pr.base })}
+                {t("pr.approve", { base: branchLabel(pr.base, t) })}
               </button>
             ) : (
               <span className="text-xs text-neutral-400">{t("pr.ownerMerges")}</span>
@@ -771,7 +851,7 @@ function PrItem({
       {showFiles && detail && (
         <CommitDetailModal
           projectId={projectId}
-          title={`#${pr.number} ${pr.title}  (${pr.head} → ${pr.base})`}
+          title={`#${pr.number} ${pr.title}  (${branchLabel(pr.head, t)} → ${branchLabel(pr.base, t)})`}
           headRef={pr.state === "open" ? pr.head : pr.headSha || pr.head}
           baseRef={pr.state === "open" ? pr.base : pr.baseSha || pr.base}
           preloaded={detail.files}
@@ -961,7 +1041,7 @@ export function VersionPanel({
                             onClick={() => onUnpublish(v)}
                             className="text-xs text-neutral-400 hover:text-neutral-600"
                           >
-                            {t("version.unpublish")}
+                            {t("version.unshare")}
                           </button>
                         )}
                       </>
@@ -984,11 +1064,11 @@ export function VersionPanel({
                           }
                           className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
                         >
-                          {t("version.publish")}
+                          {t("version.share")}
                         </button>
                       </div>
                     ) : (
-                      <span className="text-xs text-neutral-400">{t("version.notPublished")}</span>
+                      <span className="text-xs text-neutral-400">{t("version.notShared")}</span>
                     )}
                   </>
                 )}
@@ -1030,16 +1110,27 @@ export function MobileView({
   onSave,
   path: pathProp,
   onPath,
+  onPathNotFound,
   editStep: editStepProp,
   onEditStep,
+  readImport,
+  readAsset,
 }: {
   files: Files;
   editable?: boolean;
   onSave?: (path: string, dsl: string) => void;
   path?: string;
   onPath?: (p: string) => void;
+  /** Fired when `path` doesn't match any loaded file, just before falling
+   * back to the first one — e.g. a URL built around a path the file has
+   * since moved away from. */
+  onPathNotFound?: (path: string) => void;
   editStep?: number | null;
   onEditStep?: (i: number | null) => void;
+  /** `@use` targets, read at the branch tip. Without these a diagram still
+   * renders; its imported definitions and images simply do not resolve. */
+  readImport?: (path: string) => Promise<string | null>;
+  readAsset?: (path: string) => Promise<string | null>;
 }) {
   const { t, lang } = useT();
   const paths = Object.keys(files)
@@ -1049,6 +1140,10 @@ export function MobileView({
   const path = pathProp ?? pathState;
   const setPath = (p: string) => (onPath ? onPath(p) : setPathState(p));
   const active = files[path] !== undefined ? path : (paths[0] ?? "");
+  useEffect(() => {
+    if (path && files[path] === undefined) onPathNotFound?.(path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, files]);
   const [dsl, setDsl] = useState(files[active] ?? "");
   const [stepState, setStepState] = useState<number | null>(null);
   const editStep = editStepProp !== undefined ? editStepProp : stepState;
@@ -1061,7 +1156,28 @@ export function MobileView({
     setDsl(files[active] ?? "");
   }, [active, files]);
 
-  const gui = useMemo(() => parseGuiModel(dsl), [dsl]);
+  // `@use` targets already read, keyed by importing file and path. Parsing is
+  // synchronous and reading one is not, so the diagram renders with whatever
+  // has arrived and re-renders when the rest does — same pattern as the
+  // desktop editor's FileEditorProvider.
+  const [importCache, setImportCache] = useState(() => new Map<string, ImportCacheEntry>());
+  useEffect(() => {
+    const pending = missingImports(dsl, active, importCache);
+    if (!pending.length) return undefined;
+    let cancelled = false;
+    void (async () => {
+      const entries = await fetchImports(pending, { readImport, readAsset });
+      if (cancelled || !entries.length) return;
+      setImportCache((prev) => withEntries(prev, active, entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dsl, active, importCache, readImport, readAsset]);
+  const parseOptions = useMemo(() => resolversFrom(active, importCache), [active, importCache]);
+
+  const gui = useMemo(() => parseGuiModel(dsl, parseOptions), [dsl, parseOptions]);
+  const model = useMemo(() => parseDSL(dsl, parseOptions), [dsl, parseOptions]);
   const editing =
     editStep != null
       ? (() => {
@@ -1175,6 +1291,7 @@ export function MobileView({
       <div className="min-h-0 flex-1 overflow-auto">
         <MobileDiagram
           dsl={dsl}
+          model={model}
           lang={lang}
           editable={editable}
           onEditStep={editable ? (i) => setEditStep(i) : undefined}
@@ -1510,11 +1627,11 @@ function PartsPreview({
     try {
       const code = extractPartsCode(dsl, section, id);
       if (!code) return "";
-      return renderPartsPreviewHtml(code, THEMES.basic);
+      return renderPartsPreviewHtml(code, THEMES.basic, { compact });
     } catch {
       return "";
     }
-  }, [dsl, section, id]);
+  }, [dsl, section, id, compact]);
   if (!html) return null;
   const cls = compact
     ? "[&_svg]:h-7 [&_svg]:w-auto [&_svg]:max-w-[140px]"

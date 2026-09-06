@@ -13,6 +13,8 @@ export const EN: Record<string, string> = {
   // general
   loading: "Loading…",
   close: "Close",
+  "common.cancel": "Cancel",
+  "common.delete": "Delete",
   // nav
   "nav.dashboard": "← Dashboard",
   "nav.signOut": "Sign out",
@@ -27,27 +29,154 @@ export const EN: Record<string, string> = {
   "nav.versions": "Versions",
   // landing
   "landing.tagline": "Swimlane Cloud",
-  "landing.headline": "Git-backed diagrams for business processes",
+  "landing.headline": "Business process diagrams, versioned like code",
   "landing.description":
-    "Author swimlane diagrams in a shared editor on top of your own GitHub repositories: save drafts, checkpoint as commits, review pull requests, flag versions and publish — without touching git directly.",
+    "Draw swimlane diagrams in a GUI, or write them as plain text — whichever suits the person editing. Every diagram is a .txt file in your own GitHub repository, so history, review and releases are ordinary git, and nothing is locked inside another vendor's database.",
+  "landing.ctaPrimary": "Continue with GitHub",
+  "landing.ctaSecondary": "How it works",
   "landing.openDashboard": "Open dashboard",
   "landing.signIn": "Sign in with GitHub",
-  "landing.feature.draft": "Draft & checkpoint",
-  "landing.feature.draftDesc":
-    "Fast drafts, then one commit per checkpoint on a branch in your repository.",
-  "landing.feature.versions": "Flag versions",
-  "landing.feature.versionsDesc":
-    "Flag a commit on test as a release; every file is snapshotted and tagged.",
-  "landing.feature.promote": "Promote to main",
-  "landing.feature.promoteDesc": "Promote flagged versions to production with a gated merge.",
-  "landing.feature.share": "Public sharing",
-  "landing.feature.shareDesc": "Share a stable read-only link for versions on main.",
+  "landing.heroNote":
+    "Free to start. Your diagrams stay in repositories you already own — we never create a copy elsewhere.",
+
+  // what it is
+  "landing.what.title": "Two editors, one file",
+  "landing.what.lead":
+    "A swimlane diagram here is a small text format (the kai-swimlane DSL). Because it is text, two very different people can edit the same document without stepping on each other.",
+  "landing.what.gui": "GUI mode",
+  "landing.what.guiDesc":
+    "A form-based editor: add steps, pick the lane that owns each one, attach conditions, branches and notes. No syntax to learn — the person who owns the process can edit it themselves.",
+  "landing.what.text": "Text mode",
+  "landing.what.textDesc":
+    "The same document as source, with syntax highlighting, line numbers and parse errors marked inline. Fast for people who would rather type than click, and reviewable as a diff.",
+  "landing.what.preview": "Live preview",
+  "landing.what.previewDesc":
+    "The diagram redraws as you type, rendered on your own device. Switching between GUI and text is loss-free — both write the same canonical file.",
+
+  // workflow
+  "landing.flow.title": "How a change reaches production",
+  "landing.flow.lead":
+    "The workflow mirrors how software ships, with the git vocabulary kept out of the way. Three branches: main is published, preview is where work is approved, and each edit gets its own short-lived branch.",
+  "landing.flow.branches": "Edit branches merge into preview; only released versions reach main.",
+  "landing.flow.s1": "Connect a repository",
+  "landing.flow.s1Desc":
+    "Add the swimlane topic to a repository you already have, or let the app create one — seeded with a sample diagram, section templates and a .swimlane.json that says where diagrams live.",
+  "landing.flow.s2": "Edit",
+  "landing.flow.s2Desc":
+    "Start an edit and the app cuts a new branch from preview for you. Save as often as you like: drafts are stored instantly and never clutter git history.",
+  "landing.flow.s3": "Checkpoint",
+  "landing.flow.s3Desc":
+    "When a piece of work is done, one checkpoint turns every changed file into a single commit — created, edited and deleted files together, authored as you on GitHub.",
+  "landing.flow.s4": "Review",
+  "landing.flow.s4Desc":
+    "Open a pull request into preview. Reviewers see a real diff plus a side-by-side render of before and after, and the conversation is a normal GitHub thread.",
+  "landing.flow.s5": "Release",
+  "landing.flow.s5Desc":
+    "Flag a commit on preview as a version: every diagram is snapshotted and the commit is tagged. Promoting merges exactly that commit into main — only flagged versions can reach production.",
+  "landing.flow.s6": "Share",
+  "landing.flow.s6Desc":
+    "Publish a promoted version to a stable read-only link for people outside the repository. Choose whether the DSL source is visible or only the rendered diagram.",
+
+  // features
+  "landing.features.title": "What you get",
+  "landing.features.editor": "A real editor, not a viewer",
+  "landing.features.editorDesc":
+    "Folder tree over your whole diagram directory, tabs, keyboard shortcuts, formatting, and create / rename / delete — the same editor the desktop and VS Code builds use.",
+  "landing.features.templates": "Section templates, optionally enforced",
+  "landing.features.templatesDesc":
+    "Keep headers, lane styles and reusable blocks consistent across a team. An owner can force a section to match its template, and a checkpoint that diverges is rejected with a clear reason.",
+  "landing.features.git": "Your git, not ours",
+  "landing.features.gitDesc":
+    "Commits, branches, tags, pull requests and releases are created in your repository under your own account, so they show up in the tools and audits you already have.",
+  "landing.features.roles": "Permissions you already manage",
+  "landing.features.rolesDesc":
+    "Access comes from GitHub: repository admins are owners, people with push access can edit, everyone else is read-only. There is no second list of users to keep in sync.",
+  "landing.features.versions": "Versions that mean something",
+  "landing.features.versionsDesc":
+    "A version is a named snapshot of the whole folder at one commit, not an autosave. Production only ever receives commits that were explicitly flagged.",
+  "landing.features.mobile": "Readable on a phone",
+  "landing.features.mobileDesc":
+    "A wide diagram is unusable on a small screen, so the same document also renders as a vertical card view — and steps can be edited from there.",
+  "landing.features.export": "Export anywhere",
+  "landing.features.exportDesc":
+    "Download a diagram as .txt, SVG, or PNG at normal or high resolution for slides, wikis and printed procedures.",
+  "landing.features.i18n": "English and Japanese",
+  "landing.features.i18nDesc":
+    "The whole interface ships in both languages, switchable at any time — including the editor itself.",
+
+  // trust
+  "landing.trust.title": "Where your data actually is",
+  "landing.trust.source": "GitHub is the source of truth",
+  "landing.trust.sourceDesc":
+    "Diagrams are plain .txt files committed to your repository. If you stop using this app tomorrow, the work stays exactly where it is and remains readable.",
+  "landing.trust.token": "Your GitHub token is encrypted at rest",
+  "landing.trust.tokenDesc":
+    "Sign-in is GitHub OAuth. The access token is encrypted with AES-256-GCM before it is stored, and every action runs as you — there is no shared bot account.",
+  "landing.trust.db": "Only what git cannot hold",
+  "landing.trust.dbDesc":
+    "The database keeps unsaved drafts, version snapshots and templates. It is reachable only through the API, after your GitHub permissions have been checked.",
+  "landing.trust.region": "Hosted in Japan",
+  "landing.trust.regionDesc":
+    "The application and its database both run in Tokyo (Vercel hnd1, Supabase ap-northeast-1).",
+
+  // plans
+  "landing.plans.title": "Plans",
+  "landing.plans.lead":
+    "Limits apply per GitHub owner — your account, or each organisation. Paid plans are not on sale yet; today every workspace runs on the free tier.",
+  "landing.plans.free": "Free",
+  "landing.plans.freePrice": "$0",
+  "landing.plans.freeFor": "Trying it out, or a small set of diagrams",
+  "landing.plans.freeF1": "3 projects per owner",
+  "landing.plans.freeF2": "Full editor, review and versions",
+  "landing.plans.freeF3": "Use repositories you already have",
+  "landing.plans.team": "Team",
+  "landing.plans.teamPrice": "Coming soon",
+  "landing.plans.teamFor": "Teams running processes across several repositories",
+  "landing.plans.teamF1": "50 projects per owner",
+  "landing.plans.teamF2": "Create new repositories from the app",
+  "landing.plans.teamF3": "Everything in Free",
+  "landing.plans.enterprise": "Enterprise",
+  "landing.plans.enterprisePrice": "Talk to us",
+  "landing.plans.enterpriseFor": "Organisations with their own hosting or audit needs",
+  "landing.plans.enterpriseF1": "Unlimited projects",
+  "landing.plans.enterpriseF2": "GitHub Enterprise Server",
+  "landing.plans.enterpriseF3": "Everything in Team",
+
+  // faq
+  "landing.faq.title": "Questions",
+  "landing.faq.q1": "Do I need to know git?",
+  "landing.faq.a1":
+    "No. The app speaks in Save, Checkpoint, Review and Release. It creates the branches, commits and pull requests underneath, so someone who has never used git can still produce a clean, reviewable history.",
+  "landing.faq.q2": "What happens to my diagrams if I stop using this?",
+  "landing.faq.a2":
+    "Nothing. They are .txt files in your repository, already committed. The renderer is open source, and the desktop app and VS Code extension read the same files with no server at all.",
+  "landing.faq.q3": "Which repositories does it touch?",
+  "landing.faq.a3":
+    "Only ones carrying the swimlane topic, and only ones your GitHub account can already reach. Repositories without the topic are never listed and never modified.",
+  "landing.faq.q4": "Can people outside my repository see a diagram?",
+  "landing.faq.a4":
+    "Only if an owner publishes a released version, and only that version. The link is a random slug, and you choose whether it exposes the source or just the rendered diagram.",
+  "landing.faq.q5": "Why does it ask for the repo scope?",
+  "landing.faq.a5":
+    "GitHub has no narrower scope that can read and commit to a private repository. The token is stored encrypted and used only for the repositories you open here.",
+  "landing.faq.q6": "Does it work offline?",
+  "landing.faq.a6":
+    "The preview always renders on your own device, so drawing never needs the network. Saving and history do — for fully offline work there is a desktop build that edits a local folder.",
+
+  // closing
+  "landing.closing.title": "Start with a repository you already have",
+  "landing.closing.lead":
+    "Sign in with GitHub, add the swimlane topic to a repository, and open it. Nothing is created until you ask for it.",
+  "landing.footer.source": "Source on GitHub",
+  "landing.footer.rights": "Diagrams stay in your repositories.",
+
   // dashboard
   "dashboard.title": "Your projects",
   "dashboard.description":
     'Every GitHub repository you can access that carries the "{topic}" topic. Your role comes from your GitHub permissions on each repository.',
   "dashboard.open": "Open",
   "dashboard.newProject": "New project",
+  "dashboard.connectGitLab": "Connect GitLab",
   "dashboard.refresh": "Refresh",
   "dashboard.empty": "No swimlane repositories yet.",
   "dashboard.emptyHint":
@@ -62,14 +191,45 @@ export const EN: Record<string, string> = {
   "new.owner": "Owner",
   "new.name": "Repository name",
   "new.createHint":
-    "Creates a private repository with main and test branches, a sample diagram, section templates and .swimlane.json, tagged with the swimlane topic. Needs a team or enterprise plan — for an organisation, you must be a team admin there. Free-plan workspaces can mark an existing repository instead.",
+    "Creates a private repository with main and preview branches, a sample diagram, section templates and .swimlane.json, tagged with the swimlane topic. Needs a team or enterprise plan — for an organisation, you must be a team admin there. Free-plan workspaces can mark an existing repository instead.",
   "new.createButton": "Create repository",
   "new.creating": "Creating…",
   "new.markHint":
-    "Repositories you administer that are not yet marked. Marking adds the swimlane topic, a test branch and .swimlane.json — nothing else changes.",
+    "Repositories you administer that are not yet marked. Marking adds the swimlane topic, a preview branch and .swimlane.json — nothing else changes.",
   "new.search": "Search repositories…",
   "new.markButton": "Mark",
   "new.noRepos": "No repositories to mark.",
+  // GitLab: connect an instance, claim a workspace, add a project
+  "gitlab.wizardTitle": "Connect a GitLab instance",
+  "gitlab.registerHint":
+    "For a self-hosted GitLab instance (or gitlab.com), register the OAuth Application your instance's admin created for Swimlane Cloud. Read + create/attach + edit + push works today; pull request review and one-click Publish are GitHub-only for now.",
+  "gitlab.host": "Instance URL",
+  "gitlab.hostPlaceholder": "https://gitlab.example.com",
+  "gitlab.displayName": "Display name",
+  "gitlab.clientId": "OAuth Application client ID",
+  "gitlab.clientSecret": "OAuth Application client secret",
+  "gitlab.registerButton": "Register & connect",
+  "gitlab.registering": "Registering…",
+  "gitlab.claimTitle": "Choose a group",
+  "gitlab.claimHint":
+    "Connected. Pick the GitLab group (namespace) this workspace represents — you need Owner access to it.",
+  "gitlab.namespace": "Group",
+  "gitlab.claimButton": "Connect this group",
+  "gitlab.claiming": "Connecting…",
+  "gitlab.noNamespaces": "No groups where you have Owner access on this instance.",
+  "gitlab.projectStepTitle": "Add a project",
+  "gitlab.createProject": "Create a project",
+  "gitlab.attachProject": "Attach an existing project",
+  "gitlab.projectName": "Project name",
+  "gitlab.projectPath": "Project path (group/subgroup/project)",
+  "gitlab.createProjectHint":
+    "Creates a private project with main and preview branches, a sample diagram, section templates and .swimlane.json, tagged with the swimlane topic.",
+  "gitlab.attachProjectHint":
+    "Adds the swimlane topic, a preview branch and .swimlane.json to a project you already have Maintainer access to — nothing else changes.",
+  "gitlab.createProjectButton": "Create project",
+  "gitlab.attachProjectButton": "Attach",
+  "gitlab.openProject": "Open project",
+  "gitlab.workspaceConnected": "Workspace connected.",
   // login
   "login.title": "Sign in",
   "login.subtitle": "Swimlane Cloud edits diagrams in your own GitHub repositories.",
@@ -86,66 +246,73 @@ export const EN: Record<string, string> = {
   "error.conflict": "This branch moved on GitHub while you were editing. Reload and try again.",
   "error.rateLimited": "GitHub is rate-limiting requests right now. Try again in a minute.",
   // edit page
-  "edit.startEdit": "Start edit",
-  "edit.checkpoint": "Checkpoint",
-  "edit.openPrTo": "Open PR → {base}",
-  "edit.openPr": "Open PR",
   "edit.editor": "Editor",
   "edit.mobile": "Mobile",
   "edit.unsaved": "unsaved",
-  "edit.status.production": "production · read-only",
-  "edit.status.locked": "locked · PR open",
-  "edit.status.integration": "integration",
-  "edit.status.integrationReadonly": "integration · read-only",
-  "edit.status.editBranch": "edit branch",
+  "edit.myEdit": "My edit",
+  "edit.startEditing": "Start editing",
+  "edit.backToEdit": "Back to my edit",
+  "edit.push": "Push to GitHub",
+  "edit.push.title": "Save your changes to GitHub",
+  "edit.push.message": "Message (optional)",
+  "edit.push.files": "Changed files",
+  "edit.push.nothing": "Nothing to push.",
+  "edit.requestReview": "Request review",
+  "edit.review.title": "Request a review",
+  "edit.review.unpushed": "Some changes are not on GitHub yet. Push them first.",
+  "edit.review.pushFirst": "Push first",
+  "edit.review.noChanges": "No differences from Approved.",
+  "edit.review.titleField": "Title (optional)",
+  "edit.review.titleDefault": "Update {n} diagrams",
+  "edit.review.requested": "Review requested (#{n}). An admin will approve it.",
+  "edit.underReview": "Under review #{n}",
+  "edit.discard": "Discard edit",
+  "edit.discard.confirm": "Discard this edit and all its changes? This cannot be undone.",
+  "edit.status.editing": "Editing",
+  "edit.status.underReview": "Under review",
   "edit.status.viewer": "read-only",
   "edit.readonly": "Read-only: {reason}",
-  "edit.lock.main": "main is production and is never edited directly",
+  "edit.lock.main": "main is published and is never edited directly",
   "edit.lock.locked": "this branch has an open pull request",
-  "edit.lock.testOwnerOnly": "test can only be edited by a repository admin",
+  "edit.lock.previewOwnerOnly": "preview can only be edited by a repository admin",
   "edit.lock.viewer": "you have read-only access to this repository",
-  "edit.lock.other": "only test and tmp-* branches can be edited here",
-  "edit.branchMoved": "This branch moved on GitHub. Reload before checkpointing.",
+  "edit.lock.other": "only preview and edit branches can be edited here",
+  "edit.branchMoved": "This branch moved on GitHub. Reload before pushing.",
   "edit.reload": "Reload",
-  "edit.startEditBranch": "Start an edit branch",
-  "edit.prompt.startEdit": "Name this edit (creates a tmp-* branch from test):",
-  "edit.prompt.startEditDefault": "tweak",
-  "edit.prompt.checkpoint": "Checkpoint message:",
-  "edit.prompt.checkpointDefault": "Update diagram",
-  "edit.prompt.prTitle": "Pull request title:",
-  "edit.prompt.prTitleDefault": "Merge {branch} into {prBase}",
-  "edit.prompt.prOpened":
-    "Pull request opened ({branch} → {base}). A repository admin reviews and merges it.",
-  "edit.prompt.openPrHint":
-    "Pull requests are opened from a tmp-* branch (→ test). test is promoted to main from the Versions tab.",
-  "edit.prompt.prAlreadyOpen": "A pull request is already open for this branch",
+  "edit.fileNotFound": "The linked file could not be found; opened the first file instead.",
   // branches page
   "branches.title": "Branches",
   "branches.historyOf": "History · {branch}",
-  "branches.confirmUnpublish": "Unpublish this commit (remove its public link)?",
-  "branches.confirmPublish": "Publish this commit to a public link?",
+  "branches.confirmUnshare": "Unshare this commit (remove its public link)?",
+  "branches.confirmShare": "Share this commit as a public link?",
+  "branches.unshare": "Unshare",
+  "branches.share": "Share",
   // pulls page
   "pulls.title": "Pull requests",
-  "pulls.ownerHint": "You can merge or close pull requests.",
-  "pulls.editorHint": "A repository admin merges pull requests.",
-  "pulls.confirmMerge": "Merge this pull request{into}?",
-  "pulls.confirmMergeInto": " into {base}",
-  "pulls.confirmClose": "Close this pull request without merging?",
+  "pulls.ownerHint": "You can approve or reject requests.",
+  "pulls.editorHint": "An admin approves requests.",
+  "pulls.approve.title": "Approve and apply to {base}",
+  "pulls.approve.hint": "These files will become the approved version.",
+  "pulls.reject.confirm": "Reject this request without applying it?",
   // versions page
   "versions.title": "Versions",
-  "versions.description": "Flagged from the test branch; promote to main to ship.",
-  "versions.testDirty": "test has unsaved drafts — checkpoint them before flagging.",
-  "versions.flagNew": "Flag new version",
-  "versions.ownerHint": "A repository admin flags versions",
-  "versions.confirmPromote": 'Promote "{name}" to main?',
-  "versions.renderFailures": "Flagged, but these files could not be parsed: {files}",
-  "versions.prompt.name": "Version name (snapshots the current test branch):",
-  "versions.prompt.note": "Note (optional):",
+  "versions.description":
+    "Each publish snapshots Approved, tags it with the version number and updates Published.",
+  "versions.previewDirty": "Approved has unsaved changes still saving — try again in a moment.",
+  "versions.ownerHint": "A repository admin publishes versions",
+  "versions.promoteConfirm": "Publish {name} to Published?",
+  "versions.renderFailures": "Published, but these files could not be parsed: {files}",
+  "versions.publish": "Publish",
+  "versions.publish.title": "Publish Approved as a new version",
+  "versions.publish.version": "Version number",
+  "versions.publish.invalid": "Use the form v1.2.3",
+  "versions.publish.note": "Note (optional)",
+  "versions.publish.noChanges": "Approved and Published are identical.",
   // history panel
   "history.empty": "No commits on this branch.",
   "history.view": "View",
-  "history.unpublish": "Unpublish",
-  "history.publishHint": "Publish to a public link",
+  "history.unshare": "Unshare",
+  "history.shareHint": "Share as a public link",
   "history.tip": "tip",
   // commit detail
   "commit.renderError": "Could not render this file (parse error or empty).",
@@ -155,26 +322,26 @@ export const EN: Record<string, string> = {
   "commit.mode.text": "text",
   // pr panel
   "pr.empty":
-    "No pull requests yet. On the Edit page, open a PR from a tmp-* branch (→ test) or from test (→ main).",
+    "No pull requests yet. On the Edit page, open a PR from an edit branch (→ preview) or from preview (→ main).",
   "pr.review": "Review & comments",
   "pr.hide": "Hide",
   "pr.openedBy": "opened by {login}",
   "pr.reviewFile": "Review (1 file changed)",
   "pr.reviewFiles": "Review ({n} files changed)",
-  "pr.close": "Close",
-  "pr.mergeTo": "Merge → {base}",
-  "pr.ownerMerges": "An admin merges",
+  "pr.reject": "Reject",
+  "pr.approve": "Approve → {base}",
+  "pr.ownerMerges": "An admin approves",
   "pr.commentAs": "Comment as {login}…",
   "pr.comment": "Comment",
   // version panel
-  "version.empty": "No versions yet. A repository admin flags one from the test branch above.",
+  "version.empty": "No versions yet. A repository admin flags one from the preview branch above.",
   "version.files": "{n} files",
-  "version.promoteTo": "Promote → main",
-  "version.ownerPromotes": "An admin promotes",
-  "version.onMain": "on main",
-  "version.publish": "Publish",
-  "version.unpublish": "Unpublish",
-  "version.notPublished": "not published",
+  "version.promoteTo": "Publish",
+  "version.ownerPromotes": "An admin publishes",
+  "version.onMain": "Published",
+  "version.share": "Share",
+  "version.unshare": "Unshare",
+  "version.notShared": "not shared",
   "version.includeDsl": "Include DSL source",
   // mobile view
   "mobile.addStep": "Add step",
@@ -253,8 +420,8 @@ export const EN: Record<string, string> = {
   "activity.action.pull.closed": "closed pull request",
   "activity.action.version.flagged": "flagged a version",
   "activity.action.version.promoted": "promoted a version to main",
-  "activity.action.version.shared": "published a version",
-  "activity.action.version.unshared": "unpublished a version",
+  "activity.action.version.shared": "shared a version",
+  "activity.action.version.unshared": "unshared a version",
   "activity.action.template.created": "created a template",
   // billing
   "billing.title": "Plan & billing",
@@ -264,12 +431,23 @@ export const EN: Record<string, string> = {
   "billing.upgradeSoon": "Upgrade — coming soon",
   // language
   "lang.label": "Language",
+  // branch labels
+  "branch.preview": "Approved",
+  "branch.main": "Published",
+  "branch.edit": "{user}'s edit",
+  // change lists
+  "changes.empty": "No changes.",
+  "changes.status.added": "added",
+  "changes.status.changed": "changed",
+  "changes.status.removed": "removed",
 };
 
 export const JA: Record<string, string> = {
   // general
   loading: "読み込み中…",
   close: "閉じる",
+  "common.cancel": "キャンセル",
+  "common.delete": "削除",
   // nav
   "nav.dashboard": "← ダッシュボード",
   "nav.signOut": "サインアウト",
@@ -284,27 +462,155 @@ export const JA: Record<string, string> = {
   "nav.versions": "バージョン",
   // landing
   "landing.tagline": "スイムレーン クラウド",
-  "landing.headline": "ビジネスプロセスのための Git 管理スイムレーン図",
+  "landing.headline": "業務フロー図を、コードと同じようにバージョン管理する",
   "landing.description":
-    "スイムレーン図を共有エディタで作成し、草稿を保存、git にチェックポイント、バージョンをフラグ、公開 — git を直接操作せずに。",
+    "スイムレーン図を GUI で描くことも、プレーンテキストとして書くこともできます。編集する人に合う方を選んでください。すべての図はあなた自身の GitHub リポジトリ内の .txt ファイルなので、履歴・レビュー・リリースは通常の git のまま。他社のデータベースに閉じ込められることはありません。",
+  "landing.ctaPrimary": "GitHub で続行",
+  "landing.ctaSecondary": "仕組みを見る",
   "landing.openDashboard": "ダッシュボードを開く",
   "landing.signIn": "GitHub でサインイン",
-  "landing.feature.draft": "草稿とチェックポイント",
-  "landing.feature.draftDesc":
-    "高速な Postgres 草稿、オンデマンドのグループ化された git コミット。",
-  "landing.feature.versions": "バージョンのフラグ",
-  "landing.feature.versionsDesc":
-    "テストで新しいバージョンをフラグしたときだけ正規の SVG をレンダリング。",
-  "landing.feature.promote": "main に昇格",
-  "landing.feature.promoteDesc": "ゲートされたマージでフラグ済みバージョンを本番に昇格。",
-  "landing.feature.share": "公開共有",
-  "landing.feature.shareDesc": "main 上のバージョンの安定した読み取り専用リンクを共有。",
+  "landing.heroNote":
+    "無料で始められます。図はあなたが既に所有しているリポジトリに残り、別の場所に複製されることはありません。",
+
+  // what it is
+  "landing.what.title": "2 つのエディタ、1 つのファイル",
+  "landing.what.lead":
+    "ここでのスイムレーン図は小さなテキスト形式（kai-swimlane DSL）です。テキストだからこそ、まったく異なる立場の人が同じドキュメントを衝突せずに編集できます。",
+  "landing.what.gui": "GUI モード",
+  "landing.what.guiDesc":
+    "フォーム形式のエディタです。ステップを追加し、担当レーンを選び、条件・分岐・備考を付けるだけ。覚える構文はありません。業務のオーナー自身が編集できます。",
+  "landing.what.text": "テキストモード",
+  "landing.what.textDesc":
+    "同じドキュメントをソースとして表示します。シンタックスハイライト、行番号、パースエラーの行内表示付き。入力の速い人に向いており、差分としてレビューできます。",
+  "landing.what.preview": "ライブプレビュー",
+  "landing.what.previewDesc":
+    "入力に合わせて手元の端末で図が再描画されます。GUI とテキストの切り替えは無損失で、どちらも同じ正規のファイルを書き込みます。",
+
+  // workflow
+  "landing.flow.title": "変更が本番に届くまで",
+  "landing.flow.lead":
+    "ソフトウェアのリリースと同じ流れを、git の用語を表に出さずに実現します。ブランチは 3 種類。main は公開済み、preview は承認済み、そして各編集には専用の短命ブランチが割り当てられます。",
+  "landing.flow.branches":
+    "編集ブランチは preview にマージされ、main に届くのはリリース済みバージョンだけです。",
+  "landing.flow.s1": "リポジトリを接続",
+  "landing.flow.s1Desc":
+    "既存のリポジトリに swimlane トピックを付けるか、アプリに作成させます。サンプル図・セクションテンプレート・図の場所を示す .swimlane.json が用意されます。",
+  "landing.flow.s2": "編集",
+  "landing.flow.s2Desc":
+    "編集を開始すると preview から新しいブランチが自動で作られます。保存は何度でも。草稿は即座に保存され、git の履歴を汚しません。",
+  "landing.flow.s3": "チェックポイント",
+  "landing.flow.s3Desc":
+    "作業の区切りで 1 回チェックポイントすると、変更されたすべてのファイルが 1 つのコミットになります。作成・編集・削除がまとめて、あなた名義で GitHub に記録されます。",
+  "landing.flow.s4": "レビュー",
+  "landing.flow.s4Desc":
+    "preview へプルリクエストを開きます。レビュアーは実際の差分に加えて、変更前後を並べたレンダリングを確認でき、議論は通常の GitHub スレッドで行われます。",
+  "landing.flow.s5": "リリース",
+  "landing.flow.s5Desc":
+    "preview 上のコミットをバージョンとしてフラグすると、全図がスナップショットされ、コミットにタグが付きます。昇格ではそのコミットだけが main にマージされ、フラグ済みのバージョンだけが本番に到達します。",
+  "landing.flow.s6": "共有",
+  "landing.flow.s6Desc":
+    "昇格済みのバージョンを、リポジトリ外の人向けに読み取り専用の固定リンクとして公開できます。DSL ソースを見せるか、描画された図だけにするかを選べます。",
+
+  // features
+  "landing.features.title": "できること",
+  "landing.features.editor": "ビューアではなく、本物のエディタ",
+  "landing.features.editorDesc":
+    "図のディレクトリ全体を扱うフォルダツリー、タブ、キーボードショートカット、整形、作成・リネーム・削除。デスクトップ版や VS Code 版と同じエディタです。",
+  "landing.features.templates": "セクションテンプレート（強制も可能）",
+  "landing.features.templatesDesc":
+    "ヘッダー、レーンのスタイル、再利用ブロックをチーム全体で統一できます。オーナーはセクションをテンプレートと一致させるよう強制でき、逸脱したチェックポイントは理由付きで拒否されます。",
+  "landing.features.git": "私たちの git ではなく、あなたの git",
+  "landing.features.gitDesc":
+    "コミット、ブランチ、タグ、プルリクエスト、リリースは、あなたのアカウントのリポジトリに作成されます。既存のツールや監査にそのまま現れます。",
+  "landing.features.roles": "すでに管理している権限をそのまま",
+  "landing.features.rolesDesc":
+    "アクセス権は GitHub 由来です。リポジトリ管理者はオーナー、push 権限がある人は編集者、それ以外は読み取り専用。同期すべきユーザー一覧が二重に存在しません。",
+  "landing.features.versions": "意味のあるバージョン",
+  "landing.features.versionsDesc":
+    "バージョンは自動保存ではなく、1 つのコミット時点のフォルダ全体に名前を付けたスナップショットです。本番には明示的にフラグされたコミットしか届きません。",
+  "landing.features.mobile": "スマートフォンでも読める",
+  "landing.features.mobileDesc":
+    "横長の図は小さな画面では読めないため、同じドキュメントを縦方向のカード表示でも描画します。そこからステップを編集することもできます。",
+  "landing.features.export": "どこへでも書き出し",
+  "landing.features.exportDesc":
+    "資料・社内 Wiki・印刷手順書向けに、.txt / SVG / PNG（通常・高解像度）で書き出せます。",
+  "landing.features.i18n": "日本語と英語",
+  "landing.features.i18nDesc":
+    "エディタを含むすべての画面が両言語に対応し、いつでも切り替えられます。",
+
+  // trust
+  "landing.trust.title": "データが実際に置かれる場所",
+  "landing.trust.source": "正となるのは GitHub",
+  "landing.trust.sourceDesc":
+    "図はリポジトリにコミットされたプレーンな .txt ファイルです。明日このアプリの利用をやめても、成果物はそのまま残り、読める状態が続きます。",
+  "landing.trust.token": "GitHub トークンは暗号化して保管",
+  "landing.trust.tokenDesc":
+    "サインインは GitHub OAuth です。アクセストークンは AES-256-GCM で暗号化してから保存され、すべての操作はあなた名義で実行されます。共有のボットアカウントはありません。",
+  "landing.trust.db": "git に保持できないものだけ",
+  "landing.trust.dbDesc":
+    "データベースが持つのは未保存の草稿、バージョンのスナップショット、テンプレートだけです。GitHub の権限を確認したうえで、API 経由でのみ到達できます。",
+  "landing.trust.region": "日本国内でホスティング",
+  "landing.trust.regionDesc":
+    "アプリケーションとデータベースはどちらも東京で稼働しています（Vercel hnd1 / Supabase ap-northeast-1）。",
+
+  // plans
+  "landing.plans.title": "プラン",
+  "landing.plans.lead":
+    "制限は GitHub オーナー単位（個人アカウント、または組織ごと）で適用されます。有料プランはまだ販売しておらず、現在はすべてのワークスペースが無料プランで動作しています。",
+  "landing.plans.free": "Free",
+  "landing.plans.freePrice": "¥0",
+  "landing.plans.freeFor": "試用、または少数の図の管理に",
+  "landing.plans.freeF1": "オーナーあたり 3 プロジェクト",
+  "landing.plans.freeF2": "エディタ・レビュー・バージョンのすべて",
+  "landing.plans.freeF3": "既存のリポジトリをそのまま利用",
+  "landing.plans.team": "Team",
+  "landing.plans.teamPrice": "近日提供",
+  "landing.plans.teamFor": "複数リポジトリで業務を運用するチームに",
+  "landing.plans.teamF1": "オーナーあたり 50 プロジェクト",
+  "landing.plans.teamF2": "アプリから新規リポジトリを作成",
+  "landing.plans.teamF3": "Free のすべての機能",
+  "landing.plans.enterprise": "Enterprise",
+  "landing.plans.enterprisePrice": "お問い合わせ",
+  "landing.plans.enterpriseFor": "独自のホスティングや監査要件がある組織に",
+  "landing.plans.enterpriseF1": "プロジェクト数無制限",
+  "landing.plans.enterpriseF2": "GitHub Enterprise Server",
+  "landing.plans.enterpriseF3": "Team のすべての機能",
+
+  // faq
+  "landing.faq.title": "よくある質問",
+  "landing.faq.q1": "git の知識は必要ですか？",
+  "landing.faq.a1":
+    "不要です。アプリ上の言葉は「保存」「チェックポイント」「レビュー」「リリース」だけです。ブランチ・コミット・プルリクエストは裏側で作成されるため、git を使ったことがない人でも、きれいでレビュー可能な履歴を残せます。",
+  "landing.faq.q2": "利用をやめたら図はどうなりますか？",
+  "landing.faq.a2":
+    "何も起きません。図はリポジトリにコミット済みの .txt ファイルです。レンダラーはオープンソースで、デスクトップ版と VS Code 拡張はサーバーなしで同じファイルを読めます。",
+  "landing.faq.q3": "どのリポジトリが対象になりますか？",
+  "landing.faq.a3":
+    "swimlane トピックが付いていて、かつあなたの GitHub アカウントがすでにアクセスできるものだけです。トピックのないリポジトリは一覧に出ず、変更されることもありません。",
+  "landing.faq.q4": "リポジトリ外の人が図を見られますか？",
+  "landing.faq.a4":
+    "オーナーがリリース済みバージョンを公開した場合に限り、そのバージョンだけが見られます。リンクはランダムな文字列で、ソースを見せるか描画結果だけにするかを選べます。",
+  "landing.faq.q5": "なぜ repo スコープが必要なのですか？",
+  "landing.faq.a5":
+    "プライベートリポジトリの読み取りとコミットを行える、より狭いスコープが GitHub には存在しないためです。トークンは暗号化して保存し、ここで開いたリポジトリにのみ使用します。",
+  "landing.faq.q6": "オフラインでも使えますか？",
+  "landing.faq.a6":
+    "プレビューは常に手元の端末で描画されるため、作図自体にネットワークは不要です。保存と履歴には接続が必要です。完全オフラインで作業する場合は、ローカルフォルダを編集するデスクトップ版があります。",
+
+  // closing
+  "landing.closing.title": "すでにあるリポジトリから始めてください",
+  "landing.closing.lead":
+    "GitHub でサインインし、リポジトリに swimlane トピックを付けて開くだけです。あなたが求めない限り、何も作成されません。",
+  "landing.footer.source": "GitHub のソース",
+  "landing.footer.rights": "図はあなたのリポジトリに残ります。",
+
   // dashboard
   "dashboard.title": "プロジェクト",
   "dashboard.description":
     "「{topic}」トピックが付いた、アクセス可能な GitHub リポジトリの一覧です。役割は各リポジトリでの GitHub 権限から決まります。",
   "dashboard.open": "開く",
   "dashboard.newProject": "新規プロジェクト",
+  "dashboard.connectGitLab": "GitLab を接続",
   "dashboard.refresh": "更新",
   "dashboard.empty": "swimlane リポジトリはまだありません。",
   "dashboard.emptyHint":
@@ -319,14 +625,45 @@ export const JA: Record<string, string> = {
   "new.owner": "オーナー",
   "new.name": "リポジトリ名",
   "new.createHint":
-    "main / test ブランチ、サンプル図、セクションテンプレート、.swimlane.json を含むプライベートリポジトリを作成し、swimlane トピックを付けます。チーム / エンタープライズプランが必要です（組織の場合はそのチームの管理者である必要があります）。フリープランのワークスペースは既存のリポジトリをマークしてください。",
+    "main / preview ブランチ、サンプル図、セクションテンプレート、.swimlane.json を含むプライベートリポジトリを作成し、swimlane トピックを付けます。チーム / エンタープライズプランが必要です（組織の場合はそのチームの管理者である必要があります）。フリープランのワークスペースは既存のリポジトリをマークしてください。",
   "new.createButton": "リポジトリを作成",
   "new.creating": "作成中…",
   "new.markHint":
-    "管理者権限があり、まだマークされていないリポジトリです。マークすると swimlane トピック、test ブランチ、.swimlane.json が追加されます。それ以外は変更しません。",
+    "管理者権限があり、まだマークされていないリポジトリです。マークすると swimlane トピック、preview ブランチ、.swimlane.json が追加されます。それ以外は変更しません。",
   "new.search": "リポジトリを検索…",
   "new.markButton": "マーク",
   "new.noRepos": "マークできるリポジトリがありません。",
+  // GitLab: インスタンスを接続し、ワークスペースを紐付け、プロジェクトを追加する
+  "gitlab.wizardTitle": "GitLab インスタンスを接続",
+  "gitlab.registerHint":
+    "セルフホストの GitLab インスタンス(または gitlab.com)向けに、インスタンスの管理者が Swimlane Cloud 用に作成した OAuth アプリケーションを登録します。閲覧・作成/アタッチ・編集・プッシュは今すぐ利用できます。プルリクエストのレビューとワンクリック公開は今のところ GitHub 限定です。",
+  "gitlab.host": "インスタンス URL",
+  "gitlab.hostPlaceholder": "https://gitlab.example.com",
+  "gitlab.displayName": "表示名",
+  "gitlab.clientId": "OAuth アプリケーションのクライアント ID",
+  "gitlab.clientSecret": "OAuth アプリケーションのクライアントシークレット",
+  "gitlab.registerButton": "登録して接続",
+  "gitlab.registering": "登録中…",
+  "gitlab.claimTitle": "グループを選択",
+  "gitlab.claimHint":
+    "接続しました。このワークスペースが表す GitLab グループ(名前空間)を選んでください — オーナー権限が必要です。",
+  "gitlab.namespace": "グループ",
+  "gitlab.claimButton": "このグループに接続",
+  "gitlab.claiming": "接続中…",
+  "gitlab.noNamespaces": "このインスタンスでオーナー権限のあるグループがありません。",
+  "gitlab.projectStepTitle": "プロジェクトを追加",
+  "gitlab.createProject": "プロジェクトを作成",
+  "gitlab.attachProject": "既存のプロジェクトをアタッチ",
+  "gitlab.projectName": "プロジェクト名",
+  "gitlab.projectPath": "プロジェクトパス(group/subgroup/project)",
+  "gitlab.createProjectHint":
+    "main と preview ブランチ、サンプル図、セクションテンプレート、.swimlane.json を備えたプライベートプロジェクトを作成し、swimlane トピックを付与します。",
+  "gitlab.attachProjectHint":
+    "すでに Maintainer 権限を持つプロジェクトに swimlane トピック、preview ブランチ、.swimlane.json を追加します。それ以外は変更しません。",
+  "gitlab.createProjectButton": "プロジェクトを作成",
+  "gitlab.attachProjectButton": "アタッチ",
+  "gitlab.openProject": "プロジェクトを開く",
+  "gitlab.workspaceConnected": "ワークスペースを接続しました。",
   // login
   "login.title": "サインイン",
   "login.subtitle": "Swimlane Cloud はあなた自身の GitHub リポジトリ内の図を編集します。",
@@ -344,68 +681,74 @@ export const JA: Record<string, string> = {
     "編集中にこのブランチが GitHub 上で更新されました。再読み込みしてやり直してください。",
   "error.rateLimited": "GitHub のレート制限中です。1 分ほど待ってからお試しください。",
   // edit page
-  "edit.startEdit": "編集開始",
-  "edit.checkpoint": "チェックポイント",
-  "edit.openPrTo": "PR を開く → {base}",
-  "edit.openPr": "PR を開く",
   "edit.editor": "エディタ",
   "edit.mobile": "モバイル",
   "edit.unsaved": "未保存",
-  "edit.status.production": "本番 · 読み取り専用",
-  "edit.status.locked": "ロック · PR 発行中",
-  "edit.status.integration": "統合",
-  "edit.status.integrationReadonly": "統合 · 読み取り専用",
-  "edit.status.editBranch": "編集ブランチ",
+  "edit.myEdit": "自分の編集",
+  "edit.startEditing": "編集を開始",
+  "edit.backToEdit": "編集に戻る",
+  "edit.push": "GitHubに保存",
+  "edit.push.title": "変更を GitHub に保存",
+  "edit.push.message": "メッセージ（任意）",
+  "edit.push.files": "変更したファイル",
+  "edit.push.nothing": "保存する変更はありません。",
+  "edit.requestReview": "レビューを依頼",
+  "edit.review.title": "レビューを依頼",
+  "edit.review.unpushed": "GitHub に保存されていない変更があります。先に保存してください。",
+  "edit.review.pushFirst": "先に保存",
+  "edit.review.noChanges": "承認済みとの差分はありません。",
+  "edit.review.titleField": "タイトル（任意）",
+  "edit.review.titleDefault": "図を{n}件更新",
+  "edit.review.requested": "レビューを依頼しました（#{n}）。管理者が承認します。",
+  "edit.underReview": "レビュー中 #{n}",
+  "edit.discard": "編集を破棄",
+  "edit.discard.confirm": "この編集とすべての変更を破棄しますか？元に戻せません。",
+  "edit.status.editing": "編集中",
+  "edit.status.underReview": "レビュー中",
   "edit.status.viewer": "読み取り専用",
   "edit.readonly": "読み取り専用：{reason}",
-  "edit.lock.main": "main は本番のため直接編集できません",
+  "edit.lock.main": "main は公開済みのため直接編集できません",
   "edit.lock.locked": "このブランチにはプルリクエストが開かれています",
-  "edit.lock.testOwnerOnly": "test はリポジトリ管理者のみ編集できます",
+  "edit.lock.previewOwnerOnly": "preview はリポジトリ管理者のみ編集できます",
   "edit.lock.viewer": "このリポジトリへのアクセスは読み取り専用です",
-  "edit.lock.other": "編集できるのは test と tmp-* ブランチだけです",
+  "edit.lock.other": "編集できるのは preview と編集ブランチだけです",
   "edit.branchMoved":
-    "このブランチは GitHub 上で更新されました。チェックポイントの前に再読み込みしてください。",
+    "このブランチは GitHub 上で更新されました。保存の前に再読み込みしてください。",
   "edit.reload": "再読み込み",
-  "edit.startEditBranch": "編集ブランチを開始",
-  "edit.prompt.startEdit": "編集名を入力してください（テストから tmp-* ブランチを作成）：",
-  "edit.prompt.startEditDefault": "調整",
-  "edit.prompt.checkpoint": "チェックポイントのメッセージ：",
-  "edit.prompt.checkpointDefault": "図を更新",
-  "edit.prompt.prTitle": "プルリクエストのタイトル：",
-  "edit.prompt.prTitleDefault": "{branch} を {prBase} にマージ",
-  "edit.prompt.prOpened":
-    "プルリクエストが開かれました（{branch} → {base}）。リポジトリ管理者がレビューしてマージします。",
-  "edit.prompt.openPrHint":
-    "プルリクエストは tmp-* ブランチから開きます（→ test）。test はバージョンタブから main に昇格します。",
-  "edit.prompt.prAlreadyOpen": "このブランチにはすでにプルリクエストが開かれています",
+  "edit.fileNotFound": "リンク先のファイルが見つからなかったため、最初のファイルを開きました。",
   // branches page
   "branches.title": "ブランチ",
   "branches.historyOf": "履歴 · {branch}",
-  "branches.confirmUnpublish": "このコミットを非公開にしますか（公開リンクを削除します）？",
-  "branches.confirmPublish": "このコミットを公開リンクに公開しますか？",
+  "branches.confirmUnshare": "このコミットの共有を解除しますか（公開リンクを削除します）？",
+  "branches.confirmShare": "このコミットを公開リンクとして共有しますか？",
+  "branches.unshare": "共有解除",
+  "branches.share": "共有",
   // pulls page
   "pulls.title": "プルリクエスト",
-  "pulls.ownerHint": "プルリクエストのマージまたはクローズができます。",
-  "pulls.editorHint": "リポジトリ管理者がプルリクエストをマージします。",
-  "pulls.confirmMerge": "このプルリクエストをマージしますか{into}？",
-  "pulls.confirmMergeInto": " {base} に",
-  "pulls.confirmClose": "このプルリクエストをマージせずにクローズしますか？",
+  "pulls.ownerHint": "リクエストの承認・却下ができます。",
+  "pulls.editorHint": "リポジトリ管理者がリクエストを承認します。",
+  "pulls.approve.title": "承認して{base}に反映",
+  "pulls.approve.hint": "これらのファイルが承認済みになります。",
+  "pulls.reject.confirm": "反映せずに却下しますか？",
   // versions page
   "versions.title": "バージョン",
   "versions.description":
-    "テストブランチからフラグを立て、リリースするには main に昇格してください。",
-  "versions.testDirty": "test に未保存の草稿があります。フラグの前にチェックポイントしてください。",
-  "versions.flagNew": "新しいバージョンをフラグ",
-  "versions.ownerHint": "リポジトリ管理者がバージョンをフラグします",
-  "versions.confirmPromote": "「{name}」を main に昇格しますか？",
-  "versions.renderFailures": "フラグしましたが、次のファイルは解析できませんでした：{files}",
-  "versions.prompt.name": "バージョン名（現在のテストブランチのスナップショット）：",
-  "versions.prompt.note": "メモ（任意）：",
+    "公開するたびに承認済みをスナップショットし、バージョン番号でタグ付けして公開済みを更新します。",
+  "versions.previewDirty": "承認済みに保存中の変更があります。少し待ってからお試しください。",
+  "versions.ownerHint": "リポジトリ管理者がバージョンを公開します",
+  "versions.promoteConfirm": "「{name}」を公開済みに公開しますか？",
+  "versions.renderFailures": "公開しましたが、次のファイルは解析できませんでした：{files}",
+  "versions.publish": "公開する",
+  "versions.publish.title": "承認済みを新しいバージョンとして公開",
+  "versions.publish.version": "バージョン番号",
+  "versions.publish.invalid": "v1.2.3 の形式で入力してください",
+  "versions.publish.note": "メモ（任意）",
+  "versions.publish.noChanges": "承認済みと公開済みに差分はありません。",
   // history panel
   "history.empty": "このブランチにコミットはありません。",
   "history.view": "表示",
-  "history.unpublish": "非公開にする",
-  "history.publishHint": "公開リンクに公開",
+  "history.unshare": "共有を解除",
+  "history.shareHint": "公開リンクとして共有",
   "history.tip": "最新",
   // commit detail
   "commit.renderError": "このファイルを表示できません（パースエラーまたは空です）。",
@@ -415,27 +758,27 @@ export const JA: Record<string, string> = {
   "commit.mode.text": "テキスト",
   // pr panel
   "pr.empty":
-    "プルリクエストはまだありません。編集ページで、tmp-* ブランチから PR を開いてください（→ test）またはテストから（→ main）。",
+    "プルリクエストはまだありません。編集ページで、編集ブランチから PR を開いてください（→ preview）または preview から（→ main）。",
   "pr.review": "レビューとコメント",
   "pr.hide": "閉じる",
   "pr.openedBy": "{login} が作成",
   "pr.reviewFile": "レビュー（1 ファイル変更）",
   "pr.reviewFiles": "レビュー（{n} ファイル変更）",
-  "pr.close": "閉じる",
-  "pr.mergeTo": "マージ → {base}",
-  "pr.ownerMerges": "管理者がマージします",
+  "pr.reject": "却下",
+  "pr.approve": "承認して反映 → {base}",
+  "pr.ownerMerges": "管理者が承認します",
   "pr.commentAs": "{login} としてコメント…",
   "pr.comment": "コメント",
   // version panel
   "version.empty":
-    "バージョンはまだありません。リポジトリ管理者が上のテストブランチからフラグを立てます。",
+    "バージョンはまだありません。リポジトリ管理者が上の preview ブランチからフラグを立てます。",
   "version.files": "{n} ファイル",
-  "version.promoteTo": "main に昇格",
-  "version.ownerPromotes": "管理者が昇格します",
-  "version.onMain": "main に適用済み",
-  "version.publish": "公開",
-  "version.unpublish": "非公開にする",
-  "version.notPublished": "未公開",
+  "version.promoteTo": "公開する",
+  "version.ownerPromotes": "管理者が公開します",
+  "version.onMain": "公開済み",
+  "version.share": "共有",
+  "version.unshare": "共有を解除",
+  "version.notShared": "未共有",
   "version.includeDsl": "DSL ソースを含める",
   // mobile view
   "mobile.addStep": "ステップを追加",
@@ -512,8 +855,8 @@ export const JA: Record<string, string> = {
   "activity.action.pull.closed": "プルリクエストをクローズ",
   "activity.action.version.flagged": "バージョンをフラグ",
   "activity.action.version.promoted": "バージョンを main に昇格",
-  "activity.action.version.shared": "バージョンを公開",
-  "activity.action.version.unshared": "バージョンを非公開に",
+  "activity.action.version.shared": "バージョンを共有",
+  "activity.action.version.unshared": "バージョンの共有を解除",
   "activity.action.template.created": "テンプレートを作成",
   // billing
   "billing.title": "プランと請求",
@@ -523,6 +866,15 @@ export const JA: Record<string, string> = {
   "billing.upgradeSoon": "アップグレード — 近日公開",
   // language
   "lang.label": "言語",
+  // branch labels
+  "branch.preview": "承認済み",
+  "branch.main": "公開済み",
+  "branch.edit": "{user} の編集",
+  // change lists
+  "changes.empty": "変更はありません。",
+  "changes.status.added": "追加",
+  "changes.status.changed": "変更",
+  "changes.status.removed": "削除",
 };
 
 const DICTS: Record<string, Record<string, string>> = { en: EN, ja: JA };

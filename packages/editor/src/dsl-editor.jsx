@@ -24,6 +24,7 @@ import { ErrorList } from "./components/error-list.jsx";
 import { HelpModal } from "./components/help-modal.jsx";
 import { TemplatePanel } from "./components/template-panel.jsx";
 import { GuiMode } from "./components/gui/gui-mode.jsx";
+import { OnboardingTour } from "./components/gui/onboarding-tour.jsx";
 
 /**
  * The shared DSL editor surface. Mounts a folder tree + tabs, a resizable split
@@ -53,6 +54,8 @@ function DslEditorInner({ options }) {
   const {
     host,
     readOnly,
+    autosave,
+    autosaveStatus,
     isHydrated,
     loadError,
     files,
@@ -67,11 +70,16 @@ function DslEditorInner({ options }) {
     theme,
     src,
     model,
+    parseOptions,
     activeParseErrorPolicy,
     hasUnsavedChanges,
     hasAnyUnsavedChanges,
     updateActiveDocumentSrc,
     replaceActiveDocumentSrc,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     saveDocuments,
     saveAllDocuments,
     createNewFile,
@@ -84,7 +92,7 @@ function DslEditorInner({ options }) {
     dialog,
   } = editor;
 
-  const [mode, setMode] = usePersistentState("sw-editor:mode", options?.initialMode || "text");
+  const [mode, setMode] = usePersistentState("sw-editor:mode", options?.initialMode || "gui");
   const [selectedDir, setSelectedDir] = useState("");
   const [showHelp, setShowHelp] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -93,7 +101,16 @@ function DslEditorInner({ options }) {
     parse: (v) => v === "true",
   });
 
-  const { svg, errors } = useLivePreview(src, { themeKey, theme });
+  // Same resolved imports as the context's own `model`, or this debounced
+  // parse would show an @use error the text editor's live error list already
+  // cleared (or vice versa).
+  const { svg, errors } = useLivePreview(src, {
+    themeKey,
+    theme,
+    resolveImport: parseOptions.resolveImport,
+    resolveAsset: parseOptions.resolveAsset,
+    filename: parseOptions.filename,
+  });
   const { leftPct, containerRef, onDividerMouseDown } = useSplitPane(options?.initialSplit ?? 52, {
     storageKey: "sw-editor:split-pct",
   });
@@ -121,6 +138,8 @@ function DslEditorInner({ options }) {
       save: shortcutLabel("s", { mod: true }),
       saveAll: shortcutLabel("s", { mod: true, shift: true }),
       format: shortcutLabel("f", { mod: true, shift: true }),
+      undo: shortcutLabel("z", { mod: true }),
+      redo: shortcutLabel("z", { mod: true, shift: true }),
       help: "?",
     }),
     [],
@@ -140,6 +159,20 @@ function DslEditorInner({ options }) {
       shift: true,
       enabled: !readOnly && hasAnyUnsavedChanges,
       handler: () => saveAllDocuments(),
+    },
+    {
+      key: "z",
+      mod: true,
+      shift: false,
+      enabled: !readOnly && canUndo,
+      handler: () => undo(),
+    },
+    {
+      key: "z",
+      mod: true,
+      shift: true,
+      enabled: !readOnly && canRedo,
+      handler: () => redo(),
     },
     {
       key: "?",
@@ -322,6 +355,7 @@ function DslEditorInner({ options }) {
         onSelectDir={(d) => setSelectedDir((cur) => (cur === d ? "" : d))}
         onOpenFile={openFile}
         onNewFile={createNewFile}
+        onNewFileFromStarter={createNewFile}
         onNewFolder={createNewFolder}
         onDeleteFile={deleteFile}
         onDeleteFolder={deleteFolder}
@@ -352,12 +386,18 @@ function DslEditorInner({ options }) {
           canCreate={hostHas(host, "create")}
           canMkdir={hostHas(host, "mkdir")}
           canFormat={model.errors.length === 0}
-          canCheckpoint={hostHas(host, "checkpoint")}
-          canVersion={hostSupportsVersioning(host) && hostHas(host, "flagNewVersion")}
+          autosave={autosave}
+          autosaveStatus={autosaveStatus}
+          canCheckpoint={!autosave && hostHas(host, "checkpoint")}
+          canVersion={!autosave && hostSupportsVersioning(host) && hostHas(host, "flagNewVersion")}
+          canUndo={canUndo}
+          canRedo={canRedo}
           hasSvg={Boolean(svg)}
           shortcuts={shortcuts}
           onSave={() => saveDocuments()}
           onSaveAll={saveAllDocuments}
+          onUndo={() => undo()}
+          onRedo={() => redo()}
           onNewFile={() => createNewFile(selectedDir)}
           onNewFolder={() => createNewFolder(selectedDir)}
           onExport={handleExport}
@@ -391,6 +431,8 @@ function DslEditorInner({ options }) {
             theme={theme}
             svg={svg}
             errors={errors}
+            parseOptions={parseOptions}
+            onSwitchToText={() => setMode("text")}
           />
         ) : (
           <div className="sw-split" ref={containerRef}>
@@ -427,7 +469,7 @@ function DslEditorInner({ options }) {
         )}
       </div>
 
-      <HelpModal open={showHelp} onClose={() => setShowHelp(false)} />
+      <HelpModal open={showHelp} onClose={() => setShowHelp(false)} mode={effectiveMode} />
       <TemplatePanel
         open={showTemplates}
         host={host}
@@ -436,6 +478,7 @@ function DslEditorInner({ options }) {
         onClose={() => setShowTemplates(false)}
         onInsert={handleInsertTemplate}
       />
+      {effectiveMode === "gui" && activeDocument && <OnboardingTour />}
     </div>
   );
 }

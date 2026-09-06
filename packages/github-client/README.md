@@ -81,8 +81,12 @@ The branch rules already exist in `apps/saas`, but only as string literals acros
 `checkpoint/route.ts:32-34`. With two more apps encoding the same rules, that drift becomes a
 correctness problem. This module is the one definition new code imports.
 
-`assertMergeTarget` refuses `tmp-* → main` at the client layer, so no app can express the illegal
-merge that would put unreviewed work into production and into a public release URL.
+`main` is published (公開済み) and never a direct edit target; `preview` is the integration line
+(承認済み); an edit branch is named `<login>/<timestamp>/<key>` (`editBranchName`), never chosen by
+hand. `assertMergeTarget` refuses an edit branch → `main` at the client layer, so no app can express
+the illegal merge that would put unreviewed work into production and into a public release URL.
+A repository seeded before this naming existed may still carry a `test` branch or `tmp-*` edit
+branches; `isEditBranch` still recognises the latter, and neither is migrated automatically.
 
 ## Development
 

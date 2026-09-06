@@ -1,5 +1,20 @@
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useT } from "../i18n.jsx";
+
+/**
+ * Plain-language guide mapped to the actual GUI buttons/concepts, shown by
+ * default when Help is opened from GUI mode — the syntax reference below
+ * teaches raw DSL, which isn't what a GUI-mode user is looking at.
+ */
+const GUI_GUIDE_SECTIONS = [
+  "help.guideLayout",
+  "help.guideAddStep",
+  "help.guideBasicFields",
+  "help.guideAddMenu",
+  "help.guideReusable",
+  "help.guideModeToggle",
+];
 
 const HELP_SECTIONS = [
   ["@kai-swimlane … @end", "help.markers", "@kai-swimlane\n\n/title/\n…\n\n@end"],
@@ -103,48 +118,81 @@ const TEMPLATE_GROUPS = [
 ];
 
 /** Lightweight built-in help (no markdown dep). */
-export function HelpModal({ open, onClose }) {
+export function HelpModal({ open, onClose, mode }) {
   const { t } = useT();
+  const [view, setView] = useState(mode === "gui" ? "guide" : "dsl");
+  // Re-pick the default view each time the modal opens (it stays mounted
+  // between opens), so opening Help from GUI mode always starts on the
+  // guide even if it was last left on the DSL reference from text mode.
+  useEffect(() => {
+    if (open) setView(mode === "gui" ? "guide" : "dsl");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   if (!open) return null;
+
   return (
     <div className="sw-modal-overlay" onClick={onClose}>
       <div className="sw-modal sw-modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="sw-modal-header">
-          <h2>{t("help.title")}</h2>
+          <h2>{view === "guide" ? t("help.guideTitle") : t("help.title")}</h2>
           <button type="button" className="sw-icon-btn" onClick={onClose} title={t("tab.close")}>
             <X size={16} />
           </button>
         </div>
         <div className="sw-modal-body">
-          <dl className="sw-help-dl">
-            {HELP_SECTIONS.map(([term, key, code]) => (
-              <div key={term} className="sw-help-row">
-                <dt>{term}</dt>
-                <dd>{t(key)}</dd>
-                {code && <pre className="sw-help-code">{code}</pre>}
-              </div>
-            ))}
-          </dl>
+          {view === "guide" ? (
+            <>
+              <ul className="sw-help-guide-list">
+                {GUI_GUIDE_SECTIONS.map((key) => (
+                  <li key={key}>{t(key)}</li>
+                ))}
+              </ul>
+              <button type="button" className="sw-help-view-toggle" onClick={() => setView("dsl")}>
+                {t("help.viewDslRef")}
+              </button>
+            </>
+          ) : (
+            <>
+              {mode === "gui" && (
+                <button
+                  type="button"
+                  className="sw-help-view-toggle"
+                  onClick={() => setView("guide")}
+                >
+                  {t("help.viewGuiGuide")}
+                </button>
+              )}
+              <dl className="sw-help-dl">
+                {HELP_SECTIONS.map(([term, key, code]) => (
+                  <div key={term} className="sw-help-row">
+                    <dt>{term}</dt>
+                    <dd>{t(key)}</dd>
+                    {code && <pre className="sw-help-code">{code}</pre>}
+                  </div>
+                ))}
+              </dl>
 
-          <div className="sw-help-templates">
-            <h3 className="sw-help-templates-title">{t("help.templatesTitle")}</h3>
-            <p className="sw-help-templates-hint">{t("help.templatesHint")}</p>
-            {TEMPLATE_GROUPS.map((group) => (
-              <div key={group.section} className="sw-help-tpl-group">
-                <h4 className="sw-help-tpl-group-title">
-                  {group.section} — {t(group.titleKey)}
-                </h4>
-                <dl className="sw-help-dl">
-                  {group.items.map(([id, code]) => (
-                    <div key={id} className="sw-help-row">
-                      <dt>{`<${id}>`}</dt>
-                      <pre className="sw-help-code">{`<${id}>\n${code}`}</pre>
-                    </div>
-                  ))}
-                </dl>
+              <div className="sw-help-templates">
+                <h3 className="sw-help-templates-title">{t("help.templatesTitle")}</h3>
+                <p className="sw-help-templates-hint">{t("help.templatesHint")}</p>
+                {TEMPLATE_GROUPS.map((group) => (
+                  <div key={group.section} className="sw-help-tpl-group">
+                    <h4 className="sw-help-tpl-group-title">
+                      {group.section} — {t(group.titleKey)}
+                    </h4>
+                    <dl className="sw-help-dl">
+                      {group.items.map(([id, code]) => (
+                        <div key={id} className="sw-help-row">
+                          <dt>{`<${id}>`}</dt>
+                          <pre className="sw-help-code">{`<${id}>\n${code}`}</pre>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>

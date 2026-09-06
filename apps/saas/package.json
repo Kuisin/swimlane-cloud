@@ -24,7 +24,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "stripe": "^17.4.0",
-    "@swimlane-cloud/github-client": "workspace:*"
+    "@swimlane-cloud/github-client": "workspace:*",
+    "@swimlane-cloud/gitlab-client": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",

@@ -43,6 +43,12 @@ export interface TemplatePolicy {
 export interface EditorCapabilities {
   readOnly?: boolean;
   versioning?: boolean;
+  /**
+   * Debounce-save every change instead of requiring Save / Save all; hides
+   * those buttons and Checkpoint / Version in the action bar in favour of a
+   * small "saved" status.
+   */
+  autosave?: boolean;
 }
 
 /**
@@ -53,6 +59,10 @@ export interface EditorHost {
   root?(): Promise<string | null>;
   list(): Promise<FileRef[]>;
   read(id: string): Promise<string>;
+  /** Text of an `@use` fragment; without it imports simply do not resolve. */
+  readImport?(path: string): Promise<string | null>;
+  /** An `@use` image as a base64 `data:` URI. Same degradation. */
+  readAsset?(path: string): Promise<string | null>;
   writeDraft(id: string, dsl: string): Promise<void>;
   writeDraftMany?(updates: { id: string; dsl: string }[]): Promise<void>;
   checkpoint?(opts: { message?: string; files?: { id: string; dsl: string }[] }): Promise<void>;
@@ -84,6 +94,23 @@ export interface EditorOptions {
   lang?: string;
   initialMode?: "gui" | "text";
   initialSplit?: number;
+  /** Debounce delay in ms before an autosave host flushes dirty documents. Default 1500. */
+  autosaveDelayMs?: number;
+  /**
+   * Scope key for the localStorage mirror kept while `capabilities.autosave`
+   * is set (e.g. `${projectId}:${branch}`). Omit to disable the mirror.
+   */
+  localMirrorKey?: string;
+  /** Fired whenever there is (or stops being) an unflushed autosave. */
+  onPendingChange?(pending: boolean): void;
+  /** Fired when a background autosave flush fails. */
+  onAutosaveError?(message: string): void;
+  /**
+   * Fired when `initialDocumentId` doesn't match anything in the file list
+   * (e.g. a URL built around a path the file has since moved away from), just
+   * before the editor falls back to opening the first file instead.
+   */
+  onDocumentNotFound?(requestedId: string): void;
   [key: string]: unknown;
 }
 
@@ -100,10 +127,36 @@ export declare const FileEditorProvider: ComponentType<DslEditorProps & { childr
 
 export declare function useEditor(): Record<string, unknown>;
 
+/**
+ * In-app alert/confirm/prompt, exported so a host app can reuse the same
+ * themed dialogs outside `<DslEditor>` (e.g. a page that isn't rendering the
+ * editor at all) instead of native `window.confirm`/`alert`/`prompt`.
+ */
+export interface DialogHostRequest {
+  kind: "alert" | "confirm" | "prompt";
+  message: string;
+  defaultValue?: string;
+}
+export declare const DialogHost: ComponentType<{
+  request: DialogHostRequest | null;
+  onOk(value?: string): void;
+  onCancel(): void;
+}>;
+export declare function useDialogHost(): {
+  request: DialogHostRequest | null;
+  dialogs: Required<EditorDialogs>;
+  handleOk(value?: string): void;
+  handleCancel(): void;
+};
+
 export declare const TEMPLATE_SECTIONS: readonly TemplateSection[];
 export declare function hostHas(host: EditorHost, method: string): boolean;
 export declare function hostSupportsVersioning(host: EditorHost): boolean;
+export declare function hostAutosaves(host: EditorHost): boolean;
 export declare function hostIsReadOnly(host: EditorHost): boolean;
+
+/** Clears every localStorage-mirrored document under `scope` (e.g. after a successful push). */
+export declare function clearLocalMirror(scope: string): void;
 
 // ── Document model helpers (used by the SaaS mobile view and share pages) ────
 
@@ -130,11 +183,51 @@ export interface GuiModel {
   [key: string]: unknown;
 }
 
-export declare function parseGuiModel(src: string): GuiModel;
+export interface DslParseOptions {
+  lang?: string;
+  filename?: string;
+  resolveImport?: (path: string) => string | null;
+  resolveAsset?: (path: string) => string | null;
+}
+
+export declare function parseGuiModel(src: string, options?: DslParseOptions): GuiModel;
 export declare function applyModelEdit(
   src: string,
   edit: (draft: { rows: GuiRow[]; [k: string]: unknown }) => void,
 ): string;
+
+/** One `@use` target found by scanning `src`, without parsing it. */
+export interface ImportUse {
+  path: string;
+  alias: string | null;
+  kind: "fragment" | "asset";
+}
+
+/** A cache entry: `{ text }` for a fragment, `{ dataUri }` for an image, or `{ missing: true }`. */
+export type ImportCacheEntry = { text: string } | { dataUri: string } | { missing: true };
+
+export declare function cacheKey(filename: string | undefined, path: string): string;
+export declare function missingImports(
+  src: string,
+  filename: string | undefined,
+  cache: Map<string, ImportCacheEntry>,
+): ImportUse[];
+export declare function resolversFrom(
+  filename: string | undefined,
+  cache: Map<string, ImportCacheEntry>,
+): DslParseOptions;
+export declare function fetchImports(
+  uses: ImportUse[],
+  host: {
+    readImport?: (path: string) => Promise<string | null>;
+    readAsset?: (path: string) => Promise<string | null>;
+  },
+): Promise<Array<[string, ImportCacheEntry]>>;
+export declare function withEntries(
+  cache: Map<string, ImportCacheEntry>,
+  filename: string | undefined,
+  entries: Array<[string, ImportCacheEntry]>,
+): Map<string, ImportCacheEntry>;
 export declare function serializeDSL(model: { rows: GuiRow[]; [key: string]: unknown }): string;
 export declare function formatDsl(src: string): string;
 export declare function extractPartsCode(

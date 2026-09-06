@@ -1,4 +1,6 @@
 import { withApi, json, readJson, ApiError } from "@/lib/api";
+import { classifyChanges } from "@/lib/changes";
+import { buildCommitMessage } from "@/lib/commit-message";
 import { assertRef, assertRepoPath } from "@/lib/guard";
 import {
   assertBranchWritable,
@@ -23,9 +25,13 @@ interface CheckpointBody {
 }
 
 /**
- * POST /api/projects/[projectId]/checkpoint — one commit on the branch with
- * every draft for it (plus any files the editor sends that it has not saved
- * as drafts yet). Committed drafts are deleted; a moved branch is a 409.
+ * POST /api/projects/[projectId]/checkpoint — one commit ("Push to GitHub" in
+ * the UI) on the branch with every draft for it (plus any files the editor
+ * sends that it has not saved as drafts yet). The commit message is built
+ * from the user's optional note plus an automatic list of every file
+ * touched (see `commit-message.ts`), so the metadata a reviewer needs is
+ * always in the commit, never only in the app's memory. Committed drafts
+ * are deleted; a moved branch is a 409.
  */
 export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
@@ -43,30 +49,32 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     if (!isDraftablePath(f.id)) throw new ApiError(400, `${f.id} is not a diagram path.`);
     writes[f.id] = f.dsl;
   }
-  const changed = Object.entries(writes).map(([id, dsl]) => ({ id, dsl }));
-  if (changed.length === 0 && deletions.length === 0) {
-    throw new ApiError(400, "Nothing to checkpoint — save a draft first.");
+  const changedEntries = Object.entries(writes).map(([id, dsl]) => ({ id, dsl }));
+  if (changedEntries.length === 0 && deletions.length === 0) {
+    throw new ApiError(400, "Nothing to push — nothing has changed yet.");
   }
 
   const { policies, templatesById } = await loadProjectTemplates(projectId);
-  for (const f of changed) {
+  for (const f of changedEntries) {
     if (f.id.endsWith(".txt")) assertForcedSections(f.dsl, policies, templatesById);
   }
 
-  const summary =
-    changed.length && deletions.length
-      ? `Checkpoint ${changed.length} diagram(s), remove ${deletions.length}`
-      : deletions.length
-        ? `Remove ${deletions.length} diagram(s)`
-        : `Checkpoint ${changed.length} diagram(s)`;
+  const headSha = await project.write.refSha(body.branch);
+  const changes = await classifyChanges(project, headSha, writes, deletions);
+  const message = buildCommitMessage({
+    userMessage: body.message,
+    changes,
+    author: project.login,
+    branch: body.branch,
+  });
 
   const result = await project.write.commitFiles({
     branch: body.branch,
-    message: body.message?.trim() || summary,
-    files: changed.map((f) => ({ path: f.id, text: f.dsl })),
+    message,
+    files: changedEntries.map((f) => ({ path: f.id, text: f.dsl })),
     ...(deletions.length ? { deletions } : {}),
     ...(body.expectedHeadSha ? { expectedHeadSha: body.expectedHeadSha } : {}),
-    author: { name: project.login, email: `${project.login}@users.noreply.github.com` },
+    author: { name: project.login, email: project.commitAuthorEmail },
   });
 
   const supabase = getServiceSupabase();
@@ -75,7 +83,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     .delete()
     .eq("project_id", projectId)
     .eq("branch", body.branch)
-    .in("filepath", [...changed.map((f) => f.id), ...deletions]);
+    .in("filepath", [...changedEntries.map((f) => f.id), ...deletions]);
 
   await audit({
     workspaceId: project.project.workspaceId,
@@ -91,7 +99,9 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   return json({
     commitSha: result.sha,
     branch: body.branch,
-    files: changed.length,
+    files: changedEntries.length,
     deleted: deletions.length,
+    changes,
+    subject: message.split("\n")[0],
   });
 });

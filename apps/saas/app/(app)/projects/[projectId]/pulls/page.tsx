@@ -1,19 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { closePR, mergePR } from "@/lib/workflow";
-import { ProjectPage, PrPanel, describeError, useProject } from "../_components";
+import { ProjectPage, PrPanel, useProject } from "../_components";
+import { ApproveModal, RejectModal } from "./_modals";
+import type { PullState } from "@/lib/types";
 import { useT } from "@/i18n";
 
 export default function PullsPage() {
   const { projectId, state, refresh, error } = useProject();
   const { t } = useT();
-  const [notice, setNotice] = useState<string | null>(null);
+  const [approving, setApproving] = useState<PullState | null>(null);
+  const [rejecting, setRejecting] = useState<PullState | null>(null);
 
   const isOwner = state?.me.role === "owner";
 
   return (
-    <ProjectPage active="pulls" projectId={projectId} state={state} error={error ?? notice}>
+    <ProjectPage active="pulls" projectId={projectId} state={state} error={error}>
       {state && (
         <div className="min-h-0 flex-1 overflow-auto">
           <div className="mx-auto max-w-3xl p-6">
@@ -27,24 +29,33 @@ export default function PullsPage() {
               projectId={projectId}
               state={state}
               isOwner={isOwner}
-              onMerge={(pr) => {
-                const into = t("pulls.confirmMergeInto", { base: pr.base });
-                if (!window.confirm(t("pulls.confirmMerge", { into }))) return;
-                setNotice(null);
-                mergePR(projectId, pr.number, pr.headSha || undefined)
-                  .then(() => refresh())
-                  .catch((e) => setNotice(describeError(e, t)));
-              }}
-              onClose={(pr) => {
-                if (!window.confirm(t("pulls.confirmClose"))) return;
-                setNotice(null);
-                closePR(projectId, pr.number)
-                  .then(() => refresh())
-                  .catch((e) => setNotice(describeError(e, t)));
-              }}
+              onMerge={(pr) => setApproving(pr)}
+              onClose={(pr) => setRejecting(pr)}
             />
           </div>
         </div>
+      )}
+      {approving && (
+        <ApproveModal
+          projectId={projectId}
+          pr={approving}
+          onClose={() => setApproving(null)}
+          onApproved={() => {
+            setApproving(null);
+            void refresh();
+          }}
+        />
+      )}
+      {rejecting && (
+        <RejectModal
+          projectId={projectId}
+          pr={rejecting}
+          onClose={() => setRejecting(null)}
+          onRejected={() => {
+            setRejecting(null);
+            void refresh();
+          }}
+        />
       )}
     </ProjectPage>
   );

@@ -16,11 +16,13 @@ import {
   moveRow,
 } from "../../lib/flow-rows.js";
 import { buildLockedGuiRowIndices } from "../../lib/parse-error-policy.js";
+import { AddStepMenu } from "./add-step-menu.jsx";
 import { FlowStepList } from "./flow-step-list.jsx";
 import { StepInspector } from "./step-inspector.jsx";
 import { BranchInspector } from "./branch-inspector.jsx";
 import { MoveStepModal } from "./move-step-modal.jsx";
 import { FileSettingsModal } from "./file-settings-modal.jsx";
+import { StarterGallery } from "./starter-gallery.jsx";
 import { PreviewPane } from "../preview-pane.jsx";
 import { ErrorList } from "../error-list.jsx";
 
@@ -34,7 +36,16 @@ import { ErrorList } from "../error-list.jsx";
  * inspector each own a saved pixel width (resizable from their right edge), and
  * the live preview fills whatever space is left. Widths persist in localStorage.
  */
-export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
+export function GuiMode({
+  src,
+  onChange,
+  readOnly,
+  theme,
+  svg,
+  errors,
+  parseOptions,
+  onSwitchToText,
+}) {
   const { t } = useT();
   const stepList = useDragWidth(260, {
     min: 180,
@@ -54,7 +65,9 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
   const [dropOpen, setDropOpen] = useState(false);
   const [dropPos, setDropPos] = useState({ top: 0, left: 0 });
   const chevronRef = useRef(null);
-  const guiModel = useMemo(() => parseGuiModel(src), [src]);
+  // Same resolved imports as the visible error list, or a row near an @use
+  // line can be locked here for an error the banner above no longer shows.
+  const guiModel = useMemo(() => parseGuiModel(src, parseOptions), [src, parseOptions]);
   const rows = guiModel.rows;
   const lockedRows = useMemo(
     () => buildLockedGuiRowIndices(rows, guiModel.errors),
@@ -83,11 +96,15 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
 
   function commit(editFn) {
     if (readOnly) return;
-    onChange(applyModelEdit(src, editFn));
+    // Every GUI-mode mutation is its own discrete undo step — never
+    // coalesced with adjacent edits, unlike text-mode typing.
+    onChange(applyModelEdit(src, editFn), { tag: "structural" });
   }
 
   function patchRow(patch) {
-    if (saveIndex < 0) return;
+    // Defense-in-depth: the inspectors already disable every field for a
+    // locked row, but a mutation landing here for one is a no-op regardless.
+    if (saveIndex < 0 || lockedRows.has(saveIndex)) return;
     commit((draft) => {
       if (draft.rows[saveIndex]) {
         draft.rows[saveIndex] = { ...draft.rows[saveIndex], ...patch };
@@ -96,7 +113,7 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
   }
 
   function deleteRow() {
-    if (saveIndex < 0) return;
+    if (saveIndex < 0 || lockedRows.has(saveIndex)) return;
     commit((draft) => {
       draft.rows.splice(saveIndex, 1);
     });
@@ -126,7 +143,7 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
     const after = parseDSL(next).errors?.length ?? 0;
     setShowMove(false);
     if (after > before) return;
-    onChange(next);
+    onChange(next, { tag: "structural" });
     setSelectedIndex(landed);
   }
 
@@ -276,9 +293,44 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
 
   const isStep = inspectorRow?.kind === "step" && !inspectorRow.empty;
   const reorder = isStep ? getReorderBounds(rows, saveIndex) : null;
+  const isLocked = saveIndex >= 0 && lockedRows.has(saveIndex);
+
+  // A brand-new file already seeds one step (see DEFAULT_TAB_TEMPLATE), so
+  // zero rows here means the flow was emptied out (e.g. the last step was
+  // deleted) rather than "never touched" — still exactly the moment a
+  // starter shape is most useful, so offer the same gallery either way.
+  // Picking "start blank" is just the normal add-step action: it makes
+  // rows.length > 0, which is what hides this state, so no extra flag needed.
+  if (!readOnly && rows.length === 0) {
+    return (
+      <div className="sw-gui-wrap">
+        <StarterGallery
+          title={t("starter.title")}
+          hint={t("starter.hint")}
+          onSelect={(dsl) => onChange(dsl)}
+          onSkip={addStep}
+          skipLabel={t("gui.addStep")}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="sw-gui-wrap">
+      {errors?.length > 0 && (
+        <div className="sw-gui-error-banner">
+          <span>
+            {lockedRows.size > 0
+              ? t("errors.gutterBanner", { n: lockedRows.size })
+              : t("errors.definitionsBanner")}
+          </span>
+          {onSwitchToText && (
+            <button type="button" className="sw-btn sw-btn-sm" onClick={onSwitchToText}>
+              {t("errors.fixInText")}
+            </button>
+          )}
+        </div>
+      )}
       <div className="sw-gui">
         <div className="sw-gui-list-pane" style={{ width: stepList.width, flex: "0 0 auto" }}>
           <div className="sw-gui-list-head">
@@ -306,27 +358,15 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
                     <ChevronDown size={12} />
                   </button>
                   {dropOpen && (
-                    <div
-                      className="sw-add-block-menu"
-                      style={{ top: dropPos.top, left: dropPos.left }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      <button type="button" className="sw-add-block-item" onClick={addIfBranch}>
-                        {t("gui.addIf")}
-                      </button>
-                      <button type="button" className="sw-add-block-item" onClick={addSwitch}>
-                        {t("gui.addSwitch")}
-                      </button>
-                      <button type="button" className="sw-add-block-item" onClick={addFork}>
-                        {t("gui.addFork")}
-                      </button>
-                      <button type="button" className="sw-add-block-item" onClick={addSection}>
-                        {t("gui.addSection")}
-                      </button>
-                      <button type="button" className="sw-add-block-item" onClick={addSubBranch}>
-                        {t("gui.addBranch")}
-                      </button>
-                    </div>
+                    <AddStepMenu
+                      position={dropPos}
+                      onClose={() => setDropOpen(false)}
+                      onAddIf={addIfBranch}
+                      onAddSwitch={addSwitch}
+                      onAddFork={addFork}
+                      onAddSection={addSection}
+                      onAddBranch={addSubBranch}
+                    />
                   )}
                 </div>
               )}
@@ -368,6 +408,7 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
               theme={theme}
               reorder={reorder}
               readOnly={readOnly}
+              locked={isLocked}
               onPatch={patchRow}
               onMove={moveStep}
               onOpenMove={() => setShowMove(true)}
@@ -376,11 +417,13 @@ export function GuiMode({ src, onChange, readOnly, theme, svg, errors }) {
           ) : inspectorRow ? (
             <BranchInspector
               row={inspectorRow}
+              rows={rows}
               readOnly={readOnly}
+              locked={isLocked}
               onPatch={patchRow}
               onDelete={deleteRow}
               onAddCase={
-                !readOnly && ["branchStart", "branchCase"].includes(inspectorRow?.kind)
+                !readOnly && !isLocked && ["branchStart", "branchCase"].includes(inspectorRow?.kind)
                   ? addCaseToBranch
                   : undefined
               }

@@ -3,12 +3,14 @@
  * pure branch-rule helpers the pages use. Replaces the localStorage demo
  * (`demo-workflow.ts`) with the same names where the UX is the same.
  */
+import { INTEGRATION_BRANCH, PROD_BRANCH } from "@swimlane-cloud/github-client";
 import { api, del, patchJson, postJson } from "./client";
 import type {
   BranchState,
   CommitInfo,
   CompareResponse,
   LockReason,
+  PendingChange,
   ProjectState,
   PullDetail,
   ShareMode,
@@ -33,6 +35,14 @@ export const getTree = (pid: string, ref: string) =>
 
 export const getFile = (pid: string, branch: string, path: string) =>
   api<{ dsl: string; source: "draft" | "git" }>(`${base(pid)}/file?${q({ branch, path })}`);
+
+/** A file id's current path, or null if unknown — for a `?fid=` deep link. */
+export const resolveFileId = (pid: string, fid: string) =>
+  api<{ path: string | null }>(`${base(pid)}/files/resolve?${q({ fid })}`);
+
+/** One `@use` target: `{ text }` for a fragment, `{ dataUri }` for an image. */
+export const getImport = (pid: string, branch: string, from: string, path: string) =>
+  api<{ text?: string; dataUri?: string }>(`${base(pid)}/import?${q({ branch, from, path })}`);
 
 export const getSnapshot = (pid: string, ref: string, withDrafts = false) =>
   api<SnapshotResponse>(
@@ -79,35 +89,47 @@ export const checkpoint = (
   files?: { id: string; dsl: string }[],
   expectedHeadSha?: string,
 ) =>
-  postJson<{ commitSha: string; branch: string; files: number; deleted: number }>(
-    `${base(pid)}/checkpoint`,
-    {
-      branch,
-      message,
-      files,
-      expectedHeadSha,
-    },
-  );
+  postJson<{
+    commitSha: string;
+    branch: string;
+    files: number;
+    deleted: number;
+    changes: PendingChange[];
+    subject: string;
+  }>(`${base(pid)}/checkpoint`, {
+    branch,
+    message,
+    files,
+    expectedHeadSha,
+  });
+
+/** Every uncommitted change on a branch, for the Push / Request-review modals. */
+export const listPendingChanges = (pid: string, branch: string) =>
+  api<{ headSha: string; changes: PendingChange[] }>(`${base(pid)}/draft?${q({ branch })}`);
 
 // ── Branches & pull requests ────────────────────────────────────────────────
 
-export const startEdit = (pid: string, editName: string) =>
-  postJson<{ editId: string; branch: string; sha: string; reused: boolean }>(`${base(pid)}/edits`, {
-    editName,
-  });
+/** Cuts (or reuses) an edit branch named `<login>/<timestamp>/<key>` by the server. */
+export const startEdit = (pid: string) =>
+  postJson<{ editId: string; branch: string; sha: string; reused: boolean }>(
+    `${base(pid)}/edits`,
+    {},
+  );
 
 export const abandonEdit = (pid: string, editId: string) =>
   del<{ abandoned: boolean; branch?: string }>(`${base(pid)}/edits/${editId}`);
 
-/** Opens the PR; if the branch has drafts, checkpoints them first (as the demo did). */
-export async function openPR(pid: string, state: ProjectState, head: string, title?: string) {
-  const branch = branchOf(state, head);
-  if (branch?.dirty) await checkpoint(pid, head, "Update for pull request");
-  return postJson<{ number: number; htmlUrl: string; base: string; reused: boolean }>(
+/**
+ * Opens (or reuses) the pull request for `head`. The caller is responsible
+ * for making sure `head` is fully pushed first — the Request-review modal
+ * checks `listPendingChanges` and blocks itself rather than silently
+ * committing on the user's behalf.
+ */
+export const openPR = (pid: string, head: string, title?: string) =>
+  postJson<{ number: number; htmlUrl: string; base: string; reused: boolean }>(
     `${base(pid)}/pulls`,
     { head, title },
   );
-}
 
 export const mergePR = (pid: string, number: number, expectedHeadSha?: string) =>
   postJson<{ sha: string; merged: boolean; deletedBranch: string | null }>(
@@ -136,6 +158,16 @@ export const promoteVersion = (pid: string, versionId: string) =>
     `${base(pid)}/versions/${versionId}/promote`,
     {},
   );
+
+/** 公開する / Publish: flag preview as `name` (a semver) and promote it to main in one request. */
+export const publishRelease = (pid: string, name: string, note?: string) =>
+  postJson<{
+    versionId: string;
+    tag: string;
+    prNumber: number | null;
+    promotedSha: string;
+    renderFailures: string[];
+  }>(`${base(pid)}/versions/publish`, { name, note });
 
 export const publishVersion = (pid: string, versionId: string, shareMode: ShareMode) =>
   patchJson<{ versionId: string; public: boolean; public_slug: string }>(
@@ -171,9 +203,14 @@ export function editLockReason(state: ProjectState, name: string): LockReason | 
   return b.lockReason;
 }
 
-/** The branch the Edit tab should open: the URL's, else my active edit, else test. */
+/**
+ * The branch the Edit tab should open: the URL's, else my active edit, else
+ * preview (承認済み), else main (公開済み), else whatever the repository has.
+ */
 export function defaultBranch(state: ProjectState, requested?: string | null): string {
   if (requested && branchOf(state, requested)) return requested;
   if (state.activeEdit && branchOf(state, state.activeEdit.branch)) return state.activeEdit.branch;
-  return branchOf(state, "test") ? "test" : (state.branches[0]?.name ?? "main");
+  if (branchOf(state, INTEGRATION_BRANCH)) return INTEGRATION_BRANCH;
+  if (branchOf(state, PROD_BRANCH)) return PROD_BRANCH;
+  return state.branches[0]?.name ?? PROD_BRANCH;
 }

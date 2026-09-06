@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { buildFolderTree } from "../lib/folder-tree.js";
+import { StarterGallery } from "./gui/starter-gallery.jsx";
 import { useT } from "../i18n.jsx";
 
 /**
@@ -30,6 +31,7 @@ export function FolderTree({
   onSelectDir,
   onOpenFile,
   onNewFile,
+  onNewFileFromStarter,
   onNewFolder,
   onDeleteFile,
   onDeleteFolder,
@@ -43,6 +45,7 @@ export function FolderTree({
   const { t } = useT();
   const tree = useMemo(() => buildFolderTree(files), [files]);
   const [rootDragOver, setRootDragOver] = useState(false);
+  const [showStarters, setShowStarters] = useState(false);
   const rootDragCount = useRef(0);
 
   if (collapsed) {
@@ -147,7 +150,37 @@ export function FolderTree({
           canMove={canMove}
           isRoot
         />
-        {files.length === 0 && <div className="sw-tree-empty">{t("tree.noFiles")}</div>}
+        {files.length === 0 &&
+          (showStarters && onNewFileFromStarter ? (
+            <StarterGallery
+              title={t("starter.title")}
+              hint={t("starter.hint")}
+              onSelect={(dsl) => {
+                setShowStarters(false);
+                onNewFileFromStarter(selectedDir, dsl);
+              }}
+              onSkip={() => {
+                setShowStarters(false);
+                onNewFile(selectedDir);
+              }}
+              skipLabel={t("starter.startBlank")}
+            />
+          ) : (
+            <div className="sw-tree-empty">
+              <p>{t("tree.noFiles")}</p>
+              {canCreate && (
+                <button
+                  type="button"
+                  className="sw-btn sw-btn-sm"
+                  onClick={() =>
+                    onNewFileFromStarter ? setShowStarters(true) : onNewFile(selectedDir)
+                  }
+                >
+                  {t("tree.createFirst")}
+                </button>
+              )}
+            </div>
+          ))}
       </div>
     </div>
   );

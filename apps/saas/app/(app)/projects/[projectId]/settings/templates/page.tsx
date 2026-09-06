@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Star, Trash2 } from "lucide-react";
 import { api, del, patchJson, postJson } from "@/lib/client";
-import { ProjectPage, Action, Empty, Modal, describeError, useProject } from "../../_components";
+import {
+  ProjectPage,
+  Action,
+  Empty,
+  Modal,
+  ModalFooter,
+  describeError,
+  useProject,
+} from "../../_components";
 import { useT } from "@/i18n";
 
 const SECTIONS = ["page", "option", "role", "block", "prop"] as const;
@@ -36,6 +44,7 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[] | null>(null);
   const [policies, setPolicies] = useState<Record<Section, Policy> | null>(null);
   const [editing, setEditing] = useState<Partial<Template> | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Template | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -89,8 +98,10 @@ export default function TemplatesPage() {
       setEditing(null);
     });
 
-  const remove = (tpl: Template) => {
-    if (!window.confirm(t("templates.confirmDelete", { name: tpl.name }))) return;
+  const confirmRemove = () => {
+    const tpl = confirmDelete;
+    setConfirmDelete(null);
+    if (!tpl) return;
     void run(() => del(`${base}/templates?id=${encodeURIComponent(tpl.id)}`));
   };
 
@@ -217,7 +228,7 @@ export default function TemplatesPage() {
                             {t("templates.edit")}
                           </button>
                           <button
-                            onClick={() => remove(x)}
+                            onClick={() => setConfirmDelete(x)}
                             disabled={policy.forcedTemplateId === x.id}
                             title={
                               policy.forcedTemplateId === x.id
@@ -247,6 +258,27 @@ export default function TemplatesPage() {
           onCancel={() => setEditing(null)}
           onSave={save}
         />
+      )}
+
+      {confirmDelete && (
+        <Modal
+          title={t("common.delete")}
+          onClose={() => setConfirmDelete(null)}
+          maxW="max-w-sm"
+          footer={
+            <ModalFooter
+              onCancel={() => setConfirmDelete(null)}
+              onConfirm={confirmRemove}
+              confirmLabel={t("common.delete")}
+              busy={busy}
+              danger
+            />
+          }
+        >
+          <p className="text-sm text-neutral-600">
+            {t("templates.confirmDelete", { name: confirmDelete.name })}
+          </p>
+        </Modal>
       )}
     </ProjectPage>
   );

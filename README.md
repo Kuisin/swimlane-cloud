@@ -68,9 +68,14 @@ packages/
   diagram-converter/   # @swimlane-cloud/diagram-converter (open-source engine, MIT)
   editor/              # @swimlane-cloud/editor — the shared GUI/text editor surface
   github-client/       # zero-dependency GitHub client (REST, git protocol v2, raw CDN)
+  gitlab-client/       # zero-dependency GitLab client, for a self-hosted (or gitlab.com) org instance
   mobile-view/         # card-based mobile rendering of a parsed diagram
+dsl-rule.md            # kai-swimlane 2 — the DSL specification (version 2 only)
+dsl-proposals.md       # the grammar candidates it was chosen from, plus the shared i18n / squash rules
+examples/kai-swimlane-2/ # a complete worked example of the DSL and the fragments it imports
 apps/
-  saas/                # Next.js SaaS: edit diagrams in your GitHub repos (Supabase + GitHub + Vercel)
+  saas/                # Next.js SaaS: edit diagrams in your GitHub repos (Supabase + GitHub + Vercel);
+                       #   a workspace can opt into a self-hosted GitLab instance instead, per org
   hub/                 # stateless viewer/editor for diagrams in any GitHub repo
   share/               # static tokened sharing of a folder of diagrams
   web/                 # standalone editor over browser storage (no backend)
@@ -155,8 +160,8 @@ error with a clear message, never a failed deploy.
 ### 3 — Smoke test
 
 Open the production URL → **Continue with GitHub** → the dashboard lists repositories tagged
-`swimlane` → **New project** creates a private repository with `main`, `test`, a sample diagram
-and `.swimlane.json`, or **Mark an existing repository** adds the topic to one you administer.
+`swimlane` → **New project** creates a private repository with `main` and `preview`, a sample
+diagram and `.swimlane.json`, or **Mark an existing repository** adds the topic to one you administer.
 
 ---
 
