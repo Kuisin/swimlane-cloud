@@ -87,7 +87,7 @@ function DslEditorInner({ options }) {
     dialog,
   } = editor;
 
-  const [mode, setMode] = usePersistentState("sw-editor:mode", options?.initialMode || "text");
+  const [mode, setMode] = usePersistentState("sw-editor:mode", options?.initialMode || "gui");
   const [selectedDir, setSelectedDir] = useState("");
   const [showHelp, setShowHelp] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
