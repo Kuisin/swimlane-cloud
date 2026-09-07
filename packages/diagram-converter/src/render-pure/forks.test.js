@@ -143,3 +143,36 @@ end-fork
     expect(largestFanOutGroup(render(FORK))).toBe(3);
   });
 });
+
+describe("blank case () draws no label chip", () => {
+  const IF_WITH_BLANK_CASE = `@kai-swimlane 2
+/role/
+<a>
+  label: A;
+
+/line/
+[a: 開始]
+if [a] (q?)
+case (はい) #green
+  [a: 対応]
+case ()
+  [a: 何もしない]
+end-if
+[a: 完了]
+@end`;
+
+  it("still renders the labelled sibling's chip", () => {
+    expect(render(IF_WITH_BLANK_CASE)).toContain(">はい<");
+  });
+
+  it("draws no chip text for the blank case", () => {
+    const svg = render(IF_WITH_BLANK_CASE);
+    // Every case-label chip is a <text> at font-size 11; the labelled case
+    // above is the only one, so exactly one such node should exist — a
+    // second, empty one would mean the blank case wrongly drew a chip.
+    const chips = [
+      ...svg.matchAll(/<text x="[^"]*" y="[^"]*" text-anchor="middle" font-size="11"/g),
+    ];
+    expect(chips).toHaveLength(1);
+  });
+});

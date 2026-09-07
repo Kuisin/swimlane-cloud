@@ -924,8 +924,8 @@ export function parseDSLv2(src, options = {}) {
       closeFrame(w, pos);
       return;
     }
-    if (w === "case" || w === "else") {
-      readCase(w, pos);
+    if (w === "case") {
+      readCase(pos);
       return;
     }
     if (w === "and") {
@@ -1187,22 +1187,22 @@ export function parseDSLv2(src, options = {}) {
     push({ kind: "groupEnd", id: top.id, depth: top.depth, groupMode: top.groupMode }, pos);
   }
 
-  function readCase(kw, pos) {
+  // A blank `case ()` (or a bare `case`, same as `and`) is the catch-all
+  // case: valid, but its chip is left unlabeled by the renderer, which
+  // suppresses any branchCase row with an empty label — the same way an
+  // unlabeled `and` path already renders.
+  function readCase(pos) {
     let text = "";
     sc.skipWs();
-    if (kw === "case") {
-      if (sc.s[sc.i] === "(" || sc.s[sc.i] === "（") {
-        sc.i++;
-        text = readText(sc, [")", "）"], ["(", ")"]);
-        if (sc.s[sc.i] === ")" || sc.s[sc.i] === "）") sc.i++;
-      } else {
-        err(pos, "case requires a label");
-      }
+    if (sc.s[sc.i] === "(" || sc.s[sc.i] === "（") {
+      sc.i++;
+      text = readText(sc, [")", "）"], ["(", ")"]);
+      if (sc.s[sc.i] === ")" || sc.s[sc.i] === "）") sc.i++;
     }
     const { color } = readOpenerSuffixes(pos);
     const top = stack[stack.length - 1];
     if (!top || top.type !== "if") {
-      err(pos, `${kw} outside if`);
+      err(pos, "case outside if");
       return;
     }
     // The model carries the first case on `branchStart`.
@@ -1210,7 +1210,7 @@ export function parseDSLv2(src, options = {}) {
       top.awaitingCase = false;
       const start = rows.findLast((r) => r.kind === "branchStart" && r.id === top.id);
       if (start) {
-        start.firstCase = kw === "else" ? "else" : seg(text);
+        start.firstCase = seg(text);
         if (color) start.branchColor = start.branchColor || color;
         return;
       }
@@ -1218,7 +1218,7 @@ export function parseDSLv2(src, options = {}) {
     push(
       {
         kind: "branchCase",
-        label: kw === "else" ? "else" : seg(text),
+        label: seg(text),
         branchColor: color,
         id: top.id,
         depth: branchControlDepth(),

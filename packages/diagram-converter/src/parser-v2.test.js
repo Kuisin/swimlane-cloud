@@ -113,6 +113,48 @@ describe("kai-swimlane 2", () => {
   });
 });
 
+describe("case is the only if clause — else was dropped", () => {
+  it("rejects else as an unknown statement instead of reading it as a clause", () => {
+    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  [sales: x]\nelse\n  [sales: y]\nend-if"));
+    expect(m.errors.map((e) => e.msg)).toContain('unknown statement "else"');
+    // `case (a)` is the if's first case, carried on branchStart (not a row of
+    // its own — same as an if's first case has always worked); "else" isn't
+    // read as a second case at all, so no branchCase row is produced here.
+    const start = m.rows.find((r) => r.kind === "branchStart");
+    expect(start.firstCase).toBe("a");
+    expect(m.rows.filter((r) => r.kind === "branchCase")).toHaveLength(0);
+  });
+
+  it("allows a blank case () as the unlabelled, catch-all clause", () => {
+    const m = parseDSL(
+      doc("/line/\nif (q)\ncase (a)\n  [sales: x]\ncase ()\n  [sales: y]\nend-if"),
+    );
+    expect(m.errors).toEqual([]);
+    const start = m.rows.find((r) => r.kind === "branchStart");
+    expect(start.firstCase).toBe("a");
+    const cases = m.rows.filter((r) => r.kind === "branchCase");
+    expect(cases.map((c) => c.label)).toEqual([""]);
+  });
+
+  it("allows a bare case with no parens at all, same as a labelled one", () => {
+    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  [sales: x]\ncase\n  [sales: y]\nend-if"));
+    expect(m.errors).toEqual([]);
+    const start = m.rows.find((r) => r.kind === "branchStart");
+    expect(start.firstCase).toBe("a");
+    const cases = m.rows.filter((r) => r.kind === "branchCase");
+    expect(cases.map((c) => c.label)).toEqual([""]);
+  });
+
+  it("allows a blank case in the first-case (branchStart) slot too", () => {
+    const m = parseDSL(
+      doc("/line/\nif (q)\ncase ()\n  [sales: x]\ncase (b)\n  [sales: y]\nend-if"),
+    );
+    expect(m.errors).toEqual([]);
+    const start = m.rows.find((r) => r.kind === "branchStart");
+    expect(start.firstCase).toBe("");
+  });
+});
+
 describe("imported images", () => {
   const PNG =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
