@@ -1,16 +1,21 @@
 /**
- * DSL serializer (model → canonical DSL text).
+ * Version 1 DSL serializer (model → canonical v1 DSL text).
  *
  * Ported verbatim from the reference monorepo `packages/core/src/serializer.js`.
  * The diagram-converter engine in this repo is parse/render only and does not
  * ship a serializer, but the parser's model shape is identical, so this round-
- * trips losslessly with `parseDSL`.
+ * trips losslessly with `parseDSL` for a version 1 (bare `@kai-swimlane`)
+ * document. Version 2 (`@kai-swimlane-v2`) is a different grammar entirely,
+ * written by `serializeDSLv2` in `./serialize-dsl-v2.js` — `serializeDSL`
+ * below is the single exported entry point every caller uses; it dispatches
+ * on `model.dslVersion` so no call site needs to know which one ran.
  */
 import {
   DEFAULT_COLUMN_TITLES,
   DIAGRAM_OPTION_DSL_MAP,
   OPTION_COLUMN_TITLE_DSL_MAP,
 } from "@swimlane-cloud/diagram-converter/diagram-options";
+import { serializeDSLv2 } from "./serialize-dsl-v2.js";
 
 function emitProperty(key, value) {
   if (value == null || value === "") return null;
@@ -329,7 +334,12 @@ function serializeLineRows(rows) {
   return out;
 }
 
+/** The single entry point every caller uses — picks the grammar by version. */
 export function serializeDSL(model) {
+  return model?.dslVersion === 2 ? serializeDSLv2(model) : serializeDSLv1(model);
+}
+
+function serializeDSLv1(model) {
   const lines = ["@kai-swimlane", ""];
 
   if (hasPageContent(model.page)) {
