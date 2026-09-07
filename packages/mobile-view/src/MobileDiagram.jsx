@@ -37,6 +37,7 @@ const MESSAGES = {
     addStep: "Add step",
     insertStep: "Insert step",
     editStep: "Edit step",
+    edit: "Edit",
     deleteStep: "Delete step",
     noText: "(no text)",
     emptyBlock: "(empty)",
@@ -63,6 +64,7 @@ const MESSAGES = {
     addStep: "ステップを追加",
     insertStep: "ステップを挿入",
     editStep: "ステップを編集",
+    edit: "編集",
     deleteStep: "ステップを削除",
     noText: "（テキストなし）",
     emptyBlock: "（空）",
@@ -223,11 +225,21 @@ const CHEVRON_CLS = "size-3.5 shrink-0 text-slate-400";
 const COUNT_CLS = "ms-auto text-[11px] font-medium text-slate-400";
 const EMPTY_SM_CLS = "p-2 text-center text-[12px] text-slate-400";
 const HEAD_BASE = `flex w-full cursor-pointer items-center gap-2 text-start ${TAP}`;
+// Shared by StepCard/BranchCard/GroupCard: the non-interactive "content" part
+// of a row header, kept as a plain <button> sibling of the edit/delete/drag
+// buttons rather than a wrapping one — a <button> cannot contain another
+// <button>, so the header's outer element is a <div> (onClick to toggle
+// open/closed) and this is just the leading label/icon cluster inside it.
+const CONTENT_CLS = "flex min-w-0 flex-1 items-center gap-2 bg-transparent text-start text-inherit";
 
 /**
  * Mobile-friendly, vertical, card-based render of a kai-swimlane diagram.
  * Blocks collapse by default (tap to expand). `editable` + `onEditStep` show a
- * per-step edit button; the host owns the edit modal + DSL write-back.
+ * per-step edit button; `onEditBranch`/`onEditGroup` do the same for a
+ * fork/if row and a section/sub-branch row respectively (both passed the raw
+ * `model.rows` index — `node.startRow` — since branch/group nodes aren't
+ * indexed by `stepIndex` the way steps are). The host owns every edit modal +
+ * DSL write-back.
  */
 export function MobileDiagram({
   dsl,
@@ -239,6 +251,8 @@ export function MobileDiagram({
   onInsertStep,
   onMoveStep,
   onAddStep,
+  onEditBranch,
+  onEditGroup,
   insertStepLabel,
   addStepLabel,
 }) {
@@ -264,6 +278,8 @@ export function MobileDiagram({
     onDeleteStep,
     onInsertStep,
     onMoveStep,
+    onEditBranch,
+    onEditGroup,
     drag,
     insertStepLabel: insertLabel,
     signal,
@@ -505,10 +521,7 @@ function StepCard({ node, ctx, hasNext = false }) {
         aria-expanded={open}
       >
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 bg-transparent text-start text-inherit"
-          >
+          <button type="button" className={CONTENT_CLS}>
             {hasDetail ? <Chevron open={open} /> : <span className={CHEVRON_CLS} />}
             {lane && (
               <span
@@ -629,22 +642,36 @@ function BranchCard({ node, ctx }) {
   const [open, setOpen] = useSignalOpen(ctx);
   return (
     <div className="overflow-hidden rounded-xl border border-blue-200 bg-[#f8fbff]">
-      <button
-        type="button"
+      <div
         className={`${HEAD_BASE} bg-blue-50 px-3 py-[11px] text-[13px] font-bold text-blue-700`}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        <Chevron open={open} />
-        {node.parallel ? <GitFork size={14} /> : <Diamond size={14} />}
-        <span>{node.parallel ? ctx.t("parallel") : ctx.t("if")}</span>
-        {!node.parallel && node.cond && (
-          <span className="font-medium text-blue-800">{node.cond}</span>
-        )}
+        <button type="button" className={CONTENT_CLS}>
+          <Chevron open={open} />
+          {node.parallel ? <GitFork size={14} /> : <Diamond size={14} />}
+          <span>{node.parallel ? ctx.t("parallel") : ctx.t("if")}</span>
+          {!node.parallel && node.cond && (
+            <span className="font-medium text-blue-800">{node.cond}</span>
+          )}
+        </button>
         <span className={COUNT_CLS}>
           {node.cases.length} {ctx.t(node.cases.length === 1 ? "case" : "cases")}
         </span>
-      </button>
+        {ctx.editable && ctx.onEditBranch && (
+          <button
+            type="button"
+            className={EDIT_CLS}
+            title={ctx.t("edit")}
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx.onEditBranch(node.startRow);
+            }}
+          >
+            <Pencil size={15} />
+          </button>
+        )}
+      </div>
       {open && (
         <div className="flex flex-col gap-2.5 p-2.5">
           {node.cases.map((c, i) => (
@@ -685,18 +712,28 @@ function GroupCard({ node, ctx }) {
   }`;
   return (
     <div className={wrapCls}>
-      <button
-        type="button"
-        className={headCls}
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
-        <Chevron open={open} />
-        {isSection ? <Square size={13} /> : <GitBranch size={13} />}
-        <span>{isSection ? ctx.t("section") : ctx.t("subBranch")}</span>
-        {node.name && <span className="font-medium">{node.name}</span>}
+      <div className={headCls} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <button type="button" className={CONTENT_CLS}>
+          <Chevron open={open} />
+          {isSection ? <Square size={13} /> : <GitBranch size={13} />}
+          <span>{isSection ? ctx.t("section") : ctx.t("subBranch")}</span>
+          {node.name && <span className="font-medium">{node.name}</span>}
+        </button>
         <span className={COUNT_CLS}>{node.children.length}</span>
-      </button>
+        {ctx.editable && ctx.onEditGroup && (
+          <button
+            type="button"
+            className={EDIT_CLS}
+            title={ctx.t("edit")}
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx.onEditGroup(node.startRow);
+            }}
+          >
+            <Pencil size={15} />
+          </button>
+        )}
+      </div>
       {open &&
         (node.children.length > 0 ? (
           <NodeList nodes={node.children} ctx={ctx} endRow={node.endRow} />
