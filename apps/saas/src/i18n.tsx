@@ -303,7 +303,7 @@ export const EN: Record<string, string> = {
   "versions.description":
     "Each publish snapshots Approved, tags it with the version number and updates Published.",
   "versions.previewDirty":
-    "Approved still holds unsaved changes from before it became review-only — carry them into an edit or discard them on the Edit page first.",
+    "Approved still holds leftover drafts from before it became review-only; they are not part of what is published. Carry them into an edit or discard them on the Edit page.",
   "versions.ownerHint": "A repository admin publishes versions",
   "versions.promoteConfirm": "Publish {name} to Published?",
   "versions.renderFailures": "Published, but these files could not be parsed: {files}",
@@ -751,7 +751,7 @@ export const JA: Record<string, string> = {
   "versions.description":
     "公開するたびに承認済みをスナップショットし、バージョン番号でタグ付けして公開済みを更新します。",
   "versions.previewDirty":
-    "承認済みにレビュー専用になる前の未反映の変更が残っています。先に編集ページで引き継ぐか破棄してください。",
+    "承認済みにレビュー専用になる前の下書きが残っています。公開される内容には含まれません。編集ページで引き継ぐか破棄してください。",
   "versions.ownerHint": "リポジトリ管理者がバージョンを公開します",
   "versions.promoteConfirm": "「{name}」を公開済みに公開しますか？",
   "versions.renderFailures": "公開しましたが、次のファイルは解析できませんでした：{files}",

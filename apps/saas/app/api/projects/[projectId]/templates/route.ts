@@ -1,5 +1,5 @@
-import { INTEGRATION_BRANCH } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
+import { commitToPreview } from "@/lib/preview-commit";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { audit, requireProjectRole, slugify, type ProjectCtx } from "@/lib/projects";
 import { isTemplateSection, templateRepoPath, type TemplateSection } from "@/lib/templates";
@@ -39,24 +39,37 @@ function validateBody(section: TemplateSection, body: string): void {
 }
 
 /**
- * Keep `templates/{section}/{slug}.txt` on test in step with the database, so
- * the desktop app and the VS Code extension see the same library. A removed
- * template is emptied rather than deleted, which keeps its history visible.
+ * Keep `templates/{section}/{slug}.txt` on preview in step with the database,
+ * so the desktop app and the VS Code extension see the same library. A
+ * removed template is emptied rather than deleted, which keeps its history
+ * visible.
+ *
+ * preview is review-only, so the mirror lands the way every change does — a
+ * branch, a pull request and a merge (`commitToPreview`), not a direct
+ * commit. The database row is the source of truth for the app; the mirror is
+ * best-effort, so a GitHub hiccup leaves the template saved here and reports
+ * `mirrored: false` rather than failing a change that already happened.
  */
 async function mirrorToRepo(
   project: ProjectCtx,
+  projectId: string,
   section: TemplateSection,
   slug: string,
   body: string,
   remove = false,
-): Promise<void> {
+): Promise<boolean> {
   const path = templateRepoPath(section, slug);
-  await project.write.putFile(
-    path,
-    remove ? "" : body,
-    INTEGRATION_BRANCH,
-    remove ? `Remove template ${section}/${slug}` : `Update template ${section}/${slug}`,
-  );
+  try {
+    await commitToPreview(project, projectId, {
+      kind: "templates",
+      message: remove ? `Remove template ${section}/${slug}` : `Update template ${section}/${slug}`,
+      files: [{ path, text: remove ? "" : body }],
+    });
+    return true;
+  } catch (err) {
+    console.warn(`[templates] could not mirror ${path} to preview`, err);
+    return false;
+  }
 }
 
 /** GET ...?section= — list templates (optionally filtered by section). */
@@ -123,7 +136,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     .single();
   if (error) throw new ApiError(400, error.message);
 
-  await mirrorToRepo(project, section, slug, input.body);
+  const mirrored = await mirrorToRepo(project, projectId, section, slug, input.body);
   await audit({
     workspaceId: project.project.workspaceId,
     projectId,
@@ -133,7 +146,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     entityType: "template",
     entityId: data.id as string,
   });
-  return json({ id: data.id }, 201);
+  return json({ id: data.id, mirrored }, 201);
 });
 
 interface PatchBody extends TemplateBody {
@@ -171,8 +184,8 @@ export const PATCH = withApi(async (req, ctx: { params: Promise<{ projectId: str
     .eq("project_id", projectId);
   if (error) throw new ApiError(400, error.message);
 
-  await mirrorToRepo(project, section, slug, input.body);
-  return json({ id: input.id });
+  const mirrored = await mirrorToRepo(project, projectId, section, slug, input.body);
+  return json({ id: input.id, mirrored });
 });
 
 /** DELETE ?id= — delete a template (blocked if currently forced). */
@@ -210,8 +223,16 @@ export const DELETE = withApi(async (req, ctx: { params: Promise<{ projectId: st
     .eq("project_id", projectId);
   if (error) throw new ApiError(400, error.message);
 
+  let mirrored = true;
   if (row && isTemplateSection(row.section as string)) {
-    await mirrorToRepo(project, row.section as TemplateSection, row.slug as string, "", true);
+    mirrored = await mirrorToRepo(
+      project,
+      projectId,
+      row.section as TemplateSection,
+      row.slug as string,
+      "",
+      true,
+    );
   }
-  return json({ deleted: id });
+  return json({ deleted: id, mirrored });
 });

@@ -57,9 +57,11 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
   const project = await requireProjectRole(projectId, "viewer");
   const extension = target.slice(target.lastIndexOf(".") + 1).toLowerCase();
   const mime = MIME[extension];
+  // At the commit, not by branch name — see the note in `file/route.ts`.
+  const sha = await resolveSha(project, branch);
 
   if (!mime) {
-    const text = await readTextAt(project, target, branch);
+    const text = await readTextAt(project, target, sha);
     if (text === null) throw new ApiError(404, `${path} does not exist on ${branch}.`);
     return json({ text });
   }
@@ -67,7 +69,6 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
   if (!project.write.readFileBase64) {
     throw new ApiError(501, "This provider cannot read images.");
   }
-  const sha = await resolveSha(project, branch);
   const base64 = await project.write.readFileBase64(target, sha);
   if (base64 === null) throw new ApiError(404, `${path} does not exist on ${branch}.`);
   if ((base64.length * 3) / 4 > MAX_BYTES) {

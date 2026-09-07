@@ -68,6 +68,12 @@ publishRelease`) snapshots every diagram on `preview` into `version_files`,
   says it is the current version. Commit-sha snapshots and comparisons are
   immutable and cached outright. The cache is cleared on sign-out and
   whenever the signed-in GitHub account changes.
+- **The app's own writes to `preview` go through a pull request too**
+  (`src/lib/preview-commit.ts`): the `templates/` mirror lands as a
+  short-lived branch + pull request + merge by the owner who changed the
+  template, never as a direct commit. Marking an existing repository writes
+  `.swimlane.json` to `main` and cuts `preview` from it. Leftover preview
+  drafts never block publishing — they are not part of what is published.
 - **Public sharing** (`/p/[slug]`) reads Postgres only. `svg_only` links never
   send the DSL to the browser.
 - **Database access.** RLS is enabled on every table with no policies; the

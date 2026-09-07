@@ -3,17 +3,23 @@
  * commit detail and pull-request review views render.
  */
 import type { ProjectCtx } from "./projects";
-import { isDiagramPath, mapLimit, readConfigAt, readTextAt } from "./repo-files";
+import { isDiagramPath, mapLimit, readConfigAt, readTextAt, resolveSha } from "./repo-files";
 import type { CompareFile, CompareResponse } from "./types";
 
 const FILE_CAP = 100;
 
-/** Changed diagrams between two refs, with the text on both sides. */
+/**
+ * Changed diagrams between two refs, with the text on both sides. Both refs
+ * are pinned to commit shas first: a file read by branch name comes from a
+ * cache that lags a fresh push, and this is exactly what the Request-review
+ * modal shows seconds after "Push first".
+ */
 export async function compareDiagrams(
   ctx: ProjectCtx,
-  base: string,
-  head: string,
+  baseRef: string,
+  headRef: string,
 ): Promise<CompareResponse> {
+  const [base, head] = await Promise.all([resolveSha(ctx, baseRef), resolveSha(ctx, headRef)]);
   const cmp = await ctx.commits.compare(base, head);
   const config = await readConfigAt(ctx, head);
   const relevant = cmp.files
