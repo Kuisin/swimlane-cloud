@@ -7,7 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { parseGuiModel } from "./gui-model.js";
 
-const doc = (body) => `@kai-swimlane 2\n${body}\n@end\n`;
+const doc = (body) => `@kai-swimlane-v2\n${body}\n@end\n`;
 
 describe("parseGuiModel", () => {
   it("resolves a fragment import when given a resolver", () => {

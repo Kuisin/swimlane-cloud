@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { parseDSL } from "./parser.js";
 import { dslVersion, scanImports, checkImportPath } from "./parser-v2.js";
 
-const doc = (body) => `@kai-swimlane 2\n${body}\n@end\n`;
+const doc = (body) => `@kai-swimlane-v2\n${body}\n@end\n`;
 
 describe("version dispatch", () => {
   it("routes a bare header to the version 1 reader", () => {
@@ -13,19 +13,19 @@ describe("version dispatch", () => {
 
   it("reads the version from the header, prefix-matched", () => {
     expect(dslVersion("@kai-swimlane\n")).toBe(1);
-    expect(dslVersion("@kai-swimlane 2\n")).toBe(2);
-    expect(dslVersion("﻿@kai-swimlane 2 /title/ x;")).toBe(2);
+    expect(dslVersion("@kai-swimlane-v2\n")).toBe(2);
+    expect(dslVersion("﻿@kai-swimlane-v2 /title/ x;")).toBe(2);
     expect(dslVersion("nothing")).toBe(null);
   });
 
   it("refuses a version it does not implement instead of falling back", () => {
-    const m = parseDSL("@kai-swimlane 3\n@end\n");
+    const m = parseDSL("@kai-swimlane-v3\n@end\n");
     expect(m.errors[0].msg).toMatch(/unsupported version 3/);
     expect(m.rows).toEqual([]);
   });
 });
 
-describe("kai-swimlane 2", () => {
+describe("kai-swimlane-v2", () => {
   it("parses a step with every suffix in any order", () => {
     const m = parseDSL(doc("/line/\n[sales: 見積作成] <hex> @quote +RQ ~>"));
     expect(m.errors).toEqual([]);
@@ -43,7 +43,7 @@ describe("kai-swimlane 2", () => {
 
   it("is whitespace-insensitive: the squashed form parses identically", () => {
     const expanded = doc("/title/\nT;\n\n/line/\nif (q?)\ncase (a) #green\n  [sales: x]\nend-if");
-    const squashed = "@kai-swimlane 2/title/T;/line/if(q?)case(a)#green[sales:x]end-if@end";
+    const squashed = "@kai-swimlane-v2/title/T;/line/if(q?)case(a)#green[sales:x]end-if@end";
     const a = parseDSL(expanded);
     const b = parseDSL(squashed);
     expect(a.errors).toEqual([]);
@@ -253,6 +253,6 @@ describe("imported images", () => {
       { path: "t/b.txt", alias: null, kind: "fragment" },
       { path: "c/d.png", alias: "pic", kind: "asset" },
     ]);
-    expect(scanImports("@kai-swimlane 2@use a/b.svg;/line/[a:x]@end")).toHaveLength(1);
+    expect(scanImports("@kai-swimlane-v2@use a/b.svg;/line/[a:x]@end")).toHaveLength(1);
   });
 });

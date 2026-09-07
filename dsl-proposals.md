@@ -185,7 +185,7 @@ recommendation.
 
 ---
 
-## A. `kai-swimlane 2` — the evolved current syntax
+## A. `kai-swimlane-v2` — the evolved current syntax
 
 **Goal.** Keep the shape of the current file, remove the three biggest sources of syntax errors
 (`;`, `than`, the asymmetric `if … is … than` / `elseif`), and add the roadmap features. Version 2
@@ -208,7 +208,7 @@ Canonical output of the formatter, followed by the same file squashed; the two c
 token sequence and re-parse to one IR.
 
 ```
-@kai-swimlane 2
+@kai-swimlane-v2
 @use templates/role/standard.swim;
 
 /meta/
@@ -279,14 +279,14 @@ end-if
 ```
 
 ```
-@kai-swimlane 2@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>@quote+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;if[manager](承認する？)/* 上長の一次判断のみ */case(はい)#green[system:受注登録]case(いいえ)#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]and(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)case(あり)#red[sales:キャンセル受付]goto@done else[manager:通常クローズ処理]end-if[sales:完了]@done@end
+@kai-swimlane-v2@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>@quote+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;if[manager](承認する？)/* 上長の一次判断のみ */case(はい)#green[system:受注登録]case(いいえ)#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]and(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)case(あり)#red[sales:キャンセル受付]goto@done else[manager:通常クローズ処理]end-if[sales:完了]@done@end
 ```
 
 ### What changed from v1
 
 | Area | v1 | v2 |
 | --- | --- | --- |
-| Header | `@kai-swimlane` | `@kai-swimlane 2`, matched as a **prefix**, not as a line; the bare header is refused as version 1 |
+| Header | `@kai-swimlane` | `@kai-swimlane-v2`, matched as a **prefix**, not as a line; the bare header is refused as version 1 |
 | Terminator | `;` on every property | `;` on properties, directives and the `/title/` payload only; everything else self-delimits |
 | Whitespace | newline-significant, one row per line | insignificant; the squash is a token-stream transform, and `/title/` is a `;`-terminated statement |
 | Imports and metadata | — | `@use <path>;` merges `/page/ /option/ /role/ /block/ /prop/ /i18n/`, recursively, prologue-only, local last; `/meta/` adds five reserved typed keys plus opaque free ones, never rendered |
@@ -1132,7 +1132,7 @@ file extension as a tie-breaker:
 | First line / extension                     | Grammar |
 | ------------------------------------------ | ------- |
 | `@kai-swimlane` (bare)                     | v1 (current parser, unchanged) |
-| `@kai-swimlane 2`, `.swim`                 | A       |
+| `@kai-swimlane-v2`, `.swim`                 | A       |
 | `swimlane 2`, `.swim.out`                  | B       |
 | `---` front matter with `swimlane:`, `.swim.md` | C  |
 | `wire 2`, `.swim.wire`                     | D       |

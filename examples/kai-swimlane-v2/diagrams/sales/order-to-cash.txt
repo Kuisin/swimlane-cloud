@@ -1,4 +1,4 @@
-@kai-swimlane 2
+@kai-swimlane-v2
 @lang ja, en;
 
 /meta/

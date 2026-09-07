@@ -1,5 +1,5 @@
 /**
- * Reader for `kai-swimlane 2` — the DSL specified in dsl-rule.md.
+ * Reader for `kai-swimlane-v2` — the DSL specified in dsl-rule.md.
  *
  * Version 2 is whitespace-insensitive: `;` terminates properties, directives and
  * the `/title/` payload, and every other statement self-delimits, so a file can
@@ -19,7 +19,7 @@ import {
   emptyDiagramOptions,
 } from "./diagram-options.js";
 
-export const V2_HEADER_RE = /^\uFEFF?[ \t]*@kai-swimlane(?:[ \t]+([0-9]+(?:\.[0-9]+)?))?/;
+export const V2_HEADER_RE = /^\uFEFF?[ \t]*@kai-swimlane(?:-v([0-9]+(?:\.[0-9]+)?))?/;
 
 /** The header version of `src`, or null when it carries no header at all. */
 export function dslVersion(src) {
@@ -334,7 +334,7 @@ function readText(sc, stops, depth) {
 }
 
 /**
- * Parse a `kai-swimlane 2` document into the model `parseDSL` returns.
+ * Parse a `kai-swimlane-v2` document into the model `parseDSL` returns.
  *
  * @param {string} src
  * @param {{ resolveImport?: (path: string) => string | null, lang?: string }} [options]
@@ -1359,7 +1359,7 @@ export function scanImports(src, filename = "") {
 
 /** A header-less fragment: definitions and catalog entries only. */
 export function parseFragmentV2(text, options = {}) {
-  const model = parseDSLv2(`@kai-swimlane 2\n${text}`, options);
+  const model = parseDSLv2(`@kai-swimlane-v2\n${text}`, options);
   return {
     page: model.page,
     options: model.options,
