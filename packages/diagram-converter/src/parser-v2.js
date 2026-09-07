@@ -9,6 +9,14 @@
  *
  * What it does not do yet: `@use` is recorded and reported, never fetched — the
  * host resolves imports and passes them in via `options.resolveImport`.
+ *
+ * Every translatable field (dsl-rule.md's closed list) resolves to one active
+ * language for rendering, same as always, but also keeps a `<field>$langs`
+ * sibling array — index-aligned to the returned `languages` — of every
+ * language's value the source actually gave, so a host that wants to edit and
+ * re-save the document (the GUI editor) can do so without discarding every
+ * language it isn't currently displaying. A field with no `$langs` companion
+ * simply has the same value in every language, exactly as before.
  */
 import { BLOCK_SHAPE_WIDTH_FACTOR, BRANCH_COLOR_STYLES } from "./render-pure/diagram-layout.js";
 import { normalizeArrowLine } from "./arrow-line.js";
@@ -49,6 +57,8 @@ const CLOSERS = {
   "end-phase": "phase",
 };
 const BOOLS = { true: true, false: false };
+/** The internal marker `readRun` inserts for an unescaped `|`/`｜` separator. */
+const SEG_SEP = String.fromCharCode(0);
 
 /**
  * `@use` imports an image instead of merging sections when the path ends in
@@ -364,7 +374,9 @@ export function parseDSLv2(src, options = {}) {
   const catalog = {};
   const uses = [];
   const rows = [];
+  const localDefIds = { role: new Set(), block: new Set(), prop: new Set() };
   let title = "";
+  let title$langs = null;
   let langs = Array.isArray(options.languages) ? [...options.languages] : [];
   let langIndex =
     langs.length && options.lang && langs.includes(options.lang) ? langs.indexOf(options.lang) : 0;
@@ -515,11 +527,55 @@ export function parseDSLv2(src, options = {}) {
     return lines.map((l) => l.slice(cut)).join("\n");
   }
 
+  /**
+   * The positional per-language breakdown of a raw bar-joined run, or `null`
+   * when it carries no bar at all — meaning every language shares one value,
+   * already fully captured by the plain (non-`$langs`) field.
+   */
+  function langsOf(raw) {
+    if (raw == null || !raw.includes(SEG_SEP)) return null;
+    const n = Math.max(langs.length, 1);
+    const parts = raw.split(SEG_SEP);
+    const arr = new Array(n).fill(undefined);
+    for (let i = 0; i < n && i < parts.length; i++) arr[i] = parts[i].trim();
+    return arr;
+  }
+
+  /**
+   * Record one language's value for `target[field]` into `target[field+"$langs"]`
+   * — from a bar-joined run (`tag` is falsy, split positionally) or from a
+   * `field.tag:` property (`tag` is the declared language). `append` merges into
+   * whatever is already there instead of replacing it (`remark-desc`'s job).
+   * A no-op when there is nothing to distinguish between languages yet, so a
+   * plain single-language document never grows this field at all.
+   */
+  function recordLangs(target, field, value, tag, append) {
+    const key = `${field}$langs`;
+    const existing = target[key];
+    const hasBar = value.includes(SEG_SEP);
+    if (!tag && !hasBar && !existing) return;
+    const n = Math.max(langs.length, 1);
+    const arr = existing || new Array(n).fill(undefined);
+    const put = (idx, v) => {
+      arr[idx] = append && arr[idx] ? `${arr[idx]}\n\n${v}` : v;
+    };
+    if (tag) {
+      const idx = langs.indexOf(tag);
+      if (idx >= 0) put(idx, value);
+    } else if (hasBar) {
+      const parts = value.split(SEG_SEP);
+      for (let i = 0; i < n && i < parts.length; i++) put(i, parts[i].trim());
+    } else {
+      for (let i = 0; i < n; i++) put(i, value.trim());
+    }
+    target[key] = arr;
+  }
+
   /** Apply `key`/`key.tag` to a target, honouring the declared language order. */
   function applyLocalized(target, field, prop) {
+    recordLangs(target, field, prop.value, prop.tag);
     if (!prop.tag) {
       target[field] = seg(prop.value);
-      if (langs.length) target[`${field}$src`] = prop.value;
       return;
     }
     const idx = langs.indexOf(prop.tag);
@@ -646,6 +702,7 @@ export function parseDSLv2(src, options = {}) {
       if (sc.s[sc.i] === ";") sc.i++;
       else err(pos, "/title/ value must end with ';'");
       title = seg(t);
+      title$langs = langsOf(t);
       continue;
     }
 
@@ -656,6 +713,7 @@ export function parseDSLv2(src, options = {}) {
         if (sc.s[sc.i] === ">") sc.i++;
         activeDef = id;
         const bag = section === "role" ? roles : section === "block" ? blocks : props;
+        localDefIds[section].add(id);
         if (!bag[id]) {
           bag[id] = section === "prop" ? { id, label: id, side: "right" } : { id };
         }
@@ -760,6 +818,7 @@ export function parseDSLv2(src, options = {}) {
 
   return {
     title,
+    title$langs,
     page,
     options: options_,
     providedColumnTitles: [...providedColumnTitles],
@@ -776,6 +835,13 @@ export function parseDSLv2(src, options = {}) {
     languages: langs,
     lang: langs[langIndex] ?? null,
     dslVersion: 2,
+    uses: uses.map(({ path, alias }) => ({ path, alias })),
+    localDefIds: {
+      role: [...localDefIds.role],
+      block: [...localDefIds.block],
+      prop: [...localDefIds.prop],
+    },
+    catalog,
   };
 
   // ------------------------------------------------------------- statements
@@ -1026,6 +1092,7 @@ export function parseDSLv2(src, options = {}) {
       kind: "step",
       role,
       text: seg(text),
+      text$langs: langsOf(text),
       depth: stepDepth(),
       blockRef,
       stepId: stepId || `step-${rows.length + 1}`,
@@ -1067,6 +1134,7 @@ export function parseDSLv2(src, options = {}) {
       case "remark-desc": {
         const prev = target.remark || "";
         const next = seg(prop.value);
+        recordLangs(target, "remark", prop.value, prop.tag, true);
         if (!prop.tag || langs.indexOf(prop.tag) === langIndex) {
           target.remark = prev ? `${prev}\n\n${next}` : next;
         }
@@ -1113,7 +1181,9 @@ export function parseDSLv2(src, options = {}) {
           kind: "branchStart",
           ...(kw === "fork" ? { parallel: true } : {}),
           cond: kw === "if" ? seg(text ?? "") : null,
+          cond$langs: kw === "if" ? langsOf(text ?? "") : null,
           firstCase: null,
+          firstCase$langs: null,
           branchColor: color,
           lane: lane || undefined,
           id: branchId,
@@ -1129,6 +1199,7 @@ export function parseDSLv2(src, options = {}) {
             kind: "branchCase",
             parallel: true,
             label: text ? seg(text) : "",
+            label$langs: text ? langsOf(text) : null,
             branchColor: color,
             id: branchId,
             depth: branchControlDepth(),
@@ -1151,6 +1222,7 @@ export function parseDSLv2(src, options = {}) {
         depth,
         groupMode,
         sectionName: text ? seg(text) : kw === "branch" ? "Branch" : "Section",
+        sectionName$langs: text ? langsOf(text) : null,
         sectionColor: color,
       },
       pos,
@@ -1211,6 +1283,7 @@ export function parseDSLv2(src, options = {}) {
       const start = rows.findLast((r) => r.kind === "branchStart" && r.id === top.id);
       if (start) {
         start.firstCase = seg(text);
+        start.firstCase$langs = langsOf(text);
         if (color) start.branchColor = start.branchColor || color;
         return;
       }
@@ -1219,6 +1292,7 @@ export function parseDSLv2(src, options = {}) {
       {
         kind: "branchCase",
         label: seg(text),
+        label$langs: langsOf(text),
         branchColor: color,
         id: top.id,
         depth: branchControlDepth(),
@@ -1246,6 +1320,7 @@ export function parseDSLv2(src, options = {}) {
         kind: "branchCase",
         parallel: true,
         label: text ? seg(text) : "",
+        label$langs: text ? langsOf(text) : null,
         branchColor: color,
         id: top.id,
         depth: branchControlDepth(),
@@ -1368,7 +1443,7 @@ export function parseFragmentV2(text, options = {}) {
     roles: model.roles ?? {},
     blocks: model.blocks,
     props: model.props,
-    catalog: {},
+    catalog: model.catalog ?? {},
     errors: model.errors,
   };
 }

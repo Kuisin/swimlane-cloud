@@ -155,6 +155,123 @@ describe("case is the only if clause — else was dropped", () => {
   });
 });
 
+describe("multi-language retention ($langs)", () => {
+  it("keeps every declared language for inline bar segments (title, condition, case, section)", () => {
+    const body = [
+      "@lang ja, en;",
+      "",
+      "/title/",
+      "受注 | Order;",
+      "",
+      "/line/",
+      "section (総務 | General) #gray",
+      "if (承認する？ | Approve?)",
+      "case (はい | Yes)",
+      "  [sales: 完了 | Done]",
+      "case (いいえ | No)",
+      "  [sales: 却下 | Rejected]",
+      "end-if",
+      "end-section",
+    ].join("\n");
+    const m = parseDSL(doc(body));
+    expect(m.errors).toEqual([]);
+    expect(m.title$langs).toEqual(["受注", "Order"]);
+    const section = m.rows.find((r) => r.kind === "groupStart");
+    expect(section.sectionName$langs).toEqual(["総務", "General"]);
+    const start = m.rows.find((r) => r.kind === "branchStart");
+    expect(start.cond$langs).toEqual(["承認する？", "Approve?"]);
+    expect(start.firstCase$langs).toEqual(["はい", "Yes"]);
+    const secondCase = m.rows.find((r) => r.kind === "branchCase");
+    expect(secondCase.label$langs).toEqual(["いいえ", "No"]);
+    const steps = m.rows.filter((r) => r.kind === "step");
+    expect(steps[0].text$langs).toEqual(["完了", "Done"]);
+  });
+
+  it("keeps every declared language for fork/and labels", () => {
+    const body = [
+      "@lang ja, en;",
+      "",
+      "/line/",
+      "fork (出荷 | Shipping)",
+      "  [warehouse: 出荷]",
+      "and (請求 | Billing)",
+      "  [sales: 請求]",
+      "end-fork",
+    ].join("\n");
+    const m = parseDSL(doc(body));
+    expect(m.errors).toEqual([]);
+    const cases = m.rows.filter((r) => r.kind === "branchCase");
+    expect(cases.map((c) => c.label$langs)).toEqual([
+      ["出荷", "Shipping"],
+      ["請求", "Billing"],
+    ]);
+  });
+
+  it("keeps every declared language for a field.tag: property, leaving an unset language undefined", () => {
+    const m = parseDSL(doc("@lang ja, en;\n\n/line/\n[sales: x]\n  desc.en: English only;"));
+    expect(m.errors).toEqual([]);
+    expect(m.rows[0].description$langs).toEqual([undefined, "English only"]);
+    expect(m.rows[0].description).toBeUndefined();
+  });
+
+  it("lets an untagged bare value serve as the shared fallback under a tagged override", () => {
+    const m = parseDSL(
+      doc("@lang ja, en;\n\n/line/\n[sales: x]\n  desc: 共通;\n  desc.en: Shared override;"),
+    );
+    expect(m.errors).toEqual([]);
+    expect(m.rows[0].description).toBe("共通");
+    expect(m.rows[0].description$langs).toEqual([undefined, "Shared override"]);
+  });
+
+  it("appends remark-desc per language independently", () => {
+    const m = parseDSL(
+      doc(
+        "@lang ja, en;\n\n/line/\n[sales: x]\n  remark: 一行目;\n  remark-desc: 二行目;\n  remark.en: line one;\n  remark-desc.en: line two;",
+      ),
+    );
+    expect(m.errors).toEqual([]);
+    expect(m.rows[0].remark).toBe("一行目\n\n二行目");
+    expect(m.rows[0].remark$langs).toEqual([undefined, "line one\n\nline two"]);
+  });
+
+  it("keeps no $langs at all for a single-language document", () => {
+    const m = parseDSL(doc("/title/\nT;\n\n/line/\n[sales: x]\n  desc: d;"));
+    expect(m.errors).toEqual([]);
+    expect(m.title$langs).toBeNull();
+    expect(m.rows[0].text$langs).toBeNull();
+    expect(m.rows[0].description$langs).toBeUndefined();
+  });
+
+  it("does not treat an escaped literal bar as a language separator", () => {
+    const m = parseDSL(doc("@lang ja, en;\n\n/line/\n[sales: a \\| b]"));
+    expect(m.errors).toEqual([]);
+    expect(m.rows[0].text).toBe("a | b");
+    expect(m.rows[0].text$langs).toBeNull();
+  });
+
+  it("returns @use targets and which role/block/prop ids were declared locally", () => {
+    const fragment = "/role/\n<sales>\n  label: Sales;\n\n<ops>\n  label: Ops;\n";
+    const m = parseDSL(
+      doc(
+        "@use templates/role/standard.txt;\n\n/role/\n<sales>\n  icon: #user;\n\n/line/\n[sales: x]\n[ops: y]",
+      ),
+      { resolveImport: () => fragment },
+    );
+    expect(m.errors).toEqual([]);
+    expect(m.uses).toEqual([{ path: "templates/role/standard.txt", alias: null }]);
+    expect(m.localDefIds.role).toEqual(["sales"]);
+    expect(m.roles.ops).toMatchObject({ label: "Ops" });
+  });
+
+  it("returns /i18n/ entries as a raw passthrough catalog", () => {
+    const m = parseDSL(
+      doc("@lang ja, en;\n\n/i18n/\nquote.remark.en: Store audit log;\n\n/line/\n[sales: x]"),
+    );
+    expect(m.errors).toEqual([]);
+    expect(m.catalog).toEqual({ "quote.remark.en": "Store audit log" });
+  });
+});
+
 describe("imported images", () => {
   const PNG =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
