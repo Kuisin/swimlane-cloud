@@ -1359,7 +1359,15 @@ export function parseDSLv2(src, options = {}) {
         return;
       }
       if (target) jumps.push({ target, pos });
-      push({ kind: "branchLoop", loopBranchId: top.id, depth: branchBodyDepth() }, pos);
+      push(
+        {
+          kind: "branchLoop",
+          loopBranchId: top.id,
+          loopTarget: target || null,
+          depth: branchBodyDepth(),
+        },
+        pos,
+      );
       return;
     }
     if (!target) {

@@ -107,6 +107,18 @@ describe("kai-swimlane-v2", () => {
     expect(m.rows[0].description).toBe("one\ntwo");
   });
 
+  it("keeps a loop's own target so it can round-trip", () => {
+    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  [x: y] @start\n  loop @start\nend-if"));
+    expect(m.errors).toEqual([]);
+    expect(m.rows.find((r) => r.kind === "branchLoop")).toMatchObject({ loopTarget: "start" });
+  });
+
+  it("leaves loopTarget null for a bare loop with no target", () => {
+    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  [x: y]\n  loop\nend-if"));
+    expect(m.errors).toEqual([]);
+    expect(m.rows.find((r) => r.kind === "branchLoop")).toMatchObject({ loopTarget: null });
+  });
+
   it("reports a jump whose target does not exist", () => {
     const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  goto @nope\nend-if"));
     expect(m.errors.map((e) => e.msg)).toContain('no node with id "nope"');
