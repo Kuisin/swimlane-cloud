@@ -6,6 +6,7 @@ import { formatDsl } from "./format-dsl.js";
 import { isDocumentDirty, createDocument } from "./dsl-document.js";
 import { buildFolderTree } from "./folder-tree.js";
 import { mergeSectionTemplate } from "./template-merge.js";
+import { applyModelEdit } from "./gui-model.js";
 
 const SAMPLE = `@kai-swimlane
 
@@ -106,5 +107,80 @@ describe("template merge", () => {
     const model = parseDSL(merged);
     expect(model.lanes.map((l) => l.id)).toContain("auditor");
     expect(model.errors).toHaveLength(0);
+  });
+});
+
+const V2_MULTILANG_SAMPLE = `@kai-swimlane-v2
+@lang ja, en;
+
+/title/
+受注 | Order;
+
+/role/
+<sales>
+  label: 営業;
+  label.en: Sales;
+
+/line/
+if (承認する？ | Approve?)
+case (はい | Yes)
+  [sales: 完了 | Done] @done
+    desc: 詳細;
+    desc.en: Detail;
+case (いいえ | No)
+  [sales: 却下 | Rejected]
+end-if
+@end
+`;
+
+function allLangs(obj, field, n) {
+  const arr = obj[`${field}$langs`];
+  return Array.from({ length: n }, (_, i) => (arr && arr[i] != null ? arr[i] : obj[field]));
+}
+
+describe("GUI-mode edit path preserves every language it doesn't touch", () => {
+  it("patching one step's text through applyModelEdit leaves every other field/language intact", () => {
+    const before = parseDSL(V2_MULTILANG_SAMPLE);
+    expect(before.errors).toEqual([]);
+
+    // `applyModelEdit` runs `editFn` on a *normalized* draft (branchStart's
+    // firstCase becomes its own row) — find the row inside the edit itself
+    // rather than assuming its index matches a plain, unnormalized parse.
+    // This also matches today's real GUI mode: it only ever sets the
+    // flattened field, with no idea `$langs` exists yet (that's Phase D).
+    const next = applyModelEdit(V2_MULTILANG_SAMPLE, (draft) => {
+      const i = draft.rows.findIndex((r) => r.kind === "step" && r.stepId === "done");
+      draft.rows[i] = { ...draft.rows[i], text: "完了しました" };
+    });
+
+    const after = parseDSL(next);
+    expect(after.errors).toEqual([]);
+    const n = 2;
+    const afterDone = after.rows.find((r) => r.kind === "step" && r.stepId === "done");
+    const beforeDone = before.rows.find((r) => r.kind === "step" && r.stepId === "done");
+
+    // the touched field changed, in the language it was edited in...
+    expect(afterDone.text).toBe("完了しました");
+    // ...and the untouched language for that same field survived (this is
+    // exactly what "GUI mode edits one language without losing the others"
+    // needs: touching a row's flattened field must not wipe out a sibling
+    // language even though this edit only supplied the active one, and must
+    // not let a now-stale `$langs[0]` silently undo the edit either).
+    expect(allLangs(afterDone, "text", n)).toEqual(["完了しました", "Done"]);
+
+    // every other row, and every other field on the touched row, survives
+    // in every language, unchanged.
+    expect(allLangs(after, "title", n)).toEqual(allLangs(before, "title", n));
+    expect(allLangs(after.roles.sales, "label", n)).toEqual(
+      allLangs(before.roles.sales, "label", n),
+    );
+    const beforeStart = before.rows.find((r) => r.kind === "branchStart");
+    const afterStart = after.rows.find((r) => r.kind === "branchStart");
+    expect(allLangs(afterStart, "cond", n)).toEqual(allLangs(beforeStart, "cond", n));
+    expect(allLangs(afterStart, "firstCase", n)).toEqual(allLangs(beforeStart, "firstCase", n));
+    expect(allLangs(afterDone, "description", n)).toEqual(allLangs(beforeDone, "description", n));
+    const beforeRejected = before.rows.find((r) => r.kind === "step" && r.text === "却下");
+    const afterRejected = after.rows.find((r) => r.kind === "step" && r.text === "却下");
+    expect(allLangs(afterRejected, "text", n)).toEqual(allLangs(beforeRejected, "text", n));
   });
 });
