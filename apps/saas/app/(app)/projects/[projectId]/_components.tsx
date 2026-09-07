@@ -24,6 +24,7 @@ import {
   renderPartsPreviewHtml,
   ARROW_LINE_TYPES,
   arrowLineDasharray,
+  BRANCH_COLOR_STYLES,
 } from "@swimlane-cloud/diagram-converter";
 import { THEMES } from "@swimlane-cloud/diagram-converter/themes";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
@@ -1150,6 +1151,11 @@ export function MobileView({
   const setEditStep = (i: number | null) => (onEditStep ? onEditStep(i) : setStepState(i));
   const [showFiles, setShowFiles] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  // Raw `model.rows` index of a branchStart/groupStart row being edited — unlike
+  // steps, branch/group nodes aren't indexed by a separate "nth" counter (see
+  // `nthStepRowIndex`), the mobile tree already exposes their real row index
+  // as `node.startRow`, so no resolver function is needed here.
+  const [editGroupRow, setEditGroupRow] = useState<number | null>(null);
   const activeDir = active.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "";
 
   useEffect(() => {
@@ -1195,6 +1201,20 @@ export function MobileView({
     setDsl(next);
     onSave?.(active, next);
     setEditStep(null);
+  };
+
+  const editingGroup = editGroupRow != null ? (gui.rows[editGroupRow] ?? null) : null;
+
+  const applyGroupPatch = (patch: Record<string, unknown>) => {
+    if (editGroupRow == null) return;
+    const next = applyModelEdit(dsl, (draft) => {
+      if (draft.rows[editGroupRow]) {
+        draft.rows[editGroupRow] = { ...draft.rows[editGroupRow], ...patch };
+      }
+    });
+    setDsl(next);
+    onSave?.(active, next);
+    setEditGroupRow(null);
   };
 
   const addStep = () => {
@@ -1299,6 +1319,8 @@ export function MobileView({
           onInsertStep={editable ? insertStep : undefined}
           onMoveStep={editable ? moveStepRows : undefined}
           onAddStep={editable ? addStep : undefined}
+          onEditBranch={editable ? (i) => setEditGroupRow(i) : undefined}
+          onEditGroup={editable ? (i) => setEditGroupRow(i) : undefined}
           insertStepLabel={t("mobile.insertStep")}
           addStepLabel={t("mobile.addStep")}
         />
@@ -1316,6 +1338,13 @@ export function MobileView({
           onMove={moveStep}
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
+        />
+      )}
+      {editingGroup && (
+        <GroupEditModal
+          row={editingGroup}
+          onSave={applyGroupPatch}
+          onClose={() => setEditGroupRow(null)}
         />
       )}
       {pendingDelete != null && (
@@ -1569,11 +1598,136 @@ function StepEditModal({
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  // A plain div, not a <label> — some fields (BlockPicker, ArrowPicker,
+  // PropsPicker) nest a full picker sheet (its own Modal, with its own
+  // buttons) as `children`. A <label> ancestor auto-forwards clicks on any
+  // nested "labelable" element to the *first* one in the label — so tapping
+  // a nested sheet's X (or any option button) also silently re-triggered the
+  // picker's own trigger button in the same click, undoing the close.
   return (
-    <label className="block">
+    <div className="block">
       <span className="mb-1 block text-xs font-medium text-neutral-500">{label}</span>
       {children}
-    </label>
+    </div>
+  );
+}
+
+/**
+ * Swatch row for a branch/section highlight color. These are a fixed named
+ * enum the parser validates against `BRANCH_COLOR_STYLES` (not free hex), so
+ * this renders one button per key using the engine's own stroke/bg pair —
+ * imported, never hardcoded — plus a neutral "(default)" swatch for no color.
+ */
+function GroupColorSwatches({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  const { t } = useT();
+  const swatchCls = (selected: boolean) =>
+    `flex size-9 shrink-0 items-center justify-center rounded-full border ${
+      selected ? "border-indigo-600 ring-2 ring-indigo-200" : "border-transparent"
+    }`;
+  return (
+    <div className="flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        className={swatchCls(!value)}
+        title={t("mobile.colorDefault")}
+      >
+        <span className="size-6 rounded-full border border-dashed border-neutral-300 bg-neutral-50" />
+      </button>
+      {Object.entries(BRANCH_COLOR_STYLES).map(([key, style]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          className={swatchCls(value === key)}
+          title={key}
+        >
+          <span
+            className="size-6 rounded-full border"
+            style={{ background: style.bg, borderColor: style.stroke }}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Edit modal for a fork/if row (`branchStart`) or a section/sub-branch row
+ * (`groupStart`) — the "parent grouping" rows in the mobile flow list, which
+ * previously had no edit affordance at all (only expand/collapse). Edits the
+ * fields that live on that row directly: a non-parallel branch's condition,
+ * a group's name, and either row's highlight color — mirroring the desktop
+ * editor's `BranchInspector`, minus per-case editing (out of scope here; a
+ * case's own label/color isn't a "parent grouping" and has no row of its own
+ * in the mobile tree).
+ */
+function GroupEditModal({
+  row,
+  onSave,
+  onClose,
+}: {
+  row: Record<string, unknown>;
+  onSave: (patch: Record<string, unknown>) => void;
+  onClose: () => void;
+}) {
+  const { t } = useT();
+  const isBranch = row.kind === "branchStart";
+  const parallel = Boolean(row.parallel);
+  const isSection = row.groupMode === "section";
+  const [cond, setCond] = useState(String(row.cond ?? ""));
+  const [name, setName] = useState(String(row.sectionName ?? ""));
+  const [color, setColor] = useState<string | null>(
+    String((isBranch ? row.branchColor : row.sectionColor) ?? "") || null,
+  );
+
+  const title = isBranch
+    ? parallel
+      ? t("mobile.editFork")
+      : t("mobile.editBranch")
+    : isSection
+      ? t("mobile.editSection")
+      : t("mobile.editSubBranch");
+
+  return (
+    <Modal
+      title={title}
+      onClose={onClose}
+      z="z-[60]"
+      footer={
+        <ModalFooter
+          onCancel={onClose}
+          onConfirm={() =>
+            onSave(
+              isBranch ? { cond, branchColor: color } : { sectionName: name, sectionColor: color },
+            )
+          }
+          confirmLabel={t("stepEdit.save")}
+        />
+      }
+    >
+      <div className="space-y-3">
+        {isBranch && !parallel && (
+          <Field label={t("mobile.branchCondition")}>
+            <input value={cond} onChange={(e) => setCond(e.target.value)} className={FIELD_CLASS} />
+          </Field>
+        )}
+        {!isBranch && (
+          <Field label={t("mobile.groupName")}>
+            <input value={name} onChange={(e) => setName(e.target.value)} className={FIELD_CLASS} />
+          </Field>
+        )}
+        <Field label={t("mobile.highlightColor")}>
+          <GroupColorSwatches value={color} onChange={setColor} />
+        </Field>
+      </div>
+    </Modal>
   );
 }
 

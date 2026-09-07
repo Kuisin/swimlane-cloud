@@ -20,6 +20,7 @@ declare module "@swimlane-cloud/diagram-converter" {
   export function normalizeArrowLine(value: string): string | null;
   export function arrowLineDasharray(lineType: string): string | null;
   export function arrowLineStrokeProps(lineType: string): { strokeDasharray?: string };
+  export const BRANCH_COLOR_STYLES: Record<string, { stroke: string; bg: string }>;
 }
 
 declare module "@swimlane-cloud/diagram-converter/parser" {
@@ -70,6 +71,8 @@ declare module "@swimlane-cloud/mobile-view" {
     onInsertStep?: (afterStepIndex: number) => void;
     onMoveStep?: (fromRow: number, toRow: number) => void;
     onAddStep?: () => void;
+    onEditBranch?: (rowIndex: number) => void;
+    onEditGroup?: (rowIndex: number) => void;
     insertStepLabel?: string;
     addStepLabel?: string;
   }>;
