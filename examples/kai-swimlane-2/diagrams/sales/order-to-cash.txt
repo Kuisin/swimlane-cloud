@@ -93,7 +93,7 @@ phase (受付 | Intake) @intake #gray
       remark: 記録形式は「品目 \| 数量 \| 納期」;
       remark.en: Record as "item \| quantity \| date";
     [sales: 注文書（控え）を起票 | Draft the purchase order (copy)] +PO ~>
-  else #gray
+  case (その他 | Other) #gray
     [sales: 受付不可を連絡 | Decline the order]
     goto @closed
   end-if
@@ -121,7 +121,7 @@ phase (与信と承認 | Credit and approval) @approval #teal
       [sales: 顧客の回答を待つ | Wait for the customer] -.>
       // 回答が届いたら与信チェックからやり直す
       loop @credit-check
-    else #red
+    case (却下 | Reject) #red
       [sales: 受注を辞退 | Decline the order]
       goto @closed
     end-if
@@ -154,7 +154,7 @@ and (通知 | Notification) #teal
   if [system] (メール送信に失敗？ | Mail failed?)
   case (はい | Yes) #red
     [sales: 電話で連絡 | Call the customer]
-  else #green
+  case (いいえ | No) #green
     [system: 送信済みを記録 | Record as sent]
   end-if
 end-fork

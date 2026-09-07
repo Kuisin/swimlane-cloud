@@ -2570,6 +2570,9 @@ function renderDiagramSvg({
         if (f.yMerge == null) return null;
         return f.cases.map((c, ci) => {
           if (!(c.label || "").trim()) return null;
+          // v1's `else` keyword still sets a literal "else" label (parser.js);
+          // v2 dropped `else` in favor of a blank `case ()`, already caught by
+          // the empty-label check above.
           if (/^else$/i.test((c.label || "").trim())) return null;
           const { labelX, labelY, labelW } = caseLabelPosition(f, c);
           const caseStyle = resolveBranchStyle(c.color);

@@ -103,7 +103,7 @@ phase (対応 | Response) @respond #red
       [engineer: 原因調査を継続 | Keep investigating] ~>
       loop @mitigate
     end-if
-  else #green
+  case (Sev3+) #green
     [support: 通常サポートで対応 | Handle as regular support]
     goto @close
   end-if
