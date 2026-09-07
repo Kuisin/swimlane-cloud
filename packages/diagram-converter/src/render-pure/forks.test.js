@@ -99,7 +99,7 @@ describe("v2 labeled fork (fork (label) / and (label))", () => {
   // for every parallel frame, regardless of DSL version — double-counting
   // v2's already-explicit first case into a 4th, unlabeled, step-less case
   // that rendered as a bare vertical rail with no block on it.
-  const FORK_V2 = `@kai-swimlane 2
+  const FORK_V2 = `@kai-swimlane-v2
 /role/
 <a>
   label: A;
@@ -145,7 +145,7 @@ end-fork
 });
 
 describe("blank case () draws no label chip", () => {
-  const IF_WITH_BLANK_CASE = `@kai-swimlane 2
+  const IF_WITH_BLANK_CASE = `@kai-swimlane-v2
 /role/
 <a>
   label: A;

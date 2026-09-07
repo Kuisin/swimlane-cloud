@@ -1,10 +1,10 @@
-# kai-swimlane 2 — DSL specification
+# kai-swimlane-v2 — DSL specification
 
 This is the specification of the swimlane DSL, version 2. It is the grammar chosen from the
 candidates in [dsl-proposals.md](dsl-proposals.md) (grammar A there), where the shared
 multilingual model (§1), the squash and format-on-save rule (§2) and the intermediate
 representation (grammar F) are motivated; this document states the rules. A complete worked
-example lives in [examples/kai-swimlane-2](examples/kai-swimlane-2/README.md).
+example lives in [examples/kai-swimlane-v2](examples/kai-swimlane-v2/README.md).
 
 Version 2 is the only version the reader accepts. Files in the previous syntax are converted
 once by `swimlane convert` (see *Converting from v1*). The engine in
@@ -48,7 +48,7 @@ token sequence and re-parse to one IR. The squashed form keeps the `@use` line, 
 selects; the default compact form inlines its closure, and the lanes it names come from it.
 
 ```
-@kai-swimlane 2
+@kai-swimlane-v2
 @use templates/role/standard.swim;
 
 /meta/
@@ -119,13 +119,13 @@ end-if
 ```
 
 ```
-@kai-swimlane 2@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>@quote+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;if[manager](承認する？)/* 上長の一次判断のみ */case(はい)#green[system:受注登録]case(いいえ)#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]and(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)case(あり)#red[sales:キャンセル受付]goto@done case(なし)#gray[manager:通常クローズ処理]end-if[sales:完了]@done@end
+@kai-swimlane-v2@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>@quote+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;if[manager](承認する？)/* 上長の一次判断のみ */case(はい)#green[system:受注登録]case(いいえ)#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]and(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)case(あり)#red[sales:キャンセル受付]goto@done case(なし)#gray[manager:通常クローズ処理]end-if[sales:完了]@done@end
 ```
 
-Eleven of the surviving spaces are separators. Ten are invariant 2's fusion case — the left token
-ends in an `idChar` and the right begins with one: `@kai-swimlane 2`, `@use templates/…`, `+RQ
+Ten of the surviving spaces are separators. Nine are invariant 2's fusion case — the left token
+ends in an `idChar` and the right begins with one: `@use templates/…`, `+RQ
 desc:`, `@quote end-if`, `end-if end-phase`, `end-phase fork`, `end-fork section`, `+LG note:`,
-`end-section if` and `@done case`. The eleventh is a path's side of the same rule: a bare `=>` path
+`end-section if` and `@done case`. The tenth is a path's side of the same rule: a bare `=>` path
 ends only at structural whitespace, `;`, `]` or another suffix token. Two more are comment padding,
 and four are bytes inside a run, `金額が 100 万円` and `保存期間は 7 年`. What looks like a separator and is
 not: `loop@quote`, `goto@done`, `@quote+RQ`, `@audit#blue`, `]and(`, `@done@end` and `#gray[sales:`
@@ -136,7 +136,7 @@ an `@id` suffix, and a colour token ends at the first character outside `[A-Za-z
 
 | Area | v1 | v2 |
 | --- | --- | --- |
-| Header | `@kai-swimlane` | `@kai-swimlane 2`, matched as a **prefix**, not as a line; the bare header is refused as version 1 |
+| Header | `@kai-swimlane` | `@kai-swimlane-v2`, matched as a **prefix**, not as a line; the bare header is refused as version 1 |
 | Terminator | `;` on every property | `;` on properties, directives and the `/title/` payload only; everything else self-delimits |
 | Whitespace | newline-significant, one row per line | insignificant; the squash is a token-stream transform, and `/title/` is a `;`-terminated statement |
 | Imports and metadata | — | `@use <path>;` merges `/page/ /option/ /role/ /block/ /prop/ /i18n/`, recursively, prologue-only, local last; `/meta/` adds five reserved typed keys plus opaque free ones, never rendered |
@@ -289,13 +289,14 @@ is a warning with a documented fallback, retained verbatim, case included.
 
 ## File and sections
 
-**Header and version.** The header is a statement, not a line: `HEADER := "@kai-swimlane" ([ \t]+
+**Header and version.** The header is a statement, not a line: `HEADER := "@kai-swimlane" ("-v"
 VERSION)?` with `VERSION := [0-9]+ ("." [0-9]+)?`, ended by a statement boundary. Major 2 → this
 grammar, advisory minor recorded and dropped on format. Version absent or major 1 is a version 1
 file and major ≥ 3 a newer one; both are `unsupportedVersion`, the source returned unmodified with
-an empty flow, the first naming the converter. `@kai-swimlane v2` is
-`malformedHeader`, `v2` being no `VERSION`, and so is `@kai-swimlane2`, whose statement does not
-end at a boundary. Detection is one ordered procedure: strip one U+FEFF, split on `\n` stripping
+an empty flow, the first naming the converter. `@kai-swimlane 2` (the retired v1-era spelling, a
+space rather than `-v`) is `malformedHeader`, `2` being no `VERSION` attachment, and so is
+`@kai-swimlane2`, whose statement does not end at a boundary. Detection is one ordered procedure:
+strip one U+FEFF, split on `\n` stripping
 one trailing `\r`, and take as **probe line** the first line non-empty once trimmed. (1) `HEADER`
 matches as a **prefix** of it → dispatch and stop; (2) the probe line begins with `@kai-swimlane`
 but does not match → `malformedHeader` and stop; (3) otherwise scan for the first line whose
@@ -653,7 +654,7 @@ it.
 ## Multiple languages
 
 ```
-@kai-swimlane 2
+@kai-swimlane-v2
 @lang ja, en;
 @use templates/i18n/glossary.swim;
 
@@ -926,7 +927,7 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | A file with no `/page/` content (S10); blank lines anywhere in the source (S11) | no `/page/` header is emitted; one separator, never significant, output blank lines being a function of kind and depth | none |
 | The same diagram as a file, a Markdown fence or an API body (S12) | identical bytes and identical `sourceHash`; `@end` is optional and emitted iff it was present | `textOutsideDiagram` |
 | `[sales: 予算]確定]を承認]` (S13) | an *unbalanced* `]` ends the run at the first `]`; escape it or quote the run | `unbalancedBracket` |
-| **Converting from v1.** A bare `@kai-swimlane` header (V06, V10); `@kai-swimlane 3`, `@kai-swimlane2` (V08) | a version 1 file is refused with a pointer to `swimlane convert`; a newer file is refused read-only; a malformed header is never a fallthrough | `unsupportedVersion`; `malformedHeader` |
+| **Converting from v1.** A bare `@kai-swimlane` header (V06, V10); `@kai-swimlane-v3`, `@kai-swimlane2` (V08) | a version 1 file is refused with a pointer to `swimlane convert`; a newer file is refused read-only; a malformed header is never a fallthrough | `unsupportedVersion`; `malformedHeader` |
 | A squashed one-line file; `@kai-swimlane v2` (V03) | detected exactly as an expanded one, the header being prefix-matched | `malformedHeader` |
 | `merge: done;`, `[loop]` (V01); `merge: x;` pointing upstream (V17) | the converter writes `goto @done` or `loop @x` by position, and bare `loop` | converter report |
 | `&lt;hex&gt;` in step text or in suffix position (V02) | the converter decodes entities in the positions v1 unescaped, so a `&lt;hex&gt;` suffix becomes `<hex>`; the reader decodes nothing | converter report |
@@ -962,7 +963,7 @@ delimiter or a key — exactly the value-level codes listed below as errors.
 | `unterminated` | error | render | unterminated string, fence or `/* */` | Insert the closer before the next statement |
 | `danglingEscape` | error | render | `\` must be followed by the character it escapes | Write `\\` |
 | `headerMissing` | error | render | `@kai-swimlane` marker not found | — (the sole code licensing starter-template init) |
-| `malformedHeader` | error | render | malformed header: "…" is not a version | Replace with `@kai-swimlane 2` |
+| `malformedHeader` | error | render | malformed header: "…" is not a version | Replace with `@kai-swimlane-v2` |
 | `unsupportedVersion` | error | render | version 1 — run `swimlane convert`; version N — this file needs a newer build | — (read-only, source returned unmodified) |
 | `limitExceeded` | error | render | file exceeds 1 MiB / 10 000 nodes | — |
 | `missingSemicolon` | error | format | "…" must end with `;` | Insert `;` before the next sync token |

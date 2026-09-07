@@ -1,4 +1,4 @@
-# `kai-swimlane 2` — worked example
+# `kai-swimlane-v2` — worked example
 
 A complete diagram repository in version 2 of the DSL, byte-identical to
 [Kuisin/swimlane-sample](https://github.com/Kuisin/swimlane-sample) so the specification in
@@ -24,7 +24,7 @@ templates/                       the section-template mirror a project seeds
 ```
 
 Files carry `.txt` because that is what the product stores. The extension is not semantic: the
-reader takes the version from the first line, so `@kai-swimlane 2` in a `.txt` file is a version 2
+reader takes the version from the first line, so `@kai-swimlane-v2` in a `.txt` file is a version 2
 diagram.
 
 ## What the diagrams exercise
