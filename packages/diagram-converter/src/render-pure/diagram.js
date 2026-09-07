@@ -1,4 +1,5 @@
 import {
+  diffChars,
   stringDisplayColumnWidth,
   truncate,
   truncateToColumns,
@@ -23,11 +24,84 @@ import {
 import {
   BRANCH_COLOR_STYLES,
   DIAGRAM_LAYOUT,
+  DIFF_STYLES,
   FORK_GATEWAY_RADIUS,
   blockMaxTextCols,
   decisionDiamondWidth,
   gutterTextCols,
 } from "./diagram-layout.js";
+/**
+ * A "changed" step's caption as inline tracked-changes text — Google Docs'
+ * suggestion-mode convention: inserted text underlined in green, deleted
+ * text struck through in red, spliced inline at the point of the edit,
+ * rather than only marking the whole box as "something in here changed".
+ * `text-anchor: middle` on the parent centers the whole run as one chunk
+ * as long as no child tspan sets its own `x`, so per-segment styling here
+ * doesn't disturb the box-centered layout every other step caption uses.
+ */
+function DiffStepText({ x, y, oldText, newText, maxCols, fill, fontWeight }) {
+  const segments = diffChars(oldText, newText);
+  const budget = Math.max(maxCols * 1.6, stringDisplayColumnWidth(newText));
+  let used = 0;
+  let truncated = false;
+  const shown = [];
+  for (const seg of segments) {
+    if (truncated) break;
+    const w = stringDisplayColumnWidth(seg.text);
+    if (used + w > budget) {
+      const keep = [];
+      for (const ch of seg.text) {
+        if (used + stringDisplayColumnWidth(ch) > budget) break;
+        keep.push(ch);
+        used += stringDisplayColumnWidth(ch);
+      }
+      if (keep.length) shown.push({ ...seg, text: keep.join("") });
+      truncated = true;
+      break;
+    }
+    used += w;
+    shown.push(seg);
+  }
+  return /* @__PURE__ */ h(
+    "text",
+    {
+      x,
+      y,
+      textAnchor: "middle",
+      fontFamily: "'Noto Sans JP',sans-serif",
+      fontSize: "13",
+      fontWeight,
+    },
+    ...shown.map((seg, idx) => {
+      if (seg.type === "delete") {
+        // Hidden entirely when highlights are off — deleted text has no
+        // place in the accepted (new) version, unlike an inserted word,
+        // which stays but sheds its styling. See the .diff-hidden rules
+        // in <defs>.
+        return /* @__PURE__ */ h(
+          "tspan",
+          {
+            key: idx,
+            className: "sw-diff-highlight",
+            fill: "#b91c1c",
+            textDecoration: "line-through",
+          },
+          seg.text,
+        );
+      }
+      if (seg.type === "insert") {
+        return /* @__PURE__ */ h(
+          "tspan",
+          { key: idx, className: "sw-diff-insert", fill: "#15803d", textDecoration: "underline" },
+          seg.text,
+        );
+      }
+      return /* @__PURE__ */ h("tspan", { key: idx, fill }, seg.text);
+    }),
+    truncated && /* @__PURE__ */ h("tspan", { fill }, "…"),
+  );
+}
+
 /**
  * Wrapped multi-line gutter body text (step description / remark): one tspan
  * per visual line, with nested tspans for bold/italic/strike style runs.
@@ -269,6 +343,8 @@ function renderDiagramSvg({
   interactive = false,
   selectedRowIndex = null,
   onRowSelect,
+  // Row-level visual-diff overlay (spike): rowIndex -> "added" | "changed".
+  diffRows = null,
 }) {
   const { title, page = {}, lanes, rows, blocks = {}, props = {} } = model;
   const pageDescription = (showDescription ? page.description || "" : "").trim();
@@ -1513,6 +1589,10 @@ function renderDiagramSvg({
       lineType: stepOutgoingArrowLine(prev.r),
       bendY,
       caseColor: curCase ? (curCase.frame.cases[curCase.caseIdx]?.color ?? null) : null,
+      // Either end of this edge is a removed ghost: the edge is part of the
+      // path that used to flow through it, so it gets the same red overlay.
+      diffRemoved:
+        diffRows?.get(prev.i)?.status === "removed" || diffRows?.get(cur.i)?.status === "removed",
     });
   }
   const mainFlowSteps = stepRows.filter((x) => !isInsideBranchGroup(rows, x.i));
@@ -1726,6 +1806,19 @@ function renderDiagramSvg({
       /* @__PURE__ */ h(
         "defs",
         null,
+        // A host toggles one class (.diff-hidden) on the <svg> (or any
+        // ancestor) to hide every diff annotation at once — self-contained,
+        // so it doesn't need to know which elements carry which class.
+        // Google Docs' Suggesting/Viewing split is the model: hiding must
+        // fully revert an inserted word to plain text, not just undecorate
+        // it, since a <tspan> can't "un-exist" via CSS the way a <g> can.
+        diffRows?.size > 0 &&
+          /* @__PURE__ */ h(
+            "style",
+            null,
+            ".diff-hidden .sw-diff-highlight{display:none}" +
+              ".diff-hidden .sw-diff-insert{fill:inherit;text-decoration:none}",
+          ),
         /* @__PURE__ */ h(
           "marker",
           {
@@ -2381,33 +2474,61 @@ function renderDiagramSvg({
           branchColorArrows && c.caseColor ? resolveBranchStyle(c.caseColor).stroke : theme.stroke;
         const cMarker =
           branchColorArrows && c.caseColor ? `url(#arrowhead-${c.caseColor})` : "url(#arrowhead)";
-        if (Math.abs(c.fromX - c.toX) < 0.5) {
-          const x = c.fromX;
-          return /* @__PURE__ */ h("line", {
-            key: c.key,
-            x1: x,
-            y1: c.y1,
-            x2: x,
-            y2: c.y2,
-            stroke: cStroke,
-            strokeWidth: "1.6",
-            markerEnd: cMarker,
-            ...dash,
-          });
-        }
-        const x1 = c.fromX;
-        const x2 = c.toX;
-        const mid = c.bendY ?? (c.y1 + c.y2) / 2;
-        const d = `M ${x1} ${c.y1} L ${x1} ${mid} L ${x2} ${mid} L ${x2} ${c.y2}`;
-        return /* @__PURE__ */ h("path", {
-          key: c.key,
-          d,
-          fill: "none",
-          stroke: cStroke,
-          strokeWidth: "1.6",
-          markerEnd: cMarker,
-          ...dash,
-        });
+        // A removed-touching edge gets a red overlay drawn on top of the
+        // normal connector — same "sw-diff-highlight" class as the step
+        // boxes, so one toggle hides both and the underlying edge (its real
+        // color/shape) is unaffected either way.
+        const straight = Math.abs(c.fromX - c.toX) < 0.5;
+        const d = straight
+          ? null
+          : `M ${c.fromX} ${c.y1} L ${c.fromX} ${c.bendY ?? (c.y1 + c.y2) / 2} L ${c.toX} ${c.bendY ?? (c.y1 + c.y2) / 2} L ${c.toX} ${c.y2}`;
+        const base = straight
+          ? /* @__PURE__ */ h("line", {
+              key: c.key,
+              x1: c.fromX,
+              y1: c.y1,
+              x2: c.fromX,
+              y2: c.y2,
+              stroke: cStroke,
+              strokeWidth: "1.6",
+              markerEnd: cMarker,
+              ...dash,
+            })
+          : /* @__PURE__ */ h("path", {
+              key: c.key,
+              d,
+              fill: "none",
+              stroke: cStroke,
+              strokeWidth: "1.6",
+              markerEnd: cMarker,
+              ...dash,
+            });
+        if (!c.diffRemoved) return base;
+        const highlight = straight
+          ? /* @__PURE__ */ h("line", {
+              x1: c.fromX,
+              y1: c.y1,
+              x2: c.fromX,
+              y2: c.y2,
+              stroke: DIFF_STYLES.removed.stroke,
+              strokeWidth: "5",
+              strokeOpacity: "0.45",
+              strokeDasharray: "5,3",
+            })
+          : /* @__PURE__ */ h("path", {
+              d,
+              fill: "none",
+              stroke: DIFF_STYLES.removed.stroke,
+              strokeWidth: "5",
+              strokeOpacity: "0.45",
+              strokeDasharray: "5,3",
+            });
+        return /* @__PURE__ */ h(
+          Fragment,
+          { key: c.key },
+          base,
+          /* @__PURE__ */ h("g", { className: "sw-diff-highlight" }, highlight),
+        );
       }),
       startTerminal &&
         /* @__PURE__ */ h(
@@ -2481,40 +2602,108 @@ function renderDiagramSvg({
         const blockIconAsset = block && block.iconAsset;
         const { left: leftProps, right: rightProps } = splitPropsBySide(r.props);
         const docY = cy + boxH / 2 - 8;
+        const diffEntry = diffRows?.get(i);
+        const diffStatus = diffEntry?.status;
+        const diffStyle = diffStatus && DIFF_STYLES[diffStatus];
         return /* @__PURE__ */ h(
           "g",
-          { key: `step-${i}` },
-          /* @__PURE__ */ h(StepShape, {
-            shape,
-            cx,
-            cy,
-            w: boxW,
-            h: boxH,
-            fill,
-            stroke,
-          }),
-          (blockIcon || blockIconAsset) &&
-            /* @__PURE__ */ h(BlockIcon, {
-              icon: blockIcon,
-              iconAsset: blockIconAsset,
-              x: cx - boxW / 2,
-              y: cy,
-              size: 16,
-              color: txtColor,
-              shape,
-            }),
+          {
+            key: `step-${i}`,
+            // A "removed" row is a ghost with no real presence in this
+            // model — hiding diff annotations must hide the whole thing,
+            // not just its outline, or "hidden" would still show a step
+            // that doesn't exist in the new diagram.
+            className: diffStatus === "removed" ? "sw-diff-highlight" : undefined,
+          },
+          // Grouped under one class so a host page can hide/show every
+          // diff annotation at once (e.g. a "highlight changes" toggle)
+          // without needing to know which rows have one.
+          diffStyle &&
+            /* @__PURE__ */ h(
+              "g",
+              { className: "sw-diff-highlight" },
+              /* @__PURE__ */ h("rect", {
+                x: cx - boxW / 2 - 6,
+                y: cy - boxH / 2 - 6,
+                width: boxW + 12,
+                height: boxH + 12,
+                rx: 8,
+                fill: diffStyle.bg,
+                fillOpacity: "0.5",
+                stroke: diffStyle.stroke,
+                strokeWidth: "2.5",
+                strokeDasharray: "5,3",
+              }),
+              /* @__PURE__ */ h("circle", {
+                cx: cx - boxW / 2 - 6,
+                cy: cy - boxH / 2 - 6,
+                r: 10,
+                fill: diffStyle.stroke,
+              }),
+              /* @__PURE__ */ h(
+                "text",
+                {
+                  x: cx - boxW / 2 - 6,
+                  y: cy - boxH / 2 - 2,
+                  textAnchor: "middle",
+                  fill: "#fff",
+                  fontFamily: "'Noto Sans JP',sans-serif",
+                  fontSize: "13",
+                  fontWeight: "700",
+                },
+                diffStyle.badge,
+              ),
+            ),
           /* @__PURE__ */ h(
-            "text",
-            {
-              x: blockIcon ? cx + 8 : cx,
-              y: cy + 5,
-              textAnchor: "middle",
-              fill: txtColor,
-              fontFamily: "'Noto Sans JP',sans-serif",
-              fontSize: "13",
-              fontWeight: "500",
-            },
-            truncateToColumns(r.text, blockMaxTextCols(shape, Boolean(blockIcon))),
+            "g",
+            // A removed row is a ghost: it no longer exists in the new
+            // model, so its own shape/icon/text fade out while the red
+            // "removed" outline (outside this group, full-strength) stays
+            // legible — the outline is the part actually claiming something.
+            diffStatus === "removed" ? { opacity: "0.5" } : null,
+            /* @__PURE__ */ h(StepShape, {
+              shape,
+              cx,
+              cy,
+              w: boxW,
+              h: boxH,
+              fill,
+              stroke,
+            }),
+            (blockIcon || blockIconAsset) &&
+              /* @__PURE__ */ h(BlockIcon, {
+                icon: blockIcon,
+                iconAsset: blockIconAsset,
+                x: cx - boxW / 2,
+                y: cy,
+                size: 16,
+                color: txtColor,
+                shape,
+              }),
+            diffStatus === "changed" && diffEntry?.oldText != null
+              ? /* @__PURE__ */ h(DiffStepText, {
+                  x: blockIcon ? cx + 8 : cx,
+                  y: cy + 5,
+                  oldText: diffEntry.oldText,
+                  newText: r.text,
+                  maxCols: blockMaxTextCols(shape, Boolean(blockIcon)),
+                  fill: txtColor,
+                  fontWeight: "500",
+                })
+              : /* @__PURE__ */ h(
+                  "text",
+                  {
+                    x: blockIcon ? cx + 8 : cx,
+                    y: cy + 5,
+                    textAnchor: "middle",
+                    fill: txtColor,
+                    fontFamily: "'Noto Sans JP',sans-serif",
+                    fontSize: "13",
+                    fontWeight: "500",
+                    textDecoration: diffStatus === "removed" ? "line-through" : undefined,
+                  },
+                  truncateToColumns(r.text, blockMaxTextCols(shape, Boolean(blockIcon))),
+                ),
           ),
           showStepBlockCaptions &&
             r.blockRef &&

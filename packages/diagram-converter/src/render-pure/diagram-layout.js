@@ -17,6 +17,17 @@ export const BRANCH_COLOR_STYLES = {
   yellow: { stroke: "#a16207", bg: "#fef9c3" },
 };
 
+/**
+ * Row-level visual-diff overlay (spike). One outline color + badge glyph per
+ * status; `removed` has no box to outline (its row no longer exists in the
+ * new model) and is listed separately instead.
+ */
+export const DIFF_STYLES = {
+  added: { stroke: "#16a34a", bg: "#dcfce7", badge: "+" },
+  changed: { stroke: "#d97706", bg: "#fef3c7", badge: "~" },
+  removed: { stroke: "#dc2626", bg: "#fee2e2", badge: "−" },
+};
+
 /** Parallel fork gateway circle radius. */
 export const FORK_GATEWAY_RADIUS = 14;
 
