@@ -261,3 +261,17 @@ export declare function moveRow(
 ): { rows: GuiRow[]; index: number };
 export declare function sameReorderFrame(rows: GuiRow[], a: number, b: number): boolean;
 export declare function getFrameStepIndices(rows: GuiRow[], rowIndex: number): number[];
+
+export interface MergeTargetOption {
+  stepIndex: number;
+  mergeId: string;
+  blockName: string;
+  label: string;
+}
+/** Every step row a `merge:`/`goto` could point at, labelled for a picker. */
+export declare function collectMergeTargetOptions(rows: GuiRow[]): MergeTargetOption[];
+
+/** Index of the `branchEnd` closing the `branchStart` at `startIndex`, or -1. */
+export declare function findBranchEndIndex(rows: GuiRow[], startIndex: number): number;
+/** Index of the `groupEnd` closing the `groupStart` at `startIndex`, or -1. */
+export declare function findGroupEndIndex(rows: GuiRow[], startIndex: number): number;

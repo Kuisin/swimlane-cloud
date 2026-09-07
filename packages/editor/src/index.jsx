@@ -50,7 +50,11 @@ export {
   moveRow,
   sameReorderFrame,
   getFrameStepIndices,
+  collectMergeTargetOptions,
 } from "./lib/flow-rows.js";
+// Block boundaries — a host that edits branch/group rows (the mobile view)
+// needs these to delete or extend a whole block, not just its opening row.
+export { findBranchEndIndex, findGroupEndIndex } from "./lib/branch-rows.js";
 
 // i18n (English + Japanese). Consumers can seed the language via
 // <DslEditor options={{ lang: "ja" }} /> or read/switch it with useT().

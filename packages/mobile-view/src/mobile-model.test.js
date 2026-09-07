@@ -143,6 +143,39 @@ end-section
   });
 });
 
+const V2 = (body) => `@kai-swimlane-v2\n/line/\n${body}\n@end\n`;
+
+describe("case nodes carry what a host needs to edit them", () => {
+  it("gives a fork exactly one case per real path, with no phantom leading one", () => {
+    const { tree } = dslToMobile(
+      V2("fork (Shipping)\n  [a: ship]\nand (Billing)\n  [a: bill]\nend-fork"),
+    );
+    const fork = tree.nodes.find((n) => n.type === "branch");
+    // The reader emits a real branchCase row for a fork's first path, so the
+    // tree must not also synthesize one from the branchStart.
+    expect(fork.cases.map((c) => c.label)).toEqual(["Shipping", "Billing"]);
+    expect(fork.cases.every((c) => c.children.length === 1)).toBe(true);
+  });
+
+  it("points a fork's cases at their own branchCase rows", () => {
+    const { tree } = dslToMobile(
+      V2("fork (Shipping)\n  [a: ship]\nand (Billing)\n  [a: bill]\nend-fork"),
+    );
+    const fork = tree.nodes.find((n) => n.type === "branch");
+    expect(fork.cases[0]).toMatchObject({ rowIndex: 1, branchRow: 0, isFirst: false });
+    expect(fork.cases[1]).toMatchObject({ rowIndex: 3, branchRow: 0, isFirst: false });
+  });
+
+  it("marks an if's first case as living on the branchStart row", () => {
+    const { tree } = dslToMobile(V2("if (q)\ncase (Yes)\n  [a: y]\ncase (No)\n  [a: n]\nend-if"));
+    const branch = tree.nodes.find((n) => n.type === "branch");
+    expect(branch.cases.map((c) => c.label)).toEqual(["Yes", "No"]);
+    // first case has no row of its own — it's `firstCase` on the branchStart
+    expect(branch.cases[0]).toMatchObject({ rowIndex: null, branchRow: 0, isFirst: true });
+    expect(branch.cases[1]).toMatchObject({ rowIndex: 2, branchRow: 0, isFirst: false });
+  });
+});
+
 describe("toColor", () => {
   it("maps names and hex, rejects junk", () => {
     expect(toColor("blue")).toBe("#2563eb");

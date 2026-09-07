@@ -35,9 +35,12 @@ const MESSAGES = {
     collapse: "Collapse",
     empty: "Nothing to show yet.",
     addStep: "Add step",
+    addBlock: "Add branch or group",
     insertStep: "Insert step",
     editStep: "Edit step",
     edit: "Edit",
+    editCase: "Edit case",
+    editMerge: "Edit merge",
     deleteStep: "Delete step",
     noText: "(no text)",
     emptyBlock: "(empty)",
@@ -62,9 +65,12 @@ const MESSAGES = {
     collapse: "折りたたむ",
     empty: "表示する内容がありません。",
     addStep: "ステップを追加",
+    addBlock: "分岐・グループを追加",
     insertStep: "ステップを挿入",
     editStep: "ステップを編集",
     edit: "編集",
+    editCase: "ケースを編集",
+    editMerge: "合流先を編集",
     deleteStep: "ステップを削除",
     noText: "（テキストなし）",
     emptyBlock: "（空）",
@@ -236,10 +242,14 @@ const CONTENT_CLS = "flex min-w-0 flex-1 items-center gap-2 bg-transparent text-
  * Mobile-friendly, vertical, card-based render of a kai-swimlane diagram.
  * Blocks collapse by default (tap to expand). `editable` + `onEditStep` show a
  * per-step edit button; `onEditBranch`/`onEditGroup` do the same for a
- * fork/if row and a section/sub-branch row respectively (both passed the raw
- * `model.rows` index — `node.startRow` — since branch/group nodes aren't
- * indexed by `stepIndex` the way steps are). The host owns every edit modal +
- * DSL write-back.
+ * fork/if row and a section/sub-branch row respectively, `onEditCase` for one
+ * clause of a branch, and `onEditMerge` for a `goto` marker (all passed the
+ * raw `model.rows` index — `node.startRow`/`rowIndex` — since these nodes
+ * aren't indexed by `stepIndex` the way steps are). A branch's first case has
+ * no row of its own, so `onEditCase` receives `{ rowIndex, branchRow,
+ * isFirst }` and the host patches `firstCase` on the branchStart instead.
+ * `onAddBlock` offers structure (branch/group) next to plain "add step" — the
+ * host owns that picker, every edit modal, and all DSL write-back.
  */
 export function MobileDiagram({
   dsl,
@@ -251,8 +261,11 @@ export function MobileDiagram({
   onInsertStep,
   onMoveStep,
   onAddStep,
+  onAddBlock,
   onEditBranch,
   onEditGroup,
+  onEditCase,
+  onEditMerge,
   insertStepLabel,
   addStepLabel,
 }) {
@@ -280,6 +293,8 @@ export function MobileDiagram({
     onMoveStep,
     onEditBranch,
     onEditGroup,
+    onEditCase,
+    onEditMerge,
     drag,
     insertStepLabel: insertLabel,
     signal,
@@ -322,21 +337,22 @@ export function MobileDiagram({
         {tree.nodes.length === 0 ? (
           <div className="p-4 text-center">
             <div className="mb-3 text-[13px] text-slate-400">{t("empty")}</div>
-            {editable && onAddStep && (
-              <button type="button" className={ADD_CLS} onClick={onAddStep}>
-                <Plus size={16} /> {addLabel}
-              </button>
+            {editable && (onAddStep || onAddBlock) && (
+              <AddActions onAddStep={onAddStep} onAddBlock={onAddBlock} addLabel={addLabel} t={t} />
             )}
           </div>
         ) : (
           <>
             <NodeList nodes={tree.nodes} ctx={ctx} endRow={tree.rootEndRow} />
-            {editable && onAddStep && (
+            {editable && (onAddStep || onAddBlock) && (
               <>
-                {tree.nodes.length > 0 && <FlowConnector />}
-                <button type="button" className={ADD_CLS} onClick={onAddStep}>
-                  <Plus size={16} /> {addLabel}
-                </button>
+                <FlowConnector />
+                <AddActions
+                  onAddStep={onAddStep}
+                  onAddBlock={onAddBlock}
+                  addLabel={addLabel}
+                  t={t}
+                />
               </>
             )}
           </>
@@ -344,6 +360,24 @@ export function MobileDiagram({
       </div>
       <DropIndicator drag={drag} />
       <DragPreview drag={drag} />
+    </div>
+  );
+}
+
+/** Tail actions: add a plain step, and (optionally) add structure. */
+function AddActions({ onAddStep, onAddBlock, addLabel, t }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {onAddStep && (
+        <button type="button" className={ADD_CLS} onClick={onAddStep}>
+          <Plus size={16} /> {addLabel}
+        </button>
+      )}
+      {onAddBlock && (
+        <button type="button" className={ADD_CLS} onClick={onAddBlock}>
+          <GitBranch size={15} /> {t("addBlock")}
+        </button>
+      )}
     </div>
   );
 }
@@ -468,14 +502,26 @@ function Node({ node, ctx, hasNext = false }) {
       const targetLabel = ctx.tree.mergeTargets?.[node.target];
       return (
         <>
-          <span
-            className="inline-flex max-w-full items-center gap-1.5 self-center rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-[12px] text-teal-700"
-            title={node.target}
-          >
-            <GitMerge size={13} className="shrink-0" />
-            <span className="shrink-0">{ctx.t("mergeTo")}</span>
-            <span className="truncate font-semibold">{targetLabel || node.target || "?"}</span>
-          </span>
+          <div className="flex max-w-full items-center gap-1 self-center">
+            <span
+              className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-[12px] text-teal-700"
+              title={node.target}
+            >
+              <GitMerge size={13} className="shrink-0" />
+              <span className="shrink-0">{ctx.t("mergeTo")}</span>
+              <span className="truncate font-semibold">{targetLabel || node.target || "?"}</span>
+            </span>
+            {ctx.editable && ctx.onEditMerge && (
+              <button
+                type="button"
+                className={EDIT_CLS}
+                title={ctx.t("editMerge")}
+                onClick={() => ctx.onEditMerge(node.rowIndex)}
+              >
+                <Pencil size={14} />
+              </button>
+            )}
+          </div>
           {hasNext && <FlowConnector />}
         </>
       );
@@ -676,8 +722,29 @@ function BranchCard({ node, ctx }) {
         <div className="flex flex-col gap-2.5 p-2.5">
           {node.cases.map((c, i) => (
             <div key={i} className="border-s-2 border-dashed border-blue-200 ps-2.5">
-              <div className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.03em] text-blue-600">
-                {caseLabel(node, c, i, ctx.t)}
+              <div className="mb-1.5 flex items-center gap-1">
+                <span className="min-w-0 truncate text-[11px] font-bold uppercase tracking-[0.03em] text-blue-600">
+                  {caseLabel(node, c, i, ctx.t)}
+                </span>
+                {/* An implicit case (a step before any `case` marker) has no
+                    row and no branchStart slot to write back to, so it gets
+                    no edit affordance. */}
+                {ctx.editable && ctx.onEditCase && c.branchRow != null && (
+                  <button
+                    type="button"
+                    className={EDIT_CLS}
+                    title={ctx.t("editCase")}
+                    onClick={() =>
+                      ctx.onEditCase({
+                        rowIndex: c.rowIndex,
+                        branchRow: c.branchRow,
+                        isFirst: Boolean(c.isFirst),
+                      })
+                    }
+                  >
+                    <Pencil size={13} />
+                  </button>
+                )}
               </div>
               {c.children.length > 0 ? (
                 <NodeList nodes={c.children} ctx={ctx} endRow={c.endRow} />
