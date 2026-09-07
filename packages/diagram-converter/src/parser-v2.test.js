@@ -249,6 +249,25 @@ describe("multi-language retention ($langs)", () => {
     expect(m.rows[0].text$langs).toBeNull();
   });
 
+  it("keeps an opener's @id so a branch or section it names can round-trip", () => {
+    const m = parseDSL(
+      doc(
+        "/line/\nfork (Shipping) @fulfil\n  [a: x]\nend-fork\n\nsection (Closing) @closing\n  [a: y]\nend-section",
+      ),
+    );
+    expect(m.errors).toEqual([]);
+    const fork = m.rows.find((r) => r.kind === "branchStart");
+    const section = m.rows.find((r) => r.kind === "groupStart");
+    expect(fork.openerId).toBe("fulfil");
+    expect(section.openerId).toBe("closing");
+  });
+
+  it("leaves openerId null when an opener has no @id", () => {
+    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  [x: y]\nend-if"));
+    expect(m.errors).toEqual([]);
+    expect(m.rows.find((r) => r.kind === "branchStart").openerId).toBeNull();
+  });
+
   it("returns @use targets and which role/block/prop ids were declared locally", () => {
     const fragment = "/role/\n<sales>\n  label: Sales;\n\n<ops>\n  label: Ops;\n";
     const m = parseDSL(

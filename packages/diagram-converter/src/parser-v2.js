@@ -1187,6 +1187,7 @@ export function parseDSLv2(src, options = {}) {
           branchColor: color,
           lane: lane || undefined,
           id: branchId,
+          openerId: id || null,
           depth,
         },
         pos,
@@ -1224,6 +1225,7 @@ export function parseDSLv2(src, options = {}) {
         sectionName: text ? seg(text) : kw === "branch" ? "Branch" : "Section",
         sectionName$langs: text ? langsOf(text) : null,
         sectionColor: color,
+        openerId: id || null,
       },
       pos,
     );
