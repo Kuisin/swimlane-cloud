@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Lock, Plus, RefreshCw } from "lucide-react";
 import { AppHeader, RoleBadge } from "@/components/app-header";
 import { api, ApiClientError, postJson, redirectToReconnect } from "@/lib/client";
+import { CACHE_KEY, localCache } from "@/lib/local-cache";
 import { useT } from "@/i18n";
 
 interface DiscoveredRepo {
@@ -39,7 +40,12 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      setData(await api<ProjectsResponse>("/api/github/projects"));
+      const fresh = await api<ProjectsResponse>("/api/github/projects");
+      const previous = localCache.get<ProjectsResponse>(CACHE_KEY.projects());
+      // Someone else's account: everything cached here is theirs, not ours.
+      if (previous && previous.value.login !== fresh.login) localCache.clear();
+      localCache.set(CACHE_KEY.projects(), fresh);
+      setData(fresh);
     } catch (e) {
       if (e instanceof ApiClientError && e.needsAuth) return redirectToReconnect(e);
       setError(e instanceof Error ? e.message : String(e));
@@ -49,8 +55,11 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    // The last list this browser saw paints at once; the real one replaces it.
+    const cached = localCache.get<ProjectsResponse>(CACHE_KEY.projects());
+    if (cached) setData(cached.value);
     void load();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const groups = useMemo(() => {
     const byOwner = new Map<string, DiscoveredRepo[]>();

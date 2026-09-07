@@ -7,6 +7,8 @@
  * reload, `locked` / `dirty` explain why a branch action was refused.
  */
 
+import { localCache } from "./local-cache";
+
 export class ApiClientError extends Error {
   status: number;
   needsAuth: boolean;
@@ -61,6 +63,8 @@ export const del = <T>(url: string): Promise<T> => api<T>(url, { method: "DELETE
 /** Sends the user to sign in again, preserving where they were. */
 export function redirectToLogin(): void {
   if (typeof window === "undefined") return;
+  // Whoever signs in next may not be the person this cache was built for.
+  localCache.clear();
   const next = window.location.pathname + window.location.search;
   window.location.assign(`/login?next=${encodeURIComponent(next)}&error=needsAuth`);
 }

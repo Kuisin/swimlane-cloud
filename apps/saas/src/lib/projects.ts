@@ -167,10 +167,12 @@ export async function requireProjectRole(projectId: string, minRole: Role): Prom
 
 /**
  * The branch rules, in one place. `main` (公開済み) is published and never
- * edited in place; `preview` (承認済み) is the integration line, owners only;
- * an edit branch (`<login>/<timestamp>/<key>`) is where work happens; one with
- * an open pull request is frozen until it is merged or closed. Returns null
- * when the branch is writable for this role.
+ * edited in place; `preview` (承認済み) is the review line and is never edited
+ * in place either — it only changes when a pull request from an edit branch
+ * is approved, so whoever opens it sees approved content, not somebody's
+ * half-finished draft. An edit branch (`<login>/<timestamp>/<key>`) is where
+ * work happens; one with an open pull request is frozen until it is merged or
+ * closed. Returns null when the branch is writable for this role.
  */
 export function branchLockReason(
   branch: string,
@@ -179,20 +181,20 @@ export function branchLockReason(
 ): LockReason | null {
   const locked = Array.isArray(lockedBranches) ? new Set(lockedBranches) : lockedBranches;
   if (isProdBranch(branch)) return "main";
+  if (isIntegrationBranch(branch)) return "preview";
   if (role === "viewer") return "viewer";
   if (locked.has(branch)) return "locked";
-  if (isIntegrationBranch(branch)) return role === "owner" ? null : "previewOwnerOnly";
   if (isEditBranch(branch)) return null;
   return "other";
 }
 
 const LOCK_MESSAGES: Record<LockReason, string> = {
   main: "main is published (公開済み) and is never edited directly.",
+  preview:
+    "preview (承認済み) is for review only — start an edit branch and request a review to change it.",
   locked: "This branch has an open pull request and is locked until it is merged or closed.",
-  previewOwnerOnly:
-    "preview (承認済み) can only be edited by a repository admin — start an edit branch.",
   viewer: "You have read-only access to this repository.",
-  other: "Only preview and edit branches can be edited here.",
+  other: "Only edit branches can be edited here.",
 };
 
 export function assertBranchWritable(

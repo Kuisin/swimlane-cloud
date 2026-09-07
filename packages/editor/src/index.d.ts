@@ -66,7 +66,12 @@ export interface EditorHost {
   writeDraft(id: string, dsl: string): Promise<void>;
   writeDraftMany?(updates: { id: string; dsl: string }[]): Promise<void>;
   checkpoint?(opts: { message?: string; files?: { id: string; dsl: string }[] }): Promise<void>;
-  create(id: string, dsl: string): Promise<void>;
+  /**
+   * May resolve to the path the file was actually created at when the host
+   * relocates it (e.g. into a fixed diagrams folder); the editor opens that
+   * path rather than the one it suggested.
+   */
+  create(id: string, dsl: string): Promise<void | string>;
   mkdir?(dirPath: string): Promise<void>;
   delete?(id: string): Promise<void>;
   rmdir?(dirPath: string): Promise<void>;

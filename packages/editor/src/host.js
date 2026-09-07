@@ -49,7 +49,10 @@
  * @property {(id: string, dsl: string) => Promise<void>} writeDraft
  * @property {(updates: {id: string, dsl: string}[]) => Promise<void>} [writeDraftMany]
  * @property {(opts: {message?: string, files?: {id: string, dsl: string}[]}) => Promise<void>} [checkpoint]
- * @property {(id: string, dsl: string) => Promise<void>} create
+ * @property {(id: string, dsl: string) => Promise<void|string>} create Create a
+ *   file. May resolve to the path the host actually created it at when that
+ *   differs from `id` (a host that keeps diagrams under a fixed folder); the
+ *   editor then opens that path instead of the one it suggested.
  * @property {(dirPath: string) => Promise<void>} [mkdir]
  * @property {(id: string) => Promise<void>} [delete]
  * @property {(dirPath: string) => Promise<void>} [rmdir]

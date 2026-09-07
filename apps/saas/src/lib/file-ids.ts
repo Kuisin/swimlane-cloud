@@ -99,11 +99,33 @@ export async function resolveFileId(projectId: string, fid: string): Promise<str
  * branch, which is the correct failure, not the wrong file opening silently.
  */
 export async function moveFileId(projectId: string, from: string, to: string): Promise<void> {
+  if (from === to) return;
   const supabase = getServiceSupabase();
+  const { data: rows, error: lookupError } = await supabase
+    .from("file_identities")
+    .select("id, filepath")
+    .eq("project_id", projectId)
+    .in("filepath", [from, to]);
+  if (lookupError) throw new ApiError(500, `file id lookup failed: ${lookupError.message}`);
+  const fromRow = rows?.find((r) => r.filepath === from);
+  const toRow = rows?.find((r) => r.filepath === to);
+  // Nothing to move: the tree listing mints an id for `to` the next time it
+  // sees it, exactly as it would for any brand-new path.
+  if (!fromRow) return;
+  // A row already at `to` belongs to a file that used to live there and was
+  // deleted (deletes leave the row behind on purpose). The moved file's
+  // identity wins, or the unique (project_id, filepath) index turns this
+  // rename into a 500 after the draft rows have already been rewritten.
+  if (toRow) {
+    const { error: dropError } = await supabase
+      .from("file_identities")
+      .delete()
+      .eq("id", toRow.id as string);
+    if (dropError) throw new ApiError(500, `file id move failed: ${dropError.message}`);
+  }
   const { error } = await supabase
     .from("file_identities")
     .update({ filepath: to })
-    .eq("project_id", projectId)
-    .eq("filepath", from);
+    .eq("id", fromRow.id as string);
   if (error) throw new ApiError(500, `file id move failed: ${error.message}`);
 }

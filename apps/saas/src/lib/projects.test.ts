@@ -18,9 +18,10 @@ describe("branchLockReason", () => {
     expect(branchLockReason("main", "owner", none)).toBe("main");
   });
 
-  it("reserves preview for owners", () => {
-    expect(branchLockReason("preview", "owner", none)).toBeNull();
-    expect(branchLockReason("preview", "editor", none)).toBe("previewOwnerOnly");
+  it("never allows editing preview either — it only changes through a pull request", () => {
+    expect(branchLockReason("preview", "owner", none)).toBe("preview");
+    expect(branchLockReason("preview", "editor", none)).toBe("preview");
+    expect(branchLockReason("preview", "viewer", none)).toBe("preview");
   });
 
   it("opens an edit branch to owners and editors, never viewers", () => {
@@ -66,5 +67,15 @@ describe("assertBranchWritable", () => {
     })()!;
     expect(main.status).toBe(403);
     expect(main.extra).toMatchObject({ lockReason: "main" });
+
+    const preview = (() => {
+      try {
+        assertBranchWritable("preview", "owner", []);
+      } catch (e) {
+        return e as ApiError;
+      }
+    })()!;
+    expect(preview.status).toBe(403);
+    expect(preview.extra).toMatchObject({ lockReason: "preview" });
   });
 });

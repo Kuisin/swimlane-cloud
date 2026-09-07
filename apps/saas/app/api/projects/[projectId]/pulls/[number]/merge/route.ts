@@ -1,7 +1,9 @@
 import { isEditBranch, isIntegrationBranch } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
+import { moveFileId } from "@/lib/file-ids";
 import { parsePullNumber } from "@/lib/guard";
 import { audit, requireProjectRole } from "@/lib/projects";
+import { isDraftablePath } from "@/lib/repo-files";
 import { getServiceSupabase } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -36,10 +38,34 @@ export const POST = withApi(
     }
     if (pull.state !== "open") throw new ApiError(409, "This pull request is not open.");
 
+    // Renames in this request become real for everyone once it is merged, so
+    // this is where a moved file's stable id follows it (a rename on the edit
+    // branch itself deliberately leaves `file_identities` alone — see
+    // moveFileId). Collected before the merge, while the head still exists.
+    let renames: { from: string; to: string }[] = [];
+    try {
+      const cmp = await project.commits.compare(pull.base, pull.head);
+      renames = cmp.files
+        .filter((f) => f.status === "renamed" && f.previousPath && isDraftablePath(f.path))
+        .map((f) => ({ from: f.previousPath as string, to: f.path }));
+    } catch (err) {
+      console.warn(`[merge] could not read renames for #${n}`, err);
+    }
+
     const result = await project.pulls.mergePullRequest(n, {
       method: "merge",
       ...(body.expectedHeadSha ? { expectedHeadSha: body.expectedHeadSha } : {}),
     });
+
+    for (const r of renames) {
+      try {
+        await moveFileId(projectId, r.from, r.to);
+      } catch (err) {
+        // Best-effort: a stale id resolves to a path that then 404s on the
+        // branch, which is the visible failure, not a wrong file opening.
+        console.warn(`[merge] could not move file id ${r.from} -> ${r.to}`, err);
+      }
+    }
 
     const supabase = getServiceSupabase();
     let deletedBranch: string | null = null;

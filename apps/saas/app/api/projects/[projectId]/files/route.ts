@@ -14,6 +14,7 @@ import {
   loadDraftState,
   readTextAt,
   resolveSha,
+  withinDiagramsRoot,
 } from "@/lib/repo-files";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { assertForcedSections } from "@/lib/templates";
@@ -45,12 +46,12 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   assertBranchWritable(body.branch, project.role, await lockedBranches(project));
 
   const supabase = getServiceSupabase();
-  const [state, committed] = await Promise.all([
+  const [state, listing] = await Promise.all([
     loadDraftState(projectId, body.branch),
-    resolveSha(project, body.branch)
-      .then((sha) => listDiagramFiles(project, sha))
-      .then(({ files }) => new Set(files)),
+    resolveSha(project, body.branch).then((sha) => listDiagramFiles(project, sha)),
   ]);
+  const committed = new Set(listing.files);
+  const config = listing.config;
   const now = new Date().toISOString();
   const actor = { updated_by: project.user.id, updated_by_login: project.login, updated_at: now };
 
@@ -108,7 +109,9 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
 
   if (body.op === "rename") {
     assertRepoPath(body.from);
-    const to = assertRepoPath(body.to);
+    // Same rule as a draft write: a destination outside the diagram root would
+    // be moved out of the very tree the editor lists, and vanish.
+    const to = withinDiagramsRoot(assertRepoPath(body.to), config);
     if (!isDraftablePath(body.from) || !isDraftablePath(to)) {
       throw new ApiError(400, "Only diagram paths can be moved.");
     }
@@ -143,9 +146,12 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     );
     if (error) throw new ApiError(500, `rename failed: ${error.message}`);
     await markDeleted([body.from]);
-    // Only repoint the file's identity when the rename is visible to everyone
-    // (the integration branch), not a private, possibly-abandoned tmp-* edit
-    // branch — see the comment on moveFileId.
+    // A file's identity follows a rename only once the rename is visible to
+    // everyone. On an edit branch that is when its pull request is approved
+    // (the merge route moves it then); repointing it here, for a private and
+    // possibly-abandoned edit, would make the id resolve to a path no other
+    // branch has yet — see the comment on moveFileId. Kept for the legacy
+    // case of a branch that is neither, which the guard above already rejects.
     if (!isEditBranch(body.branch)) await moveFileId(projectId, body.from, to);
     return json({ renamed: true, from: body.from, to });
   }

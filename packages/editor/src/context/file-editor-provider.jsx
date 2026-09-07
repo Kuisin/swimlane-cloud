@@ -550,17 +550,24 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     let content = dslContentFromTemplate(relPath, starterDsl || DEFAULT_TAB_TEMPLATE);
     // Apply a forced /role/ etc. on create if policies demand it.
     content = applyForcedSections(content, policies);
+    let createdAt = relPath;
     try {
-      await host.create(relPath, content);
+      // A host may relocate the file (into its diagrams folder, say) and tell
+      // us where it went. Opening the suggested path instead would leave a
+      // document open that the file list never shows and whose saves land on
+      // a different path from the one on screen.
+      const actual = await host.create(relPath, content);
+      if (typeof actual === "string" && actual) createdAt = actual;
     } catch (err) {
       await dialog.alert(err?.message || "Could not create the file.");
       return;
     }
     await refreshFileList();
-    const doc = createDocument(relPath, content);
+    const doc = createDocument(createdAt, content);
+    historiesRef.current.set(createdAt, createHistory(doc.src));
     setDocuments((cur) => [...cur, doc]);
-    setOpenDocumentIds((cur) => [...cur, relPath]);
-    setActiveDocumentIdState(relPath);
+    setOpenDocumentIds((cur) => [...cur, createdAt]);
+    setActiveDocumentIdState(createdAt);
   }
 
   async function deleteFile(fileId) {

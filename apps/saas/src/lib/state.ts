@@ -172,6 +172,24 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
   });
 
   const branchNames = new Set(branchStates.map((b) => b.name));
+
+  // An edit session whose branch no longer exists (deleted on GitHub by hand,
+  // or merged outside the app) would stay `active` forever and keep showing
+  // as somebody's edit. Close it here — only when the branch list is
+  // complete, so a branch beyond BRANCH_CAP is not mistaken for a deleted one.
+  if (branchList.length < BRANCH_CAP) {
+    const gone = (sessionRows.data ?? [])
+      .filter((s) => !branchNames.has(s.branch_name as string))
+      .map((s) => s.id as string);
+    if (gone.length > 0) {
+      const { error } = await supabase
+        .from("edit_sessions")
+        .update({ status: "abandoned", closed_at: new Date().toISOString() })
+        .in("id", gone);
+      if (error) console.warn(`[state] could not close stale edit sessions: ${error.message}`);
+    }
+  }
+
   const mine = (sessionRows.data ?? [])
     .filter((s) => s.created_by_login === ctx.login && branchNames.has(s.branch_name as string))
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];

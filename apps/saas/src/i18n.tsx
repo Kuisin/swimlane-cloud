@@ -274,12 +274,16 @@ export const EN: Record<string, string> = {
   "edit.readonly": "Read-only: {reason}",
   "edit.lock.main": "main is published and is never edited directly",
   "edit.lock.locked": "this branch has an open pull request",
-  "edit.lock.previewOwnerOnly": "preview can only be edited by a repository admin",
+  "edit.lock.preview":
+    "preview is for review only — start an edit and request a review to change it",
   "edit.lock.viewer": "you have read-only access to this repository",
-  "edit.lock.other": "only preview and edit branches can be edited here",
+  "edit.lock.other": "only edit branches can be edited here",
   "edit.branchMoved": "This branch moved on GitHub. Reload before pushing.",
   "edit.reload": "Reload",
   "edit.fileNotFound": "The linked file could not be found; opened the first file instead.",
+  "edit.previewDrafts":
+    "Unsaved changes from before preview became review-only are still stored on it. Start editing to carry yours over, or discard them.",
+  "edit.previewDrafts.discard": "Discard",
   // branches page
   "branches.title": "Branches",
   "branches.historyOf": "History · {branch}",
@@ -298,7 +302,8 @@ export const EN: Record<string, string> = {
   "versions.title": "Versions",
   "versions.description":
     "Each publish snapshots Approved, tags it with the version number and updates Published.",
-  "versions.previewDirty": "Approved has unsaved changes still saving — try again in a moment.",
+  "versions.previewDirty":
+    "Approved still holds unsaved changes from before it became review-only — carry them into an edit or discard them on the Edit page first.",
   "versions.ownerHint": "A repository admin publishes versions",
   "versions.promoteConfirm": "Publish {name} to Published?",
   "versions.renderFailures": "Published, but these files could not be parsed: {files}",
@@ -321,8 +326,7 @@ export const EN: Record<string, string> = {
   "commit.mode.diff": "diff",
   "commit.mode.text": "text",
   // pr panel
-  "pr.empty":
-    "No pull requests yet. On the Edit page, open a PR from an edit branch (→ preview) or from preview (→ main).",
+  "pr.empty": "No pull requests yet. On the Edit page, start an edit and request a review.",
   "pr.review": "Review & comments",
   "pr.hide": "Hide",
   "pr.openedBy": "opened by {login}",
@@ -717,13 +721,17 @@ export const JA: Record<string, string> = {
   "edit.readonly": "読み取り専用：{reason}",
   "edit.lock.main": "main は公開済みのため直接編集できません",
   "edit.lock.locked": "このブランチにはプルリクエストが開かれています",
-  "edit.lock.previewOwnerOnly": "preview はリポジトリ管理者のみ編集できます",
+  "edit.lock.preview":
+    "preview はレビュー専用です。変更するには編集を開始してレビューを依頼してください",
   "edit.lock.viewer": "このリポジトリへのアクセスは読み取り専用です",
-  "edit.lock.other": "編集できるのは preview と編集ブランチだけです",
+  "edit.lock.other": "編集できるのは編集ブランチだけです",
   "edit.branchMoved":
     "このブランチは GitHub 上で更新されました。保存の前に再読み込みしてください。",
   "edit.reload": "再読み込み",
   "edit.fileNotFound": "リンク先のファイルが見つからなかったため、最初のファイルを開きました。",
+  "edit.previewDrafts":
+    "preview がレビュー専用になる前に保存された未反映の変更が残っています。「編集を開始」で自分の分を引き継ぐか、破棄してください。",
+  "edit.previewDrafts.discard": "破棄",
   // branches page
   "branches.title": "ブランチ",
   "branches.historyOf": "履歴 · {branch}",
@@ -742,7 +750,8 @@ export const JA: Record<string, string> = {
   "versions.title": "バージョン",
   "versions.description":
     "公開するたびに承認済みをスナップショットし、バージョン番号でタグ付けして公開済みを更新します。",
-  "versions.previewDirty": "承認済みに保存中の変更があります。少し待ってからお試しください。",
+  "versions.previewDirty":
+    "承認済みにレビュー専用になる前の未反映の変更が残っています。先に編集ページで引き継ぐか破棄してください。",
   "versions.ownerHint": "リポジトリ管理者がバージョンを公開します",
   "versions.promoteConfirm": "「{name}」を公開済みに公開しますか？",
   "versions.renderFailures": "公開しましたが、次のファイルは解析できませんでした：{files}",
@@ -766,7 +775,7 @@ export const JA: Record<string, string> = {
   "commit.mode.text": "テキスト",
   // pr panel
   "pr.empty":
-    "プルリクエストはまだありません。編集ページで、編集ブランチから PR を開いてください（→ preview）または preview から（→ main）。",
+    "プルリクエストはまだありません。編集ページで編集を開始し、レビューを依頼してください。",
   "pr.review": "レビューとコメント",
   "pr.hide": "閉じる",
   "pr.openedBy": "{login} が作成",

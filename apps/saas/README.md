@@ -23,17 +23,23 @@ state GitHub cannot hold; Vercel (Tokyo) runs the app. Nothing is self-hosted.
   reads the repository's permissions with the caller's token on every request:
   `admin` → owner, `push` → editor, `pull` → viewer.
 - **Branch model** (`packages/github-client/src/branch-model.ts`): `main` is
-  published (公開済み) and never edited in place; `preview` is the integration
-  line, owners only; work happens on edit branches named
+  published (公開済み) and never edited in place; `preview` (承認済み) is the
+  review line and is **never edited in place either** — it only changes when
+  a pull request from an edit branch is approved, so what a reviewer opens on
+  it is always approved content. Work happens on edit branches named
   `<login>/<timestamp>/<key>`, cut automatically when someone clicks
   **Start editing** — never named by hand. An edit branch with an open pull
-  request is locked until it is merged or closed. A handful of repositories
+  request is locked until it is merged or closed. Drafts an owner saved on
+  `preview` before it became review-only are carried onto that owner's next
+  edit branch by **Start editing**, or discarded from the Edit page. A handful of repositories
   seeded before this model existed still carry a legacy `test` branch or
   `tmp-*` edit branches; both are recognised (`isEditBranch`) and left alone
   rather than migrated.
 - **Autosave, then an explicit Push.** Every keystroke debounce-saves to a
   `drafts` row in Postgres (`packages/editor`'s `capabilities.autosave`,
-  mirrored to `localStorage` too so a closed tab loses nothing). **Push to
+  mirrored to `localStorage` too so a closed tab loses nothing). Drafts only
+  exist on edit branches; `main` and `preview` are always read as git has
+  them. **Push to
   GitHub** turns every draft on the branch into one commit (`commitFiles`,
   blob → tree → commit → ref) guarded by `expectedHeadSha`, so two people
   cannot clobber each other; the loser gets a 409 and a "branch moved"
@@ -48,6 +54,20 @@ publishRelease`) snapshots every diagram on `preview` into `version_files`,
   request from the snapshot — there is no object storage. The legacy
   two-step flag-then-promote routes still exist for versions created before
   this flow, sharing the same `flagVersion`/`promoteVersion` functions.
+- **Reads never trust a branch name.** File text is fetched at the commit
+  sha the branch resolves to (`…/file`), because GitHub's Contents API
+  answers a branch-name lookup from a cache that lags a fresh commit — long
+  enough for a just-pushed file to come back as 404, which the editor used to
+  show as a blank starter diagram.
+- **Local cache, never stale** (`src/lib/local-cache.ts`). Project state,
+  tree listings and the dashboard's project list are painted from
+  `localStorage` at once and always re-fetched (stale-while-revalidate).
+  File text is cached under a version token — `git:<sha>` or
+  `draft:<updated_at>` (`src/lib/file-version.ts`) — that the tree listing
+  names for every file, so cached text is served only when a fresh listing
+  says it is the current version. Commit-sha snapshots and comparisons are
+  immutable and cached outright. The cache is cleared on sign-out and
+  whenever the signed-in GitHub account changes.
 - **Public sharing** (`/p/[slug]`) reads Postgres only. `svg_only` links never
   send the DSL to the browser.
 - **Database access.** RLS is enabled on every table with no policies; the
@@ -134,34 +154,34 @@ is documented in the root [`README.md`](../../README.md#deploying-appssaas).
 
 Every project route runs `requireProjectRole(projectId, role)` first.
 
-| Method                | Route                                                    | Role            | Purpose                                                             |
-| --------------------- | -------------------------------------------------------- | --------------- | ------------------------------------------------------------------- |
-| GET                   | `/api/me`                                                | user            | who is signed in, GitHub connected?                                 |
-| POST                  | `/api/auth/signout`                                      | user            | sign out                                                            |
-| GET                   | `/api/github/projects`                                   | user            | accessible repos with the `swimlane` topic                          |
-| GET                   | `/api/github/owners`                                     | user            | self + organisations (for create)                                   |
-| GET                   | `/api/github/repos`                                      | user            | administered repos not yet marked                                   |
-| POST                  | `/api/projects` `{mode:"create"\|"mark"}`                | user            | create a seeded repo / mark an existing one                         |
-| POST                  | `/api/projects/open` `{owner, repo}`                     | user            | register a marked repo → `projectId`; best-effort creates `preview` |
-| GET                   | `…/state`                                                | viewer          | branches, pulls, versions, my role — the UI's feed                  |
-| GET                   | `…/tree?ref=` · `…/file?branch=&path=`                   | viewer          | listing / read (draft first)                                        |
-| GET                   | `…/snapshot?ref=&withDrafts=1` · `…/compare?base=&head=` | viewer          | all diagrams at a ref / changed diagrams with text                  |
-| GET                   | `…/commits?branch=&page=`                                | viewer          | history                                                             |
-| POST · GET · DELETE   | `…/draft`                                                | editor / viewer | autosave writes drafts; GET lists pending changes; DELETE discards  |
-| POST                  | `…/checkpoint` `{branch, message?, expectedHeadSha?}`    | editor          | "Push to GitHub" — one commit from drafts, auto file list           |
-| POST · GET            | `…/edits` · DELETE `…/edits/[editId]`                    | editor          | cut (server-named) / list / abandon an edit branch                  |
-| POST · GET            | `…/pulls`                                                | editor          | request review: open (reuse) a PR edit branch → `preview`           |
-| GET                   | `…/pulls/[n]`                                            | viewer          | PR + GitHub conversation + changed files                            |
-| POST                  | `…/pulls/[n]/comments`                                   | viewer          | comment (as the GitHub user)                                        |
-| POST                  | `…/pulls/[n]/merge` · `…/pulls/[n]/close`                | owner / author  | approve (deletes the edit branch) / reject                          |
-| POST · GET            | `…/versions`                                             | owner           | legacy: flag the tip of `preview` (or a sha on it)                  |
-| POST                  | `…/versions/publish` `{name, note?}`                     | owner           | one-step Publish: flag `name` as the tag and promote to `main`      |
-| GET                   | `…/versions/[id]/svg?path=`                              | viewer          | one file rendered                                                   |
-| POST                  | `…/versions/[id]/promote`                                | owner           | legacy: land an already-flagged commit on `main`                    |
-| PATCH                 | `…/versions/[id]/public` `{public, share_mode?}`         | owner           | share a promoted version's public link on / off                     |
-| GET/POST/PATCH/DELETE | `…/templates?section=` · GET/PATCH `…/template-policies` | viewer / owner  | section template library + force policy                             |
-| GET                   | `…/activity`                                             | viewer          | audit trail                                                         |
-| POST                  | `/api/billing/webhook`                                   | Stripe          | updates `workspaces.plan` (deferred)                                |
+| Method                | Route                                                    | Role            | Purpose                                                                                                        |
+| --------------------- | -------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------- |
+| GET                   | `/api/me`                                                | user            | who is signed in, GitHub connected?                                                                            |
+| POST                  | `/api/auth/signout`                                      | user            | sign out                                                                                                       |
+| GET                   | `/api/github/projects`                                   | user            | accessible repos with the `swimlane` topic                                                                     |
+| GET                   | `/api/github/owners`                                     | user            | self + organisations (for create)                                                                              |
+| GET                   | `/api/github/repos`                                      | user            | administered repos not yet marked                                                                              |
+| POST                  | `/api/projects` `{mode:"create"\|"mark"}`                | user            | create a seeded repo / mark an existing one                                                                    |
+| POST                  | `/api/projects/open` `{owner, repo}`                     | user            | register a marked repo → `projectId`; best-effort creates `preview`                                            |
+| GET                   | `…/state`                                                | viewer          | branches, pulls, versions, my role — the UI's feed                                                             |
+| GET                   | `…/tree?ref=` · `…/file?branch=&path=`                   | viewer          | listing / read (draft first)                                                                                   |
+| GET                   | `…/snapshot?ref=&withDrafts=1` · `…/compare?base=&head=` | viewer          | all diagrams at a ref / changed diagrams with text                                                             |
+| GET                   | `…/commits?branch=&page=`                                | viewer          | history                                                                                                        |
+| POST · GET · DELETE   | `…/draft`                                                | editor / viewer | autosave writes drafts; GET lists pending changes; DELETE discards (owners may discard leftovers on `preview`) |
+| POST                  | `…/checkpoint` `{branch, message?, expectedHeadSha?}`    | editor          | "Push to GitHub" — one commit from drafts, auto file list                                                      |
+| POST · GET            | `…/edits` · DELETE `…/edits/[editId]`                    | editor          | cut (server-named) / list / abandon an edit branch                                                             |
+| POST · GET            | `…/pulls`                                                | editor          | request review: open (reuse) a PR edit branch → `preview`                                                      |
+| GET                   | `…/pulls/[n]`                                            | viewer          | PR + GitHub conversation + changed files                                                                       |
+| POST                  | `…/pulls/[n]/comments`                                   | viewer          | comment (as the GitHub user)                                                                                   |
+| POST                  | `…/pulls/[n]/merge` · `…/pulls/[n]/close`                | owner / author  | approve (deletes the edit branch) / reject                                                                     |
+| POST · GET            | `…/versions`                                             | owner           | legacy: flag the tip of `preview` (or a sha on it)                                                             |
+| POST                  | `…/versions/publish` `{name, note?}`                     | owner           | one-step Publish: flag `name` as the tag and promote to `main`                                                 |
+| GET                   | `…/versions/[id]/svg?path=`                              | viewer          | one file rendered                                                                                              |
+| POST                  | `…/versions/[id]/promote`                                | owner           | legacy: land an already-flagged commit on `main`                                                               |
+| PATCH                 | `…/versions/[id]/public` `{public, share_mode?}`         | owner           | share a promoted version's public link on / off                                                                |
+| GET/POST/PATCH/DELETE | `…/templates?section=` · GET/PATCH `…/template-policies` | viewer / owner  | section template library + force policy                                                                        |
+| GET                   | `…/activity`                                             | viewer          | audit trail                                                                                                    |
+| POST                  | `/api/billing/webhook`                                   | Stripe          | updates `workspaces.plan` (deferred)                                                                           |
 
 `…` = `/api/projects/[projectId]`.
 

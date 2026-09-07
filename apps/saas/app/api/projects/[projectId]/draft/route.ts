@@ -1,3 +1,4 @@
+import { isIntegrationBranch } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { listPendingChanges } from "@/lib/changes";
 import { assertRef, assertRepoPath } from "@/lib/guard";
@@ -61,6 +62,10 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
       filepath: f.id,
       branch: body.branch,
       dsl_text: f.dsl,
+      // A write always revives the path. Without this a file deleted and then
+      // re-created (or renamed away and back) kept its tombstone: the text was
+      // stored, but the tree hid it and reads answered with the deletion.
+      deleted: false,
       updated_by: project.user.id,
       updated_by_login: project.login,
       updated_at: now,
@@ -68,7 +73,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     { onConflict: "project_id,filepath,branch" },
   );
   if (error) throw new ApiError(500, `draft upsert failed: ${error.message}`);
-  return json({ saved: files.length, paths: files.map((f) => f.id) });
+  return json({ saved: files.length, paths: files.map((f) => f.id), updatedAt: now });
 });
 
 /**
@@ -87,7 +92,14 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
   return json({ headSha, changes });
 });
 
-/** DELETE /api/projects/[projectId]/draft?branch=[&path=] — discard drafts. */
+/**
+ * DELETE /api/projects/[projectId]/draft?branch=[&path=] — discard drafts.
+ *
+ * Discarding is allowed in one place editing is not: `preview`, for owners.
+ * Drafts saved there before preview became review-only would otherwise be
+ * stranded — nothing can push them and they keep the branch marked dirty,
+ * which blocks publishing a version.
+ */
 export const DELETE = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
   const url = new URL(req.url);
@@ -97,7 +109,15 @@ export const DELETE = withApi(async (req, ctx: { params: Promise<{ projectId: st
   assertRef(branch);
 
   const project = await requireProjectRole(projectId, "editor");
-  assertBranchWritable(branch, project.role, await lockedBranches(project));
+  if (isIntegrationBranch(branch)) {
+    if (project.role !== "owner") {
+      throw new ApiError(403, "Only a repository admin can discard drafts left on preview.", {
+        lockReason: "preview",
+      });
+    }
+  } else {
+    assertBranchWritable(branch, project.role, await lockedBranches(project));
+  }
 
   const supabase = getServiceSupabase();
   let q = supabase

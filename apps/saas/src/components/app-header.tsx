@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { GitHubMark } from "@/components/github-mark";
 import { useT, LanguageToggle } from "@/i18n";
+import { localCache } from "@/lib/local-cache";
 
 /** Top bar for the account-level pages (dashboard, new project). */
 export function AppHeader({ login, right }: { login?: string | null; right?: React.ReactNode }) {
@@ -22,7 +23,7 @@ export function AppHeader({ login, right }: { login?: string | null; right?: Rea
               {login}
             </span>
           ) : null}
-          <form action="/api/auth/signout" method="post">
+          <form action="/api/auth/signout" method="post" onSubmit={() => localCache.clear()}>
             <button
               type="submit"
               className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-50"

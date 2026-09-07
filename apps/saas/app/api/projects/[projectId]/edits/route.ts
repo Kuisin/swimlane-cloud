@@ -70,6 +70,21 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     .single();
   if (error) throw new ApiError(400, error.message);
 
+  // Drafts this user saved on preview before it became review-only would be
+  // stranded there: nothing can push them, and only an owner can discard
+  // them. The new branch is cut from preview's tip, so re-keying those rows
+  // onto it applies them cleanly — the work carries over instead of being
+  // lost. Other people's leftovers stay put for them to do the same.
+  const { error: carryError } = await supabase
+    .from("drafts")
+    .update({ branch })
+    .eq("project_id", projectId)
+    .eq("branch", INTEGRATION_BRANCH)
+    .eq("updated_by", project.user.id);
+  if (carryError) {
+    console.warn(`[edits] could not carry preview drafts over: ${carryError.message}`);
+  }
+
   await audit({
     workspaceId: project.project.workspaceId,
     projectId,
