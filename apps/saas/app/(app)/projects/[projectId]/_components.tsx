@@ -1233,14 +1233,28 @@ export function MobileView({
     setEditStep(null);
   };
 
-  const editingGroup = editGroupRow != null ? (gui.rows[editGroupRow] ?? null) : null;
+  // `editGroupRow` is a raw `model.rows` index (see the comment on its
+  // `useState` above), but `gui.rows` and `applyModelEdit`'s draft are both
+  // *normalized* (`normalizeBranchRows` inserts an extra row for any `if`
+  // whose first case has a label) — that insertion shifts every later index,
+  // so re-using the raw index directly here would silently land on the
+  // wrong row, or a row of the wrong kind entirely, for any group/branch
+  // that comes after such an `if`. `id` is stable across normalization (it's
+  // only ever assigned once, when the row is first parsed), so resolve
+  // through `kind`+`id` instead of position.
+  const editingGroupRaw =
+    editGroupRow != null ? ((model.rows as GuiRow[])[editGroupRow] ?? null) : null;
+  const editingGroup = editingGroupRaw
+    ? (gui.rows.find((r) => r.kind === editingGroupRaw.kind && r.id === editingGroupRaw.id) ?? null)
+    : null;
 
   const applyGroupPatch = (patch: Record<string, unknown>) => {
-    if (editGroupRow == null) return;
+    if (!editingGroupRaw) return;
     const next = applyModelEdit(dsl, (draft) => {
-      if (draft.rows[editGroupRow]) {
-        draft.rows[editGroupRow] = { ...draft.rows[editGroupRow], ...patch };
-      }
+      const i = draft.rows.findIndex(
+        (r) => r.kind === editingGroupRaw.kind && r.id === editingGroupRaw.id,
+      );
+      if (i >= 0) draft.rows[i] = { ...draft.rows[i], ...patch };
     });
     setDsl(next);
     onSave?.(active, next);
