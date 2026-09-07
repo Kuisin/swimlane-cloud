@@ -85,13 +85,24 @@ function escapeBarSegment(s) {
  * ` | ` up to the last one that has its own override.
  */
 function joinLangs(value, langsArr, languageCount) {
-  if (languageCount <= 1 || !langsArr) return value ?? "";
-  let lastIdx = -1;
-  for (let i = 0; i < langsArr.length; i++) if (langsArr[i] !== undefined) lastIdx = i;
-  if (lastIdx < 0) return value ?? "";
+  // Bar-splitting is unconditional in every translatable position regardless
+  // of how many languages are declared, so a literal bar always needs
+  // escaping here — even with one language (or none), an unescaped one would
+  // still split the value on reparse and silently drop everything after it.
+  if (languageCount <= 1) return escapeBarSegment(value ?? "");
+  // Index 0 (the source/active language) always comes from the flattened
+  // field, never from `$langs[0]` — every existing mutation path (GUI mode
+  // today has no per-language editing UI yet) only ever touches the
+  // flattened field, so trusting a stale `$langs[0]` here would silently
+  // discard that edit on the next save.
+  let lastIdx = 0;
+  if (langsArr) {
+    for (let i = 1; i < langsArr.length; i++) if (langsArr[i] !== undefined) lastIdx = i;
+  }
+  if (lastIdx === 0) return escapeBarSegment(value ?? "");
   const parts = [];
   for (let i = 0; i <= lastIdx; i++) {
-    const v = langsArr[i] !== undefined ? langsArr[i] : i === 0 ? (value ?? "") : "";
+    const v = i === 0 ? (value ?? "") : langsArr && langsArr[i] !== undefined ? langsArr[i] : "";
     parts.push(escapeBarSegment(v));
   }
   return parts.join(" | ");
@@ -105,13 +116,10 @@ function joinLangs(value, langsArr, languageCount) {
 function emitLocalizedTag(key, value, langsArr, languages) {
   const out = [];
   const n = languages.length;
-  if (n <= 1) {
-    pushLines(out, emitLocalizedValue(key, value));
-    return out;
-  }
-  const sourceValue = langsArr && langsArr[0] !== undefined ? langsArr[0] : value;
-  pushLines(out, emitLocalizedValue(key, sourceValue));
-  if (langsArr) {
+  // Index 0 (the source/active language) always comes from the flattened
+  // field, never from `$langs[0]` — see the identical note on `joinLangs`.
+  pushLines(out, emitLocalizedValue(key, value));
+  if (n > 1 && langsArr) {
     for (let i = 1; i < n; i++) {
       if (langsArr[i] === undefined) continue;
       pushLines(out, emitLocalizedValue(`${key}.${languages[i]}`, langsArr[i]));
@@ -257,6 +265,29 @@ function isForkFirstCase(rows, i) {
   return !!prev && prev.kind === "branchStart" && prev.parallel && prev.id === row.id;
 }
 
+/**
+ * True for the branchCase an `if`'s blank `firstCase` has already been
+ * pulled out into — `normalizeBranchRows` (`flow-rows.js`) does exactly this
+ * so the GUI can treat a branch's first case like any other row, and
+ * `applyModelEdit` always re-normalizes before calling back in here. Same
+ * adjacency shape as `isForkFirstCase`, and the same inherent ambiguity the
+ * v1 serializer's `isFirstBranchCaseRow` already accepts: a genuinely blank
+ * `case ()` immediately followed by a second case with zero steps between
+ * them is indistinguishable from an extraction. Rare enough to accept.
+ */
+function isExtractedFirstCase(rows, i) {
+  const row = rows[i];
+  if (row.kind !== "branchCase" || row.parallel) return false;
+  const prev = rows[i - 1];
+  return (
+    !!prev &&
+    prev.kind === "branchStart" &&
+    !prev.parallel &&
+    prev.id === row.id &&
+    !(prev.firstCase || "").trim()
+  );
+}
+
 function serializeStepLines(out, row, depth, languages) {
   if (row.empty) {
     out.push(indent(depth, "[]"));
@@ -328,7 +359,14 @@ function serializeLineRows(rows, languages) {
         const lane = row.lane ? `[${row.lane}] ` : "";
         const cond = joinLangs(row.cond, row.cond$langs, languages.length);
         out.push(indent(controlDepth, `if ${lane}(${cond})${idSuffix}${color}`));
-        const firstCase = joinLangs(row.firstCase, row.firstCase$langs, languages.length);
+        // A GUI-normalized model already pulled a non-blank firstCase out
+        // into its own row — fold it back into the case() line here either
+        // way, so this works on both a raw parse and an edited/normalized
+        // one (see isExtractedFirstCase).
+        const extracted = isExtractedFirstCase(rows, i + 1) ? rows[i + 1] : null;
+        const firstCase = extracted
+          ? joinLangs(extracted.label, extracted.label$langs, languages.length)
+          : joinLangs(row.firstCase, row.firstCase$langs, languages.length);
         out.push(indent(controlDepth, `case (${firstCase})`));
       }
       prevKind = "branchStart";
@@ -337,6 +375,10 @@ function serializeLineRows(rows, languages) {
 
     if (row.kind === "branchCase") {
       if (row.parallel && isForkFirstCase(rows, i)) {
+        prevKind = "branchCase";
+        continue;
+      }
+      if (!row.parallel && isExtractedFirstCase(rows, i)) {
         prevKind = "branchCase";
         continue;
       }

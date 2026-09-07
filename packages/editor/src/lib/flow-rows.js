@@ -32,11 +32,15 @@ export function normalizeBranchRows(rows) {
         next?.kind === "branchCase" &&
         next.id === row.id &&
         (next.label || "").trim() === firstCase;
-      out.push({ ...row, firstCase: "" });
+      out.push({ ...row, firstCase: "", firstCase$langs: null });
       if (!alreadySplit) {
         out.push({
           kind: "branchCase",
           label: firstCase,
+          // Carried over so a later `serializeDSL` can still write every
+          // declared language back — this row only exists as a GUI-list
+          // convenience, not a real change to the document.
+          label$langs: row.firstCase$langs ?? null,
           branchColor: row.branchColor ?? null,
           id: row.id,
           depth: (row.depth ?? 0) + 1,
