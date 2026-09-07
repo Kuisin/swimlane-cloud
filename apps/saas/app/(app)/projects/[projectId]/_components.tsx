@@ -48,6 +48,7 @@ import { GitHubMark } from "@/components/github-mark";
 import { RoleBadge } from "@/components/app-header";
 import { branchLabel } from "@/lib/branch-label";
 import { ApiClientError, redirectToReconnect } from "@/lib/client";
+import { CACHE_KEY, localCache } from "@/lib/local-cache";
 import {
   addPRComment,
   compare,
@@ -92,18 +93,32 @@ export function describeError(err: unknown, t: (k: string) => string): string {
 /**
  * Shared project state hook: loads `ProjectState` from the API and re-fetches
  * when the tab regains focus (someone else may have merged or pushed).
+ *
+ * The last state this browser saw for the project is painted first, from the
+ * local cache, so switching tabs is instant; `stale` is true until the
+ * server's answer replaces it. The fetch always happens — the cached copy is
+ * a head start, never the answer — and every action re-checks on the server.
  */
 export function useProject() {
   const params = useParams();
   const projectId = String(params.projectId);
   const [state, setState] = useState<ProjectState | null>(null);
+  const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { t } = useT();
 
   const refresh = useCallback(async () => {
     try {
-      setState(await getState(projectId));
+      const fresh = await getState(projectId);
+      const key = CACHE_KEY.state(projectId);
+      // A different GitHub account than the one this cache was built for
+      // means every entry in it belongs to somebody else.
+      const previous = localCache.get<ProjectState>(key);
+      if (previous && previous.value.me.githubLogin !== fresh.me.githubLogin) localCache.clear();
+      localCache.set(key, fresh);
+      setState(fresh);
+      setStale(false);
       setError(null);
     } catch (e) {
       if (e instanceof ApiClientError && e.needsAuth) return redirectToReconnect(e);
@@ -114,8 +129,15 @@ export function useProject() {
   }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    // In an effect rather than the state initialiser: the server renders no
+    // state, so reading the cache during render would mismatch on hydration.
+    const cached = localCache.get<ProjectState>(CACHE_KEY.state(projectId));
+    if (cached) {
+      setState(cached.value);
+      setStale(true);
+    }
     void refresh();
-  }, [refresh]);
+  }, [refresh, projectId]);
 
   useEffect(() => {
     const onVisible = () => {
@@ -129,6 +151,8 @@ export function useProject() {
     projectId,
     projectName: state?.project.name ?? "",
     state,
+    /** True while `state` is the cached copy and the fresh one is still on its way. */
+    stale,
     refresh,
     loading,
     error,
@@ -220,7 +244,7 @@ export function ProjectNav({
               </span>
             </>
           ) : null}
-          <form action="/api/auth/signout" method="post">
+          <form action="/api/auth/signout" method="post" onSubmit={() => localCache.clear()}>
             <button
               type="submit"
               className="whitespace-nowrap text-xs text-neutral-400 hover:text-neutral-600"

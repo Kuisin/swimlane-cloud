@@ -21,6 +21,9 @@ export function ApproveModal({
 }) {
   const { t } = useT();
   const [files, setFiles] = useState<CompareFile[] | null>(null);
+  // The head the reviewer actually looked at, from the same fetch that showed
+  // the files — not the (possibly cached) project state the list came from.
+  const [reviewedHead, setReviewedHead] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -28,7 +31,9 @@ export function ApproveModal({
     let cancelled = false;
     getPR(projectId, pr.number)
       .then((d) => {
-        if (!cancelled) setFiles(d.files);
+        if (cancelled) return;
+        setFiles(d.files);
+        setReviewedHead(d.pull.headSha || null);
       })
       .catch((e) => {
         if (!cancelled) setError(describeError(e, t));
@@ -43,7 +48,7 @@ export function ApproveModal({
     setBusy(true);
     setError(null);
     try {
-      await mergePR(projectId, pr.number, pr.headSha || undefined);
+      await mergePR(projectId, pr.number, reviewedHead ?? (pr.headSha || undefined));
       onApproved();
     } catch (e) {
       setError(describeError(e, t));

@@ -5,10 +5,13 @@
  */
 import { INTEGRATION_BRANCH, PROD_BRANCH } from "@swimlane-cloud/github-client";
 import { api, del, patchJson, postJson } from "./client";
+import { isCommitSha } from "./file-version";
+import { CACHE_KEY, localCache } from "./local-cache";
 import type {
   BranchState,
   CommitInfo,
   CompareResponse,
+  FileResponse,
   LockReason,
   PendingChange,
   ProjectState,
@@ -34,7 +37,7 @@ export const getTree = (pid: string, ref: string) =>
   api<TreeResponse>(`${base(pid)}/tree?${q({ ref })}`);
 
 export const getFile = (pid: string, branch: string, path: string) =>
-  api<{ dsl: string; source: "draft" | "git" }>(`${base(pid)}/file?${q({ branch, path })}`);
+  api<FileResponse>(`${base(pid)}/file?${q({ branch, path })}`);
 
 /** A file id's current path, or null if unknown — for a `?fid=` deep link. */
 export const resolveFileId = (pid: string, fid: string) =>
@@ -44,13 +47,37 @@ export const resolveFileId = (pid: string, fid: string) =>
 export const getImport = (pid: string, branch: string, from: string, path: string) =>
   api<{ text?: string; dataUri?: string }>(`${base(pid)}/import?${q({ branch, from, path })}`);
 
-export const getSnapshot = (pid: string, ref: string, withDrafts = false) =>
-  api<SnapshotResponse>(
+/**
+ * Every diagram at a ref. Snapshots of a commit sha (without drafts) are
+ * immutable, so they are kept in the local cache and never fetched twice —
+ * the commit-history viewer opens instantly on a second look.
+ */
+export const getSnapshot = async (pid: string, ref: string, withDrafts = false) => {
+  const immutable = !withDrafts && isCommitSha(ref);
+  const key = CACHE_KEY.snapshot(pid, ref);
+  if (immutable) {
+    const hit = localCache.get<SnapshotResponse>(key);
+    if (hit) return hit.value;
+  }
+  const res = await api<SnapshotResponse>(
     `${base(pid)}/snapshot?${q({ ref, withDrafts: withDrafts ? "1" : undefined })}`,
   );
+  if (immutable) localCache.set(key, res);
+  return res;
+};
 
-export const compare = (pid: string, baseRef: string, head: string) =>
-  api<CompareResponse>(`${base(pid)}/compare?${q({ base: baseRef, head })}`);
+/** Same rule as `getSnapshot`: a comparison between two commit shas never changes. */
+export const compare = async (pid: string, baseRef: string, head: string) => {
+  const immutable = isCommitSha(baseRef) && isCommitSha(head);
+  const key = CACHE_KEY.compare(pid, baseRef, head);
+  if (immutable) {
+    const hit = localCache.get<CompareResponse>(key);
+    if (hit) return hit.value;
+  }
+  const res = await api<CompareResponse>(`${base(pid)}/compare?${q({ base: baseRef, head })}`);
+  if (immutable) localCache.set(key, res);
+  return res;
+};
 
 export const listCommits = (pid: string, branch: string, page = 1, perPage = 30) =>
   api<{ branch: string; commits: CommitInfo[] }>(
@@ -62,8 +89,12 @@ export const getPR = (pid: string, number: number) =>
 
 // ── Drafts & commits ─────────────────────────────────────────────────────────
 
+/** Returns the paths actually written — the server moves a bare name inside the diagram root. */
 export const saveDrafts = (pid: string, branch: string, files: { id: string; dsl: string }[]) =>
-  postJson<{ saved: number }>(`${base(pid)}/draft`, { branch, files });
+  postJson<{ saved: number; paths: string[]; updatedAt: string }>(`${base(pid)}/draft`, {
+    branch,
+    files,
+  });
 
 export const discardDrafts = (pid: string, branch: string, path?: string) =>
   del<{ deleted: number }>(`${base(pid)}/draft?${q({ branch, path })}`);

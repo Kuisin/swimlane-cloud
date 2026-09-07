@@ -13,6 +13,7 @@
  * reload but never silently becomes a commit.
  */
 
+import { isWritableBranch } from "@swimlane-cloud/github-client";
 import type { EditorHost, FileRef } from "@/lib/editor-host";
 
 const DRAFT_PREFIX = "sw-hub:draft";
@@ -97,7 +98,11 @@ export function createGitHubHost(opts: GitHubHostOptions): EditorHost {
   }
 
   return {
-    capabilities: { readOnly: false, versioning: true },
+    // Only an edit branch is ever written (branch-model.ts): `preview` is
+    // what reviewers read and changes through a pull request, `main` through
+    // a release. Opening either here is read-only, so the refusal happens
+    // before someone types, not at checkpoint.
+    capabilities: { readOnly: !isWritableBranch(branch), versioning: true },
 
     async root() {
       return `${owner}/${repo}@${branch}`;

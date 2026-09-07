@@ -1,8 +1,14 @@
 import { INTEGRATION_BRANCH } from "@swimlane-cloud/github-client";
 import { withApi, json } from "@/lib/api";
-import { assertRef, isSha } from "@/lib/guard";
+import { assertRef } from "@/lib/guard";
 import { requireProjectRole } from "@/lib/projects";
-import { isDraftablePath, loadDraftState, resolveSha, snapshotAt } from "@/lib/repo-files";
+import {
+  draftsApplyTo,
+  isDraftablePath,
+  loadDraftState,
+  resolveSha,
+  snapshotAt,
+} from "@/lib/repo-files";
 import type { SnapshotResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -10,8 +16,9 @@ export const runtime = "nodejs";
 
 /**
  * GET /api/projects/[projectId]/snapshot?ref=&withDrafts=1 — every diagram's
- * text at a ref. With `withDrafts` on a branch, uncommitted drafts overlay
- * the committed text (what the mobile view edits).
+ * text at a ref. With `withDrafts` on an edit branch, uncommitted drafts
+ * overlay the committed text (what the mobile view edits). `main` and
+ * `preview` are always the committed text: neither is ever edited directly.
  */
 export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
@@ -24,7 +31,7 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
   const sha = await resolveSha(project, ref);
   const snap = await snapshotAt(project, sha);
   const files = { ...snap.files };
-  if (withDrafts && !isSha(ref)) {
+  if (withDrafts && draftsApplyTo(ref)) {
     const { writes, deletions } = await loadDraftState(projectId, ref);
     for (const [p, text] of Object.entries(writes)) {
       if (isDraftablePath(p) && p.endsWith(".txt")) files[p] = text;

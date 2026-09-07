@@ -13,7 +13,7 @@ export interface PendingChange {
 }
 
 export type BranchKind = "main" | "preview" | "edit" | "release" | "other";
-export type LockReason = "main" | "locked" | "previewOwnerOnly" | "viewer" | "other";
+export type LockReason = "main" | "preview" | "locked" | "viewer" | "other";
 export type ShareMode = "svg_only" | "svg_and_dsl";
 
 export interface BranchState {
@@ -103,8 +103,23 @@ export interface TreeResponse {
   // `fid` is this project's stable file identity for that path (file_identities),
   // used to build a URL that keeps opening the same file after it moves.
   files: { id: string; name: string; fid: string }[];
+  /**
+   * Paths whose content on this branch comes from an uncommitted draft rather
+   * than the commit at `sha`, mapped to the draft's `updated_at`. Together with
+   * `sha` this names the exact version of every file in the listing, which is
+   * what lets the browser cache file text safely (see `file-version.ts`).
+   */
+  drafts: Record<string, string>;
   truncated: boolean;
   diagramsRoot: string;
+}
+
+/** One file's text plus the token naming exactly which version it is. */
+export interface FileResponse {
+  dsl: string;
+  source: "draft" | "git";
+  /** `git:<commit sha>` or `draft:<updated_at>` — see `file-version.ts`. */
+  version: string;
 }
 
 export interface SnapshotResponse {

@@ -9,7 +9,11 @@
  * problem, so this module is the single definition all new code imports.
  *
  *   main    published (公開済み); releases are tagged here; never a direct edit target
- *   preview approved (承認済み); the integration line; the base for every edit branch
+ *   preview approved (承認済み); the review line and the base for every edit
+ *           branch. It is NEVER a direct edit target either: the only way
+ *           content reaches it is a pull request from an edit branch, so
+ *           what a reviewer sees on preview is always something someone
+ *           approved.
  *   <login>/<timestamp>/<key>   an edit in progress; merges to `preview`, NEVER straight to `main`
  *
  * `preview` was named `test` before this module existed; a handful of
@@ -103,9 +107,13 @@ export function isIntegrationBranch(branch: string): boolean {
   return branch === INTEGRATION_BRANCH;
 }
 
-/** Branches the editor may write to. `main` is never one of them. */
+/**
+ * Branches the editor may write to: edit branches, and only those. Neither
+ * `main` nor `preview` is ever written directly — `preview` changes through
+ * a reviewed pull request, `main` through a promoted version.
+ */
 export function isWritableBranch(branch: string): boolean {
-  return isEditBranch(branch) || isIntegrationBranch(branch);
+  return isEditBranch(branch);
 }
 
 export class MergeTargetError extends Error {
@@ -144,9 +152,19 @@ export function assertMergeTarget(head: string, base: string): void {
   }
 }
 
-/** Checkpoints are commits; `main` never receives one directly (see checkpoint/route.ts:32-34). */
+/**
+ * Checkpoints are commits; neither `main` nor `preview` receives one
+ * directly. `preview` is read by reviewers, so a commit landing on it without
+ * a pull request would be content nobody approved.
+ */
 export function assertCheckpointTarget(branch: string): void {
   if (isProdBranch(branch)) {
     throw new MergeTargetError(`Checkpoints are not allowed directly on ${PROD_BRANCH}.`);
+  }
+  if (isIntegrationBranch(branch)) {
+    throw new MergeTargetError(
+      `Checkpoints are not allowed directly on ${INTEGRATION_BRANCH}. ` +
+        `Commit on an edit branch and open a pull request into ${INTEGRATION_BRANCH}.`,
+    );
   }
 }

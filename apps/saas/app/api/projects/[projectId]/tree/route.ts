@@ -1,18 +1,28 @@
 import { INTEGRATION_BRANCH } from "@swimlane-cloud/github-client";
 import { withApi, json } from "@/lib/api";
-import { assertRef, isSha } from "@/lib/guard";
+import { assertRef } from "@/lib/guard";
 import { ensureFileIds } from "@/lib/file-ids";
 import { requireProjectRole } from "@/lib/projects";
-import { isDraftablePath, listDiagramFiles, loadDraftState, resolveSha } from "@/lib/repo-files";
+import {
+  draftsApplyTo,
+  isDraftablePath,
+  listDiagramFiles,
+  loadDraftState,
+  resolveSha,
+} from "@/lib/repo-files";
 import type { TreeResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * GET /api/projects/[projectId]/tree?ref= — every diagram at the ref, plus
- * draft-only paths (files created here but not yet checkpointed) when the
- * ref is a branch, so a new file stays visible until its first commit.
+ * GET /api/projects/[projectId]/tree?ref= — every diagram at the ref. On an
+ * edit branch, draft-only paths (files created here but not yet
+ * checkpointed) are added and pending deletions removed, so the listing is
+ * what the editor should show rather than what git alone has. `drafts` names
+ * which listed paths read from a draft and when that draft was last saved:
+ * with `sha` it pins the exact version of every file, which is what lets the
+ * browser reuse cached text safely.
  */
 export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
@@ -26,16 +36,20 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
 
   const known = new Set(files);
   let ids = [...files];
-  if (!isSha(ref)) {
-    const { writes, deletions } = await loadDraftState(projectId, ref);
+  const drafts: Record<string, string> = {};
+  if (draftsApplyTo(ref)) {
+    const { writes, deletions, updatedAt } = await loadDraftState(projectId, ref);
     for (const p of Object.keys(writes)) {
-      if (!known.has(p) && isDraftablePath(p) && p.endsWith(".txt")) ids.push(p);
+      if (!isDraftablePath(p) || !p.endsWith(".txt")) continue;
+      if (!known.has(p)) ids.push(p);
+      if (updatedAt[p]) drafts[p] = updatedAt[p];
     }
     // A file deleted in the editor is gone from the tree straight away, even
     // though it only leaves git at the next checkpoint.
     if (deletions.length) {
       const gone = new Set(deletions);
       ids = ids.filter((p) => !gone.has(p));
+      for (const p of gone) delete drafts[p];
     }
   }
 
@@ -50,6 +64,7 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
       name: id.split("/").pop() ?? id,
       fid: fidByPath[id],
     })),
+    drafts,
     truncated,
     diagramsRoot: config.diagramsRoot,
   };

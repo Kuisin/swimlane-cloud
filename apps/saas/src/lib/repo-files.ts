@@ -7,6 +7,7 @@
  * base64-JSON limit.
  */
 import {
+  isEditBranch,
   isWithinRoot,
   parseRepoConfig,
   REPO_CONFIG_PATH,
@@ -41,6 +42,18 @@ export function withinDiagramsRoot(path: string, config: RepoConfig): string {
 
 export function isDiagramPath(path: string, config: RepoConfig): boolean {
   return path.endsWith(".txt") && !path.startsWith(TEMPLATES_PREFIX) && isWithinRoot(config, path);
+}
+
+/**
+ * Whether drafts overlay the committed text when reading `ref`.
+ *
+ * Only an edit branch is ever written, so only an edit branch has drafts
+ * worth showing. `main` and `preview` are read exactly as git has them — a
+ * reviewer opening preview must see what was approved, not a draft that
+ * happens to be parked there — and a commit sha has no drafts at all.
+ */
+export function draftsApplyTo(ref: string): boolean {
+  return !isSha(ref) && isEditBranch(ref);
 }
 
 /** Text of a file at a ref, or null when it does not exist there. */
@@ -123,6 +136,14 @@ export interface DraftState {
   writes: Record<string, string>;
   /** Paths pending removal at the next checkpoint. */
   deletions: string[];
+  /** `updated_at` per pending edit — the version token the browser caches file text under. */
+  updatedAt: Record<string, string>;
+  /**
+   * The newest `updated_at` across every row loaded (edits and tombstones),
+   * or null when there were none. A checkpoint deletes only rows up to this
+   * moment, so a draft saved while the commit was in flight survives it.
+   */
+  latestUpdatedAt: string | null;
 }
 
 /** Everything uncommitted on a branch: edits and pending deletions. */
@@ -130,17 +151,25 @@ export async function loadDraftState(projectId: string, branch: string): Promise
   const supabase = getServiceSupabase();
   const { data, error } = await supabase
     .from("drafts")
-    .select("filepath, dsl_text, deleted")
+    .select("filepath, dsl_text, deleted, updated_at")
     .eq("project_id", projectId)
     .eq("branch", branch);
   if (error) throw new ApiError(500, `draft load failed: ${error.message}`);
   const writes: Record<string, string> = {};
   const deletions: string[] = [];
+  const updatedAt: Record<string, string> = {};
+  let latestUpdatedAt: string | null = null;
   for (const row of data ?? []) {
-    if (row.deleted) deletions.push(row.filepath as string);
-    else writes[row.filepath as string] = row.dsl_text as string;
+    const path = row.filepath as string;
+    const at = row.updated_at as string;
+    if (row.deleted) deletions.push(path);
+    else {
+      writes[path] = row.dsl_text as string;
+      updatedAt[path] = at;
+    }
+    if (at && (!latestUpdatedAt || at > latestUpdatedAt)) latestUpdatedAt = at;
   }
-  return { writes, deletions };
+  return { writes, deletions, updatedAt, latestUpdatedAt };
 }
 
 /** Pending edits only, path → text. Deleted paths are excluded. */

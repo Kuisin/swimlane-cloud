@@ -23,6 +23,7 @@ import {
   branchOf,
   canEditBranch,
   defaultBranch,
+  discardDrafts,
   editLockReason,
   getSnapshot,
   isLocked,
@@ -142,6 +143,10 @@ function EditPageInner() {
   const lockReasonKey = state ? editLockReason(state, branch) : null;
   const lockReason = lockReasonKey ? t(`edit.lock.${lockReasonKey}`) : null;
   const hasUnpushed = localDirty || Boolean(branchState?.dirty);
+  // preview is review-only, so drafts on it can only be leftovers from before
+  // that rule; they are invisible there and need carrying over or discarding.
+  const previewLeftovers =
+    branch === INTEGRATION_BRANCH && Boolean(branchState?.dirty) && role !== "viewer";
 
   const host = useMemo(
     () =>
@@ -315,14 +320,28 @@ function EditPageInner() {
     });
   };
 
-  function handlePushed() {
+  function handlePushed(result: { commitSha: string }) {
     setShowPush(false);
     setLocalDirty(false);
     setHeadMoved(null);
     clearLocalMirror(mirrorScope);
+    // The editor keeps its documents — they are exactly what was just
+    // committed. It only needs to know the tip moved because of us, so the
+    // next listing is not reported as somebody else's push and the next read
+    // validates against the new commit. Remounting here used to re-read the
+    // open file by branch name straight after the push, which GitHub answers
+    // from a cache that has not caught up yet: the file came back missing and
+    // the editor showed a blank starter diagram instead.
+    host.noteHead(result.commitSha);
     void refresh();
-    setReload((r) => r + 1);
   }
+
+  const doDiscardPreviewLeftovers = () => {
+    void run("discardPreview", async () => {
+      await discardDrafts(projectId, INTEGRATION_BRANCH);
+      await refresh();
+    });
+  };
 
   function handleReviewRequested(res: { number: number }) {
     setShowReview(false);
@@ -472,6 +491,21 @@ function EditPageInner() {
               <span className="inline-flex items-center gap-1.5">
                 <Lock size={14} /> {t("edit.readonly", { reason: lockReason ?? "" })}
               </span>
+            </div>
+          )}
+
+          {previewLeftovers && (
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-neutral-200 bg-neutral-50 px-4 py-2 text-sm text-neutral-700">
+              <span>{t("edit.previewDrafts")}</span>
+              {role === "owner" && (
+                <button
+                  onClick={doDiscardPreviewLeftovers}
+                  disabled={busy !== null}
+                  className="shrink-0 text-xs text-neutral-500 underline hover:text-red-600 disabled:opacity-50"
+                >
+                  {t("edit.previewDrafts.discard")}
+                </button>
+              )}
             </div>
           )}
 

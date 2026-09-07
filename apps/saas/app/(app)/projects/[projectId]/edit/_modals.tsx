@@ -31,6 +31,10 @@ export function PushModal({
 }) {
   const { t } = useT();
   const [changes, setChanges] = useState<PendingChange[] | null>(null);
+  // The tip the server classified the changes against. It beats the page's
+  // `headSha`, which comes from project state and may be a cached copy that
+  // predates our own last push — pushing against that is a spurious 409.
+  const [classifiedHead, setClassifiedHead] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,7 +43,9 @@ export function PushModal({
     let cancelled = false;
     listPendingChanges(projectId, branch)
       .then((r) => {
-        if (!cancelled) setChanges(r.changes);
+        if (cancelled) return;
+        setChanges(r.changes);
+        setClassifiedHead(r.headSha);
       })
       .catch((e) => {
         if (!cancelled) setError(describeError(e, t));
@@ -59,7 +65,7 @@ export function PushModal({
         branch,
         message.trim() || undefined,
         undefined,
-        headSha,
+        classifiedHead ?? headSha,
       );
       onPushed({ commitSha: res.commitSha });
     } catch (e) {

@@ -43,7 +43,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   assertBranchWritable(body.branch, project.role, await lockedBranches(project));
 
   // Explicit files win over stored drafts for the same path.
-  const { writes, deletions } = await loadDraftState(projectId, body.branch);
+  const { writes, deletions, latestUpdatedAt } = await loadDraftState(projectId, body.branch);
   for (const f of body.files ?? []) {
     assertRepoPath(f.id);
     if (!isDraftablePath(f.id)) throw new ApiError(400, `${f.id} is not a diagram path.`);
@@ -77,13 +77,24 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     author: { name: project.login, email: project.commitAuthorEmail },
   });
 
+  // Clear only the rows this commit carried. An autosave that landed while
+  // the commit was in flight has a newer `updated_at` than anything loaded
+  // above; it stays a draft and the next push carries it, instead of being
+  // deleted here as if it had been committed.
   const supabase = getServiceSupabase();
-  await supabase
+  let clear = supabase
     .from("drafts")
     .delete()
     .eq("project_id", projectId)
     .eq("branch", body.branch)
     .in("filepath", [...changedEntries.map((f) => f.id), ...deletions]);
+  if (latestUpdatedAt) clear = clear.lte("updated_at", latestUpdatedAt);
+  const { error: clearError } = await clear;
+  if (clearError) {
+    // The commit exists; a draft row that outlives it only means one extra
+    // "changed" entry in the next push. Not worth failing the request.
+    console.warn(`[checkpoint] could not clear drafts: ${clearError.message}`);
+  }
 
   await audit({
     workspaceId: project.project.workspaceId,

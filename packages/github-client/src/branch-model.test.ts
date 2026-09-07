@@ -95,8 +95,8 @@ describe("editBranchOwner", () => {
 });
 
 describe("isWritableBranch", () => {
-  it("allows preview and edit branches, never main", () => {
-    expect(isWritableBranch(INTEGRATION_BRANCH)).toBe(true);
+  it("allows edit branches only — never main, and never preview", () => {
+    expect(isWritableBranch(INTEGRATION_BRANCH)).toBe(false);
     expect(isWritableBranch("kai/20260905-120000/abc123")).toBe(true);
     expect(isWritableBranch("tmp-u-e")).toBe(true);
     expect(isWritableBranch(PROD_BRANCH)).toBe(false);
@@ -140,9 +140,12 @@ describe("assertMergeTarget", () => {
 });
 
 describe("assertCheckpointTarget", () => {
-  it("mirrors the SaaS guard at checkpoint/route.ts:32-34", () => {
+  it("refuses main and preview; only an edit branch takes a checkpoint", () => {
     expect(() => assertCheckpointTarget(PROD_BRANCH)).toThrow(/not allowed directly on main/);
-    expect(() => assertCheckpointTarget(INTEGRATION_BRANCH)).not.toThrow();
+    expect(() => assertCheckpointTarget(INTEGRATION_BRANCH)).toThrow(
+      /not allowed directly on preview/,
+    );
     expect(() => assertCheckpointTarget("kai/20260905-120000/abc123")).not.toThrow();
+    expect(() => assertCheckpointTarget("tmp-u-e")).not.toThrow();
   });
 });
