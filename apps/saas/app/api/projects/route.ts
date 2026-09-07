@@ -25,8 +25,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * POST /api/projects — create a new repository as a project, or mark an
  * existing one. Both end by registering the project row.
  *
- * create: new private repo (auto_init) → seed commit on main → test branch → topic.
- * mark:   admin-only; ensure main + test, add `.swimlane.json` if absent, add topic.
+ * create: new private repo (auto_init) → seed commit on main → preview branch → topic.
+ * mark:   admin-only; ensure main, add `.swimlane.json` to it if absent, cut
+ *         preview from main, add topic. The config goes on main and reaches
+ *         preview through the branch cut, never as a commit on preview —
+ *         preview only changes through a pull request.
  */
 export const POST = withApi(async (req) => {
   const ctx = await requireUserWithGitHub();
@@ -114,29 +117,24 @@ export const POST = withApi(async (req) => {
     if (!info.permissions.admin) {
       throw new ApiError(403, "Only a repository admin can mark it as a swimlane project.");
     }
-    const { write, rest } = withRepo(ctx, { owner: info.owner, repo: info.name });
+    const { write } = withRepo(ctx, { owner: info.owner, repo: info.name });
 
     if (info.defaultBranch !== PROD_BRANCH)
       await write.ensureBranch(PROD_BRANCH, info.defaultBranch);
-    await write.ensureBranch(INTEGRATION_BRANCH, PROD_BRANCH);
 
-    let hasConfig = true;
-    try {
-      await rest.request(
-        `/repos/${info.owner}/${info.name}/contents/${REPO_CONFIG_PATH}?ref=${INTEGRATION_BRANCH}`,
-      );
-    } catch {
-      hasConfig = false;
-    }
+    const hasConfig = (await write.readFile(REPO_CONFIG_PATH, PROD_BRANCH)) !== null;
     if (!hasConfig) {
-      // Unknown layout: root the diagram tree at the repository root.
+      // Unknown layout: root the diagram tree at the repository root. Written
+      // before preview exists so the branch cut carries it; `state.ts` reads
+      // the config from the default branch, so this is also where it is read.
       await write.putFile(
         REPO_CONFIG_PATH,
         repoConfigJson(info.name, ""),
-        INTEGRATION_BRANCH,
+        PROD_BRANCH,
         "Add .swimlane.json",
       );
     }
+    await write.ensureBranch(INTEGRATION_BRANCH, PROD_BRANCH);
     await ctx.repos.addTopic(info.owner, info.name, PROJECT_TOPIC);
 
     const marked = await ctx.repos.getRepo(info.owner, info.name);

@@ -421,11 +421,17 @@ export function HistoryPanel({
 
   useEffect(() => {
     let cancelled = false;
-    setCommits(null);
     setError(null);
+    // The last history this browser saw for the branch paints at once and is
+    // always replaced by the server's; commits never change, only the tip.
+    const key = `commits:${projectId}:${branch}`;
+    const cached = localCache.get<CommitInfo[]>(key);
+    setCommits(cached ? cached.value : null);
     listCommits(projectId, branch)
       .then((r) => {
-        if (!cancelled) setCommits(r.commits);
+        if (cancelled) return;
+        localCache.set(key, r.commits);
+        setCommits(r.commits);
       })
       .catch((e) => {
         if (!cancelled) setError(describeError(e, t));

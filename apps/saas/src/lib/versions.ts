@@ -18,7 +18,7 @@ import { ApiError } from "./api";
 import { assertSha } from "./guard";
 import { audit, type ProjectCtx } from "./projects";
 import { render } from "./render";
-import { hasPendingDrafts, snapshotAt } from "./repo-files";
+import { snapshotAt } from "./repo-files";
 import { getServiceSupabase } from "./supabase/server";
 import { normalizeVersionName } from "./version-name";
 
@@ -65,12 +65,9 @@ export async function flagVersion(
     sha = opts.commitSha;
   }
 
-  if (sha === previewSha && (await hasPendingDrafts(projectId, INTEGRATION_BRANCH))) {
-    throw new ApiError(409, "preview has unsaved drafts. Push them before flagging a version.", {
-      dirty: true,
-    });
-  }
-
+  // Drafts on preview are leftovers from before it became review-only: they
+  // can no longer become a commit and are not read there, so what gets
+  // published is exactly the committed text. They no longer block a release.
   const snapshot = await snapshotAt(ctx, sha);
   const paths = Object.keys(snapshot.files).sort();
   if (paths.length === 0) throw new ApiError(400, "There are no diagrams to flag at this commit.");

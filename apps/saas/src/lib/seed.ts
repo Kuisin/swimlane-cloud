@@ -97,7 +97,10 @@ export async function seedProjectTemplates(projectId: string, userId: string): P
     .eq("project_id", projectId);
   if (count && count > 0) return;
 
-  await supabase.from("project_section_templates").insert(
+  // `ignoreDuplicates`: two people opening the same repository at once both
+  // pass the count check above; the unique (project_id, section, slug) index
+  // decides, and the loser must not turn into an error.
+  const { error: templatesError } = await supabase.from("project_section_templates").upsert(
     TEMPLATE_SECTIONS.map((section) => ({
       project_id: projectId,
       section,
@@ -107,14 +110,21 @@ export async function seedProjectTemplates(projectId: string, userId: string): P
       is_default: true,
       created_by: userId,
     })),
+    { onConflict: "project_id,section,slug", ignoreDuplicates: true },
   );
-  await supabase.from("project_template_policies").upsert(
+  if (templatesError) {
+    throw new Error(`template seed failed: ${templatesError.message}`);
+  }
+  const { error: policiesError } = await supabase.from("project_template_policies").upsert(
     TEMPLATE_SECTIONS.map((section) => ({
       project_id: projectId,
       section,
       mode: "optional",
       updated_by: userId,
     })),
-    { onConflict: "project_id,section" },
+    { onConflict: "project_id,section", ignoreDuplicates: true },
   );
+  if (policiesError) {
+    throw new Error(`template policy seed failed: ${policiesError.message}`);
+  }
 }
