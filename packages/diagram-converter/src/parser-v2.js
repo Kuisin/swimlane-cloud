@@ -1222,6 +1222,11 @@ export function parseDSLv2(src, options = {}) {
         id: gid,
         depth,
         groupMode,
+        // `phase` renders and behaves exactly like `section` today (both
+        // collapse to groupMode "section") but is a distinct keyword in the
+        // source — kept here only so a serializer can tell which one to
+        // write back; nothing else should switch on it.
+        openerKeyword: kw,
         sectionName: text ? seg(text) : kw === "branch" ? "Branch" : "Section",
         sectionName$langs: text ? langsOf(text) : null,
         sectionColor: color,
@@ -1258,7 +1263,16 @@ export function parseDSLv2(src, options = {}) {
       return;
     }
     groupStack.pop();
-    push({ kind: "groupEnd", id: top.id, depth: top.depth, groupMode: top.groupMode }, pos);
+    push(
+      {
+        kind: "groupEnd",
+        id: top.id,
+        depth: top.depth,
+        groupMode: top.groupMode,
+        openerKeyword: top.kw,
+      },
+      pos,
+    );
   }
 
   // A blank `case ()` (or a bare `case`, same as `and`) is the catch-all

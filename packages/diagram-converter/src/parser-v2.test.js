@@ -268,6 +268,30 @@ describe("multi-language retention ($langs)", () => {
     expect(m.rows.find((r) => r.kind === "branchStart").openerId).toBeNull();
   });
 
+  it("tells phase apart from section on the row, even though both render the same today", () => {
+    const m = parseDSL(
+      doc(
+        "/line/\nphase (Intake) @intake\n  [a: x]\nend-phase\n\nsection (Review)\n  [a: y]\nend-section",
+      ),
+    );
+    expect(m.errors).toEqual([]);
+    const [phaseStart, phaseEnd, sectionStart, sectionEnd] = m.rows.filter(
+      (r) => r.kind === "groupStart" || r.kind === "groupEnd",
+    );
+    expect(phaseStart).toMatchObject({
+      kind: "groupStart",
+      groupMode: "section",
+      openerKeyword: "phase",
+    });
+    expect(phaseEnd).toMatchObject({ kind: "groupEnd", openerKeyword: "phase" });
+    expect(sectionStart).toMatchObject({
+      kind: "groupStart",
+      groupMode: "section",
+      openerKeyword: "section",
+    });
+    expect(sectionEnd).toMatchObject({ kind: "groupEnd", openerKeyword: "section" });
+  });
+
   it("returns @use targets and which role/block/prop ids were declared locally", () => {
     const fragment = "/role/\n<sales>\n  label: Sales;\n\n<ops>\n  label: Ops;\n";
     const m = parseDSL(
