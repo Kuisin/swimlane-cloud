@@ -13,7 +13,8 @@
     "./parser": "./src/parser.js",
     "./themes": "./src/themes.js",
     "./diagram-options": "./src/diagram-options.js",
-    "./diagram-layout": "./src/render-pure/diagram-layout.js"
+    "./diagram-layout": "./src/render-pure/diagram-layout.js",
+    "./markdown-doc": "./src/markdown-doc.js"
   },
   "scripts": {
     "build": "node -e \"process.exit(0)\"",
