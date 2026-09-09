@@ -10,11 +10,15 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Diamond,
   ExternalLink,
   Flag,
   FolderOpen,
+  GitBranch,
+  GitFork,
   Plus,
   Smartphone,
+  Square,
   Tag,
   Trash2,
   X,
@@ -31,6 +35,7 @@ import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import {
   parseGuiModel,
   applyModelEdit,
+  collectMergeTargetOptions,
   extractPartsCode,
   fetchImports,
   findAdjacentStepIndex,
@@ -49,6 +54,7 @@ import { RoleBadge } from "@/components/app-header";
 import { branchLabel } from "@/lib/branch-label";
 import { ApiClientError, redirectToReconnect } from "@/lib/client";
 import { CACHE_KEY, localCache } from "@/lib/local-cache";
+import { blockRows, withExtraCase, withoutBlock, type BlockKind } from "@/lib/mobile-rows";
 import {
   addPRComment,
   compare,
@@ -1181,11 +1187,15 @@ export function MobileView({
   const setEditStep = (i: number | null) => (onEditStep ? onEditStep(i) : setStepState(i));
   const [showFiles, setShowFiles] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
-  // Raw `model.rows` index of a branchStart/groupStart row being edited — unlike
-  // steps, branch/group nodes aren't indexed by a separate "nth" counter (see
-  // `nthStepRowIndex`), the mobile tree already exposes their real row index
-  // as `node.startRow`, so no resolver function is needed here.
-  const [editGroupRow, setEditGroupRow] = useState<number | null>(null);
+  const [showAddBlock, setShowAddBlock] = useState(false);
+  // What non-step row the edit sheet is open on. `row` is a raw `model.rows`
+  // index — unlike steps, branch/group/case/merge nodes aren't indexed by a
+  // separate "nth" counter (see `nthStepRowIndex`); the mobile tree exposes
+  // their real row index directly. `firstCase` means the target is an `if`'s
+  // first clause, which has no row of its own: it lives as `firstCase` on the
+  // branchStart at `row`.
+  const [editGroup, setEditGroup] = useState<{ row: number; firstCase?: boolean } | null>(null);
+  const editGroupRow = editGroup?.row ?? null;
   const activeDir = active.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "";
 
   useEffect(() => {
@@ -1233,32 +1243,63 @@ export function MobileView({
     setEditStep(null);
   };
 
-  // `editGroupRow` is a raw `model.rows` index (see the comment on its
-  // `useState` above), but `gui.rows` and `applyModelEdit`'s draft are both
-  // *normalized* (`normalizeBranchRows` inserts an extra row for any `if`
-  // whose first case has a label) — that insertion shifts every later index,
-  // so re-using the raw index directly here would silently land on the
-  // wrong row, or a row of the wrong kind entirely, for any group/branch
-  // that comes after such an `if`. `id` is stable across normalization (it's
-  // only ever assigned once, when the row is first parsed), so resolve
-  // through `kind`+`id` instead of position.
-  const editingGroupRaw =
-    editGroupRow != null ? ((model.rows as GuiRow[])[editGroupRow] ?? null) : null;
-  const editingGroup = editingGroupRaw
-    ? (gui.rows.find((r) => r.kind === editingGroupRaw.kind && r.id === editingGroupRaw.id) ?? null)
-    : null;
-
-  const applyGroupPatch = (patch: Record<string, unknown>) => {
-    if (!editingGroupRaw) return;
-    const next = applyModelEdit(dsl, (draft) => {
-      const i = draft.rows.findIndex(
-        (r) => r.kind === editingGroupRaw.kind && r.id === editingGroupRaw.id,
-      );
-      if (i >= 0) draft.rows[i] = { ...draft.rows[i], ...patch };
-    });
+  /**
+   * Edit the **raw** (unnormalized) parse and write it back.
+   *
+   * Branch/group/case/merge rows are addressed by their raw `model.rows`
+   * index — the index the mobile tree hands out as `startRow`/`rowIndex` — so
+   * these edits must not go through `applyModelEdit`, which runs
+   * `normalizeBranchRows` first: that inserts an extra `branchCase` row for
+   * every `if` whose first case has a label, shifting every later index. (It
+   * also makes `id` alone useless as a key here, since all of a branch's
+   * cases share the branch's id.) Steps are unaffected either way and keep
+   * using `applyModelEdit` + `nthStepRowIndex`, which normalization can't
+   * shift because it only ever inserts branchCase rows.
+   */
+  const applyRawEdit = (edit: (rows: GuiRow[]) => GuiRow[] | void) => {
+    const parsed = parseDSL(dsl, parseOptions) as unknown as { rows: GuiRow[] };
+    const rows = parsed.rows.map((r) => ({ ...r }));
+    const nextRows = edit(rows) ?? rows;
+    const next = serializeDSL({ ...parsed, rows: nextRows });
     setDsl(next);
     onSave?.(active, next);
-    setEditGroupRow(null);
+  };
+
+  const editingGroup =
+    editGroupRow != null ? ((model.rows as GuiRow[])[editGroupRow] ?? null) : null;
+
+  const applyGroupPatch = (patch: Record<string, unknown>) => {
+    if (editGroupRow == null) return;
+    applyRawEdit((rows) => {
+      if (rows[editGroupRow]) rows[editGroupRow] = { ...rows[editGroupRow], ...patch };
+    });
+    setEditGroup(null);
+  };
+
+  const deleteGroupRow = () => {
+    if (editGroupRow == null) return;
+    applyRawEdit((rows) => withoutBlock(rows, editGroupRow));
+    setEditGroup(null);
+  };
+
+  /** Append a branch/group skeleton, mirroring the desktop editor's add menu. */
+  const addBlock = (kind: BlockKind) => {
+    const id = Math.random().toString(36).slice(2, 10);
+    applyRawEdit((rows) => [
+      ...rows,
+      ...blockRows(kind, id, {
+        condition: t("mobile.newCondition"),
+        firstCase: t("mobile.newCase"),
+      }),
+    ]);
+    setShowAddBlock(false);
+  };
+
+  /** Append one more case/path to the branch the edit sheet is open on. */
+  const addCaseToBranch = () => {
+    if (editGroupRow == null) return;
+    applyRawEdit((rows) => withExtraCase(rows, editGroupRow, t("mobile.newCase")));
+    setEditGroup(null);
   };
 
   const addStep = () => {
@@ -1363,8 +1404,23 @@ export function MobileView({
           onInsertStep={editable ? insertStep : undefined}
           onMoveStep={editable ? moveStepRows : undefined}
           onAddStep={editable ? addStep : undefined}
-          onEditBranch={editable ? (i) => setEditGroupRow(i) : undefined}
-          onEditGroup={editable ? (i) => setEditGroupRow(i) : undefined}
+          onAddBlock={editable ? () => setShowAddBlock(true) : undefined}
+          onEditBranch={editable ? (i) => setEditGroup({ row: i }) : undefined}
+          onEditGroup={editable ? (i) => setEditGroup({ row: i }) : undefined}
+          onEditMerge={editable ? (i) => setEditGroup({ row: i }) : undefined}
+          onEditCase={
+            editable
+              ? (c) => {
+                  // A first case has no row of its own: edit `firstCase` on
+                  // the branchStart instead.
+                  if (c.isFirst || c.rowIndex == null) {
+                    setEditGroup({ row: c.branchRow, firstCase: true });
+                  } else {
+                    setEditGroup({ row: c.rowIndex });
+                  }
+                }
+              : undefined
+          }
           insertStepLabel={t("mobile.insertStep")}
           addStepLabel={t("mobile.addStep")}
         />
@@ -1387,10 +1443,15 @@ export function MobileView({
       {editingGroup && (
         <GroupEditModal
           row={editingGroup}
+          firstCase={Boolean(editGroup?.firstCase)}
+          mergeTargets={collectMergeTargetOptions(model.rows as GuiRow[])}
           onSave={applyGroupPatch}
-          onClose={() => setEditGroupRow(null)}
+          onAddCase={addCaseToBranch}
+          onDelete={deleteGroupRow}
+          onClose={() => setEditGroup(null)}
         />
       )}
+      {showAddBlock && <AddBlockSheet onPick={addBlock} onClose={() => setShowAddBlock(false)} />}
       {pendingDelete != null && (
         <Modal
           title={t("stepEdit.deleteStep")}
@@ -1523,8 +1584,13 @@ function StepEditModal({
   const { t } = useT();
   const [role, setRole] = useState(String(row.role ?? ""));
   const [text, setText] = useState(String(row.text ?? ""));
+  // `label` (the model's `name`) is what the flow list actually shows when a
+  // step has one, so it has to be editable here — otherwise editing "Text"
+  // looks like it did nothing.
+  const [name, setName] = useState(String(row.name ?? ""));
   const [description, setDescription] = useState(String(row.description ?? ""));
   const [remark, setRemark] = useState(String(row.remark ?? ""));
+  const [mergeId, setMergeId] = useState(String(row.mergeId ?? ""));
   const [arrowLine, setArrowLine] = useState(String(row.arrowLine ?? "solid"));
   const [blockRef, setBlockRef] = useState(String(row.blockRef ?? ""));
   const [sel, setSel] = useState<Set<string>>(
@@ -1554,8 +1620,10 @@ function StepEditModal({
           onSave({
             role: role || null,
             text,
+            name,
             description,
             remark,
+            mergeId,
             arrowLine,
             blockRef: blockRef || null,
             props: [...sel],
@@ -1609,6 +1677,9 @@ function StepEditModal({
         <Field label={t("stepEdit.text")}>
           <input value={text} onChange={(e) => setText(e.target.value)} className={FIELD_CLASS} />
         </Field>
+        <Field label={t("stepEdit.label")}>
+          <input value={name} onChange={(e) => setName(e.target.value)} className={FIELD_CLASS} />
+        </Field>
         <Field label={t("stepEdit.description")}>
           <textarea
             rows={2}
@@ -1630,6 +1701,13 @@ function StepEditModal({
         </Field>
         <Field label={t("stepEdit.arrow")}>
           <ArrowPicker value={arrowLine} onChange={setArrowLine} />
+        </Field>
+        <Field label={t("stepEdit.mergeId")}>
+          <input
+            value={mergeId}
+            onChange={(e) => setMergeId(e.target.value)}
+            className={FIELD_CLASS}
+          />
         </Field>
         {propList.length > 0 && (
           <Field label={t("stepEdit.props")}>
@@ -1702,42 +1780,107 @@ function GroupColorSwatches({
   );
 }
 
-/**
- * Edit modal for a fork/if row (`branchStart`) or a section/sub-branch row
- * (`groupStart`) — the "parent grouping" rows in the mobile flow list, which
- * previously had no edit affordance at all (only expand/collapse). Edits the
- * fields that live on that row directly: a non-parallel branch's condition,
- * a group's name, and either row's highlight color — mirroring the desktop
- * editor's `BranchInspector`, minus per-case editing (out of scope here; a
- * case's own label/color isn't a "parent grouping" and has no row of its own
- * in the mobile tree).
- */
-function GroupEditModal({
-  row,
-  onSave,
+/** The structure a mobile user can append, mirroring the desktop add menu. */
+function AddBlockSheet({
+  onPick,
   onClose,
 }: {
-  row: Record<string, unknown>;
-  onSave: (patch: Record<string, unknown>) => void;
+  onPick: (kind: "if" | "fork" | "section" | "subBranch") => void;
   onClose: () => void;
 }) {
   const { t } = useT();
-  const isBranch = row.kind === "branchStart";
+  const items: Array<{ kind: "if" | "fork" | "section" | "subBranch"; icon: React.ReactNode }> = [
+    { kind: "if", icon: <Diamond size={16} /> },
+    { kind: "fork", icon: <GitFork size={16} /> },
+    { kind: "section", icon: <Square size={16} /> },
+    { kind: "subBranch", icon: <GitBranch size={16} /> },
+  ];
+  return (
+    <Modal title={t("mobile.addBlock")} onClose={onClose} z="z-[60]">
+      <div className="flex flex-col gap-2">
+        {items.map((it) => (
+          <button
+            key={it.kind}
+            type="button"
+            onClick={() => onPick(it.kind)}
+            className="flex items-start gap-3 rounded-lg border border-neutral-200 px-3 py-2.5 text-left hover:border-indigo-400 hover:bg-indigo-50/40"
+          >
+            <span className="mt-0.5 text-neutral-500">{it.icon}</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">{t(`mobile.add.${it.kind}`)}</span>
+              <span className="block text-xs text-neutral-500">
+                {t(`mobile.add.${it.kind}.hint`)}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Edit modal for every non-step row the mobile flow list shows: a fork/if
+ * (`branchStart`), one clause of one (`branchCase`, or an `if`'s first clause
+ * — which lives as `firstCase` on the branchStart, hence `firstCase`), a
+ * section/sub-branch (`groupStart`), and a `goto` marker (`branchMerge`).
+ * Between them these cover the same fields the desktop `BranchInspector`
+ * does, plus add-case and delete.
+ */
+function GroupEditModal({
+  row,
+  firstCase,
+  mergeTargets,
+  onSave,
+  onAddCase,
+  onDelete,
+  onClose,
+}: {
+  row: Record<string, unknown>;
+  firstCase: boolean;
+  mergeTargets: Array<{ mergeId: string; label: string }>;
+  onSave: (patch: Record<string, unknown>) => void;
+  onAddCase: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useT();
+  const isBranch = row.kind === "branchStart" && !firstCase;
+  const isCase = row.kind === "branchCase" || firstCase;
+  const isMerge = row.kind === "branchMerge";
+  const isGroup = row.kind === "groupStart";
   const parallel = Boolean(row.parallel);
   const isSection = row.groupMode === "section";
   const [cond, setCond] = useState(String(row.cond ?? ""));
   const [name, setName] = useState(String(row.sectionName ?? ""));
+  const [label, setLabel] = useState(String((firstCase ? row.firstCase : row.label) ?? ""));
+  const [mergeTarget, setMergeTarget] = useState(String(row.mergeTarget ?? ""));
   const [color, setColor] = useState<string | null>(
-    String((isBranch ? row.branchColor : row.sectionColor) ?? "") || null,
+    String((isGroup ? row.sectionColor : row.branchColor) ?? "") || null,
   );
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const title = isBranch
-    ? parallel
-      ? t("mobile.editFork")
-      : t("mobile.editBranch")
-    : isSection
-      ? t("mobile.editSection")
-      : t("mobile.editSubBranch");
+  const title = isMerge
+    ? t("mobile.editMerge")
+    : isCase
+      ? parallel
+        ? t("mobile.editPath")
+        : t("mobile.editCase")
+      : isBranch
+        ? parallel
+          ? t("mobile.editFork")
+          : t("mobile.editBranch")
+        : isSection
+          ? t("mobile.editSection")
+          : t("mobile.editSubBranch");
+
+  const patch = () => {
+    if (isMerge) return { mergeTarget };
+    if (firstCase) return { firstCase: label, branchColor: color };
+    if (isCase) return { label, branchColor: color };
+    if (isBranch) return { cond, branchColor: color };
+    return { sectionName: name, sectionColor: color };
+  };
 
   return (
     <Modal
@@ -1745,15 +1888,39 @@ function GroupEditModal({
       onClose={onClose}
       z="z-[60]"
       footer={
-        <ModalFooter
-          onCancel={onClose}
-          onConfirm={() =>
-            onSave(
-              isBranch ? { cond, branchColor: color } : { sectionName: name, sectionColor: color },
-            )
-          }
-          confirmLabel={t("stepEdit.save")}
-        />
+        <div className="flex items-center gap-2">
+          {/* No delete for an `if`'s first clause: it has no row of its own
+              (it lives on the branchStart), and an `if` must have one — the
+              only thing "delete" could mean there is dropping the whole
+              branch, which is what deleting the branch itself is for.
+              Everything else deletes, asking once rather than acting on the
+              first tap, since a branch/group takes its whole block with it. */}
+          {!firstCase && (
+            <button
+              type="button"
+              onClick={() => (confirmDelete ? onDelete() : setConfirmDelete(true))}
+              className={`rounded-lg border px-3 py-2.5 text-sm ${
+                confirmDelete
+                  ? "border-red-600 bg-red-600 font-semibold text-white"
+                  : "border-red-200 text-red-600 hover:bg-red-50"
+              }`}
+            >
+              {confirmDelete ? t("mobile.confirmDelete") : <Trash2 size={16} />}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-neutral-300 py-2.5 text-sm"
+          >
+            {t("stepEdit.cancel")}
+          </button>
+          <button
+            onClick={() => onSave(patch())}
+            className="flex-1 rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
+          >
+            {t("stepEdit.save")}
+          </button>
+        </div>
       }
     >
       <div className="space-y-3">
@@ -1762,14 +1929,65 @@ function GroupEditModal({
             <input value={cond} onChange={(e) => setCond(e.target.value)} className={FIELD_CLASS} />
           </Field>
         )}
-        {!isBranch && (
+        {isCase && !parallel && (
+          <Field label={t("mobile.caseLabel")}>
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder={t("mobile.caseLabelHint")}
+              className={FIELD_CLASS}
+            />
+          </Field>
+        )}
+        {isCase && parallel && (
+          <Field label={t("mobile.pathLabel")}>
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              className={FIELD_CLASS}
+            />
+          </Field>
+        )}
+        {isGroup && (
           <Field label={t("mobile.groupName")}>
             <input value={name} onChange={(e) => setName(e.target.value)} className={FIELD_CLASS} />
           </Field>
         )}
-        <Field label={t("mobile.highlightColor")}>
-          <GroupColorSwatches value={color} onChange={setColor} />
-        </Field>
+        {isMerge && (
+          <Field label={t("mobile.mergeTarget")}>
+            <select
+              value={mergeTarget}
+              onChange={(e) => setMergeTarget(e.target.value)}
+              className={FIELD_CLASS}
+            >
+              <option value="">{t("stepEdit.none")}</option>
+              {mergeTargets
+                .filter((o) => o.mergeId)
+                .map((o) => (
+                  <option key={o.mergeId} value={o.mergeId}>
+                    {o.label}
+                  </option>
+                ))}
+            </select>
+            <span className="mt-1 block text-xs text-neutral-500">
+              {t("mobile.mergeTargetHint")}
+            </span>
+          </Field>
+        )}
+        {!isMerge && (
+          <Field label={t("mobile.highlightColor")}>
+            <GroupColorSwatches value={color} onChange={setColor} />
+          </Field>
+        )}
+        {(isBranch || isCase) && (
+          <button
+            type="button"
+            onClick={onAddCase}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 py-2.5 text-sm text-neutral-600 hover:border-indigo-400 hover:text-indigo-600"
+          >
+            <Plus size={15} /> {parallel ? t("mobile.addPath") : t("mobile.addCase")}
+          </button>
+        )}
       </div>
     </Modal>
   );

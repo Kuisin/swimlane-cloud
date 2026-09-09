@@ -71,8 +71,13 @@ declare module "@swimlane-cloud/mobile-view" {
     onInsertStep?: (afterStepIndex: number) => void;
     onMoveStep?: (fromRow: number, toRow: number) => void;
     onAddStep?: () => void;
+    onAddBlock?: () => void;
     onEditBranch?: (rowIndex: number) => void;
     onEditGroup?: (rowIndex: number) => void;
+    onEditMerge?: (rowIndex: number) => void;
+    /** A branch's first case has no row of its own — it lives as `firstCase`
+     * on the branchStart at `branchRow`, so `rowIndex` is null for it. */
+    onEditCase?: (target: { rowIndex: number | null; branchRow: number; isFirst: boolean }) => void;
     insertStepLabel?: string;
     addStepLabel?: string;
   }>;

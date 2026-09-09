@@ -103,8 +103,19 @@ export function buildMobileTree(model) {
   const push = (node) => {
     const f = top();
     if (f.branch && !f.case) {
-      // step before any explicit case → implicit default case
-      const c = { type: "case", label: "", color: null, children: [], endRow: undefined };
+      // step before any explicit case → implicit default case. It has no row
+      // of its own, so it carries no `rowIndex`/`branchRow` and a host can't
+      // offer to edit it.
+      const c = {
+        type: "case",
+        label: "",
+        color: null,
+        children: [],
+        endRow: undefined,
+        rowIndex: null,
+        branchRow: null,
+        isFirst: false,
+      };
       f.branch.cases.push(c);
       f.case = c;
       f.node = c;
@@ -134,15 +145,29 @@ export function buildMobileTree(model) {
           endRow: undefined,
         };
         push(branch);
-        const first = {
-          type: "case",
-          label: (row.firstCase || "").trim(),
-          color: row.branchColor || null,
-          children: [],
-          endRow: undefined,
-        };
-        branch.cases.push(first);
-        stack.push({ node: first, branch, case: first });
+        // An `if` carries its first case on the branchStart row itself
+        // (`firstCase`), so synthesize a case node for it. A `fork` does not:
+        // the reader already emits a real `branchCase` row for its first
+        // path, so synthesizing one here too would show a phantom empty
+        // "path 1" ahead of every real path.
+        if (!row.parallel) {
+          const first = {
+            type: "case",
+            label: (row.firstCase || "").trim(),
+            color: row.branchColor || null,
+            children: [],
+            endRow: undefined,
+            // No row of its own — a host edits it by patching `firstCase` on
+            // the branchStart at `branchRow`.
+            rowIndex: null,
+            branchRow: ri,
+            isFirst: true,
+          };
+          branch.cases.push(first);
+          stack.push({ node: first, branch, case: first });
+        } else {
+          stack.push({ node: branch, branch, case: null });
+        }
         break;
       }
       case "branchCase": {
@@ -155,6 +180,9 @@ export function buildMobileTree(model) {
             color: row.branchColor || null,
             children: [],
             endRow: undefined,
+            rowIndex: ri,
+            branchRow: f.branch.startRow,
+            isFirst: false,
           };
           f.branch.cases.push(c);
           f.case = c;
