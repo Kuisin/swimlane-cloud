@@ -6,6 +6,7 @@
  * (see dsl-rule.md). Five of these are template-eligible.
  */
 import { ApiError } from "./api";
+import { dslOf } from "./diagram-file";
 
 export const TEMPLATE_SECTIONS = ["page", "option", "role", "block", "prop"] as const;
 
@@ -105,6 +106,26 @@ export function assertForcedSections(
       throw new ApiError(422, `/${section}/ must match project template "${template.name}".`);
     }
   }
+}
+
+/**
+ * `assertForcedSections` against whatever DSL a stored file holds.
+ *
+ * The check is about DSL sections, so it must run on the *diagram*, not on the
+ * bytes: a `.md` keeps its DSL in a fence, and a file with no DSL at all (a
+ * `.gitkeep`, or prose) has no sections to compare and is skipped rather than
+ * failed. Callers used to test `path.endsWith(".txt")` for this, which quietly
+ * stopped enforcing anything the moment a project moved to `.md`.
+ */
+export function assertForcedSectionsForFile(
+  path: string,
+  text: string,
+  policies: Record<string, PolicyEntry>,
+  templatesById: Record<string, TemplateRow>,
+): void {
+  const dsl = dslOf(path, text);
+  if (dsl === null) return;
+  assertForcedSections(dsl, policies, templatesById);
 }
 
 /** Repo mirror path for a template (plan: templates/{section}/{slug}.txt). */

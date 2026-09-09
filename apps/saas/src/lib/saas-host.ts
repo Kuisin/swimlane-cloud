@@ -1,7 +1,12 @@
 /**
  * The SaaS `EditorHost`: the shared editor's storage contract, implemented
  * over the project API. The editor never sees GitHub or Supabase; it sees a
- * folder of `.txt` files it can read, save, create and checkpoint.
+ * folder of DSL documents it can read, save, create and checkpoint.
+ *
+ * A diagram is stored as `.txt` (raw DSL) or `.md` (frontmatter + prose + the
+ * DSL in a fence). Unwrapping happens here, on the way in and out, so the
+ * editor only ever handles DSL and `packages/editor` needs to know nothing
+ * about markdown at all.
  *
  * Every writable branch is `autosave: true`, so the editor debounce-saves
  * drafts to Postgres itself; the page's own "Push to GitHub" turns every
@@ -28,6 +33,7 @@ import type {
   WatchEvent,
 } from "@swimlane-cloud/editor";
 import { api } from "./client";
+import { dslOf, isMarkdownFile, storedFrom } from "./diagram-file";
 import { fileVersionIn } from "./file-version";
 import { CACHE_KEY, localCache } from "./local-cache";
 import type { TreeResponse } from "./types";
@@ -130,8 +136,36 @@ export function createSaasHost(opts: SaasHostOptions): SaasEditorHost {
     for (const id of was) if (!now.has(id)) emit({ id, type: "unlink", dsl: null });
   }
 
+  /**
+   * The raw markdown of every `.md` read this session, so a save can put the
+   * DSL back inside its fence without disturbing the frontmatter or the prose
+   * around it.
+   */
+  const markdownSource = new Map<string, string>();
+
+  /**
+   * What the editor sees. A `.md` diagram is unwrapped to its DSL — the editor
+   * never needs to know the file is markdown, which is why none of this lives
+   * in `packages/editor`. A `.md` holding only prose has no DSL to unwrap and
+   * is handed over as-is.
+   */
+  function toEditorText(id: string, stored: string): string {
+    if (!isMarkdownFile(id)) return stored;
+    markdownSource.set(id, stored);
+    return dslOf(id, stored) ?? stored;
+  }
+
+  /** The inverse: what actually gets stored for `id`. */
+  function toStoredText(id: string, text: string): string {
+    if (!isMarkdownFile(id)) return text;
+    const next = storedFrom(id, text, markdownSource.get(id));
+    markdownSource.set(id, next);
+    return next;
+  }
+
   async function write(files: { id: string; dsl: string }[]) {
-    const res = await saveDrafts(projectId, branch, files);
+    const stored = files.map((f) => ({ id: f.id, dsl: toStoredText(f.id, f.dsl) }));
+    const res = await saveDrafts(projectId, branch, stored);
     invalidateListing();
     opts.onDraftSaved?.();
     return res;
@@ -158,15 +192,17 @@ export function createSaasHost(opts: SaasHostOptions): SaasEditorHost {
     },
 
     async read(id) {
+      // The cache holds what is stored, not what the editor sees, so a cache
+      // hit still records the markdown a later save has to merge back into.
       const tree = await currentTree();
       const version = fileVersionIn(tree, id);
       if (version) {
         const hit = localCache.get<string>(CACHE_KEY.file(projectId, id, version));
-        if (hit) return hit.value;
+        if (hit) return toEditorText(id, hit.value);
       }
       const res = await getFile(projectId, branch, id);
       localCache.set(CACHE_KEY.file(projectId, id, res.version), res.dsl);
-      return res.dsl;
+      return toEditorText(id, res.dsl);
     },
 
     // `@use` targets. The editor reads them here because parsing is
@@ -203,8 +239,13 @@ export function createSaasHost(opts: SaasHostOptions): SaasEditorHost {
      * rather than an in-memory one the tree will never list.
      */
     async create(id, dsl) {
-      const res = await write([{ id, dsl }]);
-      return res.paths[0] ?? id;
+      // New diagrams are markdown. The editor always suggests `.txt` (it
+      // appends the extension itself, so a typed `notes.md` arrives as
+      // `notes.md.txt`); rewriting here is what makes `.md` the default
+      // without changing `packages/editor`.
+      const target = id.toLowerCase().endsWith(".txt") ? `${id.slice(0, -4)}.md` : id;
+      const res = await write([{ id: target, dsl }]);
+      return res.paths[0] ?? target;
     },
 
     /** A folder exists once something is in it; the marker is committed with the next checkpoint. */

@@ -16,8 +16,9 @@ import {
   resolveSha,
   withinDiagramsRoot,
 } from "@/lib/repo-files";
+import { dslOf, isMarkdownFile, storedFrom } from "@/lib/diagram-file";
 import { getServiceSupabase } from "@/lib/supabase/server";
-import { assertForcedSections } from "@/lib/templates";
+import { assertForcedSectionsForFile } from "@/lib/templates";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -126,10 +127,21 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     if (text === null || text === undefined) {
       throw new ApiError(404, `${body.from} does not exist on ${body.branch}.`);
     }
-    if (to.endsWith(".txt")) {
+    // Renaming across the two diagram formats converts the file: a `.txt`
+    // holds raw DSL and a `.md` holds it in a fence, so moving between them
+    // without rewriting the content would leave the destination unreadable —
+    // and, since a `.md` holding raw DSL parses as prose, would also slip past
+    // the forced-section check below.
+    const sourceDsl = dslOf(body.from, text);
+    const stored =
+      sourceDsl === null || isMarkdownFile(body.from) === isMarkdownFile(to)
+        ? text
+        : storedFrom(to, sourceDsl);
+
+    {
       const { policies, templatesById } = await loadProjectTemplates(projectId);
       if (Object.values(policies).some((p) => p.mode === "forced")) {
-        assertForcedSections(text, policies, templatesById);
+        assertForcedSectionsForFile(to, stored, policies, templatesById);
       }
     }
 
@@ -138,7 +150,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
         project_id: projectId,
         filepath: to,
         branch: body.branch,
-        dsl_text: text,
+        dsl_text: stored,
         deleted: false,
         ...actor,
       },

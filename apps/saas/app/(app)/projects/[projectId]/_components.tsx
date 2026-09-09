@@ -53,6 +53,7 @@ import { GitHubMark } from "@/components/github-mark";
 import { RoleBadge } from "@/components/app-header";
 import { branchLabel } from "@/lib/branch-label";
 import { ApiClientError, redirectToReconnect } from "@/lib/client";
+import { dslOf, isDiagramFile, storedFrom } from "@/lib/diagram-file";
 import { CACHE_KEY, localCache } from "@/lib/local-cache";
 import { blockRows, withExtraCase, withoutBlock, type BlockKind } from "@/lib/mobile-rows";
 import {
@@ -77,12 +78,16 @@ import { useT, LanguageToggle } from "@/i18n";
 
 export type Files = Record<string, string>;
 
-/** primary diagram = first .txt path (sorted) for thumbnails/version SVG. */
+/**
+ * Primary diagram = first diagram path (sorted) for thumbnails/version SVG.
+ * A `.md` may hold only prose, so this asks what the file *contains* rather
+ * than trusting the extension.
+ */
 export function primaryPath(files: Files): string | null {
-  const txt = Object.keys(files)
-    .filter((p) => p.endsWith(".txt"))
+  const diagrams = Object.keys(files)
+    .filter((p) => dslOf(p, files[p] ?? "") !== null)
     .sort();
-  return txt[0] ?? null;
+  return diagrams[0] ?? null;
 }
 
 /** Turn an API failure into a sentence the user can act on. */
@@ -595,7 +600,7 @@ export function ChangeBrowser({
   const paths = useMemo(() => {
     const set = new Set<string>(Object.keys(files ?? {}));
     for (const c of changes ?? []) set.add(c.path);
-    return [...set].filter((p) => p.endsWith(".txt")).sort();
+    return [...set].filter((p) => isDiagramFile(p)).sort();
   }, [files, changes]);
 
   useEffect(() => {
@@ -1171,7 +1176,7 @@ export function MobileView({
 }) {
   const { t, lang } = useT();
   const paths = Object.keys(files)
-    .filter((p) => p.endsWith(".txt"))
+    .filter((p) => dslOf(p, files[p] ?? "") !== null)
     .sort();
   const [pathState, setPathState] = useState(primaryPath(files) ?? paths[0] ?? "");
   const path = pathProp ?? pathState;
@@ -1198,9 +1203,15 @@ export function MobileView({
   const editGroupRow = editGroup?.row ?? null;
   const activeDir = active.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "";
 
+  // `dsl` is always DSL, whatever the file is stored as — a `.md` diagram is
+  // unwrapped on the way in and re-wrapped by `saveDoc` on the way out, so
+  // everything below this line works on one shape.
   useEffect(() => {
-    setDsl(files[active] ?? "");
+    setDsl(dslOf(active, files[active] ?? "") ?? "");
   }, [active, files]);
+
+  /** Persist edited DSL back in whatever form `active` is stored as. */
+  const saveDoc = (next: string) => onSave?.(active, storedFrom(active, next, files[active]));
 
   // `@use` targets already read, keyed by importing file and path. Parsing is
   // synchronous and reading one is not, so the diagram renders with whatever
@@ -1239,7 +1250,7 @@ export function MobileView({
       if (i >= 0) draft.rows[i] = { ...draft.rows[i], ...patch };
     });
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
     setEditStep(null);
   };
 
@@ -1262,7 +1273,7 @@ export function MobileView({
     const nextRows = edit(rows) ?? rows;
     const next = serializeDSL({ ...parsed, rows: nextRows });
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
   };
 
   const editingGroup =
@@ -1311,7 +1322,7 @@ export function MobileView({
       });
     });
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
   };
 
   const insertStep = (afterStepIndex: number) => {
@@ -1325,7 +1336,7 @@ export function MobileView({
       });
     });
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
   };
 
   const deleteStepAt = (stepIndex: number) => {
@@ -1334,7 +1345,7 @@ export function MobileView({
       if (i >= 0) draft.rows.splice(i, 1);
     });
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
     if (editStep === stepIndex) setEditStep(null);
   };
 
@@ -1355,7 +1366,7 @@ export function MobileView({
       if (i >= 0 && adj >= 0) draft.rows = moveRow(draft.rows, i, adj).rows;
     });
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
     setEditStep(dir === "up" ? Math.max(0, editStep - 1) : editStep + 1);
   };
 
@@ -1375,7 +1386,7 @@ export function MobileView({
     const after = (parseDSL(next) as unknown as { errors?: unknown[] }).errors?.length ?? 0;
     if (after > before) return; // don't apply a move that breaks the DSL
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
   };
 
   return (
