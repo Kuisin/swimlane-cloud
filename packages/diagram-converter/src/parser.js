@@ -32,6 +32,19 @@ function parseSectionPropertyLine(text) {
 }
 
 /**
+ * Record a key `/role/`, `/block/` or `/prop/` has no meaning for.
+ *
+ * dsl-rule.md:1015 makes `unknownKey` a **warning** with `impact: none`, and
+ * :889 requires the key be "kept verbatim in an ordered `unknown` bag and
+ * re-emitted after the known keys". Dropping it — which is what reporting it as
+ * an error and moving on amounted to — silently deleted a line of someone's
+ * document the first time they saved it in the GUI.
+ */
+function keepUnknownKey(entity, key, value) {
+  (entity.unknown ??= {})[key] = value;
+}
+
+/**
  * An `icon:` value of the form `#name` references a Lucide icon by name. Returns
  * the name when it isn't one the engine can render (so the caller can flag it);
  * plain (non-`#`) values are literal text/emoji and are left alone.
@@ -223,6 +236,7 @@ export function parseDSL(src, parseOptions = {}) {
             msg: `unsupported version ${version} — this file needs a newer build`,
           },
         ],
+        warnings: [],
         trailingLineComments: [],
       };
     }
@@ -230,6 +244,12 @@ export function parseDSL(src, parseOptions = {}) {
   }
   const allLines = src.split(/\r?\n/);
   const errors = [];
+  // dsl-rule.md:37 puts a severity on every diagnostic, and :951-1015 classifies
+  // unknown keys, icons, colours and shapes as warnings with `impact: none` —
+  // they block nothing and round-trip byte for byte. Keeping them out of
+  // `errors` is what stops a stray `icon:` disabling Format, locking GUI rows
+  // and showing a file as broken.
+  const warnings = [];
 
   let startIdx = -1;
   let endIdx = allLines.length;
@@ -256,6 +276,7 @@ export function parseDSL(src, parseOptions = {}) {
       blocks: {},
       props: {},
       errors: [{ line: 1, text: "", msg: "@kai-swimlane marker not found" }],
+      warnings: [],
     };
   }
 
@@ -373,13 +394,14 @@ export function parseDSL(src, parseOptions = {}) {
         icon: "icon",
       };
       if (!map[kv.key]) {
-        errors.push({ line, text, msg: `unknown /role/ key: ${kv.key}` });
+        keepUnknownKey(roles[active], kv.key, kv.val);
+        warnings.push({ line, text, msg: `unknown /role/ key: ${kv.key} — kept, not rendered` });
         continue;
       }
       roles[active][map[kv.key]] = kv.val;
       const badIcon = kv.key === "icon" ? unknownIconName(kv.val) : null;
       if (badIcon) {
-        errors.push({ line, text, msg: `unknown icon "${badIcon}" — not a known Lucide icon` });
+        warnings.push({ line, text, msg: `unknown icon "${badIcon}" — icon omitted` });
       }
     }
   }
@@ -427,21 +449,23 @@ export function parseDSL(src, parseOptions = {}) {
         label: "label",
       };
       if (!map[kv.key]) {
-        errors.push({ line, text, msg: `unknown /block/ key: ${kv.key}` });
+        keepUnknownKey(blocks[active], kv.key, kv.val);
+        warnings.push({ line, text, msg: `unknown /block/ key: ${kv.key} — kept, not rendered` });
         continue;
       }
+      // dsl-rule.md P11: an unknown shape is `badValue`, a warning that falls
+      // back to `rounded`. The value is still kept, so it round-trips.
       if (kv.key === "shape" && !BLOCK_SHAPE_WIDTH_FACTOR[kv.val.toLowerCase()]) {
-        errors.push({
+        warnings.push({
           line,
           text,
-          msg: `unknown shape "${kv.val}" — use one of ${Object.keys(BLOCK_SHAPE_WIDTH_FACTOR).join(", ")}`,
+          msg: `unknown shape "${kv.val}" — using rounded; expected one of ${Object.keys(BLOCK_SHAPE_WIDTH_FACTOR).join(", ")}`,
         });
-        continue;
       }
       blocks[active][map[kv.key]] = kv.val;
       const badIcon = kv.key === "icon" ? unknownIconName(kv.val) : null;
       if (badIcon) {
-        errors.push({ line, text, msg: `unknown icon "${badIcon}" — not a known Lucide icon` });
+        warnings.push({ line, text, msg: `unknown icon "${badIcon}" — icon omitted` });
       }
     }
   }
@@ -492,7 +516,8 @@ export function parseDSL(src, parseOptions = {}) {
       };
       const field = propMap[kv.key];
       if (!field) {
-        errors.push({ line, text, msg: `unknown /prop/ key: ${kv.key}` });
+        keepUnknownKey(props[active], kv.key, kv.val);
+        warnings.push({ line, text, msg: `unknown /prop/ key: ${kv.key} — kept, not rendered` });
         continue;
       }
       if (field === "label") props[active].label = kv.val;
@@ -1123,6 +1148,9 @@ export function parseDSL(src, parseOptions = {}) {
     textColor: (roles[id] && roles[id].textColor) || null,
     bg: (roles[id] && roles[id].bg) || null,
     icon: (roles[id] && roles[id].icon) || null,
+    // Keys this build has no meaning for, carried so the serializer can put
+    // them back rather than deleting them on the next save.
+    unknown: (roles[id] && roles[id].unknown) || null,
   }));
 
   // Comments after the last /line/ row (kept so the formatter can round-trip them).
@@ -1138,6 +1166,7 @@ export function parseDSL(src, parseOptions = {}) {
     blocks,
     props,
     errors,
+    warnings,
     trailingLineComments,
   };
 }
@@ -1151,5 +1180,6 @@ export function parseDSLParts(src) {
     blocks: model.blocks,
     props: model.props,
     errors: model.errors,
+    warnings: model.warnings ?? [],
   };
 }

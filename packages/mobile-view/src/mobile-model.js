@@ -243,6 +243,7 @@ export function buildMobileTree(model) {
     rootEndRow: root.endRow,
     mergeTargets,
     errors: model.errors || [],
+    warnings: model.warnings || [],
   };
 }
 

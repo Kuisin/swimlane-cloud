@@ -72,6 +72,17 @@ function serializeOption(model) {
   return out;
 }
 
+/**
+ * Keys the parser had no meaning for, re-emitted after the known ones.
+ *
+ * dsl-rule.md:889 requires an unknown key round-trip byte for byte rather than
+ * being dropped, so a document written for a newer build — or simply carrying a
+ * typo — survives a save here intact.
+ */
+function emitUnknown(unknown) {
+  return Object.entries(unknown || {}).map(([key, value]) => `${key}: ${value};`);
+}
+
 function serializeRole(lane) {
   const lines = [`<${lane.id}>`];
   const props = [
@@ -80,7 +91,7 @@ function serializeRole(lane) {
     emitProperty("background-color", lane.bg),
     emitProperty("icon", lane.icon),
   ].filter(Boolean);
-  return [...lines, ...props];
+  return [...lines, ...props, ...emitUnknown(lane.unknown)];
 }
 
 function serializeBlock(block) {
@@ -93,7 +104,7 @@ function serializeBlock(block) {
     emitProperty("shape", block.shape),
     emitProperty("icon", block.icon),
   ].filter(Boolean);
-  return [...lines, ...props];
+  return [...lines, ...props, ...emitUnknown(block.unknown)];
 }
 
 function serializeProp(prop) {
@@ -107,7 +118,7 @@ function serializeProp(prop) {
     emitProperty("title", prop.title),
     emitProperty("max-chars", prop.maxChars != null ? String(prop.maxChars) : null),
   ].filter(Boolean);
-  return [...lines, ...props];
+  return [...lines, ...props, ...emitUnknown(prop.unknown)];
 }
 
 function serializeBranchColor(color) {

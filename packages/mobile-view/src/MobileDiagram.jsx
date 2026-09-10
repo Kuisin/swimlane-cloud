@@ -57,6 +57,8 @@ const MESSAGES = {
     mergeBack: "rejoins main flow",
     dragStep: "drag to reorder",
     parseIssues: (n) => `${n} parse issue${n === 1 ? "" : "s"} — showing what parsed.`,
+    parseWarnings: (n) =>
+      `${n} note${n === 1 ? "" : "s"} — the diagram is fine; unknown values were kept.`,
     path: (n) => `path ${n}`,
     caseN: (n) => `case ${n}`,
   },
@@ -87,6 +89,8 @@ const MESSAGES = {
     mergeBack: "本流へ合流",
     dragStep: "ドラッグして並べ替え",
     parseIssues: (n) => `${n} 件の解析エラー — 解析できた範囲を表示しています。`,
+    parseWarnings: (n) =>
+      `${n} 件の注意 — 図に問題はありません。認識できない値はそのまま保持しました。`,
     path: (n) => `経路 ${n}`,
     caseN: (n) => `ケース ${n}`,
   },
@@ -300,6 +304,9 @@ export function MobileDiagram({
     signal,
   };
   const hasError = tree.errors?.length > 0;
+  // Warnings block nothing (dsl-rule.md `impact: none`), so they read as a
+  // note rather than a failure — and never when there are real errors to fix.
+  const warnCount = tree.warnings?.length ?? 0;
 
   return (
     <div className="min-h-full w-full bg-slate-50">
@@ -332,6 +339,11 @@ export function MobileDiagram({
         {hasError && (
           <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-[12px] text-red-700">
             {t("parseIssues", tree.errors.length)}
+          </div>
+        )}
+        {!hasError && warnCount > 0 && (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[12px] text-amber-800">
+            {t("parseWarnings", warnCount)}
           </div>
         )}
         {tree.nodes.length === 0 ? (
