@@ -310,7 +310,7 @@ async function checkpoint(git: Git, ctx: Context, message?: string): Promise<voi
   const prefix = ctx.diagramsRoot ? `${ctx.diagramsRoot.replace(/\/+$/, "")}/` : "";
   const { staged, dirty } = await git.status(ctx.repo.root);
   const paths = [...new Set([...staged, ...dirty])].filter(
-    (p) => p.endsWith(".txt") && (!prefix || p.startsWith(prefix)),
+    (p) => /\.(txt|md)$/i.test(p) && (!prefix || p.startsWith(prefix)),
   );
 
   if (paths.length === 0) {

@@ -7,6 +7,8 @@
  * this deployment do.
  */
 
+import { isDiagramPath } from "./diagram-file";
+
 const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
@@ -30,8 +32,10 @@ export function assertRef(ref: string): void {
 }
 
 /**
- * Only `.txt` is servable. The DSL lives in `.txt` files by definition, so this
- * costs nothing and stops the app being pointed at arbitrary repo content.
+ * Only diagram sources are servable — raw DSL in a `.txt`, or DSL inside a
+ * ```` ```kai-swimlane ```` fence in a `.md`. This stops the app being pointed
+ * at arbitrary repository content; for `.md`, the other half of that promise is
+ * in `repo.ts`, where a file with no fence in it reads as missing.
  */
 export function assertDiagramPath(segments: string[]): string {
   if (segments.length === 0) throw new BadRequestError("No file path given.");
@@ -40,8 +44,8 @@ export function assertDiagramPath(segments: string[]): string {
   if (segments.some((s) => s === "" || s === "." || s === ".." || s.includes("\\"))) {
     throw new BadRequestError(`Invalid path "${path}".`);
   }
-  if (!path.toLowerCase().endsWith(".txt")) {
-    throw new BadRequestError("Only .txt diagram sources can be viewed.");
+  if (!isDiagramPath(path)) {
+    throw new BadRequestError("Only .txt and .md diagram sources can be viewed.");
   }
   return path;
 }

@@ -18,6 +18,7 @@ import {
   readMetaSection,
   serializeFrontmatter,
   splitFrontmatter,
+  storedMarkdown,
   writeMetaSection,
 } from "./markdown-doc.js";
 
@@ -186,6 +187,26 @@ body
   it("round-trips a whole authored document through the DSL and back", () => {
     const md = AUTHORED.replace("\nbody\n", `\n\`\`\`kai-swimlane\n${DSL}\n\`\`\`\n`);
     expect(markdownFromDsl(dslFromMarkdown(md), md)).toBe(md);
+  });
+});
+
+describe("storedMarkdown", () => {
+  it("writes the DSL back into the document it came from", () => {
+    const out = storedMarkdown(dslFromMarkdown(MD), MD);
+    expect(out).toBe(MD);
+  });
+
+  it("builds a new document when there was none", () => {
+    expect(isMarkdownDiagram(storedMarkdown(DSL, undefined))).toBe(true);
+  });
+
+  // Every host that can both read and write a `.md` depends on this: `read`
+  // hands prose straight through, so without it the next save would wrap a
+  // README in a fence and turn it into a broken diagram.
+  it("leaves prose alone rather than wrapping it in a fence", () => {
+    const prose = "# Notes\n\nJust prose.\n";
+    expect(storedMarkdown(prose, prose)).toBe(prose);
+    expect(storedMarkdown(`${prose}More.\n`, prose)).toBe(`${prose}More.\n`);
   });
 });
 

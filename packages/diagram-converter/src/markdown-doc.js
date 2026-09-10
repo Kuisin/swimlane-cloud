@@ -379,6 +379,19 @@ export function dslFromMarkdown(md) {
 }
 
 /**
+ * The markdown to store for `dsl`, given what the file held before.
+ *
+ * When `previousMd` is markdown with no diagram in it, `dsl` is that prose
+ * being edited directly and is stored as-is — wrapping a README in a fence
+ * would turn it into a broken diagram. Every host that can both read and write
+ * a `.md` needs this exact rule, so it lives here rather than in each of them.
+ */
+export function storedMarkdown(dsl, previousMd) {
+  if (previousMd !== undefined && previousMd !== null && !isMarkdownDiagram(previousMd)) return dsl;
+  return markdownFromDsl(dsl, previousMd ?? undefined);
+}
+
+/**
  * Write `dsl` back out as a markdown document: `/meta/` lifted into
  * frontmatter, the DSL in its fence, and — when `previousMd` is given — every
  * other line of prose exactly as it was.

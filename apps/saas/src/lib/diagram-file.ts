@@ -12,11 +12,7 @@
  * `diagrams/README.md`). `dslOf` returns `null` for those, which is the signal
  * to skip a file rather than to fail on it.
  */
-import {
-  dslFromMarkdown,
-  isMarkdownDiagram,
-  markdownFromDsl,
-} from "@swimlane-cloud/diagram-converter/markdown-doc";
+import { dslFromMarkdown, storedMarkdown } from "@swimlane-cloud/diagram-converter/markdown-doc";
 
 /** Extensions a diagram may be stored in. */
 export const DIAGRAM_EXTENSIONS = [".txt", ".md"] as const;
@@ -55,6 +51,5 @@ export function dslOf(path: string, text: string): string | null {
  */
 export function storedFrom(path: string, text: string, previous?: string): string {
   if (!isMarkdownFile(path)) return text;
-  if (previous !== undefined && !isMarkdownDiagram(previous)) return text;
-  return markdownFromDsl(text, previous);
+  return storedMarkdown(text, previous);
 }
