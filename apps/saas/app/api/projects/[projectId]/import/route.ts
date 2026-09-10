@@ -3,6 +3,7 @@ import { ASSET_EXTENSIONS, checkImportPath, dirOf } from "@swimlane-cloud/diagra
 import { withApi, json, ApiError } from "@/lib/api";
 import { assertRef, assertRepoPath } from "@/lib/guard";
 import { requireProjectRole } from "@/lib/projects";
+import { resolveImportPath } from "@/lib/import-path";
 import { readTextAt, resolveSha } from "@/lib/repo-files";
 
 export const dynamic = "force-dynamic";
@@ -13,21 +14,6 @@ const MIME: Record<string, string> = ASSET_EXTENSIONS;
 
 /** 2 MiB, the parser's per-image ceiling, checked before we send the bytes. */
 const MAX_BYTES = 2 * 1024 * 1024;
-
-/** `./` and `../` resolve against the importing file, everything else at the root. */
-function resolveImportPath(from: string, path: string): string {
-  const segments =
-    path.startsWith("./") || path.startsWith("../")
-      ? `${dirOf(from)}/${path}`.split("/")
-      : path.split("/");
-  const parts: string[] = [];
-  for (const seg of segments) {
-    if (seg === "" || seg === ".") continue;
-    if (seg === "..") parts.pop();
-    else parts.push(seg);
-  }
-  return parts.join("/");
-}
 
 /**
  * GET /api/projects/[projectId]/import?branch=&from=&path=

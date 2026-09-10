@@ -134,6 +134,15 @@ export const checkpoint = (
     expectedHeadSha,
   });
 
+/** Rewrite every `.txt` diagram on a branch as a `.md`, in one commit. */
+export const convertToMarkdown = (pid: string, branch: string) =>
+  postJson<{
+    converted: number;
+    commitSha: string | null;
+    branch: string;
+    renames?: { from: string; to: string }[];
+  }>(`${base(pid)}/convert-markdown`, { branch });
+
 /** Every uncommitted change on a branch, for the Push / Request-review modals. */
 export const listPendingChanges = (pid: string, branch: string) =>
   api<{ headSha: string; changes: PendingChange[] }>(`${base(pid)}/draft?${q({ branch })}`);

@@ -11,7 +11,7 @@ import {
   describeError,
 } from "../_components";
 import { autoSubject } from "@/lib/commit-message";
-import { checkpoint, compare, listPendingChanges, openPR } from "@/lib/workflow";
+import { checkpoint, compare, convertToMarkdown, listPendingChanges, openPR } from "@/lib/workflow";
 import type { CompareResponse, PendingChange } from "@/lib/types";
 import { useT } from "@/i18n";
 
@@ -266,6 +266,66 @@ export function DiscardEditModal({
       }
     >
       <p className="text-sm text-neutral-600">{t("edit.discard.confirm")}</p>
+    </Modal>
+  );
+}
+
+/**
+ * Convert every `.txt` diagram on this branch to `.md`, in one commit.
+ *
+ * One commit is what makes this reviewable as an ordinary pull request and
+ * undoable as a single revert — which is the reassurance worth giving here,
+ * since the action touches every diagram in the project at once.
+ */
+export function ConvertMarkdownModal({
+  projectId,
+  branch,
+  count,
+  onClose,
+  onConverted,
+}: {
+  projectId: string;
+  branch: string;
+  /** How many `.txt` diagrams the tree is currently showing. */
+  count: number;
+  onClose: () => void;
+  onConverted: (result: { converted: number }) => void;
+}) {
+  const { t } = useT();
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleConvert() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await convertToMarkdown(projectId, branch);
+      onConverted({ converted: result.converted });
+    } catch (e) {
+      setError(describeError(e, t));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={t("convert.title")}
+      onClose={onClose}
+      maxW="max-w-md"
+      footer={
+        <ModalFooter
+          onCancel={onClose}
+          onConfirm={handleConvert}
+          confirmLabel={t("convert.confirm")}
+          busy={busy}
+        />
+      }
+    >
+      <div className="space-y-3 text-sm text-neutral-600">
+        <p>{t("convert.body", { n: String(count) })}</p>
+        <p className="text-xs text-neutral-500">{t("convert.note")}</p>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>
     </Modal>
   );
 }
