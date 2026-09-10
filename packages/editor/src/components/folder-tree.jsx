@@ -23,6 +23,7 @@ import { useT } from "../i18n.jsx";
  */
 export function FolderTree({
   files,
+  folders,
   width,
   activeId,
   dirtyIds,
@@ -43,7 +44,7 @@ export function FolderTree({
   onToggleCollapse,
 }) {
   const { t } = useT();
-  const tree = useMemo(() => buildFolderTree(files), [files]);
+  const tree = useMemo(() => buildFolderTree(files, folders), [files, folders]);
   const [rootDragOver, setRootDragOver] = useState(false);
   const [showStarters, setShowStarters] = useState(false);
   const rootDragCount = useRef(0);

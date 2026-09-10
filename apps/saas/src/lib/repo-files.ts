@@ -84,19 +84,42 @@ export async function resolveSha(ctx: RepoApis, ref: string): Promise<string> {
   }
 }
 
-/** Diagram paths at a commit, honouring `.swimlane.json`. */
+/** The directory a folder marker stands for. */
+export function folderOfMarker(path: string): string {
+  return path.slice(0, -"/.gitkeep".length);
+}
+
+/**
+ * Diagram paths at a commit, honouring `.swimlane.json`, plus the directories
+ * that exist without holding one.
+ *
+ * Git has no way to store an empty directory, so the editor marks one with a
+ * `.gitkeep`. The marker is not a file anybody edits, so it stays out of
+ * `files` — but the folder it stands for still has to be listed, or creating a
+ * folder appears to do nothing.
+ */
 export async function listDiagramFiles(
   ctx: RepoApis,
   sha: string,
   config?: RepoConfig,
-): Promise<{ files: string[]; truncated: boolean; config: RepoConfig }> {
+): Promise<{ files: string[]; folders: string[]; truncated: boolean; config: RepoConfig }> {
   const cfg = config ?? (await readConfigAt(ctx, sha));
   const { entries, truncated } = await ctx.write.listTree(sha, true);
-  const files = entries
-    .filter((e) => e.type === "blob" && isDiagramPath(e.path, cfg))
+  const blobs = entries.filter((e) => e.type === "blob");
+  const files = blobs
+    .filter((e) => isDiagramPath(e.path, cfg))
     .map((e) => e.path)
     .sort();
-  return { files, truncated, config: cfg };
+  const folders = blobs
+    .filter(
+      (e) =>
+        e.path.endsWith("/.gitkeep") &&
+        !e.path.startsWith(TEMPLATES_PREFIX) &&
+        isWithinRoot(cfg, e.path),
+    )
+    .map((e) => folderOfMarker(e.path))
+    .sort();
+  return { files, folders, truncated, config: cfg };
 }
 
 /** Run `fn` over `items` with at most `concurrency` in flight. */

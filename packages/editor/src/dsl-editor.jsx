@@ -59,6 +59,7 @@ function DslEditorInner({ options }) {
     isHydrated,
     loadError,
     files,
+    folders,
     documents,
     openDocuments,
     activeDocument,
@@ -347,6 +348,7 @@ function DslEditorInner({ options }) {
     <div className="sw-editor">
       <FolderTree
         files={files}
+        folders={folders}
         width={treeCollapsed ? 0 : tree.width}
         activeId={activeDocumentId}
         dirtyIds={dirtyIds}

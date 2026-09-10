@@ -101,9 +101,13 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   if (body.op === "rmdir") {
     const dir = assertRepoPath(body.dir).replace(/\/+$/, "");
     const prefix = `${dir}/`;
-    const targets = [...new Set([...committed, ...Object.keys(state.writes)])].filter(
-      (p) => p.startsWith(prefix) && isDraftablePath(p),
-    );
+    // Committed folder markers are not in `committed` (they are not diagrams),
+    // but an empty folder is *only* its marker — without them, deleting a
+    // folder that holds nothing else would answer "no files to remove".
+    const committedMarkers = listing.folders.map((f) => `${f}/.gitkeep`);
+    const targets = [
+      ...new Set([...committed, ...committedMarkers, ...Object.keys(state.writes)]),
+    ].filter((p) => p.startsWith(prefix) && isDraftablePath(p));
     if (targets.length === 0) throw new ApiError(404, `${dir} has no files to remove.`);
     return json(await markDeleted(targets));
   }

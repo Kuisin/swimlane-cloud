@@ -58,6 +58,11 @@ export interface EditorCapabilities {
 export interface EditorHost {
   root?(): Promise<string | null>;
   list(): Promise<FileRef[]>;
+  /**
+   * Directories that exist without holding a listed file. Optional: a host
+   * with no concept of an empty folder simply omits it.
+   */
+  listFolders?(): Promise<string[]>;
   read(id: string): Promise<string>;
   /** Text of an `@use` fragment; without it imports simply do not resolve. */
   readImport?(path: string): Promise<string | null>;
@@ -247,7 +252,10 @@ export interface FolderTreeNode {
   folders: FolderTreeNode[];
   files: { id: string; name: string }[];
 }
-export declare function buildFolderTree(files: { id: string; name?: string }[]): FolderTreeNode;
+export declare function buildFolderTree(
+  files: { id: string; name?: string }[],
+  folders?: string[],
+): FolderTreeNode;
 
 export declare function findAdjacentStepIndex(
   rows: GuiRow[],

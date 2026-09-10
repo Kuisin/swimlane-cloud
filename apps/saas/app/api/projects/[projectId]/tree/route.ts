@@ -7,6 +7,7 @@ import {
   draftsApplyTo,
   isDraftablePath,
   isFolderMarker,
+  folderOfMarker,
   listDiagramFiles,
   loadDraftState,
   resolveSha,
@@ -33,17 +34,30 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
 
   const project = await requireProjectRole(projectId, "viewer");
   const sha = await resolveSha(project, ref);
-  const { files, truncated, config } = await listDiagramFiles(project, sha);
+  const {
+    files,
+    folders: committedFolders,
+    truncated,
+    config,
+  } = await listDiagramFiles(project, sha);
 
   const known = new Set(files);
   let ids = [...files];
+  // Directories that exist without holding a listed file. A folder created in
+  // the editor is a `.gitkeep` draft long before it is a commit, so drafts
+  // count here too — otherwise "New folder" appears to do nothing until push.
+  const folderSet = new Set(committedFolders);
   const drafts: Record<string, string> = {};
   if (draftsApplyTo(ref)) {
     const { writes, deletions, updatedAt } = await loadDraftState(projectId, ref);
     for (const p of Object.keys(writes)) {
-      // `isDraftablePath` also admits `.gitkeep` folder markers, which are not
-      // files the tree should list.
-      if (!isDraftablePath(p) || isFolderMarker(p)) continue;
+      if (!isDraftablePath(p)) continue;
+      // The marker itself is not a file anybody edits; it only tells us the
+      // folder is there.
+      if (isFolderMarker(p)) {
+        if (p.includes("/")) folderSet.add(folderOfMarker(p));
+        continue;
+      }
       if (!known.has(p)) ids.push(p);
       if (updatedAt[p]) drafts[p] = updatedAt[p];
     }
@@ -53,6 +67,9 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
       const gone = new Set(deletions);
       ids = ids.filter((p) => !gone.has(p));
       for (const p of gone) delete drafts[p];
+      for (const p of gone) {
+        if (isFolderMarker(p) && p.includes("/")) folderSet.delete(folderOfMarker(p));
+      }
     }
   }
 
@@ -68,6 +85,7 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
       fid: fidByPath[id],
     })),
     drafts,
+    folders: [...folderSet].sort(),
     truncated,
     diagramsRoot: config.diagramsRoot,
   };

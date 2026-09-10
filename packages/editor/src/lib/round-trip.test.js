@@ -148,6 +148,35 @@ describe("folder tree", () => {
     expect(ops.files.map((f) => f.name)).toEqual(["offboarding.txt"]);
     expect(ops.folders[0].name).toBe("onboarding");
   });
+
+  // Git cannot store an empty directory, so a folder holding nothing has no
+  // file path to derive it from — it has to be listed explicitly or it is
+  // invisible the moment it is created.
+  it("shows a folder that holds no files", () => {
+    const tree = buildFolderTree([{ id: "ops/flow.txt", name: "flow.txt" }], ["archive"]);
+    expect(tree.folders.map((f) => f.name)).toEqual(["archive", "ops"]);
+    const archive = tree.folders.find((f) => f.name === "archive");
+    expect(archive.files).toEqual([]);
+    expect(archive.path).toBe("archive");
+  });
+
+  it("creates every level of a nested empty folder", () => {
+    const tree = buildFolderTree([], ["a/b/c"]);
+    const a = tree.folders.find((f) => f.name === "a");
+    const b = a.folders.find((f) => f.name === "b");
+    expect(b.folders.map((f) => f.path)).toEqual(["a/b/c"]);
+  });
+
+  it("merges an explicit folder with one derived from a file path", () => {
+    const tree = buildFolderTree([{ id: "ops/flow.txt", name: "flow.txt" }], ["ops"]);
+    expect(tree.folders).toHaveLength(1);
+    expect(tree.folders[0].files.map((f) => f.name)).toEqual(["flow.txt"]);
+  });
+
+  it("behaves exactly as before when no folders are given", () => {
+    const files = [{ id: "ops/flow.txt", name: "flow.txt" }];
+    expect(buildFolderTree(files)).toEqual(buildFolderTree(files, []));
+  });
 });
 
 describe("template merge", () => {

@@ -110,6 +110,12 @@ export interface TreeResponse {
    * what lets the browser cache file text safely (see `file-version.ts`).
    */
   drafts: Record<string, string>;
+  /**
+   * Directories that exist but hold no listed file — git cannot store an
+   * empty directory, so these come from `.gitkeep` markers. The markers
+   * themselves are deliberately absent from `files`.
+   */
+  folders: string[];
   truncated: boolean;
   diagramsRoot: string;
 }

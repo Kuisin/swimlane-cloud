@@ -191,6 +191,19 @@ export function createSaasHost(opts: SaasHostOptions): SaasEditorHost {
       return (await next).files;
     },
 
+    /**
+     * Directories with nothing listed in them. Git cannot store an empty
+     * directory, so these come from the `.gitkeep` markers `mkdir` writes —
+     * without them a folder you just created would vanish from the tree until
+     * you put a file in it.
+     */
+    async listFolders(): Promise<string[]> {
+      if (fresh && Date.now() - fresh.at < FRESH_LISTING_MS) return fresh.tree.folders ?? [];
+      const cached = localCache.get<TreeResponse>(treeKey);
+      if (cached) return cached.value.folders ?? [];
+      return (await fetchTree()).folders ?? [];
+    },
+
     async read(id) {
       // The cache holds what is stored, not what the editor sees, so a cache
       // hit still records the markdown a later save has to merge back into.
