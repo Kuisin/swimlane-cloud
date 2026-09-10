@@ -68,6 +68,56 @@ describe("serialize/parse round-trip", () => {
   });
 });
 
+describe("keys this build has no meaning for", () => {
+  // dsl-rule.md:889 requires an unknown key be kept and re-emitted. Before this
+  // was implemented the parser reported it as an error and dropped it, so the
+  // first GUI save silently deleted the line.
+  const SRC = `@kai-swimlane
+
+/title/
+T
+
+/role/
+<a>
+label: A;
+x-figma-node: 12:345;
+
+/block/
+<b1>
+shape: rect;
+colour: red;
+
+/prop/
+<p1>
+label: P;
+icon: #monitor;
+
+/line/
+[a: x] <b1>
+props: p1;
+@end
+`;
+
+  it("survives a serialize/parse round-trip instead of being deleted", () => {
+    const model = parseDSL(SRC);
+    expect(model.errors).toEqual([]);
+    expect(model.warnings).toHaveLength(3);
+
+    const out = serializeDSL(model);
+    expect(out).toContain("x-figma-node: 12:345;");
+    expect(out).toContain("colour: red;");
+    expect(out).toContain("icon: #monitor;");
+
+    // and a second pass is stable, so the keys do not drift or accumulate
+    expect(serializeDSL(parseDSL(out))).toBe(out);
+  });
+
+  it("does not block formatting or count as a broken document", () => {
+    expect(parseDSL(SRC).errors).toHaveLength(0);
+    expect(formatDsl(SRC).ok).toBe(true);
+  });
+});
+
 describe("textToSvg engine integration", () => {
   it("renders an SVG string for valid DSL", () => {
     const { svg, errors } = textToSvg(SAMPLE, { themeKey: "basic" });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseDSL } from "./parser.js";
 
 const msgs = (src) => parseDSL(src).errors.map((e) => e.msg);
+const warns = (src) => parseDSL(src).warnings.map((e) => e.msg);
 
 const DOC = (body) => `@kai-swimlane
 /role/
@@ -81,12 +82,20 @@ describe("parser validation — definition sections", () => {
     expect(msgs(src)).toContain("definition id must not be empty");
   });
 
-  it("errors on unknown keys (typos) in /role/, /block/, /prop/", () => {
+  // dsl-rule.md:1015 makes `unknownKey` a warning with `impact: none`, and :889
+  // requires the key be kept and re-emitted rather than dropped.
+  it("warns about unknown keys (typos) in /role/, /block/, /prop/ and keeps them", () => {
     const src = `@kai-swimlane\n/role/\n<a>\nlable: A;\n/block/\n<b1>\ncolor: red;\n/prop/\n<p1>\nwidth: 4;\n/line/\n[a: x]\n@end`;
-    const m = msgs(src);
-    expect(m).toContain("unknown /role/ key: lable");
-    expect(m).toContain("unknown /block/ key: color");
-    expect(m).toContain("unknown /prop/ key: width");
+    const model = parseDSL(src);
+    expect(model.errors).toEqual([]);
+    const w = warns(src);
+    expect(w).toContain("unknown /role/ key: lable — kept, not rendered");
+    expect(w).toContain("unknown /block/ key: color — kept, not rendered");
+    expect(w).toContain("unknown /prop/ key: width — kept, not rendered");
+
+    expect(model.lanes.find((l) => l.id === "a").unknown).toEqual({ lable: "A" });
+    expect(model.blocks.b1.unknown).toEqual({ color: "red" });
+    expect(model.props.p1.unknown).toEqual({ width: "4" });
   });
 
   it("errors on a property line before any <id> definition", () => {
@@ -99,9 +108,14 @@ describe("parser validation — definition sections", () => {
     expect(msgs(src)).toContain("unrecognized /role/ line");
   });
 
-  it("errors on unknown block shape", () => {
+  // dsl-rule.md P11: an unknown shape is `badValue`, a warning that falls back
+  // to `rounded` and keeps the written value.
+  it("warns about an unknown block shape and keeps the value", () => {
     const src = `@kai-swimlane\n/role/\n<a>\n/block/\n<b1>\nshape: star;\n/line/\n[a: x]\n@end`;
-    expect(msgs(src).some((m) => m.startsWith('unknown shape "star"'))).toBe(true);
+    const model = parseDSL(src);
+    expect(model.errors).toEqual([]);
+    expect(warns(src).some((m) => m.startsWith('unknown shape "star"'))).toBe(true);
+    expect(model.blocks.b1.shape).toBe("star");
   });
 
   it("errors on invalid prop side and max-chars", () => {

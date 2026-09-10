@@ -26,6 +26,8 @@ declare module "@swimlane-cloud/diagram-converter" {
 declare module "@swimlane-cloud/diagram-converter/parser" {
   export interface ParseResult {
     errors: Array<{ line?: number; text?: string; msg?: string }>;
+    /** Diagnostics dsl-rule.md classifies `impact: none` — these block nothing. */
+    warnings: Array<{ line?: number; text?: string; msg?: string }>;
     [key: string]: unknown;
   }
   export function parseDSL(
@@ -41,6 +43,7 @@ declare module "@swimlane-cloud/diagram-converter/parser" {
     blocks: Record<string, unknown>;
     props: Record<string, unknown>;
     errors: Array<{ line?: number; text?: string; msg?: string }>;
+    warnings: Array<{ line?: number; text?: string; msg?: string }>;
   };
   export const ASSET_EXTENSIONS: Record<string, string>;
   export function checkImportPath(path: string, fromDir?: string): string | null;
