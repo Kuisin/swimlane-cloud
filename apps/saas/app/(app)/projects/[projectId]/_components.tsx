@@ -49,6 +49,7 @@ import {
 } from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import { FileTree } from "@/components/file-tree";
+import { MobileFilePicker } from "@/components/mobile-file-picker";
 import { GitHubMark } from "@/components/github-mark";
 import { RoleBadge } from "@/components/app-header";
 import { branchLabel } from "@/lib/branch-label";
@@ -1392,16 +1393,24 @@ export function MobileView({
   return (
     <div className="flex h-full flex-col bg-neutral-100">
       {paths.length > 0 && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 bg-white px-3 py-2">
+        <div className="flex shrink-0 items-center border-b border-neutral-200 bg-white px-3 py-2">
+          {/* Full width, one line each: the file name used to wrap inside the
+              button while the directory beside it ran off the screen. */}
           <button
             onClick={() => setShowFiles(true)}
-            className="flex items-center gap-2 rounded-md border border-neutral-300 px-2.5 py-1.5 hover:border-indigo-400"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-neutral-300 px-2.5 py-1.5 text-left hover:border-indigo-400"
           >
-            <FolderOpen size={15} className="text-neutral-500" />
-            <span className="font-mono text-xs">{active.split("/").pop() || "—"}</span>
-            <ChevronDown size={14} className="text-neutral-400" />
+            <FolderOpen size={15} className="shrink-0 text-neutral-500" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-mono text-xs">
+                {active.split("/").pop() || "—"}
+              </span>
+              {activeDir && (
+                <span className="block truncate text-[11px] text-neutral-400">{activeDir}/</span>
+              )}
+            </span>
+            <ChevronDown size={14} className="shrink-0 text-neutral-400" />
           </button>
-          {activeDir && <span className="truncate text-xs text-neutral-400">{activeDir}/</span>}
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-auto">
@@ -1494,7 +1503,7 @@ export function MobileView({
       )}
       {showFiles && (
         <Modal title={t("mobile.files")} onClose={() => setShowFiles(false)}>
-          <FileList
+          <MobileFilePicker
             paths={paths}
             active={active}
             onPick={(p) => {
@@ -1504,51 +1513,6 @@ export function MobileView({
           />
         </Modal>
       )}
-    </div>
-  );
-}
-
-function FileList({
-  paths,
-  active,
-  onPick,
-}: {
-  paths: string[];
-  active: string;
-  onPick: (p: string) => void;
-}) {
-  const { t } = useT();
-  const groups: Record<string, string[]> = {};
-  for (const p of paths) {
-    const dir = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
-    (groups[dir] ||= []).push(p);
-  }
-  const dirs = Object.keys(groups).sort();
-  if (paths.length === 0) return <Empty>{t("mobile.noFiles")}</Empty>;
-  return (
-    <div className="space-y-4">
-      {dirs.map((dir) => (
-        <div key={dir || "root"}>
-          <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-neutral-400">
-            <FolderOpen size={13} /> {dir || "/"}
-          </div>
-          <ul className="space-y-1">
-            {groups[dir].map((p) => (
-              <li key={p}>
-                <button
-                  onClick={() => onPick(p)}
-                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left ${
-                    p === active ? "bg-indigo-50 text-indigo-700" : "hover:bg-neutral-100"
-                  }`}
-                >
-                  <span className="truncate font-mono text-sm">{p.split("/").pop()}</span>
-                  {p === active && <Check size={15} className="shrink-0 text-indigo-600" />}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
     </div>
   );
 }
