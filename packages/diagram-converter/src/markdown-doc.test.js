@@ -77,6 +77,118 @@ describe("splitFrontmatter", () => {
   });
 });
 
+/**
+ * Frontmatter written by hand, in the shapes real documents actually use: a
+ * block sequence, an author-chosen key order, and a value this module has no
+ * model for. Each of these was silently destroyed on the first save.
+ */
+describe("frontmatter shapes this module does not itself emit", () => {
+  const AUTHORED = `---
+id: BF-AC-010-001-FLOW
+activity_ids:
+  - ACT-AC-010-001-001
+  - ACT-AC-010-001-002
+title: GL Master Data Maintenance
+status: active
+---
+
+body
+`;
+
+  it("reads a block sequence instead of dropping its items", () => {
+    const { meta } = splitFrontmatter(AUTHORED);
+    expect(meta.activity_ids).toBe("ACT-AC-010-001-001, ACT-AC-010-001-002");
+  });
+
+  it("writes a block sequence back as a block sequence", () => {
+    const { meta, shape } = splitFrontmatter(AUTHORED);
+    expect(serializeFrontmatter(meta, shape)).toBe(AUTHORED.slice(0, AUTHORED.indexOf("\nbody")));
+  });
+
+  it("keeps the author's key order rather than re-sorting every save", () => {
+    const { meta, shape } = splitFrontmatter(AUTHORED);
+    const keys = serializeFrontmatter(meta, shape)
+      .split("\n")
+      .filter((l) => /^\w/.test(l))
+      .map((l) => l.slice(0, l.indexOf(":")));
+    expect(keys).toEqual(["id", "activity_ids", "title", "status"]);
+  });
+
+  it("appends a newly added key without disturbing the existing order", () => {
+    const { meta, shape } = splitFrontmatter(AUTHORED);
+    const out = serializeFrontmatter({ ...meta, owner: "fi.coe@example.com" }, shape);
+    const keys = out
+      .split("\n")
+      .filter((l) => /^\w/.test(l))
+      .map((l) => l.slice(0, l.indexOf(":")));
+    expect(keys).toEqual(["id", "activity_ids", "title", "status", "owner"]);
+  });
+
+  it("drops a key removed from the metadata", () => {
+    const { meta, shape } = splitFrontmatter(AUTHORED);
+    const { status: _removed, ...rest } = meta;
+    expect(serializeFrontmatter(rest, shape)).not.toContain("status:");
+  });
+
+  it("carries a value it cannot model through verbatim", () => {
+    // A nested map and a block scalar have no flat-string form, so they are
+    // kept exactly as written rather than flattened into something lossy.
+    const md = `---
+owner: x
+approvals:
+  finance: alice
+  legal: bob
+notes: |
+  first
+  second
+---
+
+body
+`;
+    const { meta, shape } = splitFrontmatter(md);
+    expect(meta.approvals).toBeUndefined();
+    expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
+  });
+
+  it("keeps a list whose items contain the separator verbatim", () => {
+    const md = `---
+owners:
+  - "Doe, Jane"
+  - "Roe, Rich"
+---
+
+body
+`;
+    const { meta, shape } = splitFrontmatter(md);
+    // Flattening these would make the comma-join ambiguous, so it is refused.
+    expect(meta.owners).toBeUndefined();
+    expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
+  });
+
+  it("reads an inline [a, b] list and writes it back inline", () => {
+    const md = "---\ntags: [order, credit]\n---\n\nbody\n";
+    const { meta, shape } = splitFrontmatter(md);
+    expect(meta.tags).toBe("order, credit");
+    expect(serializeFrontmatter(meta, shape)).toBe("---\ntags: [order, credit]\n---\n");
+    // and it stays editable, unlike a shape that has to be kept verbatim
+    expect(serializeFrontmatter({ tags: "order, credit, new" }, shape)).toContain(
+      "[order, credit, new]",
+    );
+  });
+
+  it("keeps a | block scalar's content instead of reading the indicator as the value", () => {
+    const md = "---\nnotes: |\n  first\n  second\n---\n\nbody\n";
+    const { meta, shape } = splitFrontmatter(md);
+    expect(meta.notes).toBeUndefined();
+    expect(serializeFrontmatter(meta, shape)).toBe("---\nnotes: |\n  first\n  second\n---\n");
+  });
+
+  it("round-trips a whole authored document through the DSL and back", () => {
+    const md = AUTHORED.replace("\nbody\n", `\n\`\`\`kai-swimlane\n${DSL}\n\`\`\`\n`);
+    expect(markdownFromDsl(dslFromMarkdown(md), md)).toBe(md);
+  });
+});
+
 describe("serializeFrontmatter", () => {
   it("writes the five reserved keys first, then the rest sorted", () => {
     const out = serializeFrontmatter({ zeta: "z", owner: "o", alpha: "a", status: "s" });

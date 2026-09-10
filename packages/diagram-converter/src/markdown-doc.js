@@ -15,10 +15,12 @@
  * `markdownFromDsl(dslFromMarkdown(md)) === md` hold.
  *
  * The frontmatter dialect is a deliberate subset: one `key: value` scalar per
- * line, double-quoted when the value could not survive a round-trip bare. It is
- * not general YAML — this module both writes and reads it, and `/meta/` values
- * are themselves untyped strings at runtime (`parser-v2.js`), so nothing is
- * gained by parsing more than we emit.
+ * line, double-quoted when the value could not survive a round-trip bare, plus
+ * `- ` block sequences, which real documents use heavily and which flatten to
+ * the same comma-joined string `/meta/` already gives `tags`. It is not general
+ * YAML — but it must never *mangle* general YAML either, so a value written in
+ * any shape this module cannot rebuild (a nested map, a `|`/`>` block scalar) is
+ * carried through verbatim instead of being flattened into a lossy scalar.
  */
 
 const FENCE_LANG = "kai-swimlane";
@@ -84,17 +86,91 @@ export function orderedMetaKeys(meta) {
 }
 
 /**
+ * The separator a block sequence flattens to. It matches what `/meta/` already
+ * does with `tags`, so a list reads the same way everywhere downstream.
+ */
+const LIST_SEP = ", ";
+
+/** Items of a flattened list, or null when it cannot be one item per element. */
+function listItems(value) {
+  const items = String(value)
+    .split(",")
+    .map((s) => s.trim());
+  return items.every(Boolean) ? items : null;
+}
+
+/**
+ * True when these items survive being joined into one comma-separated scalar
+ * and split apart again — which is the only reason a list can be flattened.
+ */
+function flattenable(items) {
+  return items.length > 0 && items.every((v) => v && !v.includes(","));
+}
+
+/**
  * The `---` block for `meta`, including its trailing newline, or `""` when
  * there is no metadata to write.
+ *
+ * `shape` is the map `splitFrontmatter` returned for the document this metadata
+ * came from. It is what re-emits a block sequence as a block sequence, what puts
+ * a value this module never modelled back exactly as it was found, and — since
+ * it is ordered — what keeps the author's key order. Only a document with no
+ * previous shape to follow is ordered canonically; rewriting an existing file's
+ * keys into `orderedMetaKeys` order would turn every save into a large diff.
  */
-export function serializeFrontmatter(meta) {
-  const keys = orderedMetaKeys(meta);
+export function serializeFrontmatter(meta, shape) {
+  const values = meta ?? {};
+  const kept = shape instanceof Map ? shape : new Map();
+  const verbatim = [...kept].filter(([, v]) => v.kind === "verbatim").map(([k]) => k);
+  const all = { ...values };
+  for (const k of verbatim) if (!(k in all)) all[k] = "";
+  const known = [...kept.keys()].filter((k) => k in all);
+  const added = Object.keys(all).filter((k) => !kept.has(k));
+  const keys = [...known, ...orderedMetaKeys(Object.fromEntries(added.map((k) => [k, all[k]])))];
   if (!keys.length) return "";
-  const lines = keys.map((k) => {
-    const value = String(meta[k] ?? "");
-    return `${k}: ${needsQuoting(value) ? quote(value) : value}`;
-  });
+
+  const lines = [];
+  for (const key of keys) {
+    const how = kept.get(key);
+    if (how?.kind === "verbatim") {
+      lines.push(...how.lines);
+      continue;
+    }
+    const value = String(values[key] ?? "");
+    const items = how?.kind === "list" || how?.kind === "flowList" ? listItems(value) : null;
+    if (items && how.kind === "flowList") {
+      lines.push(`${key}: [${items.map((v) => (needsQuoting(v) ? quote(v) : v)).join(LIST_SEP)}]`);
+      continue;
+    }
+    if (items) {
+      lines.push(`${key}:`);
+      for (const item of items) lines.push(`  - ${needsQuoting(item) ? quote(item) : item}`);
+      continue;
+    }
+    lines.push(`${key}: ${needsQuoting(value) ? quote(value) : value}`);
+  }
   return `${FRONTMATTER_DELIM}\n${lines.join("\n")}\n${FRONTMATTER_DELIM}\n`;
+}
+
+function scalar(raw) {
+  return raw.length > 1 && raw.startsWith('"') && raw.endsWith('"') ? unquote(raw) : raw;
+}
+
+/** A `key:` whose value is written on the lines below it, as `- item` entries. */
+const SEQUENCE_ITEM = /^\s+-\s*(.*)$/;
+
+/** `|`, `>` and their chomping/indentation variants: the value is the block below. */
+const BLOCK_SCALAR = /^[|>][-+]?\d*$/;
+
+/** `[a, b]` written inline — the same list, in YAML's flow style. */
+const FLOW_SEQUENCE = /^\[(.*)\]$/;
+
+/**
+ * Inline forms YAML reads as something other than a plain string. Quoting one
+ * of these would change what it means, so its key is kept verbatim instead.
+ */
+function isOpaqueInline(raw) {
+  return BLOCK_SCALAR.test(raw) || raw.startsWith("{") || "&*!".includes(raw[0]);
 }
 
 /**
@@ -102,27 +178,75 @@ export function serializeFrontmatter(meta) {
  *
  * Only a block at the very start counts; a `---` later in the document is an
  * ordinary thematic break and is left in `body`.
+ *
+ * `shape` records how each key was written so `serializeFrontmatter` can write
+ * it back the same way — see the note at the top of this file about why an
+ * unmodellable value is kept verbatim rather than flattened.
  */
 export function splitFrontmatter(md) {
   const text = String(md ?? "");
   const lines = text.split("\n");
-  if (lines[0]?.trim() !== FRONTMATTER_DELIM)
-    return { meta: {}, body: text, hadFrontmatter: false };
+  const none = { meta: {}, body: text, hadFrontmatter: false, shape: new Map() };
+  if (lines[0]?.trim() !== FRONTMATTER_DELIM) return none;
 
   const end = lines.findIndex((l, i) => i > 0 && l.trim() === FRONTMATTER_DELIM);
-  if (end < 0) return { meta: {}, body: text, hadFrontmatter: false };
+  if (end < 0) return none;
 
   const meta = {};
-  for (const line of lines.slice(1, end)) {
+  const shape = new Map();
+  const block = lines.slice(1, end);
+
+  for (let i = 0; i < block.length; i++) {
+    const line = block[i];
     if (!line.trim()) continue;
     const cut = line.indexOf(":");
-    if (cut < 0) continue;
+    // A continuation line we did not consume below belongs to the key above it,
+    // whose shape is already `verbatim` — nothing to do.
+    if (cut < 0 || /^\s/.test(line)) continue;
     const key = line.slice(0, cut).trim();
     if (!key) continue;
-    const raw = line.slice(cut + 1).trim();
-    meta[key] = raw.length > 1 && raw.startsWith('"') && raw.endsWith('"') ? unquote(raw) : raw;
+
+    // Every line indented under this key, which a block form's value lives on.
+    const owned = [];
+    let j = i + 1;
+    for (; j < block.length; j++) {
+      if (!block[j].trim() || !/^\s/.test(block[j])) break;
+      owned.push(block[j]);
+    }
+
+    const inline = line.slice(cut + 1).trim();
+    if (inline) {
+      const flow = FLOW_SEQUENCE.exec(inline);
+      const items = flow ? flow[1].split(",").map((s) => scalar(s.trim())) : null;
+      if (items && flattenable(items)) {
+        meta[key] = items.join(LIST_SEP);
+        shape.set(key, { kind: "flowList" });
+      } else if (flow || isOpaqueInline(inline)) {
+        shape.set(key, { kind: "verbatim", lines: [line, ...owned] });
+        i = j - 1;
+      } else {
+        meta[key] = scalar(inline);
+        shape.set(key, { kind: "scalar" });
+      }
+      continue;
+    }
+
+    // `key:` with nothing after it: a block sequence, a nested map, or empty.
+    if (!owned.length) {
+      meta[key] = "";
+      shape.set(key, { kind: "scalar" });
+      continue;
+    }
+    const items = owned.map((l) => SEQUENCE_ITEM.exec(l)).map((m) => m && scalar(m[1].trim()));
+    if (flattenable(items)) {
+      meta[key] = items.join(LIST_SEP);
+      shape.set(key, { kind: "list" });
+    } else {
+      shape.set(key, { kind: "verbatim", lines: [line, ...owned] });
+    }
+    i = j - 1;
   }
-  return { meta, body: lines.slice(end + 1).join("\n"), hadFrontmatter: true };
+  return { meta, body: lines.slice(end + 1).join("\n"), hadFrontmatter: true, shape };
 }
 
 /* ───────────────────────────────── fences ──────────────────────────────── */
@@ -261,11 +385,13 @@ export function dslFromMarkdown(md) {
  */
 export function markdownFromDsl(dsl, previousMd) {
   const { meta, dsl: withoutMeta } = readMetaSection(dsl);
-  const frontmatter = serializeFrontmatter(meta);
+  // How the document being replaced wrote each key. Without this a block
+  // sequence would come back as a flat scalar and its items would be lost.
+  const previous = previousMd != null ? splitFrontmatter(previousMd) : null;
+  const frontmatter = serializeFrontmatter(meta, previous?.shape);
 
-  if (previousMd != null && extractDiagramFence(splitFrontmatter(previousMd).body)) {
-    const { body } = splitFrontmatter(previousMd);
-    return frontmatter + replaceDiagramFence(body, withoutMeta);
+  if (previous && extractDiagramFence(previous.body)) {
+    return frontmatter + replaceDiagramFence(previous.body, withoutMeta);
   }
 
   const fence = fenceFor(withoutMeta);
