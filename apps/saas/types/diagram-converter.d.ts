@@ -64,18 +64,28 @@ declare module "@swimlane-cloud/editor/styles.css";
 // Mobile-view package (separate, JSX, no bundled types).
 declare module "@swimlane-cloud/diagram-converter/markdown-doc" {
   /** A diagram stored as markdown: frontmatter + prose + a ```kai-swimlane fence. */
+  /** How a key was written, so it can be written back the same way. */
+  export type FrontmatterShape = Map<
+    string,
+    { kind: "scalar" | "list" | "flowList" } | { kind: "verbatim"; lines: string[] }
+  >;
   export function splitFrontmatter(md: string): {
     meta: Record<string, string>;
     body: string;
     hadFrontmatter: boolean;
+    shape: FrontmatterShape;
   };
-  export function serializeFrontmatter(meta: Record<string, string> | undefined): string;
+  export function serializeFrontmatter(
+    meta: Record<string, string> | undefined,
+    shape?: FrontmatterShape,
+  ): string;
   export function orderedMetaKeys(meta: Record<string, string> | undefined): string[];
   export function extractDiagramFence(
     body: string,
   ): { dsl: string; start: number; end: number; fence: string } | null;
   export function replaceDiagramFence(body: string, dsl: string): string;
   export function isMarkdownDiagram(md: string): boolean;
+  export function storedMarkdown(dsl: string, previousMd?: string | null): string;
   export function readMetaSection(dsl: string): { meta: Record<string, string>; dsl: string };
   export function writeMetaSection(dsl: string, meta: Record<string, string>): string;
   /** The DSL a markdown document holds, or null when it is only prose. */

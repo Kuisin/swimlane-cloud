@@ -9,6 +9,12 @@
  */
 
 import * as vscode from "vscode";
+import { dslFromMarkdown, storedMarkdown } from "@swimlane-cloud/diagram-converter/markdown-doc";
+
+/** Both forms a diagram is stored in: raw DSL, or DSL inside a markdown fence. */
+const DIAGRAM_GLOB = "*.{txt,md}";
+
+const isMarkdown = (id: string) => id.toLowerCase().endsWith(".md");
 
 export interface FileRef {
   id: string;
@@ -27,6 +33,12 @@ function assertInside(root: vscode.Uri, target: vscode.Uri): void {
 export class FsHost {
   private readonly decoder = new TextDecoder();
   private readonly encoder = new TextEncoder();
+  /**
+   * The raw markdown of every `.md` read this session, so a write can put the
+   * DSL back inside its fence without disturbing the frontmatter or the prose
+   * around it. Mirrors `apps/saas/src/lib/saas-host.ts`.
+   */
+  private readonly markdownSource = new Map<string, string>();
 
   constructor(
     private readonly workspaceRoot: vscode.Uri,
@@ -49,7 +61,7 @@ export class FsHost {
   /** `findFiles` honours files.exclude / search.exclude for free. */
   async list(): Promise<FileRef[]> {
     const prefix = this.diagramsRoot ? `${this.diagramsRoot.replace(/\/+$/, "")}/` : "";
-    const pattern = new vscode.RelativePattern(this.workspaceRoot, `${prefix}**/*.txt`);
+    const pattern = new vscode.RelativePattern(this.workspaceRoot, `${prefix}**/${DIAGRAM_GLOB}`);
     const uris = await vscode.workspace.findFiles(pattern, "**/node_modules/**", 5000);
 
     const refs = await Promise.all(
@@ -66,8 +78,12 @@ export class FsHost {
     return refs.sort((a, b) => a.id.localeCompare(b.id));
   }
 
+  /** What the editor sees: a `.md` diagram is unwrapped to the DSL inside it. */
   async read(id: string): Promise<string> {
-    return this.decoder.decode(await vscode.workspace.fs.readFile(this.uri(id)));
+    const text = this.decoder.decode(await vscode.workspace.fs.readFile(this.uri(id)));
+    if (!isMarkdown(id)) return text;
+    this.markdownSource.set(id, text);
+    return dslFromMarkdown(text) ?? text;
   }
 
   /**
@@ -78,7 +94,15 @@ export class FsHost {
     const uri = this.uri(id);
     const parent = vscode.Uri.joinPath(uri, "..");
     await vscode.workspace.fs.createDirectory(parent);
-    await vscode.workspace.fs.writeFile(uri, this.encoder.encode(dsl));
+    await vscode.workspace.fs.writeFile(uri, this.encoder.encode(this.toStored(id, dsl)));
+  }
+
+  /** The inverse of `read`: what actually goes on disk for `id`. */
+  private toStored(id: string, dsl: string): string {
+    if (!isMarkdown(id)) return dsl;
+    const next = storedMarkdown(dsl, this.markdownSource.get(id));
+    this.markdownSource.set(id, next);
+    return next;
   }
 
   async writeMany(updates: { id: string; dsl: string }[]): Promise<void> {
@@ -125,7 +149,7 @@ export class FsHost {
   ): vscode.Disposable {
     const prefix = this.diagramsRoot ? `${this.diagramsRoot.replace(/\/+$/, "")}/` : "";
     const watcher = vscode.workspace.createFileSystemWatcher(
-      new vscode.RelativePattern(this.workspaceRoot, `${prefix}**/*.txt`),
+      new vscode.RelativePattern(this.workspaceRoot, `${prefix}**/${DIAGRAM_GLOB}`),
     );
     const relative = (uri: vscode.Uri) =>
       vscode.workspace.asRelativePath(uri, false).split("\\").join("/");

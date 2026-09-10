@@ -15,6 +15,7 @@ import {
   type RepoReaderApi,
 } from "@swimlane-cloud/github-client";
 import { openSession, SESSION_COOKIE } from "@/lib/session";
+import { dslOf, isMarkdownPath } from "@/lib/diagram-file";
 
 /** A 40-char commit sha addresses content that cannot change, ever. */
 const SHA_RE = /^[0-9a-f]{40}$/;
@@ -78,13 +79,36 @@ function origins() {
   return { ...(git ? { git } : {}), ...(raw ? { raw } : {}), ...(api ? { api } : {}) };
 }
 
+/**
+ * A reader that hands back the DSL a `.md` holds rather than the markdown
+ * around it. Every consumer in this app renders a diagram, so unwrapping once
+ * here is what keeps them all from having to know a diagram can be stored as
+ * markdown.
+ *
+ * A `.md` with no diagram in it reads as missing, not as empty: the hub serves
+ * diagrams, and prose in someone's repository is not one.
+ */
+function withMarkdownDiagrams(reader: RepoReaderApi): RepoReaderApi {
+  return {
+    ...reader,
+    async readFile(path, at) {
+      const blob = await reader.readFile(path, at);
+      if (!blob || !isMarkdownPath(path)) return blob;
+      const dsl = dslOf(path, blob.text);
+      return dsl == null ? null : { ...blob, text: dsl };
+    },
+  };
+}
+
 export const getReader = cache(async (owner: string, repo: string): Promise<RepoReaderApi> => {
   const session = await getSession();
   const shared = { ...(origins() ? { origins: origins() } : {}) };
-  return session
-    ? createRepoReader(
-        { owner, repo },
-        { ...shared, fetchImpl: privateFetch, getToken: () => session.token },
-      )
-    : createRepoReader({ owner, repo }, { ...shared, fetchImpl: publicFetch });
+  return withMarkdownDiagrams(
+    await (session
+      ? createRepoReader(
+          { owner, repo },
+          { ...shared, fetchImpl: privateFetch, getToken: () => session.token },
+        )
+      : createRepoReader({ owner, repo }, { ...shared, fetchImpl: publicFetch })),
+  );
 });
