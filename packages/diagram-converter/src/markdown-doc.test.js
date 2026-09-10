@@ -190,6 +190,59 @@ body
   });
 });
 
+/**
+ * `/meta/` is a version 2 section — version 1's entry in dsl-rule.md:142 is
+ * "—". Injecting one into a version 1 diagram wrote a section its reader
+ * ignores, so a GUI save (which regenerates the diagram from the model) found
+ * no `/meta/` to lift back out and wiped the frontmatter entirely.
+ */
+describe("a version 1 diagram, which cannot hold metadata", () => {
+  const V1 = `@kai-swimlane
+
+/title/
+Sample
+
+/line/
+[a: x]
+@end`;
+
+  const DOC = `---
+id: BF-AC-010-001
+owner: fi.coe@example.com
+---
+
+\`\`\`kai-swimlane
+${V1}
+\`\`\`
+`;
+
+  it("keeps its frontmatter out of the fence", () => {
+    const dsl = dslFromMarkdown(DOC);
+    expect(dsl).toBe(V1);
+    expect(dsl).not.toContain("/meta/");
+  });
+
+  it("keeps the frontmatter through a save that regenerates the diagram", () => {
+    // Stands in for GUI mode, which rebuilds the DSL from the parsed model and
+    // so cannot carry anything version 1 has no syntax for.
+    const regenerated = `${V1.replace("[a: x]", "[a: edited]")}`;
+    const saved = markdownFromDsl(regenerated, DOC);
+    expect(splitFrontmatter(saved).meta).toEqual({
+      id: "BF-AC-010-001",
+      owner: "fi.coe@example.com",
+    });
+    expect(saved).toContain("[a: edited]");
+  });
+
+  it("invents no frontmatter for a brand new version 1 document", () => {
+    expect(markdownFromDsl(V1).startsWith("---")).toBe(false);
+  });
+
+  it("still round-trips byte for byte", () => {
+    expect(markdownFromDsl(dslFromMarkdown(DOC), DOC)).toBe(DOC);
+  });
+});
+
 describe("storedMarkdown", () => {
   it("writes the DSL back into the document it came from", () => {
     const out = storedMarkdown(dslFromMarkdown(MD), MD);
