@@ -348,6 +348,15 @@ export const EN: Record<string, string> = {
   "version.notShared": "not shared",
   "version.includeDsl": "Include DSL source",
   // mobile view
+  // markdown documents
+  "md.document": "Document",
+  "md.diagram": "Diagram",
+  "md.metadata": "Metadata",
+  "md.noMetadata": "No metadata yet.",
+  "md.newKey": "key",
+  "md.addKey": "Add",
+  "md.diagramNotice":
+    "The diagram in this file is edited in the Diagram tab; it is kept exactly as it is here.",
   "mobile.addStep": "Add step",
   "mobile.insertStep": "Insert step",
   "mobile.confirmDeleteStep": "Delete this step? This cannot be undone.",
@@ -822,6 +831,14 @@ export const JA: Record<string, string> = {
   "version.notShared": "未共有",
   "version.includeDsl": "DSL ソースを含める",
   // mobile view
+  // markdown documents
+  "md.document": "ドキュメント",
+  "md.diagram": "図",
+  "md.metadata": "メタデータ",
+  "md.noMetadata": "メタデータはまだありません。",
+  "md.newKey": "キー",
+  "md.addKey": "追加",
+  "md.diagramNotice": "このファイルの図は「図」タブで編集します。ここではそのまま保持されます。",
   "mobile.addStep": "ステップを追加",
   "mobile.insertStep": "ステップを挿入",
   "mobile.confirmDeleteStep": "このステップを削除しますか？元に戻せません。",

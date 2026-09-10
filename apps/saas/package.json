@@ -19,6 +19,8 @@
     "@swimlane-cloud/diagram-converter": "workspace:*",
     "@swimlane-cloud/editor": "workspace:*",
     "@swimlane-cloud/mobile-view": "workspace:*",
+    "@milkdown/kit": "^7.22.1",
+    "@milkdown/react": "^7.22.1",
     "lucide-react": "^0.469.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
