@@ -4,9 +4,6 @@ import { markdownPathFor, planMarkdownConversion, rewriteImports } from "./conve
 
 const DSL = `@kai-swimlane
 
-/meta/
-owner: sales-ops;
-
 /title/
 Order to cash
 
@@ -16,6 +13,21 @@ label: Sales;
 
 /line/
 [sales: Take the order]
+@end
+`;
+
+/** Version 2 is the only version with a `/meta/` section (dsl-rule.md:142). */
+const DSL_V2 = `@kai-swimlane-v2
+
+/meta/
+owner: sales-ops;
+
+/title/
+Order to cash;
+
+/line/
+[sales: Take the order]
+
 @end
 `;
 
@@ -76,14 +88,28 @@ describe("planMarkdownConversion", () => {
     expect(plan.writes[0]!.path).toBe("diagrams/flow.md");
   });
 
-  it("moves /meta/ into frontmatter and keeps the diagram readable", () => {
-    const plan = planMarkdownConversion({ "diagrams/flow.txt": DSL });
+  it("moves a version 2 /meta/ into frontmatter", () => {
+    const plan = planMarkdownConversion({ "diagrams/flow.txt": DSL_V2 });
     const text = plan.writes[0]!.text;
     expect(text.startsWith("---\nowner: sales-ops\n---\n")).toBe(true);
     expect(text).toContain("```kai-swimlane");
-    // and the DSL comes back out of it byte for byte — the conversion is
-    // reversible, which is what makes it safe to revert as one commit.
-    expect(dslOf("diagrams/flow.md", text)).toBe(DSL);
+    expect(dslOf("diagrams/flow.md", text)).toBe(DSL_V2);
+  });
+
+  // Version 1 has no `/meta/`, so there is nothing to lift and no metadata to
+  // invent — the diagram simply moves inside a fence, unchanged.
+  it("invents no frontmatter for a version 1 diagram", () => {
+    const plan = planMarkdownConversion({ "diagrams/flow.txt": DSL });
+    const text = plan.writes[0]!.text;
+    expect(text.startsWith("---")).toBe(false);
+    expect(text).toContain("```kai-swimlane");
+  });
+
+  it("is byte-reversible, which is what makes it safe to revert as one commit", () => {
+    for (const src of [DSL, DSL_V2]) {
+      const plan = planMarkdownConversion({ "diagrams/flow.txt": src });
+      expect(dslOf("diagrams/flow.md", plan.writes[0]!.text)).toBe(src);
+    }
   });
 
   it("leaves files that are already markdown alone", () => {
