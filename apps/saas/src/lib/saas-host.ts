@@ -76,6 +76,16 @@ export interface SaasEditorHost extends EditorHost {
    * validates against the new commit rather than the one before it.
    */
   noteHead(sha: string): void;
+
+  /**
+   * The file exactly as stored, rather than the DSL `read` unwraps out of it.
+   * The Document view edits the prose and frontmatter *around* the diagram, so
+   * it needs the half `read` deliberately throws away.
+   */
+  readStored(id: string): Promise<string>;
+
+  /** Save a whole stored document, already in its final on-disk form. */
+  writeStored(id: string, stored: string): Promise<void>;
 }
 
 /** How long a fresh listing is reused before being fetched again. */
@@ -163,12 +173,29 @@ export function createSaasHost(opts: SaasHostOptions): SaasEditorHost {
     return next;
   }
 
-  async function write(files: { id: string; dsl: string }[]) {
-    const stored = files.map((f) => ({ id: f.id, dsl: toStoredText(f.id, f.dsl) }));
-    const res = await saveDrafts(projectId, branch, stored);
+  /** Save documents that are already in their stored form. */
+  async function commitStored(files: { id: string; dsl: string }[]) {
+    const res = await saveDrafts(projectId, branch, files);
     invalidateListing();
     opts.onDraftSaved?.();
     return res;
+  }
+
+  async function write(files: { id: string; dsl: string }[]) {
+    return commitStored(files.map((f) => ({ id: f.id, dsl: toStoredText(f.id, f.dsl) })));
+  }
+
+  /** The stored bytes for `id`, from the cache when the tree says it is current. */
+  async function readRaw(id: string) {
+    const tree = await currentTree();
+    const version = fileVersionIn(tree, id);
+    if (version) {
+      const hit = localCache.get<string>(CACHE_KEY.file(projectId, id, version));
+      if (hit) return hit.value;
+    }
+    const res = await getFile(projectId, branch, id);
+    localCache.set(CACHE_KEY.file(projectId, id, res.version), res.dsl);
+    return res.dsl;
   }
 
   const host: SaasEditorHost = {
@@ -204,18 +231,23 @@ export function createSaasHost(opts: SaasHostOptions): SaasEditorHost {
       return (await fetchTree()).folders ?? [];
     },
 
+    // The cache holds what is stored, not what the editor sees, so either path
+    // still records the markdown a later save has to merge back into.
     async read(id) {
-      // The cache holds what is stored, not what the editor sees, so a cache
-      // hit still records the markdown a later save has to merge back into.
-      const tree = await currentTree();
-      const version = fileVersionIn(tree, id);
-      if (version) {
-        const hit = localCache.get<string>(CACHE_KEY.file(projectId, id, version));
-        if (hit) return toEditorText(id, hit.value);
-      }
-      const res = await getFile(projectId, branch, id);
-      localCache.set(CACHE_KEY.file(projectId, id, res.version), res.dsl);
-      return toEditorText(id, res.dsl);
+      return toEditorText(id, await readRaw(id));
+    },
+
+    async readStored(id) {
+      const stored = await readRaw(id);
+      if (isMarkdownFile(id)) markdownSource.set(id, stored);
+      return stored;
+    },
+
+    async writeStored(id, stored) {
+      // Already stored form, so it must not go through `toStoredText` — that
+      // would read it as DSL and wrap it in a second fence.
+      if (isMarkdownFile(id)) markdownSource.set(id, stored);
+      await commitStored([{ id, dsl: stored }]);
     },
 
     // `@use` targets. The editor reads them here because parsing is

@@ -13,11 +13,14 @@ import {
   Smartphone,
   Upload,
 } from "lucide-react";
+import { FileText, LayoutList } from "lucide-react";
 import { clearLocalMirror, DslEditor } from "@swimlane-cloud/editor";
 import "@swimlane-cloud/editor/styles.css";
 import { INTEGRATION_BRANCH, isEditBranch, PROD_BRANCH } from "@swimlane-cloud/github-client";
 import { branchKindOf, branchLabel } from "@/lib/branch-label";
 import { createSaasHost } from "@/lib/saas-host";
+import { dslOf, isMarkdownFile } from "@/lib/diagram-file";
+import { DocumentView } from "../_document-view";
 import {
   abandonEdit,
   branchOf,
@@ -112,6 +115,10 @@ function EditPageInner() {
   const [fidByPath, setFidByPath] = useState<Record<string, string>>({});
   const [mStep, setMStep] = useState<number | null>(null);
   const [mobileFiles, setMobileFiles] = useState<Files | null>(null);
+  // Document view: `null` means "whatever suits this file", which a prose-only
+  // `.md` answers with Document. An explicit toggle wins until the file changes.
+  const [docPref, setDocPref] = useState<boolean | null>(null);
+  const [docByDefault, setDocByDefault] = useState(false);
   const [localDirty, setLocalDirty] = useState(false);
   const [autosavePending, setAutosavePending] = useState(false);
   const [headMoved, setHeadMoved] = useState<string | null>(null);
@@ -265,6 +272,28 @@ function EditPageInner() {
   useEffect(() => {
     if (mobile && ready && !mobileFiles) void loadMobile();
   }, [mobile, ready, mobileFiles, loadMobile]);
+
+  // A `.md` holding only prose is a document, not a diagram, so open it in the
+  // view that can edit it. This reads through the same host cache the editor is
+  // about to read from, so it costs nothing extra.
+  useEffect(() => {
+    setDocPref(null);
+    setDocByDefault(false);
+    if (!ready || mobile || !mFile || !isMarkdownFile(mFile)) return;
+    let cancelled = false;
+    void host
+      .readStored(mFile)
+      .then((text) => {
+        if (!cancelled) setDocByDefault(dslOf(mFile, text) === null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, mobile, mFile, host]);
+
+  const markdownFile = !!mFile && isMarkdownFile(mFile);
+  const docView = markdownFile && (docPref ?? docByDefault);
 
   const chooseMobile = () => {
     localStorage.setItem(VIEW_PREF, "mobile");
@@ -430,6 +459,20 @@ function EditPageInner() {
                 </>
               ))}
 
+            {markdownFile && !mobile && (
+              <Action onClick={() => setDocPref(!docView)}>
+                {docView ? (
+                  <>
+                    <LayoutList size={14} /> {t("md.diagram")}
+                  </>
+                ) : (
+                  <>
+                    <FileText size={14} /> {t("md.document")}
+                  </>
+                )}
+              </Action>
+            )}
+
             <Action onClick={toggleView}>
               {mobile ? (
                 <>
@@ -532,6 +575,15 @@ function EditPageInner() {
               ) : (
                 <LoadingFallback />
               )
+            ) : docView && mFile ? (
+              <DocumentView
+                host={host}
+                path={mFile}
+                readOnly={readOnly}
+                onSaved={() => setLocalDirty(true)}
+                onError={setNotice}
+                onPending={setAutosavePending}
+              />
             ) : (
               <DslEditor
                 key={`${branch}:${reload}`}
