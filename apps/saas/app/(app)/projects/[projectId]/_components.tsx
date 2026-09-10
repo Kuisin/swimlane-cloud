@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
+  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
@@ -247,6 +248,13 @@ export function ProjectNav({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <Link
+            href="/manual"
+            className="hidden items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 sm:flex"
+          >
+            <BookOpen size={13} />
+            {t("nav.manual")}
+          </Link>
           <LanguageToggle />
           {state ? (
             <>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BookOpen } from "lucide-react";
 import { GitHubMark } from "@/components/github-mark";
 import { useT, LanguageToggle } from "@/i18n";
 import { localCache } from "@/lib/local-cache";
@@ -16,6 +17,13 @@ export function AppHeader({ login, right }: { login?: string | null; right?: Rea
         </Link>
         <div className="flex items-center gap-2 sm:gap-3">
           {right}
+          <Link
+            href="/manual"
+            className="hidden items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-800 sm:flex"
+          >
+            <BookOpen size={14} />
+            {t("nav.manual")}
+          </Link>
           <LanguageToggle />
           {login ? (
             <span className="hidden items-center gap-1.5 text-xs text-neutral-600 sm:flex">
