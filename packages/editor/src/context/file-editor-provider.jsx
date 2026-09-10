@@ -58,6 +58,10 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
   const autosaveDelayMs = options?.autosaveDelayMs ?? DEFAULT_AUTOSAVE_DELAY_MS;
 
   const [files, setFiles] = useState([]); // FileRef[] from host.list()
+  // Directories that exist but hold no listed file. Git cannot store an empty
+  // directory, so a host that supports them reports them separately rather
+  // than through a path we could derive one from.
+  const [folders, setFolders] = useState([]);
   const [documents, setDocuments] = useState([]); // loaded/open docs
   const [openDocumentIds, setOpenDocumentIds] = useState([]);
   const [activeDocumentId, setActiveDocumentIdState] = useState(null);
@@ -204,6 +208,14 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     if (!hostHas(host, "list")) return;
     const list = await host.list();
     setFiles(Array.isArray(list) ? list : []);
+    if (hostHas(host, "listFolders")) {
+      try {
+        const dirs = await host.listFolders();
+        setFolders(Array.isArray(dirs) ? dirs : []);
+      } catch {
+        /* empty folders are a nicety; never fail the listing over them */
+      }
+    }
     return list;
   }, [host]);
 
@@ -686,6 +698,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     isHydrated,
     loadError,
     files,
+    folders,
     documents,
     openDocuments: openDocumentIds.map((id) => documents.find((d) => d.id === id)).filter(Boolean),
     openDocumentIds,
