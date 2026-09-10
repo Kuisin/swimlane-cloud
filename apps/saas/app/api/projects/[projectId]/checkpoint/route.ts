@@ -11,7 +11,7 @@ import {
 } from "@/lib/projects";
 import { isDraftablePath, loadDraftState } from "@/lib/repo-files";
 import { getServiceSupabase } from "@/lib/supabase/server";
-import { assertForcedSections } from "@/lib/templates";
+import { assertForcedSectionsForFile } from "@/lib/templates";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,7 +56,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
 
   const { policies, templatesById } = await loadProjectTemplates(projectId);
   for (const f of changedEntries) {
-    if (f.id.endsWith(".txt")) assertForcedSections(f.dsl, policies, templatesById);
+    assertForcedSectionsForFile(f.id, f.dsl, policies, templatesById);
   }
 
   const headSha = await project.write.refSha(body.branch);

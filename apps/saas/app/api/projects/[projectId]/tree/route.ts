@@ -6,6 +6,7 @@ import { requireProjectRole } from "@/lib/projects";
 import {
   draftsApplyTo,
   isDraftablePath,
+  isFolderMarker,
   listDiagramFiles,
   loadDraftState,
   resolveSha,
@@ -40,7 +41,9 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
   if (draftsApplyTo(ref)) {
     const { writes, deletions, updatedAt } = await loadDraftState(projectId, ref);
     for (const p of Object.keys(writes)) {
-      if (!isDraftablePath(p) || !p.endsWith(".txt")) continue;
+      // `isDraftablePath` also admits `.gitkeep` folder markers, which are not
+      // files the tree should list.
+      if (!isDraftablePath(p) || isFolderMarker(p)) continue;
       if (!known.has(p)) ids.push(p);
       if (updatedAt[p]) drafts[p] = updatedAt[p];
     }

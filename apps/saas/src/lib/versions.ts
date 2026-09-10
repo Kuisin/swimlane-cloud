@@ -15,6 +15,7 @@ import {
   slugify,
 } from "@swimlane-cloud/github-client";
 import { ApiError } from "./api";
+import { dslOf } from "./diagram-file";
 import { assertSha } from "./guard";
 import { audit, type ProjectCtx } from "./projects";
 import { render } from "./render";
@@ -69,10 +70,16 @@ export async function flagVersion(
   // can no longer become a commit and are not read there, so what gets
   // published is exactly the committed text. They no longer block a release.
   const snapshot = await snapshotAt(ctx, sha);
-  const paths = Object.keys(snapshot.files).sort();
+  // A `.md` in the diagram tree may be plain prose (every project is seeded
+  // with a `diagrams/README.md`). It is snapshotted like any other file, but it
+  // is not a diagram, so it must not be counted as one — nor reported as a
+  // render failure for failing to be one.
+  const paths = Object.keys(snapshot.files)
+    .filter((p) => dslOf(p, snapshot.files[p]!) !== null)
+    .sort();
   if (paths.length === 0) throw new ApiError(400, "There are no diagrams to flag at this commit.");
   const renderFailures = paths.filter((p) => {
-    const { svg, errors } = render(snapshot.files[p]!, "basic");
+    const { svg, errors } = render(dslOf(p, snapshot.files[p]!)!, "basic");
     return !svg || errors.length > 0;
   });
 
@@ -97,7 +104,13 @@ export async function flagVersion(
     paths.map((p, i) => ({
       version_id: versionId,
       filepath: p,
-      dsl_text: snapshot.files[p]!,
+      // The DSL, not the file's bytes: a version is a published rendering
+      // snapshot, `dsl_text` is read only to render and to pull `/title/` out
+      // of, and it is never written back to a repository (promote and publish
+      // work through git tags). Storing the extracted DSL keeps every consumer
+      // — the version SVG route and the public share page — unchanged, and
+      // keeps a `.md`'s prose off a public share link.
+      dsl_text: dslOf(p, snapshot.files[p]!)!,
       sort_order: i,
     })),
   );

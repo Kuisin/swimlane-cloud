@@ -14,6 +14,7 @@ import {
   type RepoConfig,
 } from "@swimlane-cloud/github-client";
 import { ApiError } from "./api";
+import { isDiagramFile } from "./diagram-file";
 import { isSha } from "./guard";
 import { isRepoNotAccessible } from "./repo-errors";
 import type { RepoApis } from "./repo-apis";
@@ -24,7 +25,12 @@ const TEMPLATES_PREFIX = "templates/";
 /** Paths the editor may keep drafts for: diagrams and folder markers. */
 export function isDraftablePath(path: string): boolean {
   if (path.startsWith(TEMPLATES_PREFIX)) return false;
-  return path.endsWith(".txt") || path.endsWith("/.gitkeep") || path === ".gitkeep";
+  return isDiagramFile(path) || path.endsWith("/.gitkeep") || path === ".gitkeep";
+}
+
+/** A folder marker, which `isDraftablePath` admits but nothing renders. */
+export function isFolderMarker(path: string): boolean {
+  return path.endsWith("/.gitkeep") || path === ".gitkeep";
 }
 
 /**
@@ -41,7 +47,7 @@ export function withinDiagramsRoot(path: string, config: RepoConfig): string {
 }
 
 export function isDiagramPath(path: string, config: RepoConfig): boolean {
-  return path.endsWith(".txt") && !path.startsWith(TEMPLATES_PREFIX) && isWithinRoot(config, path);
+  return isDiagramFile(path) && !path.startsWith(TEMPLATES_PREFIX) && isWithinRoot(config, path);
 }
 
 /**

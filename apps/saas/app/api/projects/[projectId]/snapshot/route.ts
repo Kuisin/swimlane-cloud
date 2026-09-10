@@ -5,6 +5,7 @@ import { requireProjectRole } from "@/lib/projects";
 import {
   draftsApplyTo,
   isDraftablePath,
+  isFolderMarker,
   loadDraftState,
   resolveSha,
   snapshotAt,
@@ -34,7 +35,7 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
   if (withDrafts && draftsApplyTo(ref)) {
     const { writes, deletions } = await loadDraftState(projectId, ref);
     for (const [p, text] of Object.entries(writes)) {
-      if (isDraftablePath(p) && p.endsWith(".txt")) files[p] = text;
+      if (isDraftablePath(p) && !isFolderMarker(p)) files[p] = text;
     }
     for (const p of deletions) delete files[p];
   }

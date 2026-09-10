@@ -29,9 +29,13 @@ export function assertRef(ref: string): void {
 }
 
 /**
- * A repo-relative POSIX path to a `.txt` diagram. The DSL lives in `.txt` by
- * definition, so restricting to it costs nothing and keeps the API from being
- * pointed at arbitrary repository content.
+ * A repo-relative POSIX path to a diagram source — `.txt` (raw DSL) or `.md`
+ * (the DSL in a fence). Restricting to those keeps the API from being pointed
+ * at arbitrary repository content.
+ *
+ * Every caller must resolve the text through `dslOf` (`./diagram-file`) rather
+ * than assuming it is DSL: a `.md` needs unwrapping, and a `.md` holding only
+ * prose is not a diagram at all.
  */
 export function assertDiagramPath(path: string): string {
   const segments = path.split("/");
@@ -40,8 +44,9 @@ export function assertDiagramPath(path: string): string {
   if (segments.some((s) => s === "" || s === "." || s === ".." || s.includes("\\"))) {
     throw new ApiError(400, `Invalid path "${path}".`);
   }
-  if (!path.toLowerCase().endsWith(".txt")) {
-    throw new ApiError(400, "Only .txt diagram sources can be edited.");
+  const lower = path.toLowerCase();
+  if (!lower.endsWith(".txt") && !lower.endsWith(".md")) {
+    throw new ApiError(400, "Only .txt and .md diagram sources can be edited.");
   }
   return path;
 }
