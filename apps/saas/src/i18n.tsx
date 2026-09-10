@@ -349,6 +349,15 @@ export const EN: Record<string, string> = {
   "version.includeDsl": "Include DSL source",
   // mobile view
   // markdown documents
+  // converting a project to markdown storage
+  "convert.action": "Convert to Markdown",
+  "convert.title": "Store diagrams as Markdown",
+  "convert.body":
+    "Rewrite all {n} .txt diagram(s) in this project as .md files: each one's metadata becomes frontmatter and its diagram moves inside a kai-swimlane fence. You can then write notes around the diagram.",
+  "convert.note":
+    "This is one commit on your edit branch, so it reviews as a normal pull request and reverts as a single commit. Imports between converted diagrams are repointed for you.",
+  "convert.confirm": "Convert",
+  "convert.done": "Converted {n} diagram(s) to Markdown.",
   "md.document": "Document",
   "md.diagram": "Diagram",
   "md.metadata": "Metadata",
@@ -834,6 +843,15 @@ export const JA: Record<string, string> = {
   "version.includeDsl": "DSL ソースを含める",
   // mobile view
   // markdown documents
+  // converting a project to markdown storage
+  "convert.action": "Markdown に変換",
+  "convert.title": "図を Markdown で保存する",
+  "convert.body":
+    "このプロジェクトの .txt 図 {n} 件を .md ファイルに書き換えます。メタデータはフロントマターに、図は kai-swimlane フェンスの中に移ります。以降は図の周りに説明を書けます。",
+  "convert.note":
+    "編集ブランチへの 1 コミットとして実行されるため、通常のプルリクエストとしてレビューでき、1 コミットで元に戻せます。変換した図どうしのインポートは自動で貼り替えます。",
+  "convert.confirm": "変換する",
+  "convert.done": "{n} 件の図を Markdown に変換しました。",
   "md.document": "ドキュメント",
   "md.diagram": "図",
   "md.metadata": "メタデータ",

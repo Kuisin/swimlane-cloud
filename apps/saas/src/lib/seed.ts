@@ -8,6 +8,7 @@ import {
   REPO_CONFIG_PATH,
   type FileWrite,
 } from "@swimlane-cloud/github-client";
+import { storedFrom } from "./diagram-file";
 import { getServiceSupabase } from "./supabase/server";
 import { TEMPLATE_SECTIONS, templateRepoPath, type TemplateSection } from "./templates";
 
@@ -44,7 +45,8 @@ export const SEED_TEMPLATES: Record<TemplateSection, { name: string; slug: strin
     },
   };
 
-export const SEED_DIAGRAM_PATH = `${DIAGRAMS_ROOT}/sample.txt`;
+/** Diagrams are stored as Markdown: frontmatter, prose, and the DSL in a fence. */
+export const SEED_DIAGRAM_PATH = `${DIAGRAMS_ROOT}/sample.md`;
 
 export const SEED_DIAGRAM = `@kai-swimlane
 /title/
@@ -77,9 +79,9 @@ export function seedRepoFiles(title: string): FileWrite[] {
     { path: REPO_CONFIG_PATH, text: repoConfigJson(title) },
     {
       path: `${DIAGRAMS_ROOT}/README.md`,
-      text: "# Diagrams\n\nkai-swimlane `.txt` files live here. Open this repository in Swimlane Cloud to edit them with a live preview.\n",
+      text: "# Diagrams\n\nkai-swimlane diagrams live here as `.md` files: metadata in the frontmatter, the diagram itself in a `kai-swimlane` fence, and any notes you like around it. Open this repository in Swimlane Cloud to edit them with a live preview.\n",
     },
-    { path: SEED_DIAGRAM_PATH, text: SEED_DIAGRAM },
+    { path: SEED_DIAGRAM_PATH, text: storedFrom(SEED_DIAGRAM_PATH, SEED_DIAGRAM) },
   ];
   for (const section of TEMPLATE_SECTIONS) {
     const tpl = SEED_TEMPLATES[section];

@@ -4,7 +4,9 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
+  FileText,
   GitPullRequest,
+  LayoutList,
   Lock,
   Monitor,
   Pencil,
@@ -13,7 +15,6 @@ import {
   Smartphone,
   Upload,
 } from "lucide-react";
-import { FileText, LayoutList } from "lucide-react";
 import { clearLocalMirror, DslEditor } from "@swimlane-cloud/editor";
 import "@swimlane-cloud/editor/styles.css";
 import { INTEGRATION_BRANCH, isEditBranch, PROD_BRANCH } from "@swimlane-cloud/github-client";
@@ -45,7 +46,7 @@ import {
   useProject,
   type Files,
 } from "../_components";
-import { DiscardEditModal, PushModal, RequestReviewModal } from "./_modals";
+import { ConvertMarkdownModal, DiscardEditModal, PushModal, RequestReviewModal } from "./_modals";
 import { useT } from "@/i18n";
 
 const VIEW_PREF = "sw-view-mode";
@@ -127,6 +128,7 @@ function EditPageInner() {
   const [showPush, setShowPush] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [showDiscard, setShowDiscard] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
   const [reviewRequested, setReviewRequested] = useState<number | null>(null);
   const restored = useRef(false);
   // Gates the editor/mobile content until URL state is restored, so the editor
@@ -292,6 +294,11 @@ function EditPageInner() {
     };
   }, [ready, mobile, mFile, host]);
 
+  // Diagrams still stored as raw DSL. The tree listing already gave us every
+  // path, so offering the conversion costs no extra request — and the offer
+  // disappears by itself once a project has none left.
+  const legacyCount = Object.keys(fidByPath).filter((p) => p.toLowerCase().endsWith(".txt")).length;
+
   const markdownFile = !!mFile && isMarkdownFile(mFile);
   const docView = markdownFile && (docPref ?? docByDefault);
 
@@ -450,6 +457,11 @@ function EditPageInner() {
                   <Action onClick={() => setShowReview(true)} disabled={autosavePending}>
                     <GitPullRequest size={14} /> {t("edit.requestReview")}
                   </Action>
+                  {legacyCount > 0 && (
+                    <Action onClick={() => setShowConvert(true)} disabled={autosavePending}>
+                      <FileText size={14} /> {t("convert.action")}
+                    </Action>
+                  )}
                   <button
                     onClick={() => setShowDiscard(true)}
                     className="whitespace-nowrap text-xs text-neutral-400 hover:text-red-600 hover:underline"
@@ -621,6 +633,23 @@ function EditPageInner() {
               branch={branch}
               onClose={() => setShowReview(false)}
               onRequested={handleReviewRequested}
+            />
+          )}
+          {showConvert && (
+            <ConvertMarkdownModal
+              projectId={projectId}
+              branch={branch}
+              count={legacyCount}
+              onClose={() => setShowConvert(false)}
+              onConverted={({ converted }) => {
+                setShowConvert(false);
+                setNotice(t("convert.done", { n: String(converted) }));
+                // Every path in the tree changed, so nothing cached about it
+                // is still true: refetch rather than patch.
+                setMFile(undefined);
+                setMobileFiles(null);
+                setReload((n) => n + 1);
+              }}
             />
           )}
           {showDiscard && (
