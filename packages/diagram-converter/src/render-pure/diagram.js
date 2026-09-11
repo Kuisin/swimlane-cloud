@@ -763,28 +763,11 @@ function renderDiagramSvg({
    * clearance from whatever it points at.
    */
   function caseLabelPosition(f, c) {
-    const dCy = branchDecisionCy(f);
-    const dH = f.parallel ? FORK_GATEWAY_RADIUS * 2 : decisionDiamondH;
-    const startY = dCy + dH / 2;
-    const bendY = startY + branchCaseBendYOffset;
+    const { targetX, labelClampY, bendY } = caseFanOutTarget(f, c);
     let labelY = bendY + caseLabelOffsetY;
-    let targetX = c.x;
-    let targetY = null;
-    const firstStepIdx = firstStepIdxInCase(c);
-    if (firstStepIdx != null) {
-      const stepTarget = caseStepLineTarget(firstStepIdx, c);
-      if (stepTarget) {
-        targetX = stepTarget.x;
-        targetY = stepTarget.y;
-      } else {
-        targetY = stepBlockCenterY(firstStepIdx) - 22;
-      }
-    } else if (f.yMerge != null) {
-      targetY = f.yMerge + mergeH / 2 - mergeNodeH / 2 - mergeArrowClearance;
-    }
-    if (targetY != null) {
+    if (labelClampY != null) {
       const labelBottomOffset = caseLabelHeight - caseLabelPadY;
-      labelY = Math.min(labelY, targetY - caseLabelGapBelow - labelBottomOffset);
+      labelY = Math.min(labelY, labelClampY - caseLabelGapBelow - labelBottomOffset);
     }
     return {
       labelX: targetX,
@@ -1214,40 +1197,64 @@ function renderDiagramSvg({
         c.x = width / 2;
       }
     });
+    // A blank case has nothing to aim at. Hang its rail straight under the
+    // decision — or beside it when that x is taken — rather than at the canvas
+    // centre, which lands wherever the page happens to be wide.
+    const anchorX = frameAnchorX(f);
+    const taken = new Set(f.cases.filter((c) => !isStubCase(c, f.id)).map((c) => Math.round(c.x)));
+    let slot = 0;
+    f.cases.forEach((c) => {
+      if (!isStubCase(c, f.id)) return;
+      let x;
+      do {
+        const step = Math.ceil(slot / 2) * caseCollisionShift;
+        x = slot % 2 ? anchorX - step : anchorX + step;
+        slot++;
+      } while (taken.has(Math.round(x)));
+      taken.add(Math.round(x));
+      c.x = x;
+    });
     const usedX = {};
-    f.cases.forEach((c, idx) => {
+    f.cases.forEach((c) => {
       const key = Math.round(c.x);
-      if (usedX[key] != null) {
-        c.x = c.x + (idx - f.cases.length / 2) * caseCollisionShift;
-      }
-      usedX[key] = idx;
+      const seen = usedX[key] ?? 0;
+      if (seen) c.x += seen * caseCollisionShift;
+      usedX[key] = seen + 1;
     });
   });
-  function buildCaseFanOutEdgeD(f, c) {
-    const dCx = frameAnchorX(f);
+  /**
+   * Where a case's fan-out line ends. Shared by the drawn edge and the case
+   * label, so the label always sits on its own rail. A case that opens with a
+   * nested if/fork runs to that gateway and stops at its edge — a fork's
+   * circle is shorter than an if's diamond. `labelClampY` is what the label
+   * must clear: for a blank case that is the join below, not the bend it
+   * hangs from.
+   */
+  function caseFanOutTarget(f, c) {
     const dCy = branchDecisionCy(f);
     const dH = f.parallel ? FORK_GATEWAY_RADIUS * 2 : decisionDiamondH;
-    const mCy = f.yMerge + mergeH / 2;
+    const bendY = dCy + dH / 2 + branchCaseBendYOffset;
     const mH = f.parallel ? FORK_GATEWAY_RADIUS * 2 : mergeNodeH;
+    const mergeTopY =
+      f.yMerge != null ? f.yMerge + mergeH / 2 - mH / 2 - mergeArrowClearance : null;
     const child = c.childFrame;
     const firstMainStep = firstMainFlowStepIdx(c);
     const firstStepIdx = firstMainStep ?? firstStepIdxInCase(c);
     const childStartIdx =
       child != null ? rows.findIndex((r) => r.kind === "branchStart" && r.id === child.id) : -1;
-    const stubCase = isStubCase(c, f.id);
     const targetsNestedDecision =
       child != null &&
       (firstMainStep == null || (childStartIdx >= 0 && childStartIdx < firstMainStep));
-    const startX = dCx;
-    const startY = dCy + dH / 2;
-    const bendY = startY + branchCaseBendYOffset;
-    let targetY;
     let targetX = caseAnchorX(c);
+    let targetY = null;
+    let labelClampY = null;
     let caseLaneWidth = nodeW + laneContentPad * 2;
     let showArrow = false;
     if (targetsNestedDecision) {
       targetX = frameAnchorX(child);
-      targetY = branchDecisionCy(child) - 22;
+      targetY =
+        branchDecisionCy(child) - (child.parallel ? FORK_GATEWAY_RADIUS : decisionDiamondH / 2);
+      labelClampY = targetY;
       const li = laneIndexForX(targetX);
       if (li >= 0) caseLaneWidth = laneWidth(li);
     } else if (firstStepIdx != null) {
@@ -1261,12 +1268,22 @@ function renderDiagramSvg({
       } else {
         targetY = bendY;
       }
-    } else if (stubCase) {
-      targetX = caseAnchorX(c);
+      labelClampY = stepTarget ? stepTarget.y : stepBlockCenterY(firstStepIdx) - 22;
+    } else if (isStubCase(c, f.id)) {
       targetY = bendY;
+      labelClampY = mergeTopY;
     } else {
-      targetY = mCy - mH / 2 - mergeArrowClearance;
+      targetY = mergeTopY;
+      labelClampY = mergeTopY;
     }
+    return { targetX, targetY, showArrow, caseLaneWidth, bendY, labelClampY };
+  }
+  function buildCaseFanOutEdgeD(f, c) {
+    const startX = frameAnchorX(f);
+    const dCy = branchDecisionCy(f);
+    const dH = f.parallel ? FORK_GATEWAY_RADIUS * 2 : decisionDiamondH;
+    const startY = dCy + dH / 2;
+    const { targetX, targetY, showArrow, caseLaneWidth, bendY } = caseFanOutTarget(f, c);
     const sideOffset = c.offset || 0;
     const sideX = targetX;
     const laneSafeMin = targetX - caseLaneWidth / 2 + caseLaneSafeInset;
