@@ -173,8 +173,18 @@ export const DIAGRAM_LAYOUT = {
   caseLaneSafeInset: 16,
   branchConnectorElbowThreshold: 0.5,
 
-  // Loop routing
+  // Jump routing (`goto`, `goto @id`, `loop`, `loop @id`)
+  // How far below the source block a jump turns sideways.
   loopDropPad: 14,
+  // Clear space kept between the outermost block a jump has to pass and the
+  // vertical rail it runs down (or up) in.
+  jumpRailMargin: 16,
+  // Distance between two jump rails that share a side and overlap vertically,
+  // so two jumps never draw the same line.
+  jumpRailPitch: 14,
+  // Vertical spacing between the arrowheads of several jumps landing on the
+  // same edge of the same block.
+  jumpArrivalPitch: 12,
 
   // Terminals (start / end circles)
   terminalGap: 28,
