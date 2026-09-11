@@ -1528,12 +1528,17 @@ function renderDiagramSvg({
     const targetCenterX = nodeCenterX(targetIdx, rows[targetIdx].role);
     const targetCenterY = stepBlockCenterY(targetIdx);
     const dropY = fromBottomY + loopDropPad;
+    // A jump may go back up to an earlier block as well as ahead; either way
+    // every block between the two ends is something to route around, or the
+    // line runs straight up the flow's own spine.
+    const spanTop = Math.min(dropY, targetCenterY);
+    const spanBottom = Math.max(dropY, targetCenterY);
     const obstacles = [];
     rows.forEach((row, idx) => {
       if (idx === targetIdx) return;
       if (row?.kind !== "step" || row.empty || !row.role) return;
       const b = stepObstacleBounds(idx);
-      if (b.bottom >= dropY && b.top <= targetCenterY) obstacles.push(b);
+      if (b.bottom >= spanTop && b.top <= spanBottom) obstacles.push(b);
     });
     let sideSign;
     if (obstacles.length > 0) {

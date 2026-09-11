@@ -1077,6 +1077,23 @@ export function parseDSL(src, parseOptions = {}) {
     m = u.match(/^\[merge(?:\s*:\s*([^\]]*))?\]\s*;?\s*$/i);
     if (m) {
       const name = (m[1] || "").trim() || null;
+      // Inside an `if` case the bracket form is the jump itself: `[merge: id]`
+      // sends this path to the block whose `id:` is `id` (or to a marker of
+      // that name), `[merge]` to the next marker after the if. Only outside
+      // an `if` does it *define* a landing marker.
+      const openIf = stack[stack.length - 1];
+      if (openIf && openIf.type === "if") {
+        pushLineRow(
+          {
+            kind: "branchMerge",
+            mergeTarget: name,
+            mergeBranchId: openIf.id,
+            depth: branchBodyDepth(),
+          },
+          line,
+        );
+        continue;
+      }
       if (name) {
         const prev = mergeIdsSeen.get(name);
         if (prev) {

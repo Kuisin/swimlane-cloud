@@ -198,3 +198,69 @@ level: 2;
     );
   });
 });
+
+describe("the bracket spelling inside an if is the jump itself", () => {
+  it("[merge: id] sends the case to the block whose id: it names — backwards too", () => {
+    const model = parseDSL(
+      v1(`[a: start]
+id: again;
+[a: middle]
+[b: check]
+if (ok?) is (no) than
+  [merge: again]
+else
+  [b: done]
+end-if`),
+    );
+    expect(model.errors).toEqual([]);
+    const jump = model.rows.find((r) => r.kind === "branchMerge");
+    expect(jump.mergeTarget).toBe("again");
+    expect(model.rows.some((r) => r.kind === "mergeMarker")).toBe(false);
+  });
+
+  it("[merge] alone inside an if is the bare merge to the next marker", () => {
+    const model = parseDSL(
+      v1(`if (ok?) is (no) than
+  [merge]
+else
+  [b: done]
+end-if
+[merge]
+[a: after]`),
+    );
+    expect(model.errors).toEqual([]);
+    expect(model.rows.find((r) => r.kind === "branchMerge").mergeTarget).toBeNull();
+    expect(model.rows.filter((r) => r.kind === "mergeMarker")).toHaveLength(1);
+  });
+
+  it("routes a backward jump around the blocks between, not up the flow's spine", () => {
+    const svg = render(
+      v1(`[a: start]
+id: again;
+[a: middle]
+[a: check]
+if (ok?) is (no) than
+  [merge: again]
+else
+  [a: done]
+end-if`),
+    );
+    // The jump's path: down from the case, across to a route x, up to the
+    // target's centre y, then into the target's side. Its route x must sit
+    // outside every block it passes — here all blocks share one lane, so it
+    // must clear that lane's block width.
+    const body = svg.slice(svg.indexOf("</defs>"));
+    const paths = [...body.matchAll(/<path[^>]*\sd="M ([^"]+)"/g)]
+      .map((m) => m[1].split(" L ").map((p) => p.trim().split(/\s+/).map(Number)))
+      .filter((pts) => pts.length === 5);
+    const boxes = [...body.matchAll(/<rect[^>]*x="([\d.]+)"[^>]*width="188"/g)].map((m) => ({
+      left: Number(m[1]),
+      right: Number(m[1]) + 188,
+    }));
+    const jump = paths.find((pts) => pts[4][1] < pts[0][1]); // ends above where it started
+    expect(jump).toBeDefined();
+    const routeX = jump[2][0];
+    const clear = boxes.every((b) => routeX < b.left || routeX > b.right);
+    expect(clear).toBe(true);
+  });
+});
