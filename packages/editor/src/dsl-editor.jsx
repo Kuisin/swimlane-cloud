@@ -7,6 +7,7 @@ import { useSplitPane } from "./hooks/use-split-pane.js";
 import { useDragWidth } from "./hooks/use-drag-width.js";
 import { usePersistentState } from "./hooks/use-persistent-state.js";
 import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts.js";
+import { useMediaQuery, NARROW_QUERY, TREE_FOLD_QUERY } from "./hooks/use-media-query.js";
 import { hostHas, hostSupportsVersioning } from "./host.js";
 import { LanguageProvider, useT } from "./i18n.jsx";
 import { formatDsl } from "./lib/format-dsl.js";
@@ -16,6 +17,7 @@ import { modelCounts } from "./components/model-counts.js";
 import { shortcutLabel } from "./lib/platform.js";
 import { ActionBar } from "./components/action-bar.jsx";
 import { ModeToggle } from "./components/mode-toggle.jsx";
+import { PaneSwitcher } from "./components/pane-switcher.jsx";
 import { LanguageToggle } from "./components/language-toggle.jsx";
 import { Tabs } from "./components/tabs.jsx";
 import { FolderTree } from "./components/folder-tree.jsx";
@@ -105,6 +107,30 @@ function DslEditorInner({ options }) {
     parse: (v) => v === "true",
   });
 
+  // Too narrow for the columns to share the screen: show one at a time.
+  const narrow = useMediaQuery(NARROW_QUERY);
+  const foldTree = useMediaQuery(TREE_FOLD_QUERY);
+  const [pane, setPane] = useState("flow");
+  // The tree's folded state is a saved preference on a wide screen and a
+  // transient one on a narrow screen, where opening it is a momentary act.
+  // Keeping them apart stops a phone from silently rewriting the preference a
+  // desktop will read back later.
+  //
+  // `null` means the reader has not chosen yet, in which case the tree is open
+  // exactly when there is nothing else to look at. Folding it unconditionally
+  // would land someone on a phone in an empty editor with the one control that
+  // could fix that hidden behind a button they have no reason to press.
+  const [treeOpenNarrow, setTreeOpenNarrow] = useState(null);
+  const treeOpen = treeOpenNarrow ?? !activeDocumentId;
+  const treeIsCollapsed = foldTree ? !treeOpen : treeCollapsed;
+  const toggleTree = () => (foldTree ? setTreeOpenNarrow(!treeOpen) : setTreeCollapsed((v) => !v));
+  // Picking a file is the whole reason the tree was open; it gets out of the
+  // way so the file it just opened has the screen to itself.
+  const openFileFromTree = (id) => {
+    if (foldTree) setTreeOpenNarrow(false);
+    return openFile(id);
+  };
+
   // Same resolved imports as the context's own `model`, or this debounced
   // parse would show an @use error the text editor's live error list already
   // cleared (or vice versa).
@@ -157,6 +183,12 @@ function DslEditorInner({ options }) {
 
   const guiAllowed = canUseGuiEditing(model.errors, activeParseErrorPolicy);
   const effectiveMode = mode === "gui" && !guiAllowed ? "text" : mode;
+
+  // GUI has three columns, text has two. Falling back to the first pane keeps
+  // a mode switch from leaving the switcher pointing at a pane that mode has
+  // no tab for, which would render an empty editor.
+  const panes = effectiveMode === "gui" ? ["flow", "edit", "preview"] : ["text", "preview"];
+  const activePane = panes.includes(pane) ? pane : panes[0];
 
   const shortcuts = useMemo(
     () => ({
@@ -369,17 +401,17 @@ function DslEditorInner({ options }) {
   }
 
   return (
-    <div className="sw-editor">
+    <div className={narrow ? "sw-editor sw-editor-narrow" : "sw-editor"}>
       <FolderTree
         files={files}
         folders={folders}
-        width={treeCollapsed ? 0 : tree.width}
+        width={treeIsCollapsed ? 0 : tree.width}
         activeId={activeDocumentId}
         dirtyIds={dirtyIds}
         selectedDir={selectedDir}
-        collapsed={treeCollapsed}
+        collapsed={treeIsCollapsed}
         onSelectDir={(d) => setSelectedDir((cur) => (cur === d ? "" : d))}
-        onOpenFile={openFile}
+        onOpenFile={openFileFromTree}
         onNewFile={createNewFile}
         onNewFileFromStarter={createNewFile}
         onNewFolder={createNewFolder}
@@ -392,9 +424,9 @@ function DslEditorInner({ options }) {
         canMkdir={!readOnly && hostHas(host, "mkdir")}
         canDelete={!readOnly && hostHas(host, "delete")}
         canMove={!readOnly && hostHas(host, "rename")}
-        onToggleCollapse={() => setTreeCollapsed((v) => !v)}
+        onToggleCollapse={toggleTree}
       />
-      {!treeCollapsed && (
+      {!treeIsCollapsed && !foldTree && (
         <div
           className="sw-resizer"
           role="separator"
@@ -438,6 +470,9 @@ function DslEditorInner({ options }) {
 
         <div className="sw-subbar">
           <ModeToggle mode={effectiveMode} onChange={setMode} guiDisabled={!guiAllowed} />
+          {narrow && activeDocument && (
+            <PaneSwitcher panes={panes} active={activePane} onChange={setPane} />
+          )}
           <Tabs
             openDocuments={openDocuments}
             activeId={activeDocumentId}
@@ -464,38 +499,53 @@ function DslEditorInner({ options }) {
             documentInfo={documentInfo}
             onLinkClick={openLinkedFlow}
             onSwitchToText={() => setMode("text")}
+            narrow={narrow}
+            pane={activePane}
           />
         ) : (
-          <div className="sw-split" ref={containerRef}>
-            <div className="sw-split-left" style={{ width: `${leftPct}%` }}>
-              {!activeDocument ? (
-                <div className="sw-gui-empty">
-                  {isHydrated ? t("gui.openFile") : t("common.loading")}
-                </div>
-              ) : (
-                <TextEditor
-                  value={src}
-                  onChange={updateActiveDocumentSrc}
-                  readOnly={readOnly}
-                  gotoLine={gotoLine}
-                  theme={theme}
-                  errors={errors}
+          <div className={narrow ? "sw-split sw-split-narrow" : "sw-split"} ref={containerRef}>
+            {(!narrow || activePane === "text") && (
+              <div className="sw-split-left" style={narrow ? undefined : { width: `${leftPct}%` }}>
+                {!activeDocument ? (
+                  <div className="sw-gui-empty">
+                    {isHydrated ? t("gui.openFile") : t("common.loading")}
+                  </div>
+                ) : (
+                  <TextEditor
+                    value={src}
+                    onChange={updateActiveDocumentSrc}
+                    readOnly={readOnly}
+                    gotoLine={gotoLine}
+                    theme={theme}
+                    errors={errors}
+                  />
+                )}
+                <ErrorList errors={errors} onSelectLine={(line) => setGotoLine(line)} />
+              </div>
+            )}
+
+            {!narrow && (
+              <div
+                className="sw-resizer"
+                role="separator"
+                aria-orientation="vertical"
+                onMouseDown={onDividerMouseDown}
+                onTouchStart={onDividerMouseDown}
+              />
+            )}
+
+            {(!narrow || activePane === "preview") && (
+              <div
+                className="sw-split-right sw-preview-pane"
+                style={narrow ? undefined : { width: `${100 - leftPct}%` }}
+              >
+                <PreviewPane
+                  svg={svg}
+                  hasErrors={errors?.length > 0}
+                  onLinkClick={openLinkedFlow}
                 />
-              )}
-              <ErrorList errors={errors} onSelectLine={(line) => setGotoLine(line)} />
-            </div>
-
-            <div
-              className="sw-resizer"
-              role="separator"
-              aria-orientation="vertical"
-              onMouseDown={onDividerMouseDown}
-              onTouchStart={onDividerMouseDown}
-            />
-
-            <div className="sw-split-right sw-preview-pane" style={{ width: `${100 - leftPct}%` }}>
-              <PreviewPane svg={svg} hasErrors={errors?.length > 0} onLinkClick={openLinkedFlow} />
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>

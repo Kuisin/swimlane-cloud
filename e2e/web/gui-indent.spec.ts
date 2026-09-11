@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openDemo, showPane } from "./helpers";
 
 /**
  * The GUI flow list indents every row by how deeply it nests. That indent is
@@ -87,10 +88,7 @@ const EXPECTED: [string, number][] = [
 
 /** Load `dsl` into the demo editor's open file and come back to GUI mode. */
 async function typeDocument(page: Page, dsl: string) {
-  await page.goto("/?demo=reset");
-  await expect(page.locator(".sw-tree-file").first()).toBeVisible();
-  const gotIt = page.getByRole("button", { name: /got it|了解/i });
-  if (await gotIt.isVisible().catch(() => false)) await gotIt.click();
+  await openDemo(page);
   await page.locator(".sw-tree-file", { hasText: "hiring.txt" }).first().click();
 
   await page.getByRole("tab", { name: /text/i }).click();
@@ -98,6 +96,7 @@ async function typeDocument(page: Page, dsl: string) {
   await expect(textarea).toBeVisible();
   await textarea.fill(dsl);
   await page.getByRole("tab", { name: /gui/i }).click();
+  await showPane(page, /^(Flow|フロー)$/);
   await expect(page.locator(".sw-flow-row").first()).toBeVisible();
   // A parse error would lock the rows and change what the list shows.
   await expect(page.locator(".sw-error-list")).toHaveCount(0);
