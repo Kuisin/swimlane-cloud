@@ -252,6 +252,9 @@ export function StepInspector({
 
         <label className="sw-field">
           <span className="sw-field-label">{t("step.mergeId")}</span>
+          {/* The model field is still `mergeId`; only its spelling in the DSL
+              moved, from an `@id` suffix to an `id: …;` follow-up line, which
+              the shared serializer writes. Nothing to do here. */}
           <input
             type="text"
             className="sw-input"
@@ -259,6 +262,7 @@ export function StepInspector({
             disabled={fieldDisabled}
             onChange={(e) => set("mergeId")(e.target.value || "")}
           />
+          <p className="sw-field-hint">{t("step.mergeIdHint")}</p>
         </label>
 
         <label className="sw-field">

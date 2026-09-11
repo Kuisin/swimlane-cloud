@@ -243,9 +243,10 @@ const V2_MULTILANG_SAMPLE = `@kai-swimlane
 /line/
 if (承認する？ | Approve?)
 case (はい | Yes)
-  [sales: 完了 | Done] @done
+  [sales: 完了 | Done]
     desc: 詳細;
     desc.en: Detail;
+    id: done;
 case (いいえ | No)
   [sales: 却下 | Rejected]
 end-if

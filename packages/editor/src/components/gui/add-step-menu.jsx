@@ -17,7 +17,6 @@ export function AddStepMenu({
   onAddFork,
   onAddSection,
   onAddBranch,
-  onAddMergeMarker,
   onAddLoop,
   onAddMerge,
   canJump,
@@ -67,15 +66,11 @@ export function AddStepMenu({
     {
       headingKey: "gui.addGroupJumps",
       items: [
-        {
-          key: "mergeMarker",
-          labelKey: "gui.addMergeMarker",
-          descKey: "gui.addMergeMarkerDesc",
-          onSelect: onAddMergeMarker,
-        },
-        // A loop-back / merge-ahead jump only makes sense from inside an
-        // `if` — a `fork`'s paths all run and rejoin unconditionally, so
-        // there's nothing for either to redirect.
+        // A loop-back / jump-ahead only makes sense from inside an `if` — a
+        // `fork`'s paths all run and rejoin unconditionally, so there's
+        // nothing for either to redirect. (There is no "landing marker" item
+        // any more: a jump names the step it lands on, so the destination is
+        // an ordinary step, not a row you add.)
         ...(canJump
           ? [
               {
@@ -102,25 +97,29 @@ export function AddStepMenu({
       style={{ top: position.top, left: position.left }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {groups.map((group) => (
-        <div key={group.headingKey} className="sw-add-block-group">
-          <div className="sw-add-block-group-heading">{t(group.headingKey)}</div>
-          {group.items.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className="sw-add-block-item"
-              onClick={() => {
-                item.onSelect();
-                onClose();
-              }}
-            >
-              <span className="sw-add-block-item-label">{t(item.labelKey)}</span>
-              <span className="sw-add-block-item-desc">{t(item.descKey)}</span>
-            </button>
-          ))}
-        </div>
-      ))}
+      {/* "Jumps" is empty outside an `if` now that the landing marker is
+          gone — drop the heading rather than leave it dangling. */}
+      {groups
+        .filter((group) => group.items.length > 0)
+        .map((group) => (
+          <div key={group.headingKey} className="sw-add-block-group">
+            <div className="sw-add-block-group-heading">{t(group.headingKey)}</div>
+            {group.items.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className="sw-add-block-item"
+                onClick={() => {
+                  item.onSelect();
+                  onClose();
+                }}
+              >
+                <span className="sw-add-block-item-label">{t(item.labelKey)}</span>
+                <span className="sw-add-block-item-desc">{t(item.descKey)}</span>
+              </button>
+            ))}
+          </div>
+        ))}
     </div>
   );
 }

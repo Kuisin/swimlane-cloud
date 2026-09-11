@@ -180,6 +180,7 @@ export interface GuiRow {
   remark?: string;
   arrowLine?: string;
   blockRef?: string | null;
+  /** A step's own jump-target name; serialized as its `id: …;` follow-up line. */
   mergeId?: string;
   props?: string[];
   [key: string]: unknown;
@@ -271,13 +272,17 @@ export declare function sameReorderFrame(rows: GuiRow[], a: number, b: number): 
 export declare function getFrameStepIndices(rows: GuiRow[], rowIndex: number): number[];
 
 export interface MergeTargetOption {
+  kind: "step";
   stepIndex: number;
+  /** "" for a step with no `id:` yet — still a valid destination, see makeStepId. */
   mergeId: string;
   blockName: string;
   label: string;
 }
-/** Every step row a `merge:`/`goto` could point at, labelled for a picker. */
+/** Every step row a `[goto: id]` could land on, labelled for a picker. */
 export declare function collectMergeTargetOptions(rows: GuiRow[]): MergeTargetOption[];
+/** A fresh, unique `id:` for the step at `index`, derived from its label/text. */
+export declare function makeStepId(rows: GuiRow[], index: number): string;
 
 /** Index of the `branchEnd` closing the `branchStart` at `startIndex`, or -1. */
 export declare function findBranchEndIndex(rows: GuiRow[], startIndex: number): number;

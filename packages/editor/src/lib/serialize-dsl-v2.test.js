@@ -111,7 +111,7 @@ describe("serializeDSLv2: structure that needs its own model field to survive", 
   });
 
   it("keeps a loop's own @target", () => {
-    const src = doc("/line/\nif (q)\ncase (a)\n  [x: y] @start\n  loop @start\nend-if");
+    const src = doc("/line/\nif (q)\ncase (a)\n  [x: y]\n    id: start;\n  loop @start\nend-if");
     const { m2, once } = assertStableRoundTrip(src);
     expect(m2.rows.find((r) => r.kind === "branchLoop").loopTarget).toBe("start");
     expect(once).toContain("loop @start");

@@ -5,6 +5,7 @@ import {
   sameReorderFrame,
   rowBadgeLabel,
   collectMergeTargetOptions,
+  makeStepId,
 } from "./flow-rows.js";
 import { EN, JA, tr } from "../i18n.jsx";
 
@@ -95,19 +96,40 @@ describe("collectMergeTargetOptions", () => {
     });
   });
 
-  it("also lists named landing markers, skipping unnamed ones", () => {
+  // Every jump names a real step now, so a step is the *only* kind of
+  // candidate — there is no landing-marker row left to list beside them.
+  it("lists nothing but steps", () => {
     const rows = [
-      { kind: "mergeMarker", name: "", depth: 0 }, // excluded: no name
       { kind: "step", role: "r", text: "start" },
-      { kind: "mergeMarker", name: "done", depth: 0 },
+      { kind: "branchStart", id: "x", cond: "?" },
+      { kind: "branchMerge", mergeTarget: "done" },
+      { kind: "branchEnd", id: "x" },
+      { kind: "branchLoop" },
+      { kind: "groupStart", id: "g", groupMode: "section" },
     ];
     const options = collectMergeTargetOptions(rows);
-    expect(options).toHaveLength(2);
-    expect(options[1]).toMatchObject({
-      kind: "marker",
-      rowIndex: 2,
-      mergeId: "done",
-      label: "⤓ done (landing marker)",
-    });
+    expect(options).toHaveLength(1);
+    expect(options.every((o) => o.kind === "step")).toBe(true);
+  });
+});
+
+describe("makeStepId", () => {
+  it("slugs the step's label, preferring it over the raw text", () => {
+    const rows = [{ kind: "step", role: "r", text: "Send the invoice", name: "Send invoice" }];
+    expect(makeStepId(rows, 0)).toBe("send-invoice");
+  });
+
+  it("falls back to step-<n> when the text has no ASCII to slug", () => {
+    const rows = [{ kind: "step", role: "r", text: "請求書を送る" }];
+    expect(makeStepId(rows, 0)).toBe("step-1");
+  });
+
+  it("never collides with an id already in use", () => {
+    const rows = [
+      { kind: "step", role: "r", text: "Review", mergeId: "review" },
+      { kind: "step", role: "r", text: "Review", mergeId: "review-2" },
+      { kind: "step", role: "r", text: "Review" },
+    ];
+    expect(makeStepId(rows, 2)).toBe("review-3");
   });
 });

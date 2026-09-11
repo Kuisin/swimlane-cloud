@@ -68,9 +68,9 @@ const HELP_SECTIONS = [
     "[role: confirm order]\nbranch (shipping)\n  [role: record picking detail]\nend-branch\n[role: show receipt]",
   ],
   [
-    "goto @id / merge @id",
+    "[goto: id] / id: …;",
     "help.merge",
-    "if (cancel?) #red\ncase (yes)\n  [role: accept cancellation]\n  goto @done\ncase ()\n  [role: normal close]\nend-if\n\n[role: transaction complete] @done",
+    "if (cancel?) #red\ncase (yes)\n  [role: accept cancellation]\n  [goto: done]\ncase ()\n  [role: normal close]\nend-if\n\n[role: transaction complete]\n  id: done;",
   ],
   ["=> path", "help.link", "[role: hand off to shipping] => ./shipping-prep.txt"],
   ["arrow: solid|dashed|dotted;", "help.arrow", "[role: step]\narrow: dashed;\n[role: next step]"],
