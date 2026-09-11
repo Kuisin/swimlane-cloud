@@ -57,6 +57,9 @@ export type BlockTextMode = (typeof BLOCK_TEXT_MODES)[number];
 /** Mirrors `BLOCK_MARGIN_MAX` in the diagram engine's `diagram-options.js`. */
 export const BLOCK_MARGIN_MAX = 80;
 
+/** Ceiling for a layout override. Generous; it only has to stop a typo. */
+export const LAYOUT_VALUE_MAX = 10000;
+
 /** Render settings every diagram inherits; a file's own `/option/` wins. */
 export interface DiagramSettings {
   /** The fork circles and join diamonds. Off, the rails simply meet. */
@@ -65,6 +68,23 @@ export interface DiagramSettings {
   blockMargin: number;
   /** A step's box text: cut to one line with an ellipsis, or wrapped. */
   blockText: BlockTextMode;
+  /**
+   * Page geometry — margins, gutter widths, the lane grid. Overrides for the
+   * engine's `DIAGRAM_LAYOUT`, and unlike the settings above these are *not*
+   * `/option/` keys: the page layout is repository-wide only.
+   *
+   * Only keys that differ from the engine default are stored, never the whole
+   * table. That is what lets the editor revert a field by deleting its key, and
+   * it keeps an improved engine default reaching repositories that never
+   * pinned a value.
+   *
+   * Which keys mean anything, and their individual bounds, belong to the
+   * engine (`LAYOUT_SETTINGS` in `diagram-layout.js`) — this package stays free
+   * of that dependency so it remains light enough for the extension host, and
+   * the renderer ignores anything it does not recognise anyway. Parsing here
+   * only checks the shape.
+   */
+  layout: Record<string, number>;
 }
 
 export interface SwimlaneSettings {
@@ -106,6 +126,7 @@ export const DEFAULT_DIAGRAM_SETTINGS: DiagramSettings = {
   showGatewayIcons: true,
   blockMargin: 0,
   blockText: "truncate",
+  layout: {},
 };
 
 export const DEFAULT_SETTINGS: SwimlaneSettings = {
@@ -128,6 +149,18 @@ export const DEFAULT_SETTINGS: SwimlaneSettings = {
   metadata: DEFAULT_METADATA_SCHEMA,
 };
 
+/**
+ * A private copy of the defaults.
+ *
+ * `DEFAULT_SETTINGS` is a module-level object holding mutable maps
+ * (`diagram.layout`, `templates`). Handing it straight back to a caller who
+ * has no reason to suspect it is shared — the settings editor merges into
+ * `layout` — would let one request corrupt the defaults for the whole process.
+ */
+function freshDefaults(): SwimlaneSettings {
+  return structuredClone(DEFAULT_SETTINGS);
+}
+
 export function repoSettingsJson(settings: SwimlaneSettings = DEFAULT_SETTINGS): string {
   return `${JSON.stringify(settings, null, 2)}\n`;
 }
@@ -138,14 +171,14 @@ export function repoSettingsJson(settings: SwimlaneSettings = DEFAULT_SETTINGS):
  * every missing field takes the default rather than being treated as "off".
  */
 export function parseRepoSettings(text: string | null): SwimlaneSettings {
-  if (!text) return DEFAULT_SETTINGS;
+  if (!text) return freshDefaults();
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch {
-    return DEFAULT_SETTINGS;
+    return freshDefaults();
   }
-  if (!raw || typeof raw !== "object") return DEFAULT_SETTINGS;
+  if (!raw || typeof raw !== "object") return freshDefaults();
   const obj = raw as Record<string, unknown>;
   const branches = (obj.branches ?? {}) as Record<string, unknown>;
   const rules = (obj.rules ?? {}) as Record<string, unknown>;
@@ -179,6 +212,23 @@ export function parseRepoSettings(text: string | null): SwimlaneSettings {
   };
 }
 
+/** Finite, non-negative, not absurd. Range per key is the engine's business. */
+function parseLayout(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (
+      typeof value === "number" &&
+      Number.isFinite(value) &&
+      value >= 0 &&
+      value <= LAYOUT_VALUE_MAX
+    ) {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 export function parseDiagramSettings(raw: unknown): DiagramSettings {
   const d = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const margin = d.blockMargin;
@@ -197,6 +247,7 @@ export function parseDiagramSettings(raw: unknown): DiagramSettings {
     blockText: (BLOCK_TEXT_MODES as readonly unknown[]).includes(d.blockText)
       ? (d.blockText as BlockTextMode)
       : DEFAULT_DIAGRAM_SETTINGS.blockText,
+    layout: parseLayout(d.layout),
   };
 }
 

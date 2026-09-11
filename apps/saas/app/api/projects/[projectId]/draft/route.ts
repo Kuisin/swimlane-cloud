@@ -8,7 +8,12 @@ import {
   lockedBranches,
   requireProjectRole,
 } from "@/lib/projects";
-import { isDraftablePath, readConfigAt, withinDiagramsRoot } from "@/lib/repo-files";
+import {
+  isDraftablePath,
+  isSettingsPath,
+  readConfigAt,
+  withinDiagramsRoot,
+} from "@/lib/repo-files";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { assertForcedSectionsForFile } from "@/lib/templates";
 
@@ -35,7 +40,9 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   assertRef(body.branch);
   for (const f of body.files) {
     assertRepoPath(f.id);
-    if (!isDraftablePath(f.id)) throw new ApiError(400, `${f.id} is not a diagram path.`);
+    if (!isDraftablePath(f.id) && !isSettingsPath(f.id)) {
+      throw new ApiError(400, `${f.id} is not a diagram path.`);
+    }
     if (typeof f.dsl !== "string") throw new ApiError(400, `${f.id}: dsl must be a string`);
   }
 
@@ -52,7 +59,12 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   // A path the editor suggested without a folder selected would otherwise be
   // written outside the diagram tree and vanish from the listing.
   const config = await readConfigAt(project, body.branch);
-  const files = body.files.map((f) => ({ ...f, id: withinDiagramsRoot(f.id, config) }));
+  // The settings file is exempt from re-rooting: every reader resolves it at
+  // the repository root, so moving it under `diagramsRoot` would commit it
+  // where nothing looks for it.
+  const files = body.files.map((f) =>
+    isSettingsPath(f.id) ? f : { ...f, id: withinDiagramsRoot(f.id, config) },
+  );
 
   const supabase = getServiceSupabase();
   const now = new Date().toISOString();
