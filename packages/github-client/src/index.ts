@@ -58,6 +58,7 @@ export {
   DEFAULT_METADATA_SCHEMA,
   METADATA_FIELD_TYPES,
   METADATA_PROBLEM_CODES,
+  isMetadataKey,
   metadataDefaults,
   parseMetadataSchema,
   validateMetadata,

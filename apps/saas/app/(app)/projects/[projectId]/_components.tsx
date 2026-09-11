@@ -226,6 +226,7 @@ export function ProjectNav({
     ...(state?.me.role === "owner"
       ? [
           { key: "templates", label: t("nav.templates"), href: "settings/templates" },
+          { key: "metadata", label: t("nav.metadata"), href: "settings/metadata" },
           { key: "settings", label: t("nav.settings"), href: "settings/diagram" },
         ]
       : []),

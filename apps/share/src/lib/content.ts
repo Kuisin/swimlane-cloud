@@ -8,6 +8,13 @@ import {
 } from "@swimlane-cloud/diagram-converter/markdown-doc";
 
 /**
+ * A frontmatter value. `.md` frontmatter is structured — a value may be a
+ * sequence or a nested map, not only a scalar — and the document info panel
+ * flattens each shape for display.
+ */
+type MetaValue = string | string[] | { [key: string]: MetaValue };
+
+/**
  * Content registry. Diagrams are kai-swimlane files dropped into
  * apps/share/content/ (organize freely with subfolders) — raw DSL in a `.txt`,
  * or DSL inside a ```` ```kai-swimlane ```` fence in a `.md`. Every file and
@@ -130,9 +137,9 @@ export function readDiagram(relPath: string): string | null {
  */
 export function readDocumentInfo(relPath: string): {
   path: string;
-  meta: Record<string, string>;
+  meta: Record<string, MetaValue>;
 } {
-  let meta: Record<string, string> = {};
+  let meta: Record<string, MetaValue> = {};
   if (relPath.endsWith(".md")) {
     try {
       meta = splitFrontmatter(fs.readFileSync(path.join(CONTENT_DIR, relPath), "utf8")).meta;

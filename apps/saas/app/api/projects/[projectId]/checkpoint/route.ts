@@ -9,6 +9,7 @@ import {
   lockedBranches,
   requireProjectRole,
 } from "@/lib/projects";
+import { assertValidMetadataForFile, loadMetadataFields } from "@/lib/metadata";
 import { isDraftablePath, loadDraftState } from "@/lib/repo-files";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { assertForcedSectionsForFile } from "@/lib/templates";
@@ -55,8 +56,14 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   }
 
   const { policies, templatesById } = await loadProjectTemplates(projectId);
+  // The metadata schema is judged here and nowhere earlier: a required key is
+  // typed by a person over minutes, so failing every autosave on it would make
+  // the document impossible to edit. The Document form flags it live; this is
+  // the point where it stops being only a warning. See `metadata.ts`.
+  const metadataFields = await loadMetadataFields(project);
   for (const f of changedEntries) {
     assertForcedSectionsForFile(f.id, f.dsl, policies, templatesById);
+    assertValidMetadataForFile(f.id, f.dsl, metadataFields);
   }
 
   const headSha = await project.write.refSha(body.branch);

@@ -15,6 +15,7 @@ import {
   isMarkdownDiagram,
   markdownFromDsl,
   mergeMetaProjection,
+  metaText,
   orderedMetaKeys,
   projectMeta,
   readMetaSection,
@@ -248,6 +249,34 @@ body
     expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
   });
 
+  /**
+   * A key is author-supplied now that a metadata form can add one, so it needs
+   * the same care as a value. Writing `a:b: v` bare hands the next reader the
+   * key `a:b` — or, for our own reader, `a` — and the value is simply gone.
+   */
+  it("round-trips a key that cannot be written bare", () => {
+    for (const key of ["a: b", "a:b", "- x", "", "  padded  ", "#hash", 'has"quote', "a b"]) {
+      const meta = { [key]: "v" };
+      const text = serializeFrontmatter(meta);
+      expect(splitFrontmatter(`${text}body\n`).meta, key).toEqual(meta);
+    }
+  });
+
+  it("round-trips an awkward key nested inside a map", () => {
+    const meta = { sourceRef: { "a: b": "x", nested: { "c:d": ["one", "two"] } } };
+    const text = serializeFrontmatter(meta);
+    expect(text).toContain('"a: b": x');
+    expect(splitFrontmatter(`${text}body\n`).meta).toEqual(meta);
+  });
+
+  it("leaves a plainly-writable key plain, and keeps a quoted one quoted", () => {
+    expect(serializeFrontmatter({ owner: "x", "a b": "y" })).toBe("---\nowner: x\na b: y\n---\n");
+    const md = '---\n"owner": x\n---\n\nbody\n';
+    const { meta, shape } = splitFrontmatter(md);
+    expect(meta).toEqual({ owner: "x" });
+    expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
+  });
+
   it("keeps a bare `key:` bare rather than turning it into an empty string", () => {
     const md = "---\nowner:\nstatus: draft\n---\n\nbody\n";
     const { meta, shape } = splitFrontmatter(md);
@@ -342,6 +371,51 @@ ${DSL}
     const { meta, shape } = splitFrontmatter(markdownFromDsl(dsl, RICH));
     expect(meta).toEqual({ reviewers: ["Doe, Jane"], sourceRef: { system: "SAP", module: "FI" } });
     expect(verbatimKeys(shape)).toEqual(["notes"]);
+  });
+
+  /**
+   * `metaText` is the display counterpart of `projectMeta`: the projection
+   * refuses anything it cannot flatten losslessly, because it is storing;
+   * `metaText` never refuses, because it is only showing. Both live here so
+   * the renderer and a host that must flatten at its own boundary cannot drift
+   * apart and show the same document differently.
+   */
+  it("metaText flattens any value to one readable line", () => {
+    expect(metaText("plain")).toBe("plain");
+    expect(metaText(["order", "credit"])).toBe("order, credit");
+    expect(metaText({ system: "SAP", module: "FI" })).toBe("system: SAP, module: FI");
+    expect(metaText({ repo: { name: "docs", tags: ["a", "b"] } })).toBe(
+      "repo: name: docs, tags: a, b",
+    );
+    // nothing to say stays nothing, so a caller can skip the line entirely
+    expect(metaText({})).toBe("");
+    expect(metaText([])).toBe("");
+    expect(metaText(undefined)).toBe("");
+    expect(metaText(null)).toBe("");
+    // and unlike the projection, it flattens what /meta/ would have refused
+    expect(projectMeta({ k: ["Doe, Jane"] })).toEqual({});
+    expect(metaText(["Doe, Jane"])).toBe("Doe, Jane");
+  });
+
+  /**
+   * The counterpart to the deletion rule, and the reason it is safe: a tool
+   * that rebuilds `/meta/` from the parsed model (GUI mode does exactly this)
+   * can only ever produce the projection, so it can never reach a rich value.
+   * A person typing the key in can — and should, since nothing but a person
+   * could have put it there.
+   */
+  it("lets a hand-typed /meta/ key win over a rich value, but only a hand-typed one", () => {
+    // regenerating the section without touching it leaves the map alone
+    const regenerated = dslFromMarkdown(RICH);
+    expect(regenerated).not.toContain("sourceRef");
+    expect(splitFrontmatter(markdownFromDsl(regenerated, RICH)).meta.sourceRef).toEqual({
+      system: "SAP",
+      module: "FI",
+    });
+
+    // typing the key in is an assignment, and it takes
+    const typed = regenerated.replace("owner: fi.coe@example.com;", "$&\nsourceRef: SAP;");
+    expect(splitFrontmatter(markdownFromDsl(typed, RICH)).meta.sourceRef).toBe("SAP");
   });
 
   it("mergeMetaProjection is the rule on its own", () => {
