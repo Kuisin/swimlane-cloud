@@ -24,10 +24,17 @@ const MIGRATE_LIMIT = 300;
 /**
  * POST /api/projects/[projectId]/migrate-dsl — rewrite every diagram on a
  * branch from the earlier grammar into the current one (the header, the
- * `if`/`else-if`/`else` clauses into `if`/`case`, `[loop]`/`merge:` into
- * `loop`/`goto`, and a step's `id:`/`props:`/`arrow:`/`link:` lines into
- * suffixes), in **one commit**, so a repository written before the change
- * opens again.
+ * `if`/`else-if`/`else` clauses into `if`/`case`, `[loop]` into `loop`,
+ * `merge: id;` and `[merge: id]` into `[goto: id]`, and a step's
+ * `props:`/`arrow:`/`link:` lines into suffixes — a step's `id:` line is
+ * already current and is left alone), in **one commit**, so a repository
+ * written before the change opens again.
+ *
+ * `migrateLegacyDsl` owns every rewrite rule, so this route needs no grammar
+ * knowledge of its own: it reads, calls, and commits. A jump with no target —
+ * a bare `merge;` / `[merge]`, or a `[merge]` / `[merge: name]` landing marker
+ * — has no automatic mapping (there is no marker concept any more), so the
+ * migration leaves those lines alone and the reader reports them.
  *
  * Same shape as convert-markdown: refuses pending drafts (an unpushed edit to
  * a rewritten file would bring the old grammar back at the next push), and
@@ -74,7 +81,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
 
   const result = await project.write.commitFiles({
     branch: body.branch,
-    message: `Update DSL to the current grammar (${writes.length} file${writes.length === 1 ? "" : "s"})\n\nThe header, if/else-if/else into if/case, [loop]/merge: into\nloop/goto, and a step's id:/props:/arrow:/link: lines into suffixes —\nthe constructs the earlier grammar used that this reader no longer\naccepts.`,
+    message: `Update DSL to the current grammar (${writes.length} file${writes.length === 1 ? "" : "s"})\n\nThe header, if/else-if/else into if/case, [loop] into loop,\nmerge: id; and [merge: id] into [goto: id], and a step's\nprops:/arrow:/link: lines into suffixes — the constructs the earlier\ngrammar used that this reader no longer accepts. A step's id: line is\nalready current and is left alone; a jump with no target is left for a\nhand edit.`,
     files: writes,
     deletions: [],
     expectedHeadSha: sha,
