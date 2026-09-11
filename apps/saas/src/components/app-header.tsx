@@ -11,11 +11,18 @@ export function AppHeader({ login, right }: { login?: string | null; right?: Rea
   const { t } = useT();
   return (
     <header className="border-b border-neutral-200">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
+      {/*
+        `min-h` rather than a fixed height, and allowed to wrap: a page that
+        adds its own actions here (the dashboard adds two) needs about 307px on
+        the right alone, which does not fit beside the title on a 320px screen.
+        Wrapping drops the actions onto a second line instead of pushing the
+        whole page sideways.
+      */}
+      <div className="mx-auto flex min-h-14 max-w-5xl flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2 sm:px-6">
         <Link href="/dashboard" className="text-sm font-semibold tracking-tight">
           Swimlane Cloud
         </Link>
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
           {right}
           <Link
             href="/manual"

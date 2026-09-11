@@ -209,243 +209,260 @@ export default function DiagramSettingsPage() {
 
   return (
     <ProjectPage active="settings" projectId={projectId} state={state} error={error}>
-      <div className="mx-auto max-w-2xl space-y-8 p-4 sm:p-6">
-        <div>
-          <h2 className="text-lg font-semibold">{t("settings.title")}</h2>
-          <p className="mt-1 text-sm text-neutral-600">{t("settings.description")}</p>
-        </div>
-
-        {state && (
-          <div className="flex flex-wrap items-center gap-3 rounded border border-neutral-200 bg-neutral-50 p-3 text-sm">
-            <label className="flex items-center gap-2">
-              <span className="font-medium">{t("settings.branch")}</span>
-              <select
-                className={`${field} bg-white`}
-                value={branch}
-                onChange={(e) => setBranchParam(e.target.value)}
-              >
-                {state.branches.map((b) => (
-                  <option key={b.name} value={b.name}>
-                    {b.name}
-                    {b.dirty ? " •" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {pending && (
-              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                {t("settings.pendingBadge")}
-              </span>
-            )}
-            <div className="ml-auto flex gap-1 text-xs">
-              {(["form", "json"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => switchMode(m)}
-                  className={`rounded px-3 py-1 ${
-                    mode === m ? "bg-neutral-800 text-white" : "text-neutral-500 hover:bg-white"
-                  }`}
-                >
-                  {t(`settings.mode.${m}`)}
-                </button>
-              ))}
-            </div>
+      {/*
+        The same scroll wrapper every other project page uses. It is not only
+        about scrolling: `ProjectPage` is a full-height flex column, and
+        without a scroll container here the content block is free to size
+        itself to its widest child — which one long branch name in the select
+        below turned into 90px of sideways scroll on a 320px screen.
+      */}
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div className="mx-auto max-w-2xl space-y-8 p-4 sm:p-6">
+          <div>
+            <h2 className="text-lg font-semibold">{t("settings.title")}</h2>
+            <p className="mt-1 text-sm text-neutral-600">{t("settings.description")}</p>
           </div>
-        )}
 
-        {!editable && state && (
-          <div className="rounded border border-neutral-200 p-3 text-sm">
-            <p className="text-neutral-600">{t("settings.readOnly", { branch })}</p>
-            <p className="mt-1 text-xs text-neutral-500">{t("settings.readOnlyHint")}</p>
-            {state.me.role !== "viewer" && (
+          {state && (
+            <div className="flex flex-wrap items-center gap-3 rounded border border-neutral-200 bg-neutral-50 p-3 text-sm">
+              {/*
+              A select is as wide as its longest option unless told otherwise,
+              and an edit branch is `<login>/<timestamp>/<key>` by design — some
+              300px of it. Without room to shrink that one option decided the
+              width of the whole page on a phone.
+            */}
+              <label className="flex min-w-0 max-w-full items-center gap-2">
+                <span className="shrink-0 font-medium">{t("settings.branch")}</span>
+                <select
+                  className={`${field} min-w-0 bg-white`}
+                  value={branch}
+                  onChange={(e) => setBranchParam(e.target.value)}
+                >
+                  {state.branches.map((b) => (
+                    <option key={b.name} value={b.name}>
+                      {b.name}
+                      {b.dirty ? " •" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {pending && (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                  {t("settings.pendingBadge")}
+                </span>
+              )}
+              <div className="ml-auto flex gap-1 text-xs">
+                {(["form", "json"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => switchMode(m)}
+                    className={`rounded px-3 py-1 ${
+                      mode === m ? "bg-neutral-800 text-white" : "text-neutral-500 hover:bg-white"
+                    }`}
+                  >
+                    {t(`settings.mode.${m}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!editable && state && (
+            <div className="rounded border border-neutral-200 p-3 text-sm">
+              <p className="text-neutral-600">{t("settings.readOnly", { branch })}</p>
+              <p className="mt-1 text-xs text-neutral-500">{t("settings.readOnlyHint")}</p>
+              {state.me.role !== "viewer" && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={beginEdit}
+                  className="mt-2 rounded border border-neutral-300 px-2.5 py-1 text-sm hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50"
+                >
+                  {t("settings.startEdit")}
+                </button>
+              )}
+            </div>
+          )}
+
+          {mode === "json" ? (
+            <section className="space-y-2">
+              <textarea
+                value={json}
+                onChange={(e) => setJson(e.target.value)}
+                disabled={disabled}
+                rows={22}
+                spellCheck={false}
+                className="w-full rounded border border-neutral-300 px-2 py-1 font-mono text-xs disabled:bg-neutral-50"
+              />
+              <p className="text-xs text-neutral-500">
+                {t("settings.jsonHint", { path: REPO_SETTINGS_PATH })}
+              </p>
+              {jsonError && <p className="text-xs text-red-600">{jsonError}</p>}
+            </section>
+          ) : (
+            <>
+              <section className="space-y-4">
+                <h3 className="font-medium">{t("settings.diagram")}</h3>
+                {diagram && (
+                  <fieldset disabled={disabled} className="space-y-4">
+                    <label className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={diagram.showGatewayIcons}
+                        onChange={(e) =>
+                          setDiagram({ ...diagram, showGatewayIcons: e.target.checked })
+                        }
+                      />
+                      <span>
+                        <span className="block text-sm">{t("settings.showGatewayIcons")}</span>
+                        <span className="block text-xs text-neutral-500">
+                          {t("settings.showGatewayIconsHint")}
+                        </span>
+                      </span>
+                    </label>
+                    <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                      <span className="text-sm sm:w-56">{t("settings.blockMargin")}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={BLOCK_MARGIN_MAX}
+                        step={1}
+                        className={`${field} w-24`}
+                        value={diagram.blockMargin}
+                        onChange={(e) =>
+                          setDiagram({
+                            ...diagram,
+                            blockMargin: Math.max(
+                              0,
+                              Math.min(BLOCK_MARGIN_MAX, Math.round(Number(e.target.value) || 0)),
+                            ),
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                      <span className="text-sm sm:w-56">{t("settings.blockText")}</span>
+                      <select
+                        className={field}
+                        value={diagram.blockText}
+                        onChange={(e) =>
+                          setDiagram({
+                            ...diagram,
+                            blockText: e.target.value as Diagram["blockText"],
+                          })
+                        }
+                      >
+                        <option value="truncate">{t("settings.blockText.truncate")}</option>
+                        <option value="wrap">{t("settings.blockText.wrap")}</option>
+                      </select>
+                    </label>
+                    <p className="text-xs text-neutral-500">{t("settings.diagramHint")}</p>
+                  </fieldset>
+                )}
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium">{t("settings.layout")}</h3>
+                    <p className="mt-1 text-sm text-neutral-600">
+                      {t("settings.layoutDescription")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={revertAll}
+                    className="shrink-0 rounded border border-neutral-300 px-2.5 py-1 text-xs hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50"
+                  >
+                    {t("settings.revertAll")}
+                  </button>
+                </div>
+                {layout &&
+                  LAYOUT_GROUPS.map((group) => (
+                    <fieldset key={group} disabled={disabled} className="space-y-2">
+                      <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400">
+                        {t(`settings.layoutGroup.${group}`)}
+                      </legend>
+                      {LAYOUT_SETTINGS.filter((s) => s.group === group).map((setting) => (
+                        <LayoutRow
+                          key={setting.key}
+                          setting={setting}
+                          value={layout[setting.key] ?? ""}
+                          onChange={(v) => setLayout({ ...layout, [setting.key]: v })}
+                        />
+                      ))}
+                    </fieldset>
+                  ))}
+                <p className="text-xs text-neutral-500">{t("settings.layoutHint")}</p>
+              </section>
+
+              <section className="space-y-4">
+                <h3 className="font-medium">{t("settings.templates")}</h3>
+                <p className="text-sm text-neutral-600">{t("settings.templatesDescription")}</p>
+                {templates && (
+                  <fieldset disabled={disabled} className="space-y-2">
+                    {SECTIONS.map((s) => (
+                      <label
+                        key={s}
+                        className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3"
+                      >
+                        <code className="text-sm sm:w-56">/{s}/</code>
+                        <select
+                          className={field}
+                          value={templates[s]}
+                          onChange={(e) =>
+                            setTemplates({ ...templates, [s]: e.target.value as Mode })
+                          }
+                        >
+                          {MODES.map((m) => (
+                            <option key={m} value={m}>
+                              {t(`settings.templateMode.${m}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                    <p className="text-xs text-neutral-500">{t("settings.templateModeHint")}</p>
+                  </fieldset>
+                )}
+              </section>
+            </>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3 border-t border-neutral-200 pt-4">
+            <button
+              type="button"
+              disabled={disabled || !dirty || Boolean(jsonError) || !loaded}
+              onClick={() => void save()}
+              className="rounded bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            >
+              {busy ? t("settings.saving") : t("settings.save")}
+            </button>
+            {pending && editable && (
               <button
                 type="button"
                 disabled={busy}
-                onClick={beginEdit}
-                className="mt-2 rounded border border-neutral-300 px-2.5 py-1 text-sm hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50"
+                onClick={() => void discard()}
+                className="rounded border border-neutral-300 px-2.5 py-1 text-sm hover:border-red-400 hover:text-red-600 disabled:opacity-50"
               >
-                {t("settings.startEdit")}
+                {t("settings.discard")}
               </button>
             )}
+            {pending && (
+              <Link
+                href={`/projects/${projectId}/edit?branch=${encodeURIComponent(branch)}`}
+                className="text-xs text-indigo-600 hover:underline"
+              >
+                {t("settings.goToCheckpoint")}
+              </Link>
+            )}
+            <span className="text-sm text-neutral-600">
+              {notice ?? (pending ? t("settings.pending", { branch }) : null)}
+            </span>
           </div>
-        )}
-
-        {mode === "json" ? (
-          <section className="space-y-2">
-            <textarea
-              value={json}
-              onChange={(e) => setJson(e.target.value)}
-              disabled={disabled}
-              rows={22}
-              spellCheck={false}
-              className="w-full rounded border border-neutral-300 px-2 py-1 font-mono text-xs disabled:bg-neutral-50"
-            />
-            <p className="text-xs text-neutral-500">
-              {t("settings.jsonHint", { path: REPO_SETTINGS_PATH })}
-            </p>
-            {jsonError && <p className="text-xs text-red-600">{jsonError}</p>}
-          </section>
-        ) : (
-          <>
-            <section className="space-y-4">
-              <h3 className="font-medium">{t("settings.diagram")}</h3>
-              {diagram && (
-                <fieldset disabled={disabled} className="space-y-4">
-                  <label className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={diagram.showGatewayIcons}
-                      onChange={(e) =>
-                        setDiagram({ ...diagram, showGatewayIcons: e.target.checked })
-                      }
-                    />
-                    <span>
-                      <span className="block text-sm">{t("settings.showGatewayIcons")}</span>
-                      <span className="block text-xs text-neutral-500">
-                        {t("settings.showGatewayIconsHint")}
-                      </span>
-                    </span>
-                  </label>
-                  <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-                    <span className="text-sm sm:w-56">{t("settings.blockMargin")}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={BLOCK_MARGIN_MAX}
-                      step={1}
-                      className={`${field} w-24`}
-                      value={diagram.blockMargin}
-                      onChange={(e) =>
-                        setDiagram({
-                          ...diagram,
-                          blockMargin: Math.max(
-                            0,
-                            Math.min(BLOCK_MARGIN_MAX, Math.round(Number(e.target.value) || 0)),
-                          ),
-                        })
-                      }
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-                    <span className="text-sm sm:w-56">{t("settings.blockText")}</span>
-                    <select
-                      className={field}
-                      value={diagram.blockText}
-                      onChange={(e) =>
-                        setDiagram({
-                          ...diagram,
-                          blockText: e.target.value as Diagram["blockText"],
-                        })
-                      }
-                    >
-                      <option value="truncate">{t("settings.blockText.truncate")}</option>
-                      <option value="wrap">{t("settings.blockText.wrap")}</option>
-                    </select>
-                  </label>
-                  <p className="text-xs text-neutral-500">{t("settings.diagramHint")}</p>
-                </fieldset>
-              )}
-            </section>
-
-            <section className="space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-medium">{t("settings.layout")}</h3>
-                  <p className="mt-1 text-sm text-neutral-600">{t("settings.layoutDescription")}</p>
-                </div>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={revertAll}
-                  className="shrink-0 rounded border border-neutral-300 px-2.5 py-1 text-xs hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50"
-                >
-                  {t("settings.revertAll")}
-                </button>
-              </div>
-              {layout &&
-                LAYOUT_GROUPS.map((group) => (
-                  <fieldset key={group} disabled={disabled} className="space-y-2">
-                    <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400">
-                      {t(`settings.layoutGroup.${group}`)}
-                    </legend>
-                    {LAYOUT_SETTINGS.filter((s) => s.group === group).map((setting) => (
-                      <LayoutRow
-                        key={setting.key}
-                        setting={setting}
-                        value={layout[setting.key] ?? ""}
-                        onChange={(v) => setLayout({ ...layout, [setting.key]: v })}
-                      />
-                    ))}
-                  </fieldset>
-                ))}
-              <p className="text-xs text-neutral-500">{t("settings.layoutHint")}</p>
-            </section>
-
-            <section className="space-y-4">
-              <h3 className="font-medium">{t("settings.templates")}</h3>
-              <p className="text-sm text-neutral-600">{t("settings.templatesDescription")}</p>
-              {templates && (
-                <fieldset disabled={disabled} className="space-y-2">
-                  {SECTIONS.map((s) => (
-                    <label
-                      key={s}
-                      className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3"
-                    >
-                      <code className="text-sm sm:w-56">/{s}/</code>
-                      <select
-                        className={field}
-                        value={templates[s]}
-                        onChange={(e) =>
-                          setTemplates({ ...templates, [s]: e.target.value as Mode })
-                        }
-                      >
-                        {MODES.map((m) => (
-                          <option key={m} value={m}>
-                            {t(`settings.templateMode.${m}`)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ))}
-                  <p className="text-xs text-neutral-500">{t("settings.templateModeHint")}</p>
-                </fieldset>
-              )}
-            </section>
-          </>
-        )}
-
-        <div className="flex flex-wrap items-center gap-3 border-t border-neutral-200 pt-4">
-          <button
-            type="button"
-            disabled={disabled || !dirty || Boolean(jsonError) || !loaded}
-            onClick={() => void save()}
-            className="rounded bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-          >
-            {busy ? t("settings.saving") : t("settings.save")}
-          </button>
-          {pending && editable && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void discard()}
-              className="rounded border border-neutral-300 px-2.5 py-1 text-sm hover:border-red-400 hover:text-red-600 disabled:opacity-50"
-            >
-              {t("settings.discard")}
-            </button>
-          )}
-          {pending && (
-            <Link
-              href={`/projects/${projectId}/edit?branch=${encodeURIComponent(branch)}`}
-              className="text-xs text-indigo-600 hover:underline"
-            >
-              {t("settings.goToCheckpoint")}
-            </Link>
-          )}
-          <span className="text-sm text-neutral-600">
-            {notice ?? (pending ? t("settings.pending", { branch }) : null)}
-          </span>
         </div>
       </div>
     </ProjectPage>
