@@ -11,7 +11,7 @@ import { serializeDSL, type GuiRow } from "@swimlane-cloud/editor";
 import { dslToMobile } from "@swimlane-cloud/mobile-view";
 import { blockRows, withExtraCase, withoutBlock } from "./mobile-rows";
 
-const SRC = `@kai-swimlane-v2
+const SRC = `@kai-swimlane
 /line/
 if (Approved?)
 case (Yes)
@@ -140,7 +140,7 @@ describe("withExtraCase", () => {
   });
 
   it("leaves a parallel path unlabelled", () => {
-    const forkSrc = `@kai-swimlane-v2\n/line/\nfork (Ship)\n  [a: x]\nand (Bill)\n  [a: y]\nend-fork\n@end\n`;
+    const forkSrc = `@kai-swimlane\n/line/\nfork (Ship)\n  [a: x]\nand (Bill)\n  [a: y]\nend-fork\n@end\n`;
     const rows = parse(forkSrc).rows;
     const out = write(forkSrc, withExtraCase(rows, branchOf(tree(forkSrc)).startRow!, "ignored"));
     expect(parse(out).errors).toEqual([]);

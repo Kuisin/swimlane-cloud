@@ -1,6 +1,6 @@
 /**
  * The repository's worked example is a fixture: every diagram in
- * `examples/kai-swimlane-v2` must parse with no errors and render, in every
+ * `examples/kai-swimlane` must parse with no errors and render, in every
  * language it declares. It is the cheapest guard against a reader change that
  * silently breaks real files, and it exercises the whole import path — the
  * resolvers below are what a host has to supply. Skipped when the package is
@@ -19,7 +19,7 @@ const EXAMPLE = join(
   "..",
   "..",
   "examples",
-  "kai-swimlane-v2",
+  "kai-swimlane",
 );
 const ROOT = join(EXAMPLE, "diagrams");
 
@@ -63,7 +63,7 @@ function resolversFor(file) {
   };
 }
 
-describe.skipIf(!existsSync(ROOT))("examples/kai-swimlane-v2", () => {
+describe.skipIf(!existsSync(ROOT))("examples/kai-swimlane", () => {
   const files = diagrams(ROOT);
 
   it("has the sample diagrams", () => {

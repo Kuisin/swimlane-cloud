@@ -357,7 +357,7 @@ export function rowBadgeLabel(row, t = defaultT) {
       return row.parallel ? t("badge.fork") : t("badge.if");
     case "branchCase":
       if (row.parallel) return t("badge.and");
-      return /^else$/i.test((row.label || "").trim()) ? t("badge.else") : t("badge.case");
+      return (row.label || "").trim() === "" ? t("badge.otherwise") : t("badge.case");
     case "branchEnd":
       return row.parallel ? t("badge.endfork") : t("badge.endif");
     case "branchLoop":
@@ -393,7 +393,7 @@ export function rowBadgeKind(row) {
       return row.parallel ? "fork" : "if";
     case "branchCase":
       if (row.parallel) return "fork";
-      return /^else$/i.test((row.label || "").trim()) ? "else" : "case";
+      return (row.label || "").trim() === "" ? "otherwise" : "case";
     case "branchLoop":
       return "loop";
     case "branchMerge":
@@ -427,7 +427,7 @@ export function rowSummaryText(row, lanes, t = defaultT) {
       return row.parallel ? t("flow.parallelFork") : (row.cond || "").trim() || t("flow.condition");
     case "branchCase":
       if (row.parallel) return t("flow.parallelPath");
-      if (/^else$/i.test((row.label || "").trim())) return t("flow.otherwise");
+      if ((row.label || "").trim() === "") return t("flow.otherwise");
       return (row.label || "").trim() || t("flow.case");
     case "branchEnd":
       return row.parallel ? t("flow.endParallel") : t("flow.endBranch");

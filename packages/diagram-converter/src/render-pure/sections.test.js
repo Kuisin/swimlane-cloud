@@ -96,16 +96,17 @@ section (open)
 [a: step]
 end-section
 @end`);
-    expect(model.errors.some((e) => e.msg.includes("end-section without section"))).toBe(true);
+    expect(model.errors.some((e) => e.msg.includes("end-section closes nothing"))).toBe(true);
   });
 
   it("parses a section inside an if case", () => {
     const model = parseDSL(`${BASE_DSL}
-if (x) is (yes) than
+if (x)
+case (yes)
   section (inner)
     [a: step]
   end-section
-else
+case ()
   [b: no]
 end-if
 @end`);
@@ -315,11 +316,10 @@ end-fork
     expect(sectionBoxCount(svg)).toBeGreaterThanOrEqual(1);
   });
 
-  it("applies arrow: line-type modifier for steps inside a section", () => {
+  it("applies the dashed-arrow suffix for steps inside a section", () => {
     const svgDashed = render(`${BASE_DSL}
 section (wrap)
-  [a: step1]
-  arrow: dashed;
+  [a: step1] ~>
   [b: step2]
 end-section
 @end`);

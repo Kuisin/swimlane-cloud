@@ -197,7 +197,8 @@ export function GuiMode({
           branchColor: null,
           depth: 0,
         },
-        { kind: "branchCase", id, label: "else", parallel: false, branchColor: null, depth: 0 },
+        // A blank label is the catch-all case — there is no "else" spelling.
+        { kind: "branchCase", id, label: "", parallel: false, branchColor: null, depth: 0 },
         { kind: "branchEnd", id, parallel: false, depth: 0 },
       );
     });
@@ -236,7 +237,8 @@ export function GuiMode({
           depth: 0,
         },
         { kind: "branchCase", id, label: "Case B", parallel: false, branchColor: null, depth: 0 },
-        { kind: "branchCase", id, label: "else", parallel: false, branchColor: null, depth: 0 },
+        // A blank label is the catch-all case — there is no "else" spelling.
+        { kind: "branchCase", id, label: "", parallel: false, branchColor: null, depth: 0 },
         { kind: "branchEnd", id, parallel: false, depth: 0 },
       );
     });

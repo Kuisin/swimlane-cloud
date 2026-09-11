@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
-import { textToSvg } from "@swimlane-cloud/diagram-converter";
+import { textToSvg, migrateLegacyDsl } from "@swimlane-cloud/diagram-converter";
 import { serializeDSL } from "./serialize-dsl.js";
 import { formatDsl } from "./format-dsl.js";
 import { isDocumentDirty, createDocument } from "./dsl-document.js";
@@ -11,7 +11,7 @@ import { applyModelEdit } from "./gui-model.js";
 const SAMPLE = `@kai-swimlane
 
 /title/
-Onboarding
+Onboarding;
 
 /role/
 
@@ -25,9 +25,10 @@ label: System;
 
 [user: Submit request]
 
-if (approved?) is (yes) than
+if (approved?)
+case (yes)
   [system: Provision account]
-else
+case ()
   [system: Send rejection]
 end-if
 
@@ -68,9 +69,8 @@ describe("serialize/parse round-trip", () => {
   });
 });
 
-describe("a document in the older closer spellings", () => {
-  it("is refused by Format, naming the spelling to use", () => {
-    const old = `@kai-swimlane
+describe("a document in the older grammar", () => {
+  const OLD = `@kai-swimlane
 
 /role/
 
@@ -87,23 +87,34 @@ endif
 
 @end
 `;
-    const result = formatDsl(old);
+
+  it("is refused by Format, reporting the old constructs as unknown statements", () => {
+    const result = formatDsl(OLD);
     expect(result.ok).toBe(false);
-    expect(result.errors.map((e) => e.msg)).toContain(
-      '"elseif" is no longer read; write else-if (…) than',
-    );
-    expect(result.errors.map((e) => e.msg)).toContain('"endif" is no longer read; write end-if');
+    const messages = result.errors.map((e) => e.msg);
+    expect(messages).toContain('unknown statement "is"');
+    expect(messages).toContain('unknown statement "elseif"');
+    expect(messages).toContain('unknown statement "endif"');
+  });
+
+  it("round-trips cleanly through migrateLegacyDsl + Format", () => {
+    const { text: migrated, changed } = migrateLegacyDsl(OLD);
+    expect(changed).toBeGreaterThan(0);
+    const first = formatDsl(migrated);
+    expect(first.ok, JSON.stringify(first.errors)).toBe(true);
+    const second = formatDsl(first.value);
+    expect(second.ok).toBe(true);
+    expect(second.value).toBe(first.value);
   });
 });
 
+// dsl-rule.md:889 requires an unknown key be kept and re-emitted, as a warning
+// rather than an error (commit 23e4fa7).
 describe("keys this build has no meaning for", () => {
-  // dsl-rule.md:889 requires an unknown key be kept and re-emitted. Before this
-  // was implemented the parser reported it as an error and dropped it, so the
-  // first GUI save silently deleted the line.
   const SRC = `@kai-swimlane
 
 /title/
-T
+T;
 
 /role/
 <a>
@@ -121,8 +132,7 @@ label: P;
 icon: #monitor;
 
 /line/
-[a: x] <b1>
-props: p1;
+[a: x] <b1> +p1
 @end
 `;
 
@@ -208,6 +218,8 @@ describe("folder tree", () => {
 });
 
 describe("template merge", () => {
+  // A role added with no step yet must still be offered by the GUI, so the
+  // model lists every defined role; only used ones are drawn.
   it("merges a role template into the model", () => {
     const body = "<auditor>\nlabel: Auditor;";
     const merged = mergeSectionTemplate(SAMPLE, "role", body);
@@ -217,7 +229,7 @@ describe("template merge", () => {
   });
 });
 
-const V2_MULTILANG_SAMPLE = `@kai-swimlane-v2
+const V2_MULTILANG_SAMPLE = `@kai-swimlane
 @lang ja, en;
 
 /title/
@@ -300,7 +312,7 @@ describe("GUI-mode edit path preserves every language it doesn't touch", () => {
  * case into it, and reparsed with zero errors — silent corruption.
  */
 describe("inserting a block next to an if", () => {
-  const SRC = `@kai-swimlane-v2
+  const SRC = `@kai-swimlane
 
 /role/
 <a>
@@ -354,10 +366,11 @@ end-if
 });
 
 /**
- * The GUI colours an else case by writing `else than #red`; the reader used
- * to accept only a bare `else`, so one colour swatch broke the file on save.
+ * The GUI colours the catch-all case by writing `case () #red`; that blank
+ * label is what makes it the catch-all, and the colour has to survive a
+ * Format cycle the same as any labelled case's does.
  */
-describe("a coloured else case", () => {
+describe("a coloured catch-all case", () => {
   it("survives Format and reparses with its colour", () => {
     const src = `@kai-swimlane
 
@@ -368,9 +381,10 @@ label: A;
 
 /line/
 
-if (ok?) is (yes) than #green
+if (ok?) #green
+case (yes) #green
 [a: go]
-else than #red
+case () #red
 [a: stop]
 end-if
 
@@ -378,10 +392,10 @@ end-if
 `;
     const once = formatDsl(src);
     expect(once.ok, JSON.stringify(once.errors)).toBe(true);
-    expect(once.value).toContain("else than #red");
+    expect(once.value).toContain("case () #red");
     const model = parseDSL(once.value);
     expect(model.errors).toEqual([]);
-    const elseCase = model.rows.find((r) => r.kind === "branchCase" && r.label === "else");
-    expect(elseCase.branchColor).toBe("red");
+    const catchAll = model.rows.find((r) => r.kind === "branchCase" && r.label === "");
+    expect(catchAll.branchColor).toBe("red");
   });
 });

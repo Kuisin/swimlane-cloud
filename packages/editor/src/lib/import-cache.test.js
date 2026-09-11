@@ -8,7 +8,7 @@ import {
 } from "./import-cache.js";
 
 const SRC = [
-  "@kai-swimlane-v2",
+  "@kai-swimlane",
   "@use templates/role/standard.txt;",
   "@use assets/logo.svg;",
   "/line/",

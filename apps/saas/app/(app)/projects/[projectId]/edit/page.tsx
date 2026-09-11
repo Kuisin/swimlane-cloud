@@ -50,7 +50,7 @@ import {
 import {
   ConvertMarkdownModal,
   DiscardEditModal,
-  MigrateSpellingsModal,
+  MigrateDslModal,
   PushModal,
   RequestReviewModal,
 } from "./_modals";
@@ -136,7 +136,7 @@ function EditPageInner() {
   const [showReview, setShowReview] = useState(false);
   const [showDiscard, setShowDiscard] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
-  const [showSpelling, setShowSpelling] = useState(false);
+  const [showMigrate, setShowMigrate] = useState(false);
   const [reviewRequested, setReviewRequested] = useState<number | null>(null);
   const restored = useRef(false);
   // Gates the editor/mobile content until URL state is restored, so the editor
@@ -470,8 +470,8 @@ function EditPageInner() {
                       <FileText size={14} /> {t("convert.action")}
                     </Action>
                   )}
-                  <Action onClick={() => setShowSpelling(true)} disabled={autosavePending}>
-                    <FileText size={14} /> {t("spelling.action")}
+                  <Action onClick={() => setShowMigrate(true)} disabled={autosavePending}>
+                    <FileText size={14} /> {t("migrate.action")}
                   </Action>
                   <button
                     onClick={() => setShowDiscard(true)}
@@ -659,17 +659,17 @@ function EditPageInner() {
               onRequested={handleReviewRequested}
             />
           )}
-          {showSpelling && (
-            <MigrateSpellingsModal
+          {showMigrate && (
+            <MigrateDslModal
               projectId={projectId}
               branch={branch}
-              onClose={() => setShowSpelling(false)}
+              onClose={() => setShowMigrate(false)}
               onMigrated={({ updated, lines }) => {
-                setShowSpelling(false);
+                setShowMigrate(false);
                 setNotice(
                   updated
-                    ? t("spelling.done", { files: String(updated), lines: String(lines) })
-                    : t("spelling.none"),
+                    ? t("migrate.done", { files: String(updated), lines: String(lines) })
+                    : t("migrate.none"),
                 );
                 if (updated) {
                   setMobileFiles(null);

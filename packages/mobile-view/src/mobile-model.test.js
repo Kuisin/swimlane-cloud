@@ -3,15 +3,22 @@ import { dslToMobile, toColor } from "./mobile-model.js";
 
 const DSL = `@kai-swimlane
 /title/
-Demo
+Demo;
 /role/
-<a: Alice> #blue
-<b: Bob> #green
+<a>
+label: Alice;
+background-color: #2563eb;
+
+<b>
+label: Bob;
+background-color: #16a34a;
+
 /line/
 [a: Start]
-if (ok?) is (yes) than
+if (ok?)
+case (yes)
 [b: Approve]
-else
+case ()
 [a: Reject]
 end-if
 [a: Done]
@@ -33,8 +40,8 @@ describe("buildMobileTree", () => {
     // first case = "yes" with Bob's Approve step
     expect(branch.cases[0].label).toBe("yes");
     expect(branch.cases[0].children[0]).toMatchObject({ type: "step", role: "b", text: "Approve" });
-    // else case
-    expect(branch.cases[1].label).toBe("else");
+    // the blank case () is the catch-all — no "else" spelling any more
+    expect(branch.cases[1].label).toBe("");
     expect(branch.cases[1].children[0]).toMatchObject({ role: "a", text: "Reject" });
   });
 
@@ -47,19 +54,21 @@ describe("buildMobileTree", () => {
 
 const MERGE_DSL = `@kai-swimlane
 /title/
-M
+M;
 /role/
-<a: Alice> #blue
+<a>
+label: Alice;
+
 /line/
 [a: Start]
-if (cancel?) is (yes) than
+if (cancel?)
+case (yes)
 [a: Stop]
-merge: fin;
-else
+goto @fin
+case ()
 [a: Continue]
 end-if
-[a: Finish]
-id: fin;
+[a: Finish] @fin
 @end
 `;
 
@@ -85,9 +94,11 @@ describe("mid-flow merge", () => {
 
 const GROUP_DSL = `@kai-swimlane
 /title/
-G
+G;
 /role/
-<a: Alice> #blue
+<a>
+label: Alice;
+
 /line/
 [a: Start]
 section (枠グループ)
@@ -116,7 +127,9 @@ describe("row-index annotations (drag drop targets)", () => {
   // rows: 0 step S1, 1 step S2, 2 groupStart, 3 step G1, 4 groupEnd, 5 step S3
   const DSL2 = `@kai-swimlane
 /role/
-<a: Alice>
+<a>
+label: Alice;
+
 /line/
 [a: S1]
 [a: S2]
@@ -143,7 +156,7 @@ end-section
   });
 });
 
-const V2 = (body) => `@kai-swimlane-v2\n/line/\n${body}\n@end\n`;
+const V2 = (body) => `@kai-swimlane\n/line/\n${body}\n@end\n`;
 
 describe("case nodes carry what a host needs to edit them", () => {
   it("gives a fork exactly one case per real path, with no phantom leading one", () => {
@@ -178,18 +191,21 @@ describe("case nodes carry what a host needs to edit them", () => {
 
 const LANDING_DSL = `@kai-swimlane
 /title/
-L
+L;
 /role/
-<a: Alice> #blue
+<a>
+label: Alice;
+
 /line/
 [a: Start]
-if (cancel?) is (yes) than
+if (cancel?)
+case (yes)
 [a: Stop]
-merge;
-else
+goto
+case ()
 [a: Continue]
 end-if
-[merge: done]
+merge @done
 [a: End]
 @end
 `;

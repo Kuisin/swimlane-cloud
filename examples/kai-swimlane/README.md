@@ -1,6 +1,6 @@
-# `kai-swimlane-v2` — worked example
+# `kai-swimlane` — worked example
 
-A complete diagram repository in version 2 of the DSL, byte-identical to
+A complete diagram repository in the current DSL, byte-identical to
 [Kuisin/swimlane-sample](https://github.com/Kuisin/swimlane-sample) so the specification in
 [dsl-rule.md](../../dsl-rule.md) can be read against files the engine actually renders.
 
@@ -24,8 +24,7 @@ templates/                       the section-template mirror a project seeds
 ```
 
 Files carry `.txt` because that is what the product stores. The extension is not semantic: the
-reader takes the version from the first line, so `@kai-swimlane-v2` in a `.txt` file is a version 2
-diagram.
+reader looks for the `@kai-swimlane` header on the first non-blank line, wherever the file sits.
 
 ## What the diagrams exercise
 

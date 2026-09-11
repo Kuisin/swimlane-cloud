@@ -16,7 +16,7 @@ import {
   compare,
   convertToMarkdown,
   listPendingChanges,
-  migrateSpellings,
+  migrateDsl,
   openPR,
 } from "@/lib/workflow";
 import type { CompareResponse, PendingChange } from "@/lib/types";
@@ -278,12 +278,14 @@ export function DiscardEditModal({
 }
 
 /**
- * Rewrite the spellings the grammar no longer reads — `endif`, `elseif` and
- * the rest — in every diagram on this branch, in one commit. The grammar has
- * no compatibility layer, so a repository written before the change fails on
+ * Rewrite every diagram on this branch from the earlier grammar into the
+ * current one — the header, `if`/`else-if`/`else` into `if`/`case`,
+ * `[loop]`/`merge:` into `loop`/`goto`, and a step's `id:`/`props:`/`arrow:`/
+ * `link:` lines into suffixes — in one commit. The grammar has no
+ * compatibility layer, so a repository written before the change fails on
  * every file until this runs.
  */
-export function MigrateSpellingsModal({
+export function MigrateDslModal({
   projectId,
   branch,
   onClose,
@@ -302,7 +304,7 @@ export function MigrateSpellingsModal({
     setBusy(true);
     setError(null);
     try {
-      const result = await migrateSpellings(projectId, branch);
+      const result = await migrateDsl(projectId, branch);
       onMigrated({ updated: result.updated, lines: result.lines });
     } catch (e) {
       setError(describeError(e, t));
@@ -312,21 +314,21 @@ export function MigrateSpellingsModal({
 
   return (
     <Modal
-      title={t("spelling.title")}
+      title={t("migrate.title")}
       onClose={onClose}
       maxW="max-w-md"
       footer={
         <ModalFooter
           onCancel={onClose}
           onConfirm={handleMigrate}
-          confirmLabel={t("spelling.confirm")}
+          confirmLabel={t("migrate.confirm")}
           busy={busy}
         />
       }
     >
       <div className="space-y-3 text-sm text-neutral-600">
-        <p>{t("spelling.body")}</p>
-        <p className="text-xs text-neutral-500">{t("spelling.note")}</p>
+        <p>{t("migrate.body")}</p>
+        <p className="text-xs text-neutral-500">{t("migrate.note")}</p>
         {error && <p className="text-xs text-red-600">{error}</p>}
       </div>
     </Modal>

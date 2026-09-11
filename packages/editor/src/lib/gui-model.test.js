@@ -5,9 +5,9 @@
  * images resolves them in one view and not the other.
  */
 import { describe, it, expect } from "vitest";
-import { parseGuiModel } from "./gui-model.js";
+import { applyModelEdit, parseGuiModel } from "./gui-model.js";
 
-const doc = (body) => `@kai-swimlane-v2\n${body}\n@end\n`;
+const doc = (body) => `@kai-swimlane\n${body}\n@end\n`;
 
 describe("parseGuiModel", () => {
   it("resolves a fragment import when given a resolver", () => {
@@ -34,5 +34,58 @@ describe("parseGuiModel", () => {
     expect(gui.errors.map((e) => e.msg)).toEqual([
       'cannot resolve "missing.txt" — definitions fall back to theme defaults',
     ]);
+  });
+});
+
+/**
+ * The GUI's definitions editor writes `lanes` / `blocks` / `props`; the
+ * serializer reads `roles` + `localDefIds`. `applyModelEdit` keeps them in
+ * step, or a role added in the GUI would never reach the saved file.
+ */
+describe("applyModelEdit definition sync", () => {
+  const SRC = doc("/role/\n<a>\nlabel: A;\n\n/block/\n<b1>\nshape: rect;\n\n/line/\n[a: x] <b1>");
+
+  it("writes a lane the GUI added as a local role", () => {
+    const out = applyModelEdit(SRC, (draft) => {
+      draft.lanes = [...draft.lanes, { id: "auditor", label: "Auditor" }];
+    });
+    expect(out).toContain("<auditor>");
+    expect(out).toContain("label: Auditor;");
+    const m = parseGuiModel(out);
+    expect(m.errors).toEqual([]);
+    expect(m.lanes.map((l) => l.id)).toEqual(["a", "auditor"]);
+  });
+
+  it("drops a lane the GUI removed", () => {
+    const out = applyModelEdit(SRC, (draft) => {
+      draft.lanes = draft.lanes.filter((l) => l.id !== "a");
+    });
+    expect(out).not.toContain("<a>");
+  });
+
+  it("writes a block and a prop that did not exist before the edit", () => {
+    const out = applyModelEdit(SRC, (draft) => {
+      draft.blocks = { ...draft.blocks, b2: { id: "b2", shape: "rounded" } };
+      draft.props = { ...draft.props, p1: { id: "p1", label: "P", side: "left" } };
+    });
+    expect(out).toContain("<b2>");
+    expect(out).toContain("shape: rounded;");
+    expect(out).toContain("<p1>");
+    expect(out).toContain("side: left;");
+  });
+
+  it("leaves a fragment-supplied role alone", () => {
+    const fragment = "/role/\n<shared>\n  label: Shared;\n";
+    const src = doc("@use shared.txt;\n\n/role/\n<a>\nlabel: A;\n\n/line/\n[shared: x]");
+    const out = applyModelEdit(
+      src,
+      (draft) => {
+        draft.lanes = [...draft.lanes, { id: "b", label: "B" }];
+      },
+      { resolveImport: () => fragment },
+    );
+    expect(out).toContain("@use shared.txt;");
+    expect(out).not.toContain("<shared>");
+    expect(out).toContain("<b>");
   });
 });

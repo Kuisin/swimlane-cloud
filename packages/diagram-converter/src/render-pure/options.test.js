@@ -17,9 +17,8 @@ side: left;
 label: RIGHTDOC;
 side: right;
 /line/
-[a: blockbody]
+[a: blockbody] +L +R
 label: GUTTERONLY;
-props: L,R;
 @end`;
 
 function render(opts) {

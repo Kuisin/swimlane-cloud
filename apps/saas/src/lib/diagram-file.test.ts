@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import { dslOf, isDiagramFile, isMarkdownFile, storedFrom } from "./diagram-file";
 
-const DSL = `@kai-swimlane-v2
+const DSL = `@kai-swimlane
 
 /title/
 Order to cash;

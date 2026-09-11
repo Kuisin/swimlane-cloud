@@ -94,10 +94,9 @@ side: right;
 
 /line/
 
-[role_applicant: 領収書を添付して申請] <block_apply>
+[role_applicant: 領収書を添付して申請] <block_apply> +REQ_DOC
 label: 申請入力;
 desc: 入力内容を確認して送信する;
-props: REQ_DOC;
 
 [role_system: 申請を受け付ける] <block_system>
 
@@ -170,9 +169,10 @@ shape: subroutine;
 [role_recruiter: 書類選考] <block_review>
 label: スクリーニング;
 
-if (合格) is (はい) than
+if (合格)
+case (はい)
   [role_recruiter: 面接を設定]
-else-if (いいえ) than
+case (いいえ)
   [role_recruiter: お見送り連絡]
 end-if
 
@@ -207,17 +207,17 @@ level: 2;
 [ops: Warehouse B]
 level: 2;
 
-if (In stock?) is (yes) than
-  [ops: Pick and pack]
-  link: ../hr/hiring.txt;
-  merge;
-else-if (no) than
+if (In stock?)
+case (yes)
+  [ops: Pick and pack] => ../hr/hiring.txt
+  goto
+case (no)
   [sales: Back-order]
 end-if
 
 [sales: Confirm]
 
-[merge]
+merge
 
 [sales: Invoice]
 

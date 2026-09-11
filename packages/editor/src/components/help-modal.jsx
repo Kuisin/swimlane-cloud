@@ -38,19 +38,24 @@ const HELP_SECTIONS = [
   ["/prop/", "help.prop", "/prop/\n\n<propId>\nlabel: Note text;\nside: right;"],
   ["icon: #name;", "help.icon", "icon: #check;\nicon: #alert-triangle;\nicon: 🔥;"],
   [
-    "// … / *** …",
+    "// … / /* … */",
     "help.comment",
-    "// note about this branch\nif (channel?) is (web) than #blue\n  [role: web form]\nend-if",
+    "// note about this branch\nif (channel?) #blue\ncase (web)\n  [role: web form]\nend-if",
+  ],
+  [
+    "if (q) … case (a) … end-if",
+    "help.ifCase",
+    "if (condition?)\ncase (yes)\n  [role: Branch A]\ncase ()\n  [role: Branch B]\nend-if",
   ],
   [
     "/line/",
     "help.line",
-    "/line/\n\n[role: Step text] <block>\nlabel: …;\nprops: propId;\n\nif (condition?) is (yes)\n  [role: Branch A]\nelse\n  [role: Branch B]\nend-if\n\nfork\n  [role: Parallel A]\nand\n  [role: Parallel B]\nend-fork",
+    "/line/\n\n[role: Step text] <block> +propId\nlabel: …;\n\nif (condition?)\ncase (yes)\n  [role: Branch A]\ncase ()\n  [role: Branch B]\nend-if\n\nfork\n  [role: Parallel A]\nand\n  [role: Parallel B]\nend-fork",
   ],
   [
-    "[loop]",
+    "loop / loop @id",
     "help.loop",
-    "if (retry?) is (yes) than\n  [role: process item]\n  [loop]\nelse-if (no) than\n  [role: done]\nend-if",
+    "if (retry?)\ncase (yes)\n  [role: process item]\n  loop\ncase ()\n  [role: done]\nend-if",
   ],
   [
     "section (name) #color … end-section",
@@ -63,10 +68,11 @@ const HELP_SECTIONS = [
     "[role: confirm order]\nbranch (shipping)\n  [role: record picking detail]\nend-branch\n[role: show receipt]",
   ],
   [
-    "merge: id;",
+    "goto @id / merge @id",
     "help.merge",
-    "if (cancel?) is (yes) than #red\n  [role: accept cancellation]\n  merge: done;\nelse\n  [role: normal close]\nend-if\n\n[role: transaction complete]\nid: done;",
+    "if (cancel?) #red\ncase (yes)\n  [role: accept cancellation]\n  goto @done\ncase ()\n  [role: normal close]\nend-if\n\n[role: transaction complete] @done",
   ],
+  ["=> path", "help.link", "[role: hand off to shipping] => ./shipping-prep.txt"],
   ["arrow: solid|dashed|dotted;", "help.arrow", "[role: step]\narrow: dashed;\n[role: next step]"],
 ];
 

@@ -9,24 +9,24 @@
  *   comment | meta | section | keyword | key | ref | anchor | punct | plain
  */
 
-// Control-flow keywords. Longer forms first so e.g. "section-start" wins over
-// "section". Matched at a word boundary, case-insensitive.
+// Control-flow keywords (dsl-rule.md's closed keyword table). Longer forms
+// first so e.g. "end-section" wins over "section". Matched at a word
+// boundary, case-insensitive.
 const KEYWORDS = [
   "end-section",
   "end-branch",
-  "end-if",
+  "end-phase",
   "end-fork",
-  "else-if",
+  "end-if",
   "section",
   "branch",
+  "phase",
   "fork",
   "loop",
-  "skip",
+  "goto",
   "merge",
-  "else",
-  "than",
+  "case",
   "and",
-  "is",
   "if",
 ];
 const KW_RE = new RegExp(`^(?:${KEYWORDS.join("|")})\\b`, "i");
@@ -57,8 +57,9 @@ export function tokenizeDslLine(line) {
     return tokens;
   }
 
-  // Control-flow lines start with a keyword; only then do we colour inline
-  // keywords like `is` / `than` (avoids highlighting them inside step text).
+  // Control-flow lines start with a keyword; only then do we colour an inline
+  // keyword like `and` (avoids highlighting it inside step text, e.g.
+  // "review and approve").
   const inControl = KW_RE.test(body);
   let atStart = true;
   let pos = 0;
@@ -67,14 +68,13 @@ export function tokenizeDslLine(line) {
     let m;
     if ((m = /^<[^>]*>/.exec(rest))) tokens.push({ t: "ref", s: m[0] });
     else if ((m = /^#[A-Za-z0-9_-]+/.exec(rest))) tokens.push({ t: "anchor", s: m[0] });
-    // `[merge]` / `[merge: name]` — a landing marker. The optional `: name`
-    // has its own `:` inside the brackets, so it doesn't fit the plain
-    // `[word]` bracket-keyword rule below; matched first so the whole marker
-    // (brackets included) stays one token, exactly like `[loop]` does.
-    else if ((m = /^\[merge(?:\s*:\s*[^\]]*)?\]/i.exec(rest)))
-      tokens.push({ t: "keyword", s: m[0] });
-    else if ((m = /^\[[A-Za-z][A-Za-z-]*\]/.exec(rest))) tokens.push({ t: "keyword", s: m[0] });
-    else if (atStart && (m = /^[A-Za-z][A-Za-z0-9_-]*(?=\s*:)/.exec(rest)))
+    // The bare spacer statement — a step-shaped line with nothing in it.
+    else if ((m = /^\[\]/.exec(rest))) tokens.push({ t: "keyword", s: m[0] });
+    else if (
+      atStart &&
+      (m = /^[A-Za-z][A-Za-z0-9_-]*(?=\s*[:;])/.exec(rest)) &&
+      !KEYWORDS.includes(m[0].toLowerCase())
+    )
       tokens.push({ t: "key", s: m[0] });
     else if ((atStart || inControl) && (m = KW_RE.exec(rest)))
       tokens.push({ t: "keyword", s: m[0] });

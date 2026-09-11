@@ -11,7 +11,7 @@ import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 export const DEFAULT_TAB_TEMPLATE = `@kai-swimlane
 
 /title/
-新規ファイル
+新規ファイル;
 
 /role/
 

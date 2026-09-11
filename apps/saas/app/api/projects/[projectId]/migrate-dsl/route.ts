@@ -1,4 +1,4 @@
-import { migrateLegacySpellings } from "@swimlane-cloud/diagram-converter";
+import { migrateLegacyDsl } from "@swimlane-cloud/diagram-converter";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { dslOf, storedFrom } from "@/lib/diagram-file";
 import { assertRef } from "@/lib/guard";
@@ -22,12 +22,15 @@ interface MigrateBody {
 const MIGRATE_LIMIT = 300;
 
 /**
- * POST /api/projects/[projectId]/migrate-spellings — rewrite the spellings the
- * grammar no longer reads (`endif`, `elseif`, …) in every diagram on a branch,
- * in **one commit**, so a repository written before the change opens again.
+ * POST /api/projects/[projectId]/migrate-dsl — rewrite every diagram on a
+ * branch from the earlier grammar into the current one (the header, the
+ * `if`/`else-if`/`else` clauses into `if`/`case`, `[loop]`/`merge:` into
+ * `loop`/`goto`, and a step's `id:`/`props:`/`arrow:`/`link:` lines into
+ * suffixes), in **one commit**, so a repository written before the change
+ * opens again.
  *
  * Same shape as convert-markdown: refuses pending drafts (an unpushed edit to
- * a rewritten file would bring the old spelling back at the next push), and
+ * a rewritten file would bring the old grammar back at the next push), and
  * lands as a single reviewable, revertable commit.
  */
 export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
@@ -42,7 +45,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   if (await hasPendingDrafts(projectId, body.branch)) {
     throw new ApiError(
       409,
-      "Push or discard your pending changes before updating spellings — an unpushed edit would bring the old ones back.",
+      "Push or discard your pending changes before updating the DSL — an unpushed edit would bring the old grammar back.",
     );
   }
 
@@ -60,7 +63,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     if (typeof stored !== "string") return;
     const dsl = dslOf(p, stored);
     if (dsl === null) return;
-    const { text, changed } = migrateLegacySpellings(dsl);
+    const { text, changed } = migrateLegacyDsl(dsl);
     if (!changed) return;
     lines += changed;
     writes.push({ path: p, text: storedFrom(p, text, stored) });
@@ -71,7 +74,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
 
   const result = await project.write.commitFiles({
     branch: body.branch,
-    message: `Update DSL spellings (${writes.length} file${writes.length === 1 ? "" : "s"})\n\nendif → end-if, endfork → end-fork, elseif → else-if, and the older\nsection openers and closers, which the grammar no longer reads.`,
+    message: `Update DSL to the current grammar (${writes.length} file${writes.length === 1 ? "" : "s"})\n\nThe header, if/else-if/else into if/case, [loop]/merge: into\nloop/goto, and a step's id:/props:/arrow:/link: lines into suffixes —\nthe constructs the earlier grammar used that this reader no longer\naccepts.`,
     files: writes,
     deletions: [],
     expectedHeadSha: sha,
@@ -83,7 +86,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     projectId,
     userId: project.user.id,
     actorLogin: project.login,
-    action: "migrate-spellings",
+    action: "migrate-dsl",
     entityType: "branch",
     entityId: body.branch,
     commitSha: result.sha,

@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { dslOf } from "./diagram-file";
 import { DIAGRAM_PLACEHOLDER, fromProse, toProse } from "./markdown-prose";
 
-const DSL = `@kai-swimlane-v2
+const DSL = `@kai-swimlane
 
 /line/
 [a: x]

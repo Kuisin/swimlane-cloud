@@ -5,7 +5,7 @@ import { renderDiagramSvg } from "./render-pure/diagram.js";
 import { textToSvg } from "./render-pure/text-to-svg.js";
 import { relativeLinkPath, resolveLinkPath } from "./link-path.js";
 
-const v1 = (body) => `@kai-swimlane
+const doc = (body) => `@kai-swimlane
 /role/
 <a>
 label: A;
@@ -44,43 +44,27 @@ describe("resolveLinkPath / relativeLinkPath", () => {
 });
 
 describe("a step that links to another flow", () => {
-  it("reads `link:` in v1 and `=> path` in v2 onto the same field", () => {
-    const one = parseDSL(v1(`[a: pick]\nlink: ../sales/order.md;`));
-    expect(one.errors).toEqual([]);
-    expect(one.rows[0].link).toBe("../sales/order.md");
-
-    const two = parseDSL(`@kai-swimlane-v2
-/role/
-<a>
-label: A;
-/line/
-[a: pick] => ../sales/order.md
-@end
-`);
-    expect(two.errors).toEqual([]);
-    expect(two.rows[0].link).toBe("../sales/order.md");
-  });
-
-  it("rejects a malformed link line", () => {
-    const model = parseDSL(v1(`[a: pick]\nlink: ;`));
-    expect(model.errors.map((e) => e.msg)).toContain("link must be written as link: <path>;");
+  it("reads the `=> path` suffix onto `row.link`", () => {
+    const model = parseDSL(doc(`[a: pick] => ../sales/order.md`));
+    expect(model.errors).toEqual([]);
+    expect(model.rows[0].link).toBe("../sales/order.md");
   });
 
   it("draws a ↗ tile carrying data-link, on a subroutine-shaped box", () => {
     const svg = renderDiagramSvg({
-      model: parseDSL(v1(`[a: pick]\nlink: ../sales/order.md;`)),
+      model: parseDSL(doc(`[a: pick] => ../sales/order.md`)),
       theme: THEMES.basic,
     });
     expect(svg).toContain('data-link="../sales/order.md"');
     expect(svg).toContain("<title>../sales/order.md</title>");
     expect(svg).not.toContain("<a ");
     // A linked step defaults to the sub-process shape; a plain step does not.
-    const plain = renderDiagramSvg({ model: parseDSL(v1(`[a: pick]`)), theme: THEMES.basic });
+    const plain = renderDiagramSvg({ model: parseDSL(doc(`[a: pick]`)), theme: THEMES.basic });
     expect(svg.length).toBeGreaterThan(plain.length);
   });
 
   it("becomes an <a href> when the host can name a URL for the link", () => {
-    const { svg } = textToSvg(v1(`[a: pick]\nlink: ../sales/order.md;`), {
+    const { svg } = textToSvg(doc(`[a: pick] => ../sales/order.md`), {
       linkHref: (link) => `?file=${encodeURIComponent(resolveLinkPath(link, "ops/pick.md"))}`,
     });
     expect(svg).toContain('<a href="?file=sales%2Forder.md">');
@@ -89,7 +73,7 @@ label: A;
 });
 
 describe("the document info panel", () => {
-  const dsl = v1(`[a: pick]`);
+  const dsl = doc(`[a: pick]`);
 
   it("is absent unless the host provides something to say", () => {
     expect(textToSvg(dsl).svg).not.toContain("data-document-info");

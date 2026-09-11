@@ -24,9 +24,10 @@ fork
 and
   [b: two]
 end-fork
-if (ok?) is (yes) than
+if (ok?)
+case (yes)
   [a: yes]
-else
+case ()
   [b: no]
 end-if
 [a: end]`;
@@ -67,7 +68,7 @@ describe("block-margin", () => {
   it("rejects anything but a whole number of pixels in /option/", () => {
     const model = parseDSL(doc(FLOW, "block-margin: lots;"));
     expect(model.errors.map((e) => e.msg)).toContain(
-      "block-margin: expected a whole number of pixels from 0 to 80",
+      '"block-margin": expected a whole number of pixels from 0 to 80',
     );
   });
 });
@@ -114,7 +115,7 @@ describe("block-text", () => {
     const model = parseDSL(doc(LONG, "block-text: wrap;"));
     expect(model.options.blockText).toBe("wrap");
     expect(parseDSL(doc(LONG, "block-text: sideways;")).errors.map((e) => e.msg)).toContain(
-      "block-text: expected truncate or wrap",
+      '"block-text": expected truncate or wrap',
     );
   });
 });

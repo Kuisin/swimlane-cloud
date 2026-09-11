@@ -1,5 +1,5 @@
 /**
- * kai-swimlane-v2 serializer (model → canonical v2 DSL text).
+ * DSL serializer (model → canonical DSL text, header `@kai-swimlane`).
  *
  * A parallel write-side counterpart to parser-v2.js's grammar. Every declared
  * language is written back: the source (first-declared) language as the bare
@@ -198,7 +198,15 @@ function serializeDef(id, def, languages, extraProps) {
   const lines = [`<${id}>`];
   for (const line of extraProps(def)) lines.push(line);
   lines.push(...emitLocalizedTag("label", def.label, def[`label$langs`], languages));
+  lines.push(...emitUnknownKeys(def));
   return lines;
+}
+
+/** A key the reader did not recognise is kept and written back unchanged. */
+function emitUnknownKeys(def) {
+  return Object.entries(def?.unknown || {})
+    .map(([key, value]) => emitProperty(key, value))
+    .filter(Boolean);
 }
 
 function serializeRole(id, role, languages) {
@@ -235,6 +243,7 @@ function serializeProp(id, prop, languages) {
     ].filter(Boolean),
     ...emitLocalizedTag("label", prop.label, prop[`label$langs`], languages),
     ...emitLocalizedTag("title", prop.title, prop[`title$langs`], languages),
+    ...emitUnknownKeys(prop),
   ];
 }
 
@@ -459,7 +468,7 @@ function serializeLineRows(rows, languages) {
 export function serializeDSLv2(model) {
   const languages = Array.isArray(model.languages) ? model.languages : [];
   const localDefIds = model.localDefIds || { role: [], block: [], prop: [] };
-  const lines = ["@kai-swimlane-v2"];
+  const lines = ["@kai-swimlane"];
 
   if (languages.length > 0) lines.push(`@lang ${languages.join(", ")};`);
   for (const use of model.uses || []) {

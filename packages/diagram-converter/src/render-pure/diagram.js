@@ -396,7 +396,10 @@ function renderDiagramSvg({
   // Row-level visual-diff overlay (spike): rowIndex -> "added" | "changed".
   diffRows = null,
 }) {
-  const { title, page = {}, lanes, rows, blocks = {}, props = {} } = model;
+  const { title, page = {}, lanes: allLanes, rows, blocks = {}, props = {} } = model;
+  // A role no step references is defined but not drawn (dsl-rule.md: a lane
+  // appears only when a step uses it); the model still lists it for the GUI.
+  const lanes = (allLanes || []).filter((lane) => lane.used !== false);
   const pageDescription = (showDescription ? page.description || "" : "").trim();
   const hasPageHeader = Boolean(
     showHeader &&

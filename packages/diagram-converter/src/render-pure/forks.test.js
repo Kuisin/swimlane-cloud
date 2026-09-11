@@ -34,7 +34,12 @@ function largestFanOutGroup(svg) {
   return Math.max(0, ...counts.values());
 }
 
-/** v1 fork: the first path opens at `fork` itself and never gets its own row. */
+/**
+ * A bare `fork` (no label) still gets an explicit `branchCase` row for its
+ * own first path — the reader (parser-v2.js) always emits one for `fork`,
+ * labelled or not, so there is only one behaviour now, not a "v1 leaves it
+ * implicit, v2 makes it explicit" split.
+ */
 const FORK = `@kai-swimlane
 /role/
 <a>
@@ -62,7 +67,8 @@ describe("parallel fork/join", () => {
     const start = model.rows.find((r) => r.kind === "branchStart");
     expect(start.parallel).toBe(true);
     const cases = model.rows.filter((r) => r.kind === "branchCase");
-    expect(cases.length).toBe(2); // two `and`s (first path opens at `fork`)
+    // `fork`'s own first path, plus the two `and`s.
+    expect(cases.length).toBe(3);
     expect(cases.every((c) => c.parallel)).toBe(true);
     const end = model.rows.find((r) => r.kind === "branchEnd");
     expect(end.parallel).toBe(true);
@@ -73,33 +79,39 @@ describe("parallel fork/join", () => {
     expect(circles.length).toBe(2);
   });
 
-  it("rejects else-if/end-if against a fork and and/end-fork against an if", () => {
-    const mixed = parseDSL(`@kai-swimlane
+  it("rejects end-if against a fork and end-fork against an if", () => {
+    const forkClosedByIf = parseDSL(`@kai-swimlane
 /role/
 <a>
 label: A;
 /line/
 fork
 [a: x]
-else-if (y) than
-[a: z]
 end-if
 @end`);
-    const msgs = mixed.errors.map((e) => e.msg);
-    expect(msgs).toContain("else-if without if");
-    expect(msgs).toContain("end-if without if");
+    expect(forkClosedByIf.errors.map((e) => e.msg)).toContain("end-if closes fork");
+
+    const ifClosedByFork = parseDSL(`@kai-swimlane
+/role/
+<a>
+label: A;
+/line/
+if (y)
+case (z)
+[a: x]
+end-fork
+@end`);
+    expect(ifClosedByFork.errors.map((e) => e.msg)).toContain("end-fork closes if");
   });
 });
 
-describe("v2 labeled fork (fork (label) / and (label))", () => {
-  // Unlike v1, where a fork's first path never gets a row of its own, the v2
-  // reader emits an explicit `branchCase` for `fork (label)` itself, right
-  // after the `branchStart` row (parser-v2.js). The renderer's `branchStart`
-  // handling used to synthesize an implicit first-path case unconditionally
-  // for every parallel frame, regardless of DSL version — double-counting
-  // v2's already-explicit first case into a 4th, unlabeled, step-less case
-  // that rendered as a bare vertical rail with no block on it.
-  const FORK_V2 = `@kai-swimlane-v2
+describe("labeled fork (fork (label) / and (label))", () => {
+  // The reader emits an explicit `branchCase` for `fork (label)` itself,
+  // right after the `branchStart` row (parser-v2.js). The renderer must not
+  // *also* synthesize an implicit first-path case on top of that — doing so
+  // would double-count it into a 4th, unlabeled, step-less case that
+  // rendered as a bare vertical rail with no block on it.
+  const FORK_LABELED = `@kai-swimlane
 /role/
 <a>
   label: A;
@@ -117,35 +129,32 @@ end-fork
 @end`;
 
   it("parses fork (label)/and (label) into exactly 3 parallel branchCase rows", () => {
-    const model = parseDSL(FORK_V2);
+    const model = parseDSL(FORK_LABELED);
     expect(model.errors).toEqual([]);
     const cases = model.rows.filter((r) => r.kind === "branchCase" && r.parallel);
     expect(cases.map((c) => c.label)).toEqual(["書類", "アカウント", "備品"]);
   });
 
   it("fans out exactly 3 edges from the gateway, not 4 (no phantom rail)", () => {
-    expect(largestFanOutGroup(render(FORK_V2))).toBe(3);
+    expect(largestFanOutGroup(render(FORK_LABELED))).toBe(3);
   });
 
   it("renders all 3 case labels as chips", () => {
-    const svg = render(FORK_V2);
+    const svg = render(FORK_LABELED);
     for (const label of ["書類", "アカウント", "備品"]) {
       expect(svg).toContain(`>${label}<`);
     }
   });
 
-  it("still synthesizes the implicit first-path case for a v1 fork", () => {
-    // v1 never emits a row for the fork's own first path, so the renderer
-    // must still synthesize it — this regression guard must not remove it
-    // for v1. FORK has 2 explicit `and` cases + the synthesized first path
-    // = 3 fan-out edges, same count as the v2 fixture above (coincidentally
-    // equal case totals, not equal case shapes).
+  it("does not double-count an unlabeled fork's own first path either", () => {
+    // FORK (above) has no label at all: `fork`'s own path plus 2 `and`s is
+    // 3 explicit cases, so this must also fan out to exactly 3 edges, not 4.
     expect(largestFanOutGroup(render(FORK))).toBe(3);
   });
 });
 
 describe("blank case () draws no label chip", () => {
-  const IF_WITH_BLANK_CASE = `@kai-swimlane-v2
+  const IF_WITH_BLANK_CASE = `@kai-swimlane
 /role/
 <a>
   label: A;
