@@ -74,11 +74,20 @@ function roundTripFailures(meta: MetaRecord, shape?: FrontmatterShape): string[]
  *
  * Asked of the engine rather than assumed: serialize, parse it back, and see
  * what changed. A sequence that does not survive as a sequence is retried as
- * the comma-joined scalar the engine flattens one to — which is how a list
- * still round-trips through a build of the engine that cannot yet write an
- * array, and how this stops doing anything the moment one can, with no edit
- * here. Whatever still fails is left out entirely, so `serializeFrontmatter`
- * re-emits it from `shape` exactly as the document already had it.
+ * the comma-joined scalar the engine flattens one to, which is how a list still
+ * round-trips through a build of the engine that cannot yet write an array.
+ * Whatever still fails is left out entirely, so `serializeFrontmatter` re-emits
+ * it from `shape` exactly as the document already had it.
+ *
+ * DELETE THIS WHOLE FUNCTION when `feat/md-metadata-engine` merges, and call
+ * `serializeFrontmatter(meta, shape)` directly with the structured values.
+ * `splitFrontmatter` round-trip-verifies every key on that branch and keeps any
+ * key it cannot re-emit byte-identically as `verbatim` — so this outer check
+ * becomes strictly redundant with the engine's inner one and can never fire.
+ * Left standing it would read like a guard while guarding nothing; the engine
+ * author confirmed the direct call is supported and covered by tests.
+ * `unwritableKeys` goes with it (it only ever answers `[]` from then on), along
+ * with the `md.notWritable` string the form shows for it.
  */
 function forEngine(
   meta: MetaRecord,
