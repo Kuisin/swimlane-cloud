@@ -1,0 +1,34 @@
+{
+  "name": "@swimlane-cloud/mcp",
+  "version": "0.1.0",
+  "description": "Public MCP server for the kai-swimlane DSL: an LLM connects to it to read the syntax rules and validate a draft document before writing it to a file.",
+  "private": true,
+  "scripts": {
+    "predev": "node scripts/sync-dsl-rule.mjs",
+    "dev": "next dev",
+    "prebuild": "node scripts/sync-dsl-rule.mjs",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@swimlane-cloud/diagram-converter": "workspace:*",
+    "mcp-handler": "^2.1.1",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "prettier": "^3.9.6",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
+  }
+}
