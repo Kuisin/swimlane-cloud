@@ -11,6 +11,7 @@ import {
   isWithinRoot,
   parseRepoConfig,
   REPO_CONFIG_PATH,
+  REPO_SETTINGS_PATH,
   type RepoConfig,
 } from "@swimlane-cloud/github-client";
 import { ApiError } from "./api";
@@ -26,6 +27,18 @@ const TEMPLATES_PREFIX = "templates/";
 export function isDraftablePath(path: string): boolean {
   if (path.startsWith(TEMPLATES_PREFIX)) return false;
   return isDiagramFile(path) || path.endsWith("/.gitkeep") || path === ".gitkeep";
+}
+
+/**
+ * The repository-wide settings file.
+ *
+ * Deliberately kept out of `isDraftablePath`, which also gates
+ * `files/route.ts` (delete / rmdir / rename): every reader resolves the
+ * settings by that exact path, so it must not be renameable or removable from
+ * the file tree. Only the draft write path opts it in.
+ */
+export function isSettingsPath(path: string): boolean {
+  return path === REPO_SETTINGS_PATH;
 }
 
 /** A folder marker, which `isDraftablePath` admits but nothing renders. */

@@ -15,6 +15,10 @@ import { diffModels } from "./row-diff.js";
  *
  * `diagramDefaults` are render options the document inherits — a
  * repository-wide setting — which its own `/option/` section overrides.
+ * `diagramDefaults.layout` overrides the page geometry (margins, gutter
+ * widths, lane grid). It rides the same object but, unlike the keys above, is
+ * not an `/option/` key, so a diagram cannot override it: the page layout is
+ * repository-wide only.
  * `documentInfo` (`{ path, meta }`) is drawn top-right for a printed image;
  * `linkHref(link, row)` turns a step's link into an `<a href>` when the host
  * can name a URL for it.

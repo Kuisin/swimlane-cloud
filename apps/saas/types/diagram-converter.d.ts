@@ -119,6 +119,23 @@ declare module "@swimlane-cloud/diagram-converter/parser" {
   ): Array<{ path: string; alias: string | null; kind: "fragment" | "asset" }>;
 }
 
+declare module "@swimlane-cloud/diagram-converter/diagram-layout" {
+  /** A DIAGRAM_LAYOUT key a repository may override, with the bounds to enforce. */
+  export interface LayoutSetting {
+    key: string;
+    group: "margins" | "grid";
+    min: number;
+    max: number;
+  }
+  export const DIAGRAM_LAYOUT: Record<string, number | string>;
+  export const LAYOUT_SETTINGS: readonly LayoutSetting[];
+  export const LAYOUT_SETTING_KEYS: readonly string[];
+  export function isLayoutOverride(key: string, value: unknown): boolean;
+  export function resolveLayout(
+    overrides?: Record<string, number> | null,
+  ): Record<string, number | string>;
+}
+
 declare module "@swimlane-cloud/diagram-converter/themes" {
   export const THEMES: Record<string, unknown>;
 }

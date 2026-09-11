@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { INTEGRATION_BRANCH } from "@swimlane-cloud/github-client";
 import { patchJson } from "@/lib/client";
 import {
   METADATA_FIELD_TYPES,
@@ -85,7 +86,9 @@ export default function MetadataSettingsPage() {
         metadata: { fields: fields.map((f) => ({ ...f, key: f.key.trim() })) },
       });
       await refresh();
-      setNotice(t("settings.saved"));
+      // Shares the settings route, so this is a pending change on the
+      // approved line until someone checkpoints it.
+      setNotice(t("settings.saved", { branch: INTEGRATION_BRANCH }));
     } catch (e) {
       setNotice(describeError(e, t));
     } finally {

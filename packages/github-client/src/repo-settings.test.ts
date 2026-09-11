@@ -72,6 +72,8 @@ describe("diagram settings and template modes", () => {
       showGatewayIcons: true,
       blockMargin: 0,
       blockText: "truncate",
+      // No page-geometry overrides: the engine's own defaults apply.
+      layout: {},
     });
     expect(DEFAULT_SETTINGS.templates).toEqual({});
   });
@@ -82,8 +84,36 @@ describe("diagram settings and template modes", () => {
       templates: { role: "template-only", block: "base", prop: "none" },
     });
     const parsed = parseRepoSettings(text);
-    expect(parsed.diagram).toEqual({ showGatewayIcons: false, blockMargin: 24, blockText: "wrap" });
+    expect(parsed.diagram).toEqual({
+      showGatewayIcons: false,
+      blockMargin: 24,
+      blockText: "wrap",
+      layout: {},
+    });
     expect(parsed.templates).toEqual({ role: "template-only", block: "base", prop: "none" });
+  });
+
+  it("keeps page-geometry overrides, and only the usable ones", () => {
+    const text = JSON.stringify({
+      diagram: {
+        layout: { leftGutterWidth: 420, nodeW: "240", rowH: -5, headerH: 90, xPad: 1e9 },
+      },
+    });
+    // Shape only — which keys the renderer honours, and their per-key bounds,
+    // are the engine's business (`resolveLayout` ignores what it cannot use).
+    expect(parseRepoSettings(text).diagram.layout).toEqual({ leftGutterWidth: 420, headerH: 90 });
+  });
+
+  it("treats a layout that is not an object as absent", () => {
+    expect(parseRepoSettings('{"diagram":{"layout":[1,2]}}').diagram.layout).toEqual({});
+    expect(parseRepoSettings('{"diagram":{"layout":"wide"}}').diagram.layout).toEqual({});
+  });
+
+  it("never shares the default layout object between parses", () => {
+    const a = parseRepoSettings(null);
+    a.diagram.layout.nodeW = 999;
+    expect(parseRepoSettings(null).diagram.layout).toEqual({});
+    expect(DEFAULT_SETTINGS.diagram.layout).toEqual({});
   });
 
   it("drops a value the renderer could not honour rather than guessing", () => {
