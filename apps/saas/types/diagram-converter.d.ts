@@ -18,8 +18,15 @@ declare module "@swimlane-cloud/diagram-converter" {
       resolveAsset?: (path: string) => string | null;
       /** Render options the file inherits; its own `/option/` wins. */
       diagramDefaults?: object;
-      /** Drawn top-right for a printed image: the file's path and metadata. */
-      documentInfo?: { path?: string; meta?: Record<string, string> | null } | null;
+      /**
+       * Drawn top-right for a printed image: the file's path and metadata.
+       * A `.md` file's frontmatter is structured — a value may be a list or a
+       * nested map — and the panel flattens each for display (`metaText`).
+       */
+      documentInfo?: {
+        path?: string;
+        meta?: Record<string, string | string[] | object> | null;
+      } | null;
       /** A linked step's ↗ becomes an <a href> when this names a URL for it. */
       linkHref?: ((link: string, row: unknown) => string | null) | null;
     },
@@ -165,6 +172,12 @@ declare module "@swimlane-cloud/diagram-converter/markdown-doc" {
     shape?: FrontmatterShape,
   ): string;
   export function orderedMetaKeys(meta: MetaRecord | undefined): string[];
+  /**
+   * A value as one line of text, for display and search. Lossy on purpose —
+   * the deliberate opposite of `projectMeta`, which refuses anything it cannot
+   * flatten losslessly because its output is written to a file.
+   */
+  export function metaText(value: MetaValue | undefined): string;
   /** The keys whose value can only be carried through verbatim, not modelled. */
   export function verbatimKeys(shape: FrontmatterShape | undefined): string[];
   /** The subset of `meta` that `/meta/` inside the fence can represent. */
