@@ -11,7 +11,14 @@ import {
   describeError,
 } from "../_components";
 import { autoSubject } from "@/lib/commit-message";
-import { checkpoint, compare, convertToMarkdown, listPendingChanges, openPR } from "@/lib/workflow";
+import {
+  checkpoint,
+  compare,
+  convertToMarkdown,
+  listPendingChanges,
+  migrateSpellings,
+  openPR,
+} from "@/lib/workflow";
 import type { CompareResponse, PendingChange } from "@/lib/types";
 import { useT } from "@/i18n";
 
@@ -266,6 +273,62 @@ export function DiscardEditModal({
       }
     >
       <p className="text-sm text-neutral-600">{t("edit.discard.confirm")}</p>
+    </Modal>
+  );
+}
+
+/**
+ * Rewrite the spellings the grammar no longer reads — `endif`, `elseif` and
+ * the rest — in every diagram on this branch, in one commit. The grammar has
+ * no compatibility layer, so a repository written before the change fails on
+ * every file until this runs.
+ */
+export function MigrateSpellingsModal({
+  projectId,
+  branch,
+  onClose,
+  onMigrated,
+}: {
+  projectId: string;
+  branch: string;
+  onClose: () => void;
+  onMigrated: (result: { updated: number; lines: number }) => void;
+}) {
+  const { t } = useT();
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleMigrate() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await migrateSpellings(projectId, branch);
+      onMigrated({ updated: result.updated, lines: result.lines });
+    } catch (e) {
+      setError(describeError(e, t));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={t("spelling.title")}
+      onClose={onClose}
+      maxW="max-w-md"
+      footer={
+        <ModalFooter
+          onCancel={onClose}
+          onConfirm={handleMigrate}
+          confirmLabel={t("spelling.confirm")}
+          busy={busy}
+        />
+      }
+    >
+      <div className="space-y-3 text-sm text-neutral-600">
+        <p>{t("spelling.body")}</p>
+        <p className="text-xs text-neutral-500">{t("spelling.note")}</p>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>
     </Modal>
   );
 }

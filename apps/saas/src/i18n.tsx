@@ -374,6 +374,15 @@ export const EN: Record<string, string> = {
     "This is one commit on your edit branch, so it reviews as a normal pull request and reverts as a single commit. Imports between converted diagrams are repointed for you.",
   "convert.confirm": "Convert",
   "convert.done": "Converted {n} diagram(s) to Markdown.",
+  "spelling.action": "Update DSL spellings",
+  "spelling.title": "Update the spellings this grammar no longer reads",
+  "spelling.body":
+    "Rewrites endif → end-if, endfork → end-fork, elseif → else-if, and the older section openers and closers, in every diagram on this branch — in one commit.",
+  "spelling.note":
+    "Nothing else in a file is touched. Push or discard pending changes first; an unpushed edit would bring the old spelling back.",
+  "spelling.confirm": "Update",
+  "spelling.done": "Updated {files} file(s), {lines} line(s).",
+  "spelling.none": "Every diagram already uses the current spellings.",
   "md.document": "Document",
   "md.diagram": "Diagram",
   "md.metadata": "Metadata",
@@ -914,6 +923,15 @@ export const JA: Record<string, string> = {
     "編集ブランチへの 1 コミットとして実行されるため、通常のプルリクエストとしてレビューでき、1 コミットで元に戻せます。変換した図どうしのインポートは自動で貼り替えます。",
   "convert.confirm": "変換する",
   "convert.done": "{n} 件の図を Markdown に変換しました。",
+  "spelling.action": "DSL の表記を更新",
+  "spelling.title": "読み込まれなくなった表記を更新する",
+  "spelling.body":
+    "このブランチのすべての図で、endif → end-if、endfork → end-fork、elseif → else-if、および古いセクションの開始・終了記号を 1 つのコミットで書き換えます。",
+  "spelling.note":
+    "ファイル内のそれ以外は変更しません。先に保留中の変更をプッシュするか破棄してください。未プッシュの編集は古い表記を戻してしまいます。",
+  "spelling.confirm": "更新する",
+  "spelling.done": "{files} 件のファイル、{lines} 行を更新しました。",
+  "spelling.none": "すべての図がすでに現在の表記です。",
   "md.document": "ドキュメント",
   "md.diagram": "図",
   "md.metadata": "メタデータ",

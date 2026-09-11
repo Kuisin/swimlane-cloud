@@ -47,7 +47,13 @@ import {
   useProject,
   type Files,
 } from "../_components";
-import { ConvertMarkdownModal, DiscardEditModal, PushModal, RequestReviewModal } from "./_modals";
+import {
+  ConvertMarkdownModal,
+  DiscardEditModal,
+  MigrateSpellingsModal,
+  PushModal,
+  RequestReviewModal,
+} from "./_modals";
 import { useT } from "@/i18n";
 
 const VIEW_PREF = "sw-view-mode";
@@ -130,6 +136,7 @@ function EditPageInner() {
   const [showReview, setShowReview] = useState(false);
   const [showDiscard, setShowDiscard] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
+  const [showSpelling, setShowSpelling] = useState(false);
   const [reviewRequested, setReviewRequested] = useState<number | null>(null);
   const restored = useRef(false);
   // Gates the editor/mobile content until URL state is restored, so the editor
@@ -463,6 +470,9 @@ function EditPageInner() {
                       <FileText size={14} /> {t("convert.action")}
                     </Action>
                   )}
+                  <Action onClick={() => setShowSpelling(true)} disabled={autosavePending}>
+                    <FileText size={14} /> {t("spelling.action")}
+                  </Action>
                   <button
                     onClick={() => setShowDiscard(true)}
                     className="whitespace-nowrap text-xs text-neutral-400 hover:text-red-600 hover:underline"
@@ -647,6 +657,25 @@ function EditPageInner() {
               branch={branch}
               onClose={() => setShowReview(false)}
               onRequested={handleReviewRequested}
+            />
+          )}
+          {showSpelling && (
+            <MigrateSpellingsModal
+              projectId={projectId}
+              branch={branch}
+              onClose={() => setShowSpelling(false)}
+              onMigrated={({ updated, lines }) => {
+                setShowSpelling(false);
+                setNotice(
+                  updated
+                    ? t("spelling.done", { files: String(updated), lines: String(lines) })
+                    : t("spelling.none"),
+                );
+                if (updated) {
+                  setMobileFiles(null);
+                  setReload((n) => n + 1);
+                }
+              }}
             />
           )}
           {showConvert && (

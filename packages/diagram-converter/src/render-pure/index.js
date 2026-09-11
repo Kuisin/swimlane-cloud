@@ -21,6 +21,7 @@ export { renderPartsPreviewHtml } from "./parts-preview-static.js";
 export { renderTemplatePartsPreviewHtml } from "./template-parts-preview.js";
 export { textToSvg } from "./text-to-svg.js";
 export { relativeLinkPath, resolveLinkPath } from "../link-path.js";
+export { migrateLegacySpellings } from "../legacy-spelling.js";
 export {
   ARROW_LINE_TYPES,
   normalizeArrowLine,
