@@ -24,6 +24,42 @@ declare module "@swimlane-cloud/diagram-converter" {
       linkHref?: ((link: string, row: unknown) => string | null) | null;
     },
   ): TextToSvgResult;
+  /** How a row of the "after" model differs from the model it is compared against. */
+  export type RowDiffStatus = "added" | "changed" | "removed";
+  export interface RowDiffEntry {
+    status: RowDiffStatus;
+    /** The matching row of the "before" model, for `changed` and `removed`. */
+    oldRow?: unknown;
+    /** That row's caption, which the renderer shows as inline tracked changes. */
+    oldText?: string;
+  }
+  export interface TextDiffToSvgResult extends TextToSvgResult {
+    /** Row index (into the rendered model) -> what happened to that row. */
+    diffRows: Map<number, RowDiffEntry>;
+  }
+  /**
+   * `afterSrc` rendered with the change from `beforeSrc` drawn on it. Pass ""
+   * for a side that does not exist (a file added, or deleted). A host reverts
+   * the picture to a plain render by putting the class `diff-hidden` on the
+   * `<svg>` or any ancestor.
+   */
+  export function textDiffToSvg(
+    beforeSrc: string,
+    afterSrc: string,
+    options?: Parameters<typeof textToSvg>[1],
+  ): TextDiffToSvgResult;
+  /** Aligns two models' rows into the `diffRows` map, splicing in ghosts for removed steps. */
+  export function diffModelRows(
+    oldRows: unknown[],
+    newRows: unknown[],
+  ): { rows: unknown[]; diffRows: Map<number, RowDiffEntry> };
+  /** `diffModelRows` at the model level: the model to render, and the map to render it with. */
+  export function diffModels(
+    oldModel: unknown,
+    newModel: unknown,
+  ): { model: unknown; diffRows: Map<number, RowDiffEntry> };
+  /** The caption a row shows — a step's text, a case's label, a branch's question. */
+  export function rowCaption(row: unknown): string;
   /** The repository id a step's link points at from `fromFile`; null when it leaves the repo. */
   export function resolveLinkPath(link: string, fromFile: string): string | null;
   /** The shortest relative link from `fromFile` to `targetFile`. */
