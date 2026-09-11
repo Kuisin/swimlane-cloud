@@ -20,10 +20,9 @@ label: Sales;
 /line/
 [sales: Take the order]
 
-if (Approved?)
-case (Yes) #green
+if (Approved?) is (Yes) than #green
   [sales: Ship it]
-case () #red
+else-if () than #red
   [sales: Send a rejection]
 end-if
 
@@ -35,11 +34,13 @@ end-if
 - `/line/` is the flow itself: steps in `[role: text]` form, plus `if`,
   `fork`, `section` and a handful of other flow keywords.
 
-Closers are spelled `end-if`, `end-fork`, `end-section` and `end-branch`, and
-an extra case is spelled `case (…)`, with a blank `case ()` for the one that
-catches everything else — there is no `else`. The older `endif`, `endfork`
-and `elseif` are no longer read: the editor reports the line and the
-spelling to use instead.
+A decision names its first outcome on the `if` line itself — `if (question)
+is (label) than` — so there is no `if` on a line of its own. Every outcome
+after that is `else-if (label) than`, and the one that catches everything
+else is the blank `else-if () than`; there is no `else`. Closers are spelled
+`end-if`, `end-fork`, `end-section` and `end-branch`. The older `endif`,
+`endfork` and `elseif` are no longer read: the editor reports the line and
+the spelling to use instead.
 
 ## The full syntax reference is one click away
 
@@ -257,20 +258,20 @@ then draft the quote.
 
 ### Flow
 
-| Construct        | What it does                                                                                                                     | Example                     |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| `if (question)`  | Opens a decision. `#color` is optional and colours the diamond                                                                   | `if (Approved?)`            |
-| `case (label)`   | One outcome; `#color` is optional. A blank `case ()` is the catch-all — there is no `else`, and any number of cases may be blank | `case (Yes) #green`         |
-| `end-if`         | Closes the decision                                                                                                              | `end-if`                    |
-| `fork`           | Opens parallel paths. Its own optional label names path 1                                                                        | `fork #purple`              |
-| `and (label)`    | Starts the next parallel path; the label is optional                                                                             | `and (Shipping)`            |
-| `end-fork`       | Joins them                                                                                                                       | `end-fork`                  |
-| `section (Name)` | Draws a labelled box around some steps; the flow is unchanged                                                                    | `section (Quotation) #gray` |
-| `end-section`    | Closes it                                                                                                                        | `end-section`               |
-| `branch (Name)`  | A side path: its first step isn't connected, its last rejoins after the close                                                    | `branch (Audit) #blue`      |
-| `end-branch`     | Closes it                                                                                                                        | `end-branch`                |
-| `phase (Name)`   | A horizontal band with its label in the left gutter; can hold complete `if`/`fork`/`section`/`branch` blocks                     | `phase (Quoting) #gray`     |
-| `end-phase`      | Closes it                                                                                                                        | `end-phase`                 |
+| Construct                       | What it does                                                                                                                                                           | Example                               |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `if (question) is (label) than` | Opens a decision **and** names its first outcome, on one line. The question is required, the label is not, and `than` is. `#color` is optional and colours the diamond | `if (Approved?) is (Yes) than #green` |
+| `else-if (label) than`          | The next outcome; `#color` is optional. A blank `else-if () than` is the catch-all — there is no `else`, and any number of outcomes may be blank                       | `else-if (No) than #red`              |
+| `end-if`                        | Closes the decision                                                                                                                                                    | `end-if`                              |
+| `fork`                          | Opens parallel paths. Its own optional label names path 1                                                                                                              | `fork #purple`                        |
+| `case (label)`                  | Starts the next parallel path; the label is optional. Only inside a `fork` — it takes no `than`                                                                        | `case (Shipping)`                     |
+| `end-fork`                      | Joins them                                                                                                                                                             | `end-fork`                            |
+| `section (Name)`                | Draws a labelled box around some steps; the flow is unchanged                                                                                                          | `section (Quotation) #gray`           |
+| `end-section`                   | Closes it                                                                                                                                                              | `end-section`                         |
+| `branch (Name)`                 | A side path: its first step isn't connected, its last rejoins after the close                                                                                          | `branch (Audit) #blue`                |
+| `end-branch`                    | Closes it                                                                                                                                                              | `end-branch`                          |
+| `phase (Name)`                  | A horizontal band with its label in the left gutter; can hold complete `if`/`fork`/`section`/`branch` blocks                                                           | `phase (Quoting) #gray`               |
+| `end-phase`                     | Closes it                                                                                                                                                              | `end-phase`                           |
 
 The ten colour names are `blue`, `green`, `red`, `orange`, `purple`,
 `gray`, `black`, `pink`, `teal` and `yellow`.
@@ -281,11 +282,11 @@ There are no landing markers: a jump always names a node that is already
 there. A step is named by its `id:` line, and a decision, fork, section,
 branch or phase by the `@id` written on its opening line.
 
-| Construct    | What it does                                                              | Example          |
-| ------------ | ------------------------------------------------------------------------- | ---------------- |
-| `[goto: id]` | From inside a case: continue at the step, decision or fork named `id`     | `[goto: closed]` |
-| `loop`       | From inside a case: go back to the question of the nearest enclosing `if` | `loop`           |
-| `loop @id`   | Go back to the decision or fork named `@id`                               | `loop @quote`    |
+| Construct    | What it does                                                                  | Example          |
+| ------------ | ----------------------------------------------------------------------------- | ---------------- |
+| `[goto: id]` | From inside an outcome: continue at the step, decision or fork named `id`     | `[goto: closed]` |
+| `loop`       | From inside an outcome: go back to the question of the nearest enclosing `if` | `loop`           |
+| `loop @id`   | Go back to the decision or fork named `@id`                                   | `loop @quote`    |
 
 `[goto: id]` looks like a step but isn't one — `goto` is reserved, so you
 can't have a role called `goto`. It always needs a target; there is no bare
@@ -302,16 +303,15 @@ Jumps;
 label: Sales;
 
 /line/
-if (Approved?)
-case (Yes)
+if (Approved?) is (Yes) than
   [sales: Ship it]
   [goto: closed]
 
-case (Needs changes)
+else-if (Needs changes) than
   [sales: Revise it]
   loop
 
-case ()
+else-if () than
   [sales: Reject it]
   [goto: closed]
 end-if
@@ -325,32 +325,36 @@ end-if
 ### Spellings no longer read
 
 Each of these is an error that names the replacement: `endif` → `end-if`,
-`endfork` → `end-fork`, `elseif` → `else-if`, `section-start (n)` → `section (n)`,
+`endfork` → `end-fork`, `elseif` → `else-if`, a bare `else` → `else-if () than`,
+a fork's `and (b)` → `case (b)`, `section-start (n)` → `section (n)`,
 `start-point` → `section`, `end-point` → `end-section`.
 
 ### Migrating an older file
 
 A file written before this grammar — the plain `@kai-swimlane-v2` (or `2`)
-header, `if (…) is (…) than` / `else-if … than` / `else`, `[loop]`, and a
-step's `props:` / `arrow:` / `link:` property lines among them — is not read
-here: there is one reader and no compatibility layer, so it fails on the
-first old construct. The **Update DSL** action (under the project's edit
-view) rewrites every diagram on a branch across in one commit: the header
-becomes `@kai-swimlane`; `if (q) is (a) than` becomes `if (q)` followed by
-`case (a)`; `else-if (b) than` becomes `case (b)`; `else` becomes a blank
-`case ()`; `[loop]` becomes `loop`; `merge: id;` and `[merge: id]` become
-`[goto: id]`; and a step's `props:` / `arrow:` / `link:` lines become the
-suffixes `+prop`, an arrow glyph and `=> path`. A step's `id:` line is
-already current and is left exactly as it is. Nothing else in the file
-changes.
+header, an `if (q)` on a line of its own with its outcomes as `case (…)`
+lines, a fork's `and (…)`, a bare `else`, `[loop]`, and a step's `props:` /
+`arrow:` / `link:` property lines among them — is not read here: there is one
+reader and no compatibility layer, so it fails on the first old construct.
+The **Update DSL** action (under the project's edit view) rewrites every
+diagram on a branch across in one commit: the header becomes
+`@kai-swimlane`; an `if (q)` and the `case (a)` line right under it fuse into
+`if (q) is (a) than`; a later `case (b)` becomes `else-if (b) than`; a bare
+`else` becomes `else-if () than`; a fork's `and (b)` becomes `case (b)`;
+`[loop]` becomes `loop`; `merge: id;` and `[merge: id]` become `[goto: id]`;
+and a step's `props:` / `arrow:` / `link:` lines become the suffixes `+prop`,
+an arrow glyph and `=> path`. A step's `id:` line is already current and is
+left exactly as it is. Anything already written the current way passes
+through untouched, so running Update DSL twice is the same as running it
+once. Nothing else in the file changes.
 
 **One old construct has no automatic replacement: a jump with no target.**
-A bare `merge;` or `[merge]` inside a case, and a `[merge]` / `[merge: name]`
-landing marker in the flow, name nothing — and there are no landing markers
-any more, so there is nothing to turn them into. Update DSL leaves those
-lines untouched and the file then reports an error on each one. Fix them by
-hand: give the step you wanted to land on an `id:` line, and write the jump
-as `[goto: id]`.
+A bare `merge;` or `[merge]` inside an outcome, and a `[merge]` /
+`[merge: name]` landing marker in the flow, name nothing — and there are no
+landing markers any more, so there is nothing to turn them into. Update DSL
+leaves those lines untouched and the file then reports an error on each one.
+Fix them by hand: give the step you wanted to land on an `id:` line, and
+write the jump as `[goto: id]`.
 
 ## What Visual mode can and can't do
 
@@ -376,8 +380,8 @@ unless this table says otherwise.
 | `skip;`                                                                                                                                                                 | **Text mode only**                | Kept on save                                                                                                                        |
 | `remark-desc:`                                                                                                                                                          | **Text mode only**, and rewritten | Saving folds it into a single `remark:` — the text survives, the two-line form doesn't                                              |
 | The spacer `[]`                                                                                                                                                         | Visible, deletable                | Can't be created or edited in Visual mode                                                                                           |
-| `if` / `case`, the question, case labels, colours                                                                                                                       | Editable                          | Colours are swatches, not names                                                                                                     |
-| `fork` / `and`                                                                                                                                                          | Insertable, colour editable       | A parallel path can carry a label in the grammar, but Visual mode doesn't expose a field for it yet — set one in Text mode          |
+| `if` / `else-if`, the question, outcome labels, colours                                                                                                                 | Editable                          | Colours are swatches, not names                                                                                                     |
+| `fork` / `case`                                                                                                                                                         | Insertable, colour editable       | A parallel path can carry a label in the grammar, but Visual mode doesn't expose a field for it yet — set one in Text mode          |
 | `section` / `branch` / `phase`, name and colour                                                                                                                         | Editable                          | No way to turn one into another; `phase` is shown as a group but can only be created as a `section` or `branch`                     |
 | `loop`, `loop @id`                                                                                                                                                      | Insertable only                   | Nothing to configure                                                                                                                |
 | `[goto: id]`                                                                                                                                                            | Editable                          | The target is a dropdown of steps, not an id you type                                                                               |

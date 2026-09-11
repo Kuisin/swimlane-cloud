@@ -377,7 +377,7 @@ export const EN: Record<string, string> = {
   "migrate.action": "Update DSL",
   "migrate.title": "Update the DSL to the current grammar",
   "migrate.body":
-    "Rewrites every diagram on this branch from the earlier grammar into the current one, in one commit: the header; if … is … than / else-if / else into if / case; [loop] into loop; merge: id; and [merge: id] into [goto: id]; and a step's props: / arrow: / link: lines into suffixes on the step itself. A step's id: line is already current and is left alone.",
+    "Rewrites every diagram on this branch from the earlier grammar into the current one, in one commit: the header; an if (q) and the case (a) under it fused into if (q) is (a) than; a later case (b) into else-if (b) than; a bare else into else-if () than; a fork's and (b) into case (b); [loop] into loop; merge: id; and [merge: id] into [goto: id]; and a step's props: / arrow: / link: lines into suffixes on the step itself. A step's id: line is already current and is left alone.",
   "migrate.note":
     "Nothing else in a file is touched. A jump with no target — a bare merge; or [merge], or a [merge] / [merge: name] landing marker — has no replacement, since there are no landing markers any more; those lines are left as they are and reported as errors, to be fixed by hand. Push or discard pending changes first; an unpushed edit would bring the old grammar back.",
   "migrate.confirm": "Update",
@@ -925,7 +925,7 @@ export const JA: Record<string, string> = {
   "migrate.action": "DSL を更新",
   "migrate.title": "DSL を現在の文法に更新する",
   "migrate.body":
-    "このブランチのすべての図を、以前の文法から現在の文法へ 1 つのコミットで書き換えます。ヘッダー、if … is … than / else-if / else を if / case へ、[loop] を loop へ、merge: id; と [merge: id] を [goto: id] へ、そしてステップの props: / arrow: / link: 行をステップ自体の接尾辞へ変換します。ステップの id: 行は現在の文法そのままなので変更しません。",
+    "このブランチのすべての図を、以前の文法から現在の文法へ 1 つのコミットで書き換えます。ヘッダー、if (q) とその直下の case (a) を融合して if (q) is (a) than へ、2 つめ以降の case (b) を else-if (b) than へ、裸の else を else-if () than へ、fork の中の and (b) を case (b) へ、[loop] を loop へ、merge: id; と [merge: id] を [goto: id] へ、そしてステップの props: / arrow: / link: 行をステップ自体の接尾辞へ変換します。ステップの id: 行は現在の文法そのままなので変更しません。",
   "migrate.note":
     "ファイル内のそれ以外は変更しません。行き先のないジャンプ——裸の merge; や [merge]、フロー中の [merge] / [merge: name] の着地点——は、着地点という行自体がなくなったため置き換え先がありません。これらの行はそのまま残り、エラーとして報告されるので手作業で直してください。先に保留中の変更をプッシュするか破棄してください。未プッシュの編集は古い文法を戻してしまいます。",
   "migrate.confirm": "更新する",

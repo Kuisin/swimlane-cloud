@@ -13,10 +13,10 @@ import { blockRows, withExtraCase, withoutBlock } from "./mobile-rows";
 
 const SRC = `@kai-swimlane
 /line/
-if (Approved?)
-case (Yes)
-  [sales: Ship it] @shipped
-case (No)
+if (Approved?) is (Yes) than
+  [sales: Ship it]
+    id: shipped;
+else-if (No) than
   [sales: Reject]
 end-if
 
@@ -140,7 +140,7 @@ describe("withExtraCase", () => {
   });
 
   it("leaves a parallel path unlabelled", () => {
-    const forkSrc = `@kai-swimlane\n/line/\nfork (Ship)\n  [a: x]\nand (Bill)\n  [a: y]\nend-fork\n@end\n`;
+    const forkSrc = `@kai-swimlane\n/line/\nfork (Ship)\n  [a: x]\ncase (Bill)\n  [a: y]\nend-fork\n@end\n`;
     const rows = parse(forkSrc).rows;
     const out = write(forkSrc, withExtraCase(rows, branchOf(tree(forkSrc)).startRow!, "ignored"));
     expect(parse(out).errors).toEqual([]);
