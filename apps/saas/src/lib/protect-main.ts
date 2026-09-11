@@ -29,10 +29,10 @@ import {
   isCurrentRepoSettings,
   MAIN_GUARD_WORKFLOW,
   MAIN_GUARD_WORKFLOW_PATH,
+  normalizeRepoSettingsText,
   PROD_BRANCH,
   REPO_RULES,
   REPO_RULES_PATH,
-  repoSettingsJson,
   REPO_SETTINGS_PATH,
   type ProtectionOutcome,
   type RepoRef,
@@ -137,13 +137,15 @@ export async function enforceMainPullRequestOnly(
     report.detail ??= err instanceof Error ? err.message : String(err);
   }
 
-  // 4. The settings the guard workflow reads its allowed sources from.
+  // 4. The settings the guard workflow reads its allowed sources from. An
+  //    existing file keeps every value it holds — this only fills in keys a
+  //    newer version of the app added, and never resets what the owner chose.
   try {
     const existing = await write.readFile(REPO_SETTINGS_PATH, PROD_BRANCH);
     if (!isCurrentRepoSettings(existing)) {
       await write.putFile(
         REPO_SETTINGS_PATH,
-        repoSettingsJson(),
+        normalizeRepoSettingsText(existing),
         PROD_BRANCH,
         existing === null ? `Add ${REPO_SETTINGS_PATH}` : `Update ${REPO_SETTINGS_PATH}`,
       );

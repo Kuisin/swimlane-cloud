@@ -15,7 +15,7 @@ import {
   MAIN_GUARD_WORKFLOW_PATH,
   MANAGED_PATHS,
 } from "./main-guard.ts";
-import { repoSettingsJson } from "./repo-settings.ts";
+import { DEFAULT_SETTINGS, repoSettingsJson } from "./repo-settings.ts";
 
 /** The dedented body of the `run: |` block belonging to `jobName`. */
 function runScript(jobName: string): string {
@@ -102,8 +102,7 @@ describe("the pull-request guard reads its allowlist from settings", () => {
     writeFileSync(
       join(dir, "swimlane-settings.json"),
       repoSettingsJson({
-        version: 1,
-        branches: { published: "main", approved: "preview", releasePrefix: "release-" },
+        ...DEFAULT_SETTINGS,
         rules: {
           publishedRequiresPullRequest: true,
           allowedPublishedSources: ["preview"],

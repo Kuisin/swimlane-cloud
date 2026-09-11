@@ -604,6 +604,7 @@ function EditPageInner() {
                 options={{
                   lang,
                   showLanguageToggle: false,
+                  diagramDefaults: state?.settings.diagram,
                   initialDocumentId: mFile,
                   onActiveDocument: setMFile,
                   onDocumentNotFound: () => setNotice(t("edit.fileNotFound")),

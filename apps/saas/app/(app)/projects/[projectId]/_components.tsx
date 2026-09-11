@@ -221,7 +221,10 @@ export function ProjectNav({
     { key: "versions", label: t("nav.versions"), href: "versions" },
     { key: "activity", label: t("nav.activity"), href: "activity" },
     ...(state?.me.role === "owner"
-      ? [{ key: "templates", label: t("nav.templates"), href: "settings/templates" }]
+      ? [
+          { key: "templates", label: t("nav.templates"), href: "settings/templates" },
+          { key: "settings", label: t("nav.settings"), href: "settings/diagram" },
+        ]
       : []),
   ];
   return (
@@ -1943,7 +1946,9 @@ function GroupEditModal({
               onChange={(e) => setMergeTarget(e.target.value)}
               className={FIELD_CLASS}
             >
-              <option value="">{t("stepEdit.none")}</option>
+              {/* Empty is a real, valid target now: a bare merge lands on
+                  the next landing marker after this if — not "unset". */}
+              <option value="">{t("mobile.mergeTargetNext")}</option>
               {mergeTargets
                 .filter((o) => o.mergeId)
                 .map((o) => (

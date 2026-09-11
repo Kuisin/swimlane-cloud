@@ -18,6 +18,7 @@ export {
 import {
   DEFAULT_COLUMN_TITLES,
   DIAGRAM_OPTION_DSL_MAP,
+  DIAGRAM_OPTION_VALUE_MAP,
   OPTION_COLUMN_TITLE_DSL_MAP,
   emptyDiagramOptions,
   parseOptionBoolean,
@@ -112,6 +113,16 @@ function parseOptionSection(items, errors) {
       options[boolField] = bool;
       continue;
     }
+    const valueOption = DIAGRAM_OPTION_VALUE_MAP[kv.key];
+    if (valueOption) {
+      const value = valueOption.parse(kv.val);
+      if (value === null) {
+        errors.push({ line, text, msg: `${kv.key}: expected ${valueOption.expected}` });
+        continue;
+      }
+      options[valueOption.field] = value;
+      continue;
+    }
     const titleField = OPTION_COLUMN_TITLE_DSL_MAP[kv.key];
     if (titleField) {
       columnTitles[titleField] = kv.val;
@@ -199,17 +210,28 @@ export function unescapeDslLine(line) {
     .replace(/&quot;/g, '"');
 }
 
-/** 出現順の表示番号。skipIndex の行は件数に含めず番号なし。 */
+/**
+ * 出現順の表示番号。skipIndex の行は件数に含めず番号なし。
+ *
+ * A step's `level` nests its number under the previous shallower step:
+ * level 1 counts 1, 2, 3; a level-2 step after "2" is 2-1, then 2-2; a
+ * level-3 step after that is 2-2-1. A sub-step with no parent yet counts
+ * under an implicit "1".
+ */
 export function buildStepRowDisplayInfo(rows) {
   const out = new Map();
-  let index = 1;
+  const counters = [];
   rows.forEach((r, i) => {
     if (r.kind !== "step" || r.empty || !r.role) return;
     if (r.skipIndex) {
       out.set(i, { skipped: true });
       return;
     }
-    out.set(i, { displayIndex: index++ });
+    const level = Math.max(1, Math.floor(Number(r.level) || 1));
+    while (counters.length < level - 1) counters.push(1);
+    counters.length = level;
+    counters[level - 1] = (counters[level - 1] || 0) + 1;
+    out.set(i, { displayIndex: counters.join("-"), level });
   });
   return out;
 }
@@ -683,7 +705,11 @@ export function parseDSL(src, parseOptions = {}) {
       );
       continue;
     }
-    if (/^else$/i.test(u)) {
+    // `else`, or `else than #color` — the form the editor writes for a
+    // coloured else case, so it must read back.
+    m = u.match(/^else(?:\s+than)?(?:\s+#([A-Za-z]+))?$/i);
+    if (m) {
+      checkColorToken(m[1], line, text);
       const top = stack[stack.length - 1];
       if (!top || top.type !== "if") {
         errors.push({ line, text, msg: "else without if" });
@@ -693,6 +719,7 @@ export function parseDSL(src, parseOptions = {}) {
         {
           kind: "branchCase",
           label: "else",
+          branchColor: m[1] ? m[1].trim().toLowerCase() : null,
           id: top.id,
           depth: branchControlDepth(),
         },
@@ -953,6 +980,21 @@ export function parseDSL(src, parseOptions = {}) {
       rows[lastRealStepIndex].skipIndex = true;
       continue;
     }
+    if (/^level:\s*/i.test(u)) {
+      if (lastRealStepIndex >= 0) appendLineToRow(lastRealStepIndex, line);
+      m = u.match(/^level:\s*([1-9])\s*;\s*$/i);
+      if (!m) {
+        errors.push({ line, text, msg: "level must be written as level: <1-9>;" });
+        continue;
+      }
+      if (lastRealStepIndex < 0) {
+        errors.push({ line, text, msg: "level has no preceding step" });
+        continue;
+      }
+      const level = Number(m[1]);
+      if (level > 1) rows[lastRealStepIndex].level = level;
+      continue;
+    }
     if (/^props:\s*/i.test(u)) {
       if (lastRealStepIndex >= 0) appendLineToRow(lastRealStepIndex, line);
       m = u.match(/^props:\s*(.+);\s*$/i);
@@ -996,6 +1038,40 @@ export function parseDSL(src, parseOptions = {}) {
         continue;
       }
       rows[lastRealStepIndex].arrowLine = arrowVal;
+      continue;
+    }
+
+    /**
+     * `[merge]` / `[merge: <name>]` — a landing marker in the flow. A case's
+     * bare `merge;` lands on the next marker after its `if`; a named one can
+     * be targeted from anywhere with `merge: <name>;`.
+     */
+    m = u.match(/^\[merge(?:\s*:\s*([^\]]*))?\]\s*;?\s*$/i);
+    if (m) {
+      const name = (m[1] || "").trim() || null;
+      if (name) {
+        const prev = mergeIdsSeen.get(name);
+        if (prev) {
+          errors.push({ line: prev.line, text: prev.text, msg: `duplicate step id "${name}"` });
+          errors.push({ line, text, msg: `duplicate step id "${name}"` });
+        } else {
+          mergeIdsSeen.set(name, { line, text });
+        }
+      }
+      pushLineRow({ kind: "mergeMarker", name, depth: stepDepth() }, line);
+      continue;
+    }
+
+    if (/^merge\s*;\s*$/i.test(u)) {
+      const top = stack[stack.length - 1];
+      if (!top || top.type !== "if") {
+        errors.push({ line, text, msg: "merge outside if" });
+        continue;
+      }
+      pushLineRow(
+        { kind: "branchMerge", mergeTarget: null, mergeBranchId: top.id, depth: branchBodyDepth() },
+        line,
+      );
       continue;
     }
 
@@ -1119,19 +1195,37 @@ export function parseDSL(src, parseOptions = {}) {
     });
   }
 
-  /** Resolve each `merge: <id>;` to the step whose `id:` matches; error if none. */
-  for (const r of rows) {
-    if (r.kind !== "branchMerge") continue;
-    if (!mergeIdsSeen.has(r.mergeTarget)) {
-      const mergeLine = r.dslLines?.[0];
-      const mergeText = sections.line.find((l) => l.line === mergeLine)?.text;
+  /**
+   * Resolve each merge: a named `merge: <id>;` needs a step `id:` or a
+   * `[merge: <id>]` marker; a bare `merge;` needs a `[merge]` marker somewhere
+   * after its `if`. Error if none.
+   */
+  rows.forEach((r, i) => {
+    if (r.kind !== "branchMerge") return;
+    const mergeLine = r.dslLines?.[0];
+    const mergeText = sections.line.find((l) => l.line === mergeLine)?.text;
+    if (r.mergeTarget) {
+      if (!mergeIdsSeen.has(r.mergeTarget)) {
+        errors.push({
+          line: mergeLine,
+          text: mergeText,
+          msg: `merge: no step with id "${r.mergeTarget}"`,
+        });
+      }
+      return;
+    }
+    const endIdx = rows.findIndex(
+      (x, j) => j > i && x.kind === "branchEnd" && x.id === r.mergeBranchId,
+    );
+    const hasMarker = endIdx >= 0 && rows.some((x, j) => j > endIdx && x.kind === "mergeMarker");
+    if (!hasMarker) {
       errors.push({
         line: mergeLine,
         text: mergeText,
-        msg: `merge: no step with id "${r.mergeTarget}"`,
+        msg: "merge; has no [merge] marker after this if",
       });
     }
-  }
+  });
 
   const seen = new Set();
   const ordered = [];

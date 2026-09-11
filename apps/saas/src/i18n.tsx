@@ -22,6 +22,7 @@ export const EN: Record<string, string> = {
   "nav.role.editor": "Editor",
   "nav.role.viewer": "Viewer",
   "nav.templates": "Templates",
+  "nav.settings": "Settings",
   "nav.manual": "Manual",
   // in-app user manual
   "manual.sections": "Sections",
@@ -408,6 +409,7 @@ export const EN: Record<string, string> = {
   "mobile.newCondition": "Condition",
   "mobile.mergeTarget": "Rejoins at",
   "mobile.mergeTargetHint": "Pick a step that has a landing point name.",
+  "mobile.mergeTargetNext": "Next landing marker",
   "mobile.confirmDelete": "Delete — tap again",
   "mobile.addBlock": "Add branch or group",
   "mobile.add.if": "Branch (if)",
@@ -450,6 +452,30 @@ export const EN: Record<string, string> = {
     "The full editor is built for wide screens. Switch to a mobile-friendly, read-only view of this diagram?",
   "mobilePrompt.switchMobile": "Switch to mobile view",
   "mobilePrompt.stayEditor": "Stay in the editor",
+  // repository settings
+  "settings.title": "Repository settings",
+  "settings.description":
+    "Stored as swimlane-settings.json on main, so every diagram in this repository — and every tool that reads the repository — follows the same rules.",
+  "settings.diagram": "Diagram",
+  "settings.showGatewayIcons": "Show fork and merge icons",
+  "settings.showGatewayIconsHint":
+    "The circles where a parallel fork splits and rejoins, and the diamond where an if rejoins. Off, the lines simply meet.",
+  "settings.blockMargin": "Extra space per block (px)",
+  "settings.blockText": "Long block text",
+  "settings.blockText.truncate": "Cut to one line (…)",
+  "settings.blockText.wrap": "Wrap onto more lines",
+  "settings.diagramHint": "A file's own /option/ section overrides these for that file.",
+  "settings.templates": "Templates",
+  "settings.templatesDescription":
+    "How strictly each section must follow the project template. The templates themselves live on the Templates tab.",
+  "settings.templateMode.none": "Free",
+  "settings.templateMode.base": "Template as a starting point",
+  "settings.templateMode.template-only": "Template only",
+  "settings.templateModeHint":
+    "Template only: every diagram must match the pinned template exactly. Starting point: new files begin from it. Free: no rule.",
+  "settings.save": "Save to repository",
+  "settings.saved": "Saved to main.",
+  "settings.ownerOnly": "Only the project owner can change these.",
   // templates settings
   "templates.title": "Section templates",
   "templates.description":
@@ -526,6 +552,7 @@ export const JA: Record<string, string> = {
   "nav.role.editor": "編集者",
   "nav.role.viewer": "閲覧者",
   "nav.templates": "テンプレート",
+  "nav.settings": "設定",
   "nav.manual": "マニュアル",
   // in-app user manual
   "manual.sections": "目次",
@@ -916,6 +943,7 @@ export const JA: Record<string, string> = {
   "mobile.newCondition": "条件",
   "mobile.mergeTarget": "合流先",
   "mobile.mergeTargetHint": "合流ポイント名を持つステップを選びます。",
+  "mobile.mergeTargetNext": "次の合流地点",
   "mobile.confirmDelete": "削除 — もう一度タップ",
   "mobile.addBlock": "分岐・グループを追加",
   "mobile.add.if": "条件分岐（if）",
@@ -959,6 +987,30 @@ export const JA: Record<string, string> = {
   "mobilePrompt.switchMobile": "モバイルビューに切り替え",
   "mobilePrompt.stayEditor": "エディタに留まる",
   // templates settings
+  "settings.title": "リポジトリ設定",
+  "settings.description":
+    "main の swimlane-settings.json に保存され、このリポジトリのすべての図と、リポジトリを読むすべてのツールが同じ規則に従います。",
+  "settings.diagram": "図",
+  "settings.showGatewayIcons": "分岐・合流アイコンを表示",
+  "settings.showGatewayIconsHint":
+    "並列分岐が分かれて合流する円と、if が合流するひし形です。オフにすると線がそのまま合流します。",
+  "settings.blockMargin": "ブロックごとの追加余白 (px)",
+  "settings.blockText": "長いブロック文字列",
+  "settings.blockText.truncate": "1行に切り詰める (…)",
+  "settings.blockText.wrap": "複数行に折り返す",
+  "settings.diagramHint":
+    "ファイル自身の /option/ セクションがあれば、そのファイルではそちらが優先されます。",
+  "settings.templates": "テンプレート",
+  "settings.templatesDescription":
+    "各セクションがプロジェクトのテンプレートにどの程度従うかを決めます。テンプレート自体は「テンプレート」タブで管理します。",
+  "settings.templateMode.none": "自由",
+  "settings.templateMode.base": "テンプレートを初期値に",
+  "settings.templateMode.template-only": "テンプレートのみ",
+  "settings.templateModeHint":
+    "テンプレートのみ: すべての図が固定テンプレートと完全に一致する必要があります。初期値: 新規ファイルはテンプレートから始まります。自由: 規則なし。",
+  "settings.save": "リポジトリに保存",
+  "settings.saved": "main に保存しました。",
+  "settings.ownerOnly": "変更できるのはプロジェクトのオーナーだけです。",
   "templates.title": "セクションテンプレート",
   "templates.description":
     "/page/ /option/ /role/ /block/ /prop/ の再利用可能な断片です。編集者はエディタから挿入できます。強制されたセクションはテンプレートと完全に一致しないと保存できません。",

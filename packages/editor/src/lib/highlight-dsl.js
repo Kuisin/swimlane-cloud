@@ -73,6 +73,12 @@ export function tokenizeDslLine(line) {
     let m;
     if ((m = /^<[^>]*>/.exec(rest))) tokens.push({ t: "ref", s: m[0] });
     else if ((m = /^#[A-Za-z0-9_-]+/.exec(rest))) tokens.push({ t: "anchor", s: m[0] });
+    // `[merge]` / `[merge: name]` — a landing marker. The optional `: name`
+    // has its own `:` inside the brackets, so it doesn't fit the plain
+    // `[word]` bracket-keyword rule below; matched first so the whole marker
+    // (brackets included) stays one token, exactly like `[loop]` does.
+    else if ((m = /^\[merge(?:\s*:\s*[^\]]*)?\]/i.exec(rest)))
+      tokens.push({ t: "keyword", s: m[0] });
     else if ((m = /^\[[A-Za-z][A-Za-z-]*\]/.exec(rest))) tokens.push({ t: "keyword", s: m[0] });
     else if (atStart && (m = /^[A-Za-z][A-Za-z0-9_-]*(?=\s*:)/.exec(rest)))
       tokens.push({ t: "key", s: m[0] });

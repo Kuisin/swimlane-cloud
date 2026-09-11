@@ -53,6 +53,7 @@ const MESSAGES = {
     case: "case",
     cases: "cases",
     mergeTo: "merges to",
+    mergeNext: "next landing marker",
     mergeTarget: "merge point",
     mergeBack: "rejoins main flow",
     dragStep: "drag to reorder",
@@ -85,6 +86,7 @@ const MESSAGES = {
     case: "ケース",
     cases: "ケース",
     mergeTo: "合流先",
+    mergeNext: "次の合流地点",
     mergeTarget: "合流ポイント",
     mergeBack: "本流へ合流",
     dragStep: "ドラッグして並べ替え",
@@ -511,17 +513,20 @@ function Node({ node, ctx, hasNext = false }) {
         </>
       );
     case "merge": {
-      const targetLabel = ctx.tree.mergeTargets?.[node.target];
+      const hasTarget = Boolean(node.target);
+      const targetLabel = hasTarget ? ctx.tree.mergeTargets?.[node.target] : null;
       return (
         <>
           <div className="flex max-w-full items-center gap-1 self-center">
             <span
               className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-[12px] text-teal-700"
-              title={node.target}
+              title={node.target || undefined}
             >
               <GitMerge size={13} className="shrink-0" />
               <span className="shrink-0">{ctx.t("mergeTo")}</span>
-              <span className="truncate font-semibold">{targetLabel || node.target || "?"}</span>
+              <span className="truncate font-semibold">
+                {hasTarget ? targetLabel || node.target : ctx.t("mergeNext")}
+              </span>
             </span>
             {ctx.editable && ctx.onEditMerge && (
               <button
@@ -538,6 +543,25 @@ function Node({ node, ctx, hasNext = false }) {
         </>
       );
     }
+    case "landing":
+      // 0-height in the desktop SVG render (the merge arrow itself shows
+      // where it lands); on mobile it still needs *some* presence so a
+      // landing marker with a name can be told apart from empty space —
+      // shown as a subtle labeled divider rather than a card.
+      return (
+        <>
+          <div className="flex items-center gap-2 self-stretch px-1 py-1">
+            <span className="h-px flex-1 bg-slate-200" aria-hidden />
+            {node.name && (
+              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                ⤓ {node.name}
+              </span>
+            )}
+            <span className="h-px flex-1 bg-slate-200" aria-hidden />
+          </div>
+          {hasNext && <FlowConnector />}
+        </>
+      );
     default:
       return null;
   }

@@ -81,11 +81,33 @@ describe("collectMergeTargetOptions", () => {
     ];
     const options = collectMergeTargetOptions(rows);
     expect(options).toHaveLength(2);
-    expect(options[0]).toMatchObject({ stepIndex: 0, mergeId: "", blockName: "start" });
+    expect(options[0]).toMatchObject({
+      kind: "step",
+      stepIndex: 0,
+      mergeId: "",
+      blockName: "start",
+    });
     expect(options[1]).toMatchObject({
+      kind: "step",
       stepIndex: 1,
       mergeId: "done",
       label: "done step (id: done)",
+    });
+  });
+
+  it("also lists named landing markers, skipping unnamed ones", () => {
+    const rows = [
+      { kind: "mergeMarker", name: "", depth: 0 }, // excluded: no name
+      { kind: "step", role: "r", text: "start" },
+      { kind: "mergeMarker", name: "done", depth: 0 },
+    ];
+    const options = collectMergeTargetOptions(rows);
+    expect(options).toHaveLength(2);
+    expect(options[1]).toMatchObject({
+      kind: "marker",
+      rowIndex: 2,
+      mergeId: "done",
+      label: "⤓ done (landing marker)",
     });
   });
 });

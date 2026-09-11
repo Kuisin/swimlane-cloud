@@ -9,7 +9,16 @@ declare module "@swimlane-cloud/diagram-converter" {
   }
   export function textToSvg(
     src: string,
-    options?: { theme?: object; themeKey?: string },
+    options?: {
+      theme?: object;
+      themeKey?: string;
+      lang?: string;
+      filename?: string;
+      resolveImport?: (path: string) => string | null;
+      resolveAsset?: (path: string) => string | null;
+      /** Render options the file inherits; its own `/option/` wins. */
+      diagramDefaults?: object;
+    },
   ): TextToSvgResult;
   export function renderPartsPreviewHtml(
     code: string,

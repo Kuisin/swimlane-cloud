@@ -17,6 +17,10 @@ export function AddStepMenu({
   onAddFork,
   onAddSection,
   onAddBranch,
+  onAddMergeMarker,
+  onAddLoop,
+  onAddMerge,
+  canJump,
 }) {
   const { t } = useT();
   const groups = [
@@ -58,6 +62,36 @@ export function AddStepMenu({
           descKey: "gui.addBranchDesc",
           onSelect: onAddBranch,
         },
+      ],
+    },
+    {
+      headingKey: "gui.addGroupJumps",
+      items: [
+        {
+          key: "mergeMarker",
+          labelKey: "gui.addMergeMarker",
+          descKey: "gui.addMergeMarkerDesc",
+          onSelect: onAddMergeMarker,
+        },
+        // A loop-back / merge-ahead jump only makes sense from inside an
+        // `if` — a `fork`'s paths all run and rejoin unconditionally, so
+        // there's nothing for either to redirect.
+        ...(canJump
+          ? [
+              {
+                key: "loop",
+                labelKey: "gui.addLoop",
+                descKey: "gui.addLoopDesc",
+                onSelect: onAddLoop,
+              },
+              {
+                key: "merge",
+                labelKey: "gui.addMerge",
+                descKey: "gui.addMergeDesc",
+                onSelect: onAddMerge,
+              },
+            ]
+          : []),
       ],
     },
   ];

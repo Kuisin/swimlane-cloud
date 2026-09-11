@@ -8,10 +8,12 @@ import {
   isEditBranch,
   isIntegrationBranch,
   isProdBranch,
+  parseRepoSettings,
   PROD_BRANCH,
+  REPO_SETTINGS_PATH,
 } from "@swimlane-cloud/github-client";
 import { branchLockReason, type ProjectCtx } from "./projects";
-import { mapLimit, readConfigAt } from "./repo-files";
+import { mapLimit, readConfigAt, readTextAt } from "./repo-files";
 import { getServiceSupabase } from "./supabase/server";
 import type { BranchKind, BranchState, ProjectState, PullState, VersionState } from "./types";
 
@@ -56,28 +58,30 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
     }
   }
 
-  const [pulls, config, draftRows, sessionRows, versionRows, mrRows] = await Promise.all([
-    ctx.pulls.listPullRequests({ state: "all" }),
-    readConfigAt(ctx, ctx.repoInfo.defaultBranch),
-    supabase.from("drafts").select("branch").eq("project_id", projectId),
-    supabase
-      .from("edit_sessions")
-      .select("id, branch_name, created_by_login, created_at")
-      .eq("project_id", projectId)
-      .eq("status", "active"),
-    supabase
-      .from("versions")
-      .select(
-        "id, name, note, commit_sha, tag_name, promoted_to_main, promoted_sha, public, share_mode, public_slug, created_at, created_by_login, version_files(filepath, sort_order)",
-      )
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("merge_requests")
-      .select("pr_number, version_id")
-      .eq("project_id", projectId)
-      .not("version_id", "is", null),
-  ]);
+  const [pulls, config, settingsText, draftRows, sessionRows, versionRows, mrRows] =
+    await Promise.all([
+      ctx.pulls.listPullRequests({ state: "all" }),
+      readConfigAt(ctx, ctx.repoInfo.defaultBranch),
+      readTextAt(ctx, REPO_SETTINGS_PATH, PROD_BRANCH).catch(() => null),
+      supabase.from("drafts").select("branch").eq("project_id", projectId),
+      supabase
+        .from("edit_sessions")
+        .select("id, branch_name, created_by_login, created_at")
+        .eq("project_id", projectId)
+        .eq("status", "active"),
+      supabase
+        .from("versions")
+        .select(
+          "id, name, note, commit_sha, tag_name, promoted_to_main, promoted_sha, public, share_mode, public_slug, created_at, created_by_login, version_files(filepath, sort_order)",
+        )
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("merge_requests")
+        .select("pr_number, version_id")
+        .eq("project_id", projectId)
+        .not("version_id", "is", null),
+    ]);
 
   const dirtyBranches = new Set((draftRows.data ?? []).map((r) => r.branch as string));
   const sessions = new Map(
@@ -215,6 +219,7 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
         }
       : null,
     plan: ctx.project.plan,
+    settings: parseRepoSettings(settingsText),
     fetchedAt: new Date().toISOString(),
   };
 }

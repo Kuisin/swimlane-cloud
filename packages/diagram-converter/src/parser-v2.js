@@ -22,6 +22,7 @@ import { BLOCK_SHAPE_WIDTH_FACTOR, BRANCH_COLOR_STYLES } from "./render-pure/dia
 import { normalizeArrowLine } from "./arrow-line.js";
 import {
   DIAGRAM_OPTION_DSL_MAP,
+  DIAGRAM_OPTION_VALUE_MAP,
   OPTION_COLUMN_TITLE_DSL_MAP,
   DEFAULT_COLUMN_TITLES,
   emptyDiagramOptions,
@@ -801,6 +802,20 @@ export function parseDSLv2(src, options = {}) {
       errors.push({ line: sc.lineAt(j.pos), text: "", msg: `no node with id "${j.target}"` });
     }
   }
+  rows.forEach((r, i) => {
+    if (r.kind !== "branchMerge" || r.mergeTarget) return;
+    const endIdx = rows.findIndex(
+      (x, j) => j > i && x.kind === "branchEnd" && x.id === r.mergeBranchId,
+    );
+    const hasMarker = endIdx >= 0 && rows.some((x, j) => j > endIdx && x.kind === "mergeMarker");
+    if (!hasMarker) {
+      errors.push({
+        line: r.dslLines?.[0],
+        text: "",
+        msg: "goto has no merge marker after this if",
+      });
+    }
+  });
 
   const seen = new Set();
   const ordered = [];
@@ -969,6 +984,13 @@ export function parseDSLv2(src, options = {}) {
       else options_[DIAGRAM_OPTION_DSL_MAP[key]] = v;
       return;
     }
+    if (DIAGRAM_OPTION_VALUE_MAP[key]) {
+      const { field, parse, expected } = DIAGRAM_OPTION_VALUE_MAP[key];
+      const v = parse(prop.value);
+      if (v === null) err(prop.pos, `"${key}": expected ${expected}`);
+      else options_[field] = v;
+      return;
+    }
     if (OPTION_COLUMN_TITLE_DSL_MAP[key]) {
       const field = OPTION_COLUMN_TITLE_DSL_MAP[key];
       applyLocalized(page, field, prop);
@@ -1012,6 +1034,10 @@ export function parseDSLv2(src, options = {}) {
     }
     if (w === "goto" || w === "loop") {
       readJump(w, pos);
+      return;
+    }
+    if (w === "merge") {
+      readMergeMarker(pos);
       return;
     }
     if (OPENERS.includes(w)) {
@@ -1155,6 +1181,16 @@ export function parseDSLv2(src, options = {}) {
       case "skip":
         target.skipIndex = true;
         return;
+      case "level": {
+        if (!isStep) return;
+        const level = Number(String(prop.value).trim());
+        if (!Number.isInteger(level) || level < 1 || level > 9) {
+          err(prop.pos, "level must be a whole number from 1 to 9");
+          return;
+        }
+        if (level > 1) target.level = level;
+        return;
+      }
       case "note":
       case "note-side":
       case "question":
@@ -1382,19 +1418,36 @@ export function parseDSLv2(src, options = {}) {
       );
       return;
     }
-    if (!target) {
-      err(pos, "goto requires a target");
-      return;
-    }
     if (!top || top.type !== "if") {
       err(pos, "goto outside if is not supported by this renderer");
       return;
     }
-    jumps.push({ target, pos });
+    // A bare `goto` lands on the next `merge` marker after this if.
+    if (target) jumps.push({ target, pos });
     push(
-      { kind: "branchMerge", mergeTarget: target, mergeBranchId: top.id, depth: branchBodyDepth() },
+      {
+        kind: "branchMerge",
+        mergeTarget: target || null,
+        mergeBranchId: top.id,
+        depth: branchBodyDepth(),
+      },
       pos,
     );
+  }
+
+  /** `merge` / `merge @id` — a landing marker a case's `goto` lands on. */
+  function readMergeMarker(pos) {
+    sc.skipWs();
+    let name = null;
+    if (sc.s[sc.i] === "@") {
+      sc.i++;
+      name = sc.word() || null;
+    }
+    if (name) {
+      if (stepIds.has(name)) err(pos, `duplicate node id "${name}"`);
+      stepIds.set(name, rows.length);
+    }
+    push({ kind: "mergeMarker", name, depth: stepDepth() }, pos);
   }
 }
 

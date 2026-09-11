@@ -176,6 +176,45 @@ describe("case nodes carry what a host needs to edit them", () => {
   });
 });
 
+const LANDING_DSL = `@kai-swimlane
+/title/
+L
+/role/
+<a: Alice> #blue
+/line/
+[a: Start]
+if (cancel?) is (yes) than
+[a: Stop]
+merge;
+else
+[a: Continue]
+endif
+[merge: done]
+[a: End]
+@end
+`;
+
+describe("landing markers (mergeMarker rows)", () => {
+  const { tree } = dslToMobile(LANDING_DSL);
+
+  it("renders a top-level landing node carrying its name", () => {
+    const landing = tree.nodes.find((n) => n.type === "landing");
+    expect(landing).toBeTruthy();
+    expect(landing.name).toBe("done");
+  });
+
+  it("maps a named landing marker into mergeTargets with a ⤓ prefix", () => {
+    expect(tree.mergeTargets.done).toBe("⤓ done");
+  });
+
+  it("keeps a bare merge's target empty (lands on the next marker)", () => {
+    const branch = tree.nodes.find((n) => n.type === "branch");
+    const merge = branch.cases[0].children.find((n) => n.type === "merge");
+    expect(merge).toBeTruthy();
+    expect(merge.target).toBe("");
+  });
+});
+
 describe("toColor", () => {
   it("maps names and hex, rejects junk", () => {
     expect(toColor("blue")).toBe("#2563eb");

@@ -11,7 +11,9 @@
 import {
   GitHubConflictError,
   INTEGRATION_BRANCH,
+  parseRepoSettings,
   PROD_BRANCH,
+  REPO_SETTINGS_PATH,
   slugify,
 } from "@swimlane-cloud/github-client";
 import { ApiError } from "./api";
@@ -19,7 +21,7 @@ import { dslOf } from "./diagram-file";
 import { assertSha } from "./guard";
 import { audit, type ProjectCtx } from "./projects";
 import { render } from "./render";
-import { snapshotAt } from "./repo-files";
+import { readTextAt, snapshotAt } from "./repo-files";
 import { getServiceSupabase } from "./supabase/server";
 import { normalizeVersionName } from "./version-name";
 
@@ -78,8 +80,13 @@ export async function flagVersion(
     .filter((p) => dslOf(p, snapshot.files[p]!) !== null)
     .sort();
   if (paths.length === 0) throw new ApiError(400, "There are no diagrams to flag at this commit.");
+  // Snapshotted with the version: the public share page has no GitHub access
+  // to read the live file, and a version should keep looking as it did.
+  const diagramSettings = parseRepoSettings(
+    await readTextAt(ctx, REPO_SETTINGS_PATH, PROD_BRANCH).catch(() => null),
+  ).diagram;
   const renderFailures = paths.filter((p) => {
-    const { svg, errors } = render(dslOf(p, snapshot.files[p]!)!, "basic");
+    const { svg, errors } = render(dslOf(p, snapshot.files[p]!)!, "basic", diagramSettings);
     return !svg || errors.length > 0;
   });
 
@@ -94,6 +101,7 @@ export async function flagVersion(
       branch: INTEGRATION_BRANCH,
       created_by: ctx.user.id,
       created_by_login: ctx.login,
+      settings_json: diagramSettings,
     })
     .select("id")
     .single();

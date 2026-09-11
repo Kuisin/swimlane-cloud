@@ -3,6 +3,8 @@
  * a server module, so `workflow.ts` and the pages can use these directly.
  */
 
+import type { SwimlaneSettings } from "@swimlane-cloud/github-client";
+
 export type Role = "owner" | "editor" | "viewer";
 export type ChangeStatus = "added" | "changed" | "removed";
 
@@ -83,6 +85,8 @@ export interface ProjectState {
   versions: VersionState[];
   activeEdit: { id: string; branch: string; createdAt: string } | null;
   plan: "free" | "team" | "enterprise";
+  /** `swimlane-settings.json` on `main`, defaults filled in. */
+  settings: SwimlaneSettings;
   fetchedAt: string;
 }
 

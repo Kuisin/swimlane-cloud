@@ -15,6 +15,7 @@ import {
   swapStepRows,
   moveRow,
 } from "../../lib/flow-rows.js";
+import { findEnclosingBranchStart } from "../../lib/branch-rows.js";
 import { buildLockedGuiRowIndices } from "../../lib/parse-error-policy.js";
 import { AddStepMenu } from "./add-step-menu.jsx";
 import { FlowStepList } from "./flow-step-list.jsx";
@@ -44,6 +45,7 @@ export function GuiMode({
   svg,
   errors,
   parseOptions,
+  diagramDefaults,
   onSwitchToText,
 }) {
   const { t } = useT();
@@ -77,7 +79,7 @@ export function GuiMode({
   const interactiveSvg = useMemo(() => {
     if (!guiModel) return null;
     try {
-      const opts = resolveDiagramOptions(guiModel.options);
+      const opts = resolveDiagramOptions(guiModel.options, diagramDefaults);
       return renderDiagramSvg({
         model: guiModel,
         theme: theme ?? THEMES.basic,
@@ -88,7 +90,7 @@ export function GuiMode({
     } catch {
       return null;
     }
-  }, [guiModel, theme, selectedIndex]);
+  }, [guiModel, theme, selectedIndex, diagramDefaults]);
 
   const target = resolveInspectorTarget(rows, selectedIndex);
   const inspectorRow = target.inspectorRow;
@@ -292,6 +294,56 @@ export function GuiMode({
     });
   }
 
+  /**
+   * The `if` (non-parallel `branchStart`) enclosing `index` — either because
+   * `index` *is* that branchStart, or because it's a case/step nested inside
+   * one. Returns its `id`, or null when there's no enclosing `if` (top level,
+   * or the enclosing branch is a `fork`, where loop/merge jumps don't apply).
+   */
+  function enclosingIfId(rowsArg, index) {
+    if (index < 0 || !rowsArg[index]) return null;
+    const row = rowsArg[index];
+    if (row.kind === "branchStart" && !row.parallel) return row.id;
+    const startIdx = findEnclosingBranchStart(rowsArg, index);
+    if (startIdx < 0) return null;
+    const start = rowsArg[startIdx];
+    if (!start || start.parallel) return null;
+    return start.id;
+  }
+
+  function addMergeMarker() {
+    setDropOpen(false);
+    commit((draft) => {
+      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
+      draft.rows.splice(insertAt, 0, { kind: "mergeMarker", name: "", depth: 0 });
+    });
+  }
+
+  function addLoop() {
+    setDropOpen(false);
+    const branchId = enclosingIfId(rows, selectedIndex);
+    if (!branchId) return;
+    commit((draft) => {
+      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
+      draft.rows.splice(insertAt, 0, { kind: "branchLoop", loopBranchId: branchId, depth: 0 });
+    });
+  }
+
+  function addMerge() {
+    setDropOpen(false);
+    const branchId = enclosingIfId(rows, selectedIndex);
+    if (!branchId) return;
+    commit((draft) => {
+      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
+      draft.rows.splice(insertAt, 0, {
+        kind: "branchMerge",
+        mergeTarget: "",
+        mergeBranchId: branchId,
+        depth: 0,
+      });
+    });
+  }
+
   function openDrop() {
     const rect = chevronRef.current?.getBoundingClientRect();
     if (rect) setDropPos({ top: rect.bottom + 2, left: rect.left });
@@ -382,6 +434,10 @@ export function GuiMode({
                       onAddFork={addFork}
                       onAddSection={addSection}
                       onAddBranch={addSubBranch}
+                      onAddMergeMarker={addMergeMarker}
+                      onAddLoop={addLoop}
+                      onAddMerge={addMerge}
+                      canJump={enclosingIfId(rows, selectedIndex) != null}
                     />
                   )}
                 </div>

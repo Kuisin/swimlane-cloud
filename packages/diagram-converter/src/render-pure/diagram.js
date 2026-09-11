@@ -340,6 +340,9 @@ function renderDiagramSvg({
   showFooter = true,
   showDescription = true,
   branchColorArrows = true,
+  showGatewayIcons = true,
+  blockMargin = 0,
+  blockText = "truncate",
   interactive = false,
   selectedRowIndex = null,
   onRowSelect,
@@ -384,6 +387,7 @@ function renderDiagramSvg({
     decisionYOffset,
     branchCaseBendYOffset,
     stepBoxH,
+    stepTextLineH,
     loopDropPad,
     pageDescLineHeight,
     pageDescWrapCols,
@@ -436,6 +440,11 @@ function renderDiagramSvg({
     gutterInnerPad,
     nodeW,
   } = L;
+  // Hidden gateway icons collapse to a point, so every rail that aimed at a
+  // circle's edge or a diamond's tip meets its neighbours there instead.
+  const gatewayR = showGatewayIcons ? FORK_GATEWAY_RADIUS : 0;
+  const mergeNodeWEff = showGatewayIcons ? mergeNodeW : 0;
+  const mergeNodeHEff = showGatewayIcons ? mergeNodeH : 0;
   const leftGutter = showLeftGutter ? leftGutterWidth : 0;
   const hasRemarks = (rows || []).some((r) => r.kind === "step" && (r.remark || "").trim());
   const rightGutterVisible = showRightGutter && hasRemarks;
@@ -524,6 +533,49 @@ function renderDiagramSvg({
     }
     return extra;
   }
+  /** The step's box text as drawn: one truncated line, or wrapped lines. */
+  function stepTextLines(row) {
+    const text = (row?.text || "").trim();
+    const block = row?.blockRef ? blocks[row.blockRef] : null;
+    const shape = (block && block.shape) || "rounded";
+    const cols = blockMaxTextCols(shape, Boolean(block && block.icon));
+    if (blockText !== "wrap") return [truncateToColumns(text, cols)];
+    const lines = wrapWordsToColumns(text, cols);
+    return lines.length ? lines : [""];
+  }
+  /**
+   * Wrap at spaces where there are any; a run with no spaces (a CJK title,
+   * one over-long token) breaks by display column instead.
+   */
+  function wrapWordsToColumns(text, cols) {
+    const out = [];
+    for (const segment of text.split(/\r?\n/)) {
+      let line = "";
+      for (const word of segment.split(/\s+/).filter(Boolean)) {
+        const candidate = line ? `${line} ${word}` : word;
+        if (stringDisplayColumnWidth(candidate) <= cols) {
+          line = candidate;
+          continue;
+        }
+        if (line) out.push(line);
+        if (stringDisplayColumnWidth(word) <= cols) {
+          line = word;
+        } else {
+          const parts = wrapTextToDisplayColumns(word, cols);
+          out.push(...parts.slice(0, -1));
+          line = parts[parts.length - 1] || "";
+        }
+      }
+      out.push(line);
+    }
+    return out;
+  }
+  function stepBoxExtraH(row) {
+    return (stepTextLines(row).length - 1) * stepTextLineH;
+  }
+  function stepBoxHeight(row) {
+    return stepBoxH + stepBoxExtraH(row);
+  }
   function stepRowHeight(row, rowIndex) {
     if (!row || row.kind !== "step" || row.empty) return rowH;
     const counts = stepPropCounts(row);
@@ -531,7 +583,7 @@ function renderDiagramSvg({
     const propExtra =
       (maxPropsPerSide > 0 && propRowExtraHBase) +
       Math.max(0, maxPropsPerSide - 1) * propRowExtraHPerProps;
-    const heightWithProps = rowH + propExtra;
+    const heightWithProps = rowH + propExtra + stepBoxExtraH(row) + blockMargin;
     const titleText = (row.name || row.text || "").trim();
     const descExtra = showLeftGutter
       ? gutterTextExtraHeight(
@@ -561,7 +613,7 @@ function renderDiagramSvg({
     const row = rows[rowIndex];
     if (row?.kind === "step") {
       const yRow = rowMeta[rowIndex]?.y ?? 0;
-      return yRow + rowH / 2;
+      return yRow + (rowH + (row.empty ? 0 : stepBoxExtraH(row) + blockMargin)) / 2;
     }
     return rowCenterY(rowIndex);
   }
@@ -571,7 +623,7 @@ function renderDiagramSvg({
       const yRow = rowMeta[rowIndex]?.y ?? 0;
       return yRow + (stepRowHeightByIndex.get(rowIndex) || rowH);
     }
-    return stepBlockCenterY(rowIndex) + stepBoxH / 2;
+    return stepBlockCenterY(rowIndex) + stepBoxHeight(row) / 2;
   }
   function estimateTextWidth(text, base = estimateTextWidthBase) {
     if (!text) return base;
@@ -669,6 +721,11 @@ function renderDiagramSvg({
       rowMeta[i] = { y, kind: "branchMerge" };
       pushToActiveCase(i);
       y += branchMergeH;
+    } else if (r.kind === "mergeMarker") {
+      // Invisible: the merge arrow it attracts is what shows where it is.
+      stepRowHeightByIndex.set(i, 0);
+      rowMeta[i] = { y, kind: "mergeMarker" };
+      pushToActiveCase(i);
     } else if (r.kind === "groupStart") {
       stepRowHeightByIndex.set(i, groupMarkerH);
       rowMeta[i] = { y, kind: "groupStart" };
@@ -757,7 +814,7 @@ function renderDiagramSvg({
    * Position + width for a branch/fork case label chip, shared by the drawn
    * chip and its click target so the two can never drift apart. `dH` (the
    * gateway's half-height) is parallel-aware: a fork's gateway is a
-   * FORK_GATEWAY_RADIUS*2 circle, shorter than an `if`'s decisionDiamondH
+   * gatewayR*2 circle, shorter than an `if`'s decisionDiamondH
    * diamond, so treating both the same left a fork's label almost touching
    * the block below it. The result is also clamped upward (never pushed
    * down) so the label's drawn bottom edge keeps at least caseLabelGapBelow
@@ -809,7 +866,7 @@ function renderDiagramSvg({
       }
       return {
         fromX: mergeAnchorX(childFrame),
-        fromY: childFrame.yMerge + mergeH / 2 - 14,
+        fromY: childFrame.yMerge + mergeH / 2 - mergeNodeHEff / 2,
       };
     }
     const lastDirectStepIdx = lastMainFlowStepIdx(c);
@@ -1233,9 +1290,9 @@ function renderDiagramSvg({
    */
   function caseFanOutTarget(f, c) {
     const dCy = branchDecisionCy(f);
-    const dH = f.parallel ? FORK_GATEWAY_RADIUS * 2 : decisionDiamondH;
+    const dH = f.parallel ? gatewayR * 2 : decisionDiamondH;
     const bendY = dCy + dH / 2 + branchCaseBendYOffset;
-    const mH = f.parallel ? FORK_GATEWAY_RADIUS * 2 : mergeNodeH;
+    const mH = f.parallel ? gatewayR * 2 : mergeNodeHEff;
     const mergeTopY =
       f.yMerge != null ? f.yMerge + mergeH / 2 - mH / 2 - mergeArrowClearance : null;
     const child = c.childFrame;
@@ -1253,8 +1310,7 @@ function renderDiagramSvg({
     let showArrow = false;
     if (targetsNestedDecision) {
       targetX = frameAnchorX(child);
-      targetY =
-        branchDecisionCy(child) - (child.parallel ? FORK_GATEWAY_RADIUS : decisionDiamondH / 2);
+      targetY = branchDecisionCy(child) - (child.parallel ? gatewayR : decisionDiamondH / 2);
       labelClampY = targetY;
       const li = laneIndexForX(targetX);
       if (li >= 0) caseLaneWidth = laneWidth(li);
@@ -1282,7 +1338,7 @@ function renderDiagramSvg({
   function buildCaseFanOutEdgeD(f, c) {
     const startX = frameAnchorX(f);
     const dCy = branchDecisionCy(f);
-    const dH = f.parallel ? FORK_GATEWAY_RADIUS * 2 : decisionDiamondH;
+    const dH = f.parallel ? gatewayR * 2 : decisionDiamondH;
     const startY = dCy + dH / 2;
     const { targetX, targetY, showArrow, caseLaneWidth, bendY } = caseFanOutTarget(f, c);
     const sideOffset = c.offset || 0;
@@ -1322,10 +1378,33 @@ function renderDiagramSvg({
       .find((idx) => rows[idx]?.kind === "step" && !rows[idx].empty && rows[idx].role);
     return { loopIdx, prevStepIdx: prevStepIdx ?? null };
   }
-  function findStepIndexByMergeId(mergeId) {
+  function firstRealStepAfter(idx) {
+    for (let i = idx + 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (r.kind === "step" && !r.empty && r.role) return i;
+    }
+    return -1;
+  }
+  /**
+   * The step a merge lands on. A named target is a step's `id:` or a
+   * `[merge: <name>]` marker (then the step after it); a bare merge is the
+   * step after the next marker following its own `if`.
+   */
+  function resolveMergeTargetIdx(mergeIdx) {
+    const merge = rows[mergeIdx];
+    const name = (merge.mergeTarget || "").trim();
+    if (!name) {
+      const endIdx = rows.findIndex(
+        (r, i) => i > mergeIdx && r.kind === "branchEnd" && r.id === merge.mergeBranchId,
+      );
+      if (endIdx < 0) return -1;
+      const markerIdx = rows.findIndex((r, i) => i > endIdx && r.kind === "mergeMarker");
+      return markerIdx < 0 ? -1 : firstRealStepAfter(markerIdx);
+    }
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      if (r.kind === "step" && !r.empty && r.role && r.mergeId === mergeId) return i;
+      if (r.kind === "step" && !r.empty && r.role && r.mergeId === name) return i;
+      if (r.kind === "mergeMarker" && r.name === name) return firstRealStepAfter(i);
     }
     return -1;
   }
@@ -1339,7 +1418,7 @@ function renderDiagramSvg({
       if (idx < mergeIdx && rows[idx]?.kind === "step" && !rows[idx].empty && rows[idx].role)
         prevStepIdx = idx;
     }
-    const targetIdx = findStepIndexByMergeId(rows[mergeIdx].mergeTarget);
+    const targetIdx = resolveMergeTargetIdx(mergeIdx);
     if (targetIdx < 0) return null;
     return { mergeIdx, prevStepIdx, targetIdx };
   }
@@ -1430,14 +1509,15 @@ function renderDiagramSvg({
     const cx = row?.role && laneIndex(row.role) >= 0 ? nodeCenterX(rowIndex, row.role) : width / 2;
     let left = cx - nodeW / 2;
     let right = cx + nodeW / 2;
-    let top = stepBlockCenterY(rowIndex) - stepBoxH / 2;
+    const boxH = row?.kind === "step" ? stepBoxHeight(row) : stepBoxH;
+    let top = stepBlockCenterY(rowIndex) - boxH / 2;
     let bottom = stepBlockBottomY(rowIndex);
     if (!row || row.kind !== "step") {
       return { left, right, top, bottom };
     }
     const cy = stepBlockCenterY(rowIndex);
     const { left: leftProps, right: rightProps } = splitPropsBySide(row.props);
-    const docY = cy + stepBoxH / 2 - stepDocIconOffsetY;
+    const docY = cy + boxH / 2 - stepDocIconOffsetY;
     leftProps.forEach((prop, docIdx) => {
       const x = cx - nodeW / 2 + 55 - docW + docIdx * docGapX;
       left = Math.min(left, x);
@@ -1646,7 +1726,7 @@ function renderDiagramSvg({
       const frame = frames.find((f) => f.id === branchRow.id);
       if (!frame) return;
       toX = frameAnchorX(frame);
-      toY = branchDecisionCy(frame) - (frame.parallel ? FORK_GATEWAY_RADIUS : 25);
+      toY = branchDecisionCy(frame) - (frame.parallel ? gatewayR : 25);
     }
     const innerLastIdx = lastStepInsideGroup(startIdx, endIdx);
     if (innerLastIdx < 0) return;
@@ -1697,7 +1777,7 @@ function renderDiagramSvg({
         if (!frame) continue;
         return {
           x: frameAnchorX(frame),
-          targetY: branchDecisionCy(frame) - (frame.parallel ? FORK_GATEWAY_RADIUS : 25),
+          targetY: branchDecisionCy(frame) - (frame.parallel ? gatewayR : 25),
         };
       }
     }
@@ -1720,7 +1800,7 @@ function renderDiagramSvg({
         const startIdx = rows.findIndex((r) => r.kind === "branchStart" && r.id === row.id);
         const lastInBranch = startIdx >= 0 ? lastStepInBranchSpan(startIdx, i) : -1;
         const mergeCenterX = mergeAnchorX(frame);
-        const mergeBottomY = frame.yMerge + mergeH / 2 + 14;
+        const mergeBottomY = frame.yMerge + mergeH / 2 + mergeNodeHEff / 2;
         return {
           x: mergeCenterX,
           sourceY: mergeBottomY,
@@ -2203,22 +2283,23 @@ function renderDiagramSvg({
         const parallelGatewayStyle = resolveBranchStyle(f.decisionColor || "purple");
         const mCx = mergeAnchorX(f);
         const mCy = f.yMerge + mergeH / 2;
-        const mW = mergeNodeW;
-        const mH = mergeNodeH;
+        const mW = mergeNodeWEff;
+        const mH = mergeNodeHEff;
         const diamondPath = (cx, cy, w, h2) =>
           `M ${cx} ${cy - h2 / 2} L ${cx + w / 2} ${cy} L ${cx} ${cy + h2 / 2} L ${cx - w / 2} ${cy} Z`;
         return /* @__PURE__ */ h(
           "g",
           { key: `branch-${f.id}` },
           isParallel
-            ? /* @__PURE__ */ h("circle", {
-                cx: dCx,
-                cy: dCy,
-                r: FORK_GATEWAY_RADIUS,
-                fill: parallelGatewayStyle.bg,
-                stroke: parallelGatewayStyle.stroke,
-                strokeWidth: "1.6",
-              })
+            ? showGatewayIcons &&
+                /* @__PURE__ */ h("circle", {
+                  cx: dCx,
+                  cy: dCy,
+                  r: gatewayR,
+                  fill: parallelGatewayStyle.bg,
+                  stroke: parallelGatewayStyle.stroke,
+                  strokeWidth: "1.6",
+                })
             : /* @__PURE__ */ h(
                 Fragment,
                 null,
@@ -2363,7 +2444,7 @@ function renderDiagramSvg({
               }
             }
             const toX = mCx;
-            const toY = mCy - (isParallel ? FORK_GATEWAY_RADIUS : mH / 2);
+            const toY = mCy - (isParallel ? gatewayR : mH / 2);
             const bendY2 = toY - 14;
             const sideOffset = c.offset || 0;
             const needsMergeElbow = Math.abs(fromX - toX) > 0.5 || sideOffset !== 0 || stubCase;
@@ -2389,7 +2470,7 @@ function renderDiagramSvg({
             const stepTarget = caseStepLineTarget(afterIdx, c);
             if (!stepTarget) return null;
             const fromX = mergeAnchorX(child);
-            const fromY = child.yMerge + mergeH / 2 + 14;
+            const fromY = child.yMerge + mergeH / 2 + mergeNodeHEff / 2;
             const toX = stepTarget.x;
             const toY = stepTarget.y;
             const mid = (fromY + toY) / 2;
@@ -2410,21 +2491,23 @@ function renderDiagramSvg({
               markerEnd: cMarker2,
             });
           }),
-          isParallel
-            ? /* @__PURE__ */ h("circle", {
-                cx: mCx,
-                cy: mCy,
-                r: FORK_GATEWAY_RADIUS,
-                fill: parallelGatewayStyle.bg,
-                stroke: parallelGatewayStyle.stroke,
-                strokeWidth: "1.6",
-              })
-            : /* @__PURE__ */ h("path", {
-                d: diamondPath(mCx, mCy, mW, mH),
-                fill: theme.branchBg,
-                stroke: theme.branch,
-                strokeWidth: "1.6",
-              }),
+          !showGatewayIcons
+            ? null
+            : isParallel
+              ? /* @__PURE__ */ h("circle", {
+                  cx: mCx,
+                  cy: mCy,
+                  r: gatewayR,
+                  fill: parallelGatewayStyle.bg,
+                  stroke: parallelGatewayStyle.stroke,
+                  strokeWidth: "1.6",
+                })
+              : /* @__PURE__ */ h("path", {
+                  d: diamondPath(mCx, mCy, mW, mH),
+                  fill: theme.branchBg,
+                  stroke: theme.branch,
+                  strokeWidth: "1.6",
+                }),
         );
       }),
       rows.map((row, i) => {
@@ -2611,7 +2694,7 @@ function renderDiagramSvg({
         const cx = nodeCenterX(i, r.role);
         const cy = stepBlockCenterY(i);
         const boxW = nodeW;
-        const boxH = 44;
+        const boxH = stepBoxHeight(r);
         const fill = (block && block.bg) || lane.bg || theme.boxBg;
         const txtColor = (block && block.textColor) || lane.textColor || theme.boxText;
         const stroke = (block && block.borderColor) || theme.stroke;
@@ -2720,7 +2803,17 @@ function renderDiagramSvg({
                     fontWeight: "500",
                     textDecoration: diffStatus === "removed" ? "line-through" : undefined,
                   },
-                  truncateToColumns(r.text, blockMaxTextCols(shape, Boolean(blockIcon))),
+                  stepTextLines(r).map((line, k, all) =>
+                    /* @__PURE__ */ h(
+                      "tspan",
+                      {
+                        key: k,
+                        x: blockIcon ? cx + 8 : cx,
+                        dy: k === 0 ? -((all.length - 1) * stepTextLineH) / 2 : stepTextLineH,
+                      },
+                      line,
+                    ),
+                  ),
                 ),
           ),
           showStepBlockCaptions &&
@@ -2837,9 +2930,9 @@ function renderDiagramSvg({
         const nextBranchStartIdx = findNextSiblingBranchStart(rows, startIdx, endIdx);
         const dCx = frameAnchorX(f);
         const dCy = branchDecisionCy(f);
-        const dTopY = dCy - (f.parallel ? FORK_GATEWAY_RADIUS : 25);
+        const dTopY = dCy - (f.parallel ? gatewayR : 25);
         const mCx = mergeAnchorX(f);
-        const mBotY = f.yMerge + mergeH / 2 + (f.parallel ? FORK_GATEWAY_RADIUS : 14);
+        const mBotY = f.yMerge + mergeH / 2 + (f.parallel ? gatewayR : mergeNodeHEff / 2);
         const edges = [];
         const branchLastStep = lastStepInBranchSpan(startIdx, endIdx);
         if (prevStepIdx >= 0) {
@@ -2901,8 +2994,7 @@ function renderDiagramSvg({
           const nextRowY = rowMeta[nextBranchStartIdx]?.y;
           if (nextFrame && nextRowY != null) {
             const nextCx = frameAnchorX(nextFrame);
-            const nextTopY =
-              branchDecisionCy(nextFrame) - (nextFrame.parallel ? FORK_GATEWAY_RADIUS : 25);
+            const nextTopY = branchDecisionCy(nextFrame) - (nextFrame.parallel ? gatewayR : 25);
             const bend = (mBotY + nextTopY) / 2;
             const d =
               Math.abs(nextCx - mCx) < 0.5
@@ -2963,7 +3055,7 @@ function renderDiagramSvg({
             const dCy = branchDecisionCy(f);
             if (f.parallel) {
               const pad = hitTargetPad;
-              const r0 = FORK_GATEWAY_RADIUS;
+              const r0 = gatewayR;
               return /* @__PURE__ */ h(RowHitTarget, {
                 key: `hit-${i}`,
                 rowIndex: i,
@@ -3020,7 +3112,7 @@ function renderDiagramSvg({
             const mCy = f.yMerge + mergeH / 2;
             if (f.parallel) {
               const pad = hitTargetPad;
-              const r0 = FORK_GATEWAY_RADIUS;
+              const r0 = gatewayR;
               return /* @__PURE__ */ h(RowHitTarget, {
                 key: `hit-${i}`,
                 rowIndex: i,
@@ -3032,8 +3124,8 @@ function renderDiagramSvg({
                 onSelect: onRowSelect,
               });
             }
-            const mW = mergeNodeW;
-            const mH = mergeNodeH;
+            const mW = mergeNodeWEff;
+            const mH = mergeNodeHEff;
             return /* @__PURE__ */ h(RowHitTarget, {
               key: `hit-${i}`,
               rowIndex: i,

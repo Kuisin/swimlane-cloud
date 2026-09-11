@@ -13,6 +13,7 @@
 import {
   DEFAULT_COLUMN_TITLES,
   DIAGRAM_OPTION_DSL_MAP,
+  DIAGRAM_OPTION_VALUE_MAP,
   OPTION_COLUMN_TITLE_DSL_MAP,
 } from "@swimlane-cloud/diagram-converter/diagram-options";
 import { serializeDSLv2 } from "./serialize-dsl-v2.js";
@@ -60,6 +61,9 @@ function serializeOption(model) {
     if (options[field] !== undefined) {
       out.push(`${dslKey}: ${options[field]};`);
     }
+  }
+  for (const [dslKey, { field }] of Object.entries(DIAGRAM_OPTION_VALUE_MAP)) {
+    if (options[field] !== undefined) out.push(`${dslKey}: ${options[field]};`);
   }
   const page = model.page || {};
   const provided = new Set(model.providedColumnTitles || []);
@@ -182,6 +186,7 @@ function serializeStepLines(out, row, depth) {
   const blockSuffix = row.blockRef ? ` <${row.blockRef}>` : "";
   out.push(indent(depth, `[${row.role}: ${row.text}]${blockSuffix}`));
   if (row.mergeId) out.push(indent(depth, `id: ${row.mergeId};`));
+  if (row.level > 1) out.push(indent(depth, `level: ${row.level};`));
   if (row.name) out.push(indent(depth, `label: ${row.name};`));
   if (row.description) {
     const descLines = emitMultilineProperty("desc", row.description);
@@ -291,8 +296,16 @@ function serializeLineRows(rows) {
     }
 
     if (row.kind === "branchMerge") {
-      out.push(indent(depth, `merge: ${row.mergeTarget};`));
+      const target = (row.mergeTarget || "").trim();
+      out.push(indent(depth, target ? `merge: ${target};` : "merge;"));
       prevKind = "branchMerge";
+      continue;
+    }
+
+    if (row.kind === "mergeMarker") {
+      const name = (row.name || "").trim();
+      out.push(indent(depth, name ? `[merge: ${name}]` : "[merge]"));
+      prevKind = "mergeMarker";
       continue;
     }
 

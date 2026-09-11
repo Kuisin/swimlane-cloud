@@ -33,13 +33,27 @@ export {
 } from "./main-guard.ts";
 export { isCurrentRepoRules, REPO_RULES, REPO_RULES_PATH } from "./repo-rules.ts";
 export {
+  BLOCK_MARGIN_MAX,
+  BLOCK_TEXT_MODES,
+  DEFAULT_DIAGRAM_SETTINGS,
   DEFAULT_SETTINGS,
   isCurrentRepoSettings,
+  normalizeRepoSettingsText,
+  parseDiagramSettings,
   parseRepoSettings,
+  parseTemplateModes,
   repoSettingsJson,
   REPO_SETTINGS_PATH,
+  TEMPLATE_MODES,
+  TEMPLATE_SECTIONS,
 } from "./repo-settings.ts";
-export type { SwimlaneSettings } from "./repo-settings.ts";
+export type {
+  BlockTextMode,
+  DiagramSettings,
+  SwimlaneSettings,
+  TemplateMode,
+  TemplateSection,
+} from "./repo-settings.ts";
 export { createProtectionApi } from "./protection.ts";
 export type { ProtectionApi, ProtectionOutcome } from "./protection.ts";
 export { createPullsApi } from "./pulls.ts";

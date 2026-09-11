@@ -25,6 +25,9 @@ describe("tokenizeDslLine", () => {
       "section-start (Intake) #S1",
       "merge: target;",
       "[loop];",
+      "[merge];",
+      "[merge: done];",
+      "level: 2;",
       "résumé: 日本語のテキスト;",
     ];
     for (const line of lines) expect(concat(line)).toBe(line);
@@ -38,6 +41,18 @@ describe("tokenizeDslLine", () => {
     expect(types("endif")).toEqual(["keyword:endif"]);
     expect(types("end-if")).toEqual(["keyword:end-if"]);
     expect(types("<ref>")).toEqual(["ref:<ref>"]);
+  });
+
+  it("tokenizes [merge] / [merge: name] as one keyword/marker token, like [loop]", () => {
+    expect(types("[loop];")).toEqual(["keyword:[loop]", "punct:;"]);
+    expect(types("[merge];")).toEqual(["keyword:[merge]", "punct:;"]);
+    expect(types("[merge: done];")).toEqual(["keyword:[merge: done]", "punct:;"]);
+  });
+
+  it("recognises `level` as a property key, like `skip`/`id`", () => {
+    expect(types("level: 2;")).toEqual(["key:level", "punct::", "plain:2", "punct:;"]);
+    expect(types("id: fin;")).toEqual(["key:id", "punct::", "plain:fin", "punct:;"]);
+    expect(types("skip;")).toEqual(["keyword:skip", "punct:;"]);
   });
 
   it("colours inline keywords only on control-flow lines", () => {
