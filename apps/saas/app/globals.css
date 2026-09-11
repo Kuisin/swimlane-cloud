@@ -27,3 +27,30 @@ body {
     Arial,
     sans-serif;
 }
+
+/*
+ * Touch targets in the page headers.
+ *
+ * Every page's header carries the same handful of small controls — the
+ * language toggle, sign out, the back link, the project tabs. Sized for a
+ * mouse they come out between 16px and 26px tall, well under the ~44px a
+ * fingertip needs, and they sit close enough together that the wrong one is
+ * easy to hit.
+ *
+ * Scoped to `pointer: coarse` so a mouse keeps the compact header, and to
+ * `header` so it cannot reach the editor, which styles its own controls.
+ * `inline-flex` is what makes `min-height` mean anything on a link: an inline
+ * box ignores height entirely.
+ */
+@media (pointer: coarse) {
+  header a,
+  header button,
+  header select {
+    min-height: 36px;
+  }
+  header a,
+  header button {
+    display: inline-flex;
+    align-items: center;
+  }
+}
