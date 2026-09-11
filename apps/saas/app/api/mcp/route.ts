@@ -1,13 +1,15 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
-import { readDslRule, sectionNames } from "@/dsl-rule-sections";
+import { readDslRule, sectionNames } from "@/lib/dsl-rule-sections";
 
 /**
  * Public, unauthenticated MCP server for the kai-swimlane DSL: an LLM
  * connects here to read the syntax spec and check a draft document before
- * writing it to a file. Read-only — no tool here ever sees or touches a
- * user's actual repository, so no auth is needed for either tool.
+ * writing it to a file. Not covered by middleware.ts's auth matcher (it
+ * only gates /dashboard, /projects and /new) — deliberately, since this
+ * route never sees or touches a user's actual repository, only whatever
+ * text a tool call passes it and the bundled copy of dsl-rule.md.
  */
 const handler = createMcpHandler((server) => {
   server.registerTool(

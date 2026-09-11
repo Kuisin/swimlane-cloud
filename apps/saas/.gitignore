@@ -1,1 +1,4 @@
 .vercel
+# Synced from the repo-root dsl-rule.md by scripts/sync-dsl-rule.mjs; edit
+# the root file, not this copy.
+content/dsl-rule.md
