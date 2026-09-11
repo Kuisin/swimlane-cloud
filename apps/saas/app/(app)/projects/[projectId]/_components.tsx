@@ -1672,7 +1672,10 @@ function StepEditModal({
   const [name, setName] = useState(String(row.name ?? ""));
   const [description, setDescription] = useState(String(row.description ?? ""));
   const [remark, setRemark] = useState(String(row.remark ?? ""));
-  const [mergeId, setMergeId] = useState(String(row.mergeId ?? ""));
+  // No field for the step's `mergeId` (its `id:` line): a raw id is never
+  // shown or typed in the GUI. It is written and removed for you when a jump
+  // is pointed at this step or stops pointing at it. The patch below omits
+  // the key, so `applyPatch`'s spread leaves whatever the row already has.
   const [arrowLine, setArrowLine] = useState(String(row.arrowLine ?? "solid"));
   const [blockRef, setBlockRef] = useState(String(row.blockRef ?? ""));
   const [sel, setSel] = useState<Set<string>>(
@@ -1705,7 +1708,6 @@ function StepEditModal({
             name,
             description,
             remark,
-            mergeId,
             arrowLine,
             blockRef: blockRef || null,
             props: [...sel],
@@ -1783,13 +1785,6 @@ function StepEditModal({
         </Field>
         <Field label={t("stepEdit.arrow")}>
           <ArrowPicker value={arrowLine} onChange={setArrowLine} />
-        </Field>
-        <Field label={t("stepEdit.mergeId")}>
-          <input
-            value={mergeId}
-            onChange={(e) => setMergeId(e.target.value)}
-            className={FIELD_CLASS}
-          />
         </Field>
         {propList.length > 0 && (
           <Field label={t("stepEdit.props")}>
