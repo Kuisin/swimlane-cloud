@@ -32,9 +32,28 @@ export const BLOCK_MARGIN_MAX = 80;
 /**
  * DSL kebab keys → model fields for the options that are not booleans. Each
  * `parse` returns the stored value, or `null` with `expected` describing what
- * would have been accepted.
+ * would have been accepted; `format` writes the stored value back out when it
+ * is not simply its own string form.
+ *
+ * Declaration order is emission order — dsl-rule.md's canonical `/option/`
+ * order puts `lane-order` before `block-margin, block-text`.
  */
 export const DIAGRAM_OPTION_VALUE_MAP = {
+  "lane-order": {
+    field: "laneOrder",
+    expected: "a comma-separated list of role ids",
+    parse(raw) {
+      const ids = String(raw ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      // Written once, so a repeated id is the author saying the same thing
+      // twice; the first mention decides the position.
+      const out = [...new Set(ids)];
+      return out.length ? out : null;
+    },
+    format: (value) => (Array.isArray(value) ? value.join(", ") : String(value)),
+  },
   "block-margin": {
     field: "blockMargin",
     expected: `a whole number of pixels from 0 to ${BLOCK_MARGIN_MAX}`,

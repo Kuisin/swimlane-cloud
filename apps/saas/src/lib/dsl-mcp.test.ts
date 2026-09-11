@@ -35,7 +35,7 @@ const CLEAN = [
   "",
   "/line/",
   "[staff: Submit the claim]",
-  "if [manager] (Approved?) is (Yes) than #green",
+  "if (Approved?) is (Yes) than #green",
   "  [manager: Pay it]",
   "else-if (No) than #red",
   "  [staff: Revise]",

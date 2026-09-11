@@ -32,7 +32,7 @@ right-title: 備考 | Remarks;
 
 [engineer: 切り戻しを実行 | Redeploy the stable release]
 
-if [engineer] (ヘルスチェック OK？ | Health check OK?) is (はい | Yes) than #green
+if (ヘルスチェック OK？ | Health check OK?) is (はい | Yes) than #green
   [engineer: 監視を継続 | Keep monitoring]
 else-if (いいえ | No) than #red
   [engineer: 設定差分を確認 | Check configuration drift]

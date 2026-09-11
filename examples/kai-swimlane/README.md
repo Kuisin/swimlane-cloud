@@ -36,7 +36,7 @@ reader looks for the `@kai-swimlane` header on the first non-blank line, whereve
 | `/meta/` reserved keys | owner, status, tags, version, updated |
 | Fenced multi-line value | `/page/ description` and the credit-check `desc` |
 | Phases at root scope | `phase (受付 \| Intake) @intake #gray` |
-| `if` with a lane, an id and cases | `if [sales] (受注チャネルは？ …) @channel` |
+| `if` with an id and cases | `if (受注チャネルは？ …) is (Web) than @channel` |
 | Nested `if` inside a case | the special-approval decision in `order-to-cash.txt` |
 | `loop` to a named upstream step | `loop @credit-check`, `loop @mitigate`, `loop @orientation` |
 | Bare `loop` back to its own decision | the overdue-payment case, and both sub-processes |

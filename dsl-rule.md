@@ -83,7 +83,7 @@ phase (見積) #gray
     desc: 顧客要件を確認して見積を作成;
     remark: 金額が 100 万円超なら本部承認;
     id: quote;
-  if [manager] (承認する？) is (はい) than #green
+  if (承認する？) is (はい) than #green
     // 上長の一次判断のみ
     [system: 受注登録]
   else-if (いいえ) than #red
@@ -118,7 +118,7 @@ end-if
 ```
 
 ```
-@kai-swimlane@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;id:quote;if[manager](承認する？)is(はい)than#green/* 上長の一次判断のみ */[system:受注登録]else-if(いいえ)than#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]case(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)is(あり)than#red[sales:キャンセル受付][goto:done]else-if(なし)than#gray[manager:通常クローズ処理]end-if[sales:完了]id:done;@end
+@kai-swimlane@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;id:quote;if(承認する？)is(はい)than#green/* 上長の一次判断のみ */[system:受注登録]else-if(いいえ)than#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]case(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)is(あり)than#red[sales:キャンセル受付][goto:done]else-if(なし)than#gray[manager:通常クローズ処理]end-if[sales:完了]id:done;@end
 ```
 
 Nine of the surviving spaces are separators. Eight are invariant 2's fusion case — the left token
@@ -356,7 +356,7 @@ this table.
 | statement                           | suffixes                       | keys                                                                                                                                                     |
 | ----------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | step                                | `<block> +prop* glyph => path` | `label desc remark remark-desc note note-side id skip level`                                                                                             |
-| `if`                                | `[lane] @id #color`            | `question` _(the first parenthesised run, required)_, `firstCase` _(the run after `is`, optional)_, `lane`, `desc`, `note`, `note-side`                  |
+| `if`                                | `@id #color`                   | `question` _(the first parenthesised run, required)_, `firstCase` _(the run after `is`, optional)_, `desc`, `note`, `note-side`                          |
 | `else-if` / `case` / `fork`         | `@id #color`                   | `label` _(the parenthesised run, optional — a blank or absent one is the unlabelled, catch-all clause; on `fork` it names path 1)_, `note`, `note-side`  |
 | `section` / `branch` / `phase`      | `@id #color`                   | `name` _(the parenthesised run)_, `desc`, `note`, `note-side`; with no name the display name is the translatable constant `Section` / `Branch` / `Phase` |
 | closers, `loop`, `[goto: id]`, `[]` | —                              | **none**                                                                                                                                                 |
@@ -385,7 +385,9 @@ keys are numeric or enumerated rather than boolean and are read identically by b
 box, and `block-text` is the enum `truncate | wrap`, default `truncate`, deciding whether a step
 text longer than its box is cut or allowed to run onto further lines. `i18n-storage` is the enum
 `as-written | catalog | inline`, default `as-written`; `lang` is a tag declared by `@lang`;
-`lane-order` is a list of role ids; `left-title left-subtitle right-title right-subtitle` are
+`lane-order` is a comma-separated list of role ids, defaulting to the implicit order described
+under _Lane order_, and an empty list is an error rather than "no opinion"; `left-title
+left-subtitle right-title right-subtitle` are
 translatable text defaulting `Procedure` / `Description` / `Remark` / `""`, readable from `/page/`
 too, `/option/` winning when both carry one. `/meta/` has five reserved typed keys — `owner` (one
 string, a comma being a character), `status` (`draft | review | approved | deprecated`), `tags` (a
@@ -453,20 +455,27 @@ rows a jump can name or sit between. A **control frame** — an `if` clause, a `
 transparent to every flow rule, so it never appears in `scopePath`, a row's chain of flow scopes
 from the root. A body **terminates** when its last row is a jump, or an `if` or `fork` all of whose
 bodies terminate. Every opener takes an optional id and an optional colour last, `@id` and `#color`
-read in either order. The slot order is `keyword [lane]? (text)? @id? #color?` for `fork`,
-`section`, `branch` and `phase`, and `if [lane]? (question) is (label)? than @id? #color?` for
-`if`, whose first clause is fused onto its own line; the parenthesised run is optional on every
-opener but `if`, and an opener without one takes the display constant named in _Per-statement key
-sets_. `if`, `fork`, `section` and `phase` ids are jump targets; `else-if`, `case` and `branch`
-ids exist only for translation overrides and GUI and diff stability.
+read in either order. The slot order is `keyword (text)? @id? #color?` for `fork`, `section`,
+`branch` and `phase`, and `if (question) is (label)? than @id? #color?` for `if`, whose first
+clause is fused onto its own line; the parenthesised run is optional on every opener but `if`, and
+an opener without one takes the display constant named in _Per-statement key sets_. **No opener
+takes a lane selector.** `if [sales] (q) …` once did — it was read and kept and nothing was ever
+drawn from it — and is now `laneSelectorRemoved`; the gateway sits in the lane of the row before
+it, and the order of the lanes themselves is `/option/ lane-order:`. `if`, `fork`, `section` and
+`phase` ids are jump targets; `else-if`, `case` and `branch` ids exist only for translation
+overrides and GUI and diff stability.
 
 ### `if` / `else-if`
 
-`if` takes an optional lane, written `[roleId]` immediately after the keyword; it is an ordinary
-role reference populating the IR's `if.lane`, and when it is omitted the renderer keeps today's
-derived placement and the formatter never materialises one. A bracket run containing an unescaped
-`:` is a step head and one without is a lane reference, and an opener's bracket always follows a
-keyword.
+`if` takes **no lane**. It once took one, written `[roleId]` immediately after the keyword, and
+nothing was ever drawn from it: the diamond sat in the lane of the row above either way. Rather
+than make it real, the slot is gone, so `if [sales] (q) is (a) than` is `laneSelectorRemoved` —
+the bracket is consumed by the diagnostic so it cannot be re-read as a step, and the rest of the
+statement parses as usual. Whitespace is not structural, so an opener is routinely followed by a
+bracket that is a statement of its own; a run containing an unescaped `:` is a step head, `[]` is
+a spacer, and only a bare id in brackets directly after an opener is the removed selector. **Update
+DSL** strips it. Where the diamond is drawn stays derived from the preceding row; what the lanes'
+own left-to-right order is, is `/option/ lane-order:`.
 
 **There is no bare `if`.** An `if` names its own first clause on its own line, `if (question) is
 (label) than`, so the opener and the first clause are one statement and the first clause's body
@@ -713,11 +722,18 @@ additions outside it must satisfy the policy. A pin reached through an intermedi
 unless the policy sets `direct: true`; a bundle that shadows a pinned key fails; and a
 byte-identical re-declaration of a pinned key is still an override.
 
-**Lane order.** A lane's position is where its id is first introduced in the merge sequence:
-imported roles in merge order, then local `/role/` declarations in source order, then roles first
-seen in `/line/`. A local definition overriding an imported role keeps its imported position, and a
-lane is **drawn** iff a step references it, it is declared locally, or `/option/ lane-order:` names
-it.
+**Lane order.** Implicitly, a lane's position is where its id is first introduced in the merge
+sequence: imported roles in merge order, then local `/role/` declarations in source order, then
+roles first seen in `/line/`. A local definition overriding an imported role keeps its imported
+position.
+
+`/option/ lane-order:` **overrides that**: the roles it names are drawn first, left to right in the
+order written, and every lane it does not name follows them in the implicit order above, unchanged
+relative to one another. A repeated id counts at its first mention. A name that is no role at all
+is `laneOrderUnknown` — a **warning**, so the document still renders — and is dropped from the
+order; it never invents a lane. A lane is **drawn** iff a step references it, it is declared
+locally, or `lane-order` names it, which is how a column is reserved for a lane the flow has not
+reached yet.
 
 ## Multiple languages
 
@@ -882,8 +898,9 @@ glyph        := "->" | "~>" | "..>" | "-.>" | "-->"  -- longest match; "->" is n
 
 block        := ifBlock | forkBlock | sectionBlock | branchBlock | phaseBlock
 ifBlock      := ifOpen row* elseIfClause* "end-if"
-ifOpen       := "if" lane? lparen text rparen
+ifOpen       := "if" lparen text rparen
                 "is" (lparen text rparen)? "than" idSlot? color? property*
+                -- no lane slot: `if [x] (q)` is `laneSelectorRemoved`, not a production.
                 -- the first clause is fused onto the opener: there is no bare `if`.
                 -- The question is required, the label after "is" is not, and "than"
                 -- closes the clause; the rows after it are the first clause's body,
@@ -903,7 +920,7 @@ groupClose   := "end-section" | "end-branch" | "end-phase"   -- must match the o
 jump         := "loop" ("@" id)?                     -- bare: back to the enclosing if
 gotoStmt     := "[" "goto" ":" id "]"                -- a bracket statement, never a step; no bare
                                                      -- form, so the id is required; ASCII ":" only
-lane         := "[" id "]"                           idSlot := "@" id
+idSlot       := "@" id
 color        := "#" (paletteName | hex)              -- hex is 3, 4, 6 or 8 digits
 
 text         := seg (SEP seg)*                       -- segments only in a translatable position
@@ -954,7 +971,7 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | `[goto: id]` at the root, in a `section` or in a `phase` (C04); a row after `loop @quote` (C05)                                                    | jumps are legal in every body; nothing is deleted, so the diagnostic survives format-on-save                                                                                                                       | none; `unreachableRow`                                                                       |
 | `loop @retry` where `@retry` names an `if` (C07)                                                                                                   | legal — every opener takes an optional `@id`, which is also what makes control text addressable                                                                                                                    | none                                                                                         |
 | Bare `loop` inside a `section` inside an `if` clause; with no enclosing `if` (C08)                                                                         | searches outward through every frame kind; the fix offers each upstream node that already has an id                                                                                                                | `unknownId`                                                                                  |
-| `if [manager] (承認する？) is (はい) than`, `if [] (q) is () than` (C09)                                                                                                         | the lane populates the IR's `if.lane`; omitted means "keep today's derived placement"                                                                                                                              | `emptyValue`                                                                                 |
+| `if [manager] (承認する？) is (はい) than` (C09); `fork` on one line and `[a: x]` on the next                                                                                    | the selector is gone: the bracket is consumed by the diagnostic, the rest of the statement still parses, and **Update DSL** strips it. Only a bare id in brackets right after an opener is the selector, so the step, the spacer and `[goto: …]` that may follow one are untouched | `laneSelectorRemoved`; none                                                                  |
 | A bare `if (q)`, an `if (q) is (a)` with no `than` (C10); an `if` with no clause (C11)                                                             | the first two are rejected; the third is unwritable, the first clause being part of the opener. An empty clause _body_, a blank `is () than` and a blank `else-if () than` are all legal and draw a bare edge      | `malformedIf`                                                                                |
 | `fork (通知)` (C12)                                                                                                                                | names path 1 exactly as `case (出荷)` names path 2; there is no name for the block                                                                                                                                 | none                                                                                         |
 | `end-if` while a `section` is open; `end-branch` closing a `section` (C14)                                                                         | refused, the frame closed anyway so nothing cascades                                                                                                                                                               | `closerMismatch`                                                                             |
@@ -1061,6 +1078,7 @@ delimiter or a key — exactly the value-level codes listed below as errors.
 | `keyNotAllowedHere`      | error    | format | "…" is not a property of "…" (allowed: …); `unset:` needs a mergeable section                                                                                                                      | Change to `note:` / Move under the step           |
 | `flowRowOutsideLine`     | error    | format | flow row outside `/line/`                                                                                                                                                                          | Move into `/line/`                                |
 | `malformedIf`            | error    | format | `if` requires `is (…) than`; an `is (…)` clause must end with `than`; `else-if` must end with `than`; `if` requires a question; `else-if` outside an `if`, `case` outside a `fork`                  | Insert `is (…) than` / Insert `than`              |
+| `laneSelectorRemoved`    | error    | format | "…" takes no `[lane]` — the gateway is drawn in the lane of the row before it, and a group opener spans every lane                                                                                 | Delete the selector / Run **Update DSL**          |
 | `closerMismatch`         | error    | format | "…" closes "…", or closes nothing, while "…" is still open                                                                                                                                         | Insert the missing closer / Delete                |
 | `unclosedBlock`          | error    | format | "…" is not closed (missing "…")                                                                                                                                                                    | Insert the closer at the closure point            |
 | `frameNotAllowedHere`    | error    | format | `phase` must be at the top level and phases do not nest; `branch` may not nest inside `branch`                                                                                                     | Replace with `section (…)` / Move it out          |
@@ -1130,6 +1148,7 @@ diff — never silently, and never as part of a save. Spelling rewrites:
 | a later `case (b) #c`, not the first, outside a `fork`; a blank `case ()`                    | `else-if (b) than #c`; `else-if () than`                                                    |
 | a bare `else #c`, `else than #c` — the oldest spelling, no parens                            | `else-if () than #c` — there is no bare `else` and no `elseif`                              |
 | a fork's `and (b) #c` (the `fork (a)` opener line itself is unchanged)                       | `case (b) #c` — `and` is gone and `case` is the fork's path separator now                   |
+| an opener's lane selector — `if [sales] (q) …`, `section [sales] (n) …`                      | the selector deleted, the rest of the line kept — it was read and never drawn from, and the slot is gone, so a file that still carries one is rewritten rather than left to error |
 | an already-current `if (q) is (a) than` / `else-if (b) than` / fork `case (b)`               | unchanged — the rewrite matches only the older spellings, so it is idempotent                |
 | `[loop]`, `[loop];`; `merge: id;` and `[merge: id]`                                          | `loop`; `[goto: id]`                                                                        |
 | bare `merge;` and `[merge]`; a `[merge]` / `[merge: name]` landing marker in the flow        | **nothing** — left untouched, so the reader errors on the line (see below)                  |

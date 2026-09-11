@@ -69,7 +69,7 @@ right-title: 備考 | Remarks;
 
 /line/
 phase (検知 | Detection) @detect #gray
-  if [support] (検知経路は？ | Detected by?) is (監視アラート | Monitoring alert) than @source #blue
+  if (検知経路は？ | Detected by?) is (監視アラート | Monitoring alert) than @source #blue
     [system: アラートをチケット化 | Open a ticket from the alert] <external> +TICKET
   else-if (顧客報告 | Customer report) than #orange
     [support: 事象を聞き取り | Take the report] +TICKET
@@ -83,7 +83,7 @@ phase (検知 | Detection) @detect #gray
 end-phase
 
 phase (対応 | Response) @respond #red
-  if [support] (重大度は？ | Severity?) is (Sev1) than @severity #red
+  if (重大度は？ | Severity?) is (Sev1) than @severity #red
     fork (顧客連絡 | Customer notice) #purple
       [support: ステータスページ更新 | Update the status page]
     case (暫定対処 | Mitigation) #orange
@@ -96,7 +96,7 @@ phase (対応 | Response) @respond #red
   else-if (Sev2) than #orange
     [engineer: 暫定対処 | Mitigate]
       id: mitigate;
-    if [engineer] (収束した？ | Contained?) is (はい | Yes) than #green
+    if (収束した？ | Contained?) is (はい | Yes) than #green
       [support: 顧客へ経過連絡 | Send a progress update]
     else-if (いいえ | No) than #red
       [engineer: 原因調査を継続 | Keep investigating] ~>
@@ -119,7 +119,7 @@ section (振り返り | Retrospective) @retro #blue
     時系列、根本原因、再発防止策。
     非難しないことを原則とする。
     ```;
-  if [manager] (再発防止策は十分？ | Prevention sufficient?) is (はい | Yes) than #green
+  if (再発防止策は十分？ | Prevention sufficient?) is (はい | Yes) than #green
     [manager: 承認 | Approve]
   else-if (いいえ | No) than #red
     [engineer: 対策を見直す | Revise the actions]

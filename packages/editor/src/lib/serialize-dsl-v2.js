@@ -170,8 +170,9 @@ function serializeOption(model, languages) {
   for (const [dslKey, field] of Object.entries(DIAGRAM_OPTION_DSL_MAP)) {
     if (options[field] !== undefined) out.push(`${dslKey}: ${options[field]};`);
   }
-  for (const [dslKey, { field }] of Object.entries(DIAGRAM_OPTION_VALUE_MAP)) {
-    if (options[field] !== undefined) out.push(`${dslKey}: ${options[field]};`);
+  for (const [dslKey, { field, format }] of Object.entries(DIAGRAM_OPTION_VALUE_MAP)) {
+    if (options[field] === undefined) continue;
+    out.push(`${dslKey}: ${format ? format(options[field]) : options[field]};`);
   }
   const page = model.page || {};
   const provided = new Set(model.providedColumnTitles || []);
@@ -367,7 +368,6 @@ function serializeLineRows(rows, languages) {
           : "";
         out.push(indent(controlDepth, `fork (${label})${idSuffix}${color}`));
       } else {
-        const lane = row.lane ? `[${row.lane}] ` : "";
         const cond = joinLangs(row.cond, row.cond$langs, languages.length);
         // A GUI-normalized model already pulled a non-blank firstCase out
         // into its own row — fold it back into the fused is (...) than
@@ -378,9 +378,7 @@ function serializeLineRows(rows, languages) {
         const firstCase = extracted
           ? joinLangs(extracted.label, extracted.label$langs, languages.length)
           : joinLangs(row.firstCase, row.firstCase$langs, languages.length);
-        out.push(
-          indent(controlDepth, `if ${lane}(${cond}) is (${firstCase}) than${idSuffix}${color}`),
-        );
+        out.push(indent(controlDepth, `if (${cond}) is (${firstCase}) than${idSuffix}${color}`));
       }
       prevKind = "branchStart";
       continue;

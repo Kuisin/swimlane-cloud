@@ -142,6 +142,7 @@ Anything you don't write keeps its default.
 | `show-gateway-icons`                    | `true` / `false` — the glyph inside an `if` diamond and a `fork` bar | `true`                     |
 | `block-margin`                          | a whole number of pixels, `0`–`80` — the gap around a step box       | `0`                        |
 | `block-text`                            | `truncate` or `wrap` — what a too-long step text does                | `truncate`                 |
+| `lane-order`                            | role ids, comma-separated — the left-to-right order of the lanes     | declaration order          |
 | `left-title`, `left-subtitle`           | text — the left gutter's two headings                                | `Procedure`, `Description` |
 | `right-title`, `right-subtitle`         | text — the right gutter's two headings                               | `Remark`, empty            |
 
@@ -153,8 +154,20 @@ is short for `show-header: true;`. The four headings may also be written in
 Five more keys are accepted and kept but change nothing today:
 `show-notes`, `auto-define`, `i18n-strict`, `i18n-uniform-layout` and
 `i18n-storage`. Write them if a template you share expects them; don't expect
-them to do anything yet. `lane-order` is **not** accepted — it's reported as
-an unknown key. To reorder the lanes, reorder their `/role/` definitions.
+them to do anything yet.
+
+`lane-order` names the roles you want drawn first, left to right:
+
+```
+/option/
+lane-order: sales, manager, system;
+```
+
+Every lane you don't name follows the ones you do, in the order it would have
+had anyway — so naming one role is enough to pull it to the left and leave the
+rest alone. Naming a role no step has reached yet reserves an empty column for
+it. A name that isn't a role at all is a warning, not an error: it's skipped,
+the rest of the order still applies, and the diagram still draws.
 
 ### `/role/`, `/block/` and `/prop/`
 
@@ -321,12 +334,6 @@ then draft the quote.
 The ten colour names are `blue`, `green`, `red`, `orange`, `purple`,
 `gray`, `black`, `pink`, `teal` and `yellow`.
 
-A decision may name a lane, in square brackets between `if` and its
-question: `if [sales] (Approved?) is (Yes) than`. Only `if` takes it. It is
-read and kept through a save, but **nothing is drawn from it yet** — the
-diamond still appears in the lane of the step above it. Write it to record
-whose decision it is; don't expect it to move anything.
-
 ### Jumps
 
 There are no landing markers: a jump always names a node that is already
@@ -440,6 +447,13 @@ Each of these is an error that names the replacement: `endif` → `end-if`,
 a fork's `and (b)` → `case (b)`, `section-start (n)` → `section (n)`,
 `start-point` → `section`, `end-point` → `end-section`.
 
+An opener's lane selector — `if [sales] (Approved?) is (Yes) than` — is gone
+too: delete the brackets and what's between them. It used to be read and kept
+on save, and nothing was ever drawn from it, so removing it changes no
+diagram. A decision is drawn in the lane of the row above it; to change the
+order of the lanes themselves, use `/option/ lane-order:`. **Update DSL**
+strips the selector for you.
+
 ### Migrating an older file
 
 A file written before this grammar — the plain `@kai-swimlane-v2` (or `2`)
@@ -453,7 +467,8 @@ diagram on a branch across in one commit: the header becomes
 `if (q) is (a) than`; a later `case (b)` becomes `else-if (b) than`; a bare
 `else` becomes `else-if () than`; a fork's `and (b)` becomes `case (b)`;
 `[loop]` becomes `loop`; `merge: id;` and `[merge: id]` become `[goto: id]`;
-and a step's `props:` / `arrow:` / `link:` lines become the suffixes `+prop`,
+an opener's lane selector, `if [sales] (q) …`, loses the brackets; and a
+step's `props:` / `arrow:` / `link:` lines become the suffixes `+prop`,
 an arrow glyph and `=> path`. A step's `id:` line is already current and is
 left exactly as it is. Anything already written the current way passes
 through untouched, so running Update DSL twice is the same as running it
@@ -478,11 +493,11 @@ unless this table says otherwise.
 | Title, page description, header and footer slots                                                                                                                        | Editable                          | In **Settings**. A slot is hidden while its `show-…` switch is off                                                                  |
 | Gutter headings                                                                                                                                                         | Editable                          | Left pair hidden while the left gutter is off, right pair while the right gutter is off                                             |
 | `show-left-gutter`, `show-right-gutter`, `show-header`, `show-footer`, `show-description`, `show-step-block-captions`, `merge-at-previous-block`, `branch-color-arrows` | Editable                          | Checkboxes in **Settings**                                                                                                          |
-| `show-gateway-icons`, `block-margin`, `block-text`, `show-notes`, `auto-define`, `i18n-strict`, `i18n-uniform-layout`, `i18n-storage`                                   | **Text mode only**                | No control yet; the values are preserved                                                                                            |
+| `show-gateway-icons`, `block-margin`, `block-text`, `lane-order`, `show-notes`, `auto-define`, `i18n-strict`, `i18n-uniform-layout`, `i18n-storage`                     | **Text mode only**                | No control yet; the values are preserved                                                                                            |
 | Role, block and side-note definitions                                                                                                                                   | Editable                          | Every property, plus add and delete                                                                                                 |
 | `unset:` in a definition                                                                                                                                                | **Text mode only**, and rewritten | Saving writes the definition's finished keys instead — the result is the same, the line isn't                                       |
 | Renaming a definition's `<id>`                                                                                                                                          | **Text mode only**                | The id is shown but not editable                                                                                                    |
-| Lane order                                                                                                                                                              | **Text mode only**                | Lanes appear in the order their `/role/` definitions do; reorder the definitions to reorder the lanes                               |
+| Lane order                                                                                                                                                              | **Text mode only**                | Lanes appear in the order their `/role/` definitions do, unless `/option/ lane-order:` overrides it; both are edited in Text mode   |
 | Add, edit, delete, reorder a step                                                                                                                                       | Editable                          | Up/down and **Move to…** stay inside the enclosing branch; drag can cross branches, and a drag that would break the file is refused |
 | `<block>` on a step                                                                                                                                                     | Editable                          | With a visual picker                                                                                                                |
 | `label:`, `desc:`, `remark:`, `+prop`, arrow                                                                                                                            | Editable                          | Under **More options**                                                                                                              |
@@ -493,7 +508,6 @@ unless this table says otherwise.
 | `remark-desc:`                                                                                                                                                          | **Text mode only**, and rewritten | Saving folds it into a single `remark:` — the text survives, the two-line form doesn't                                              |
 | The spacer `[]`                                                                                                                                                         | Visible, deletable                | Can't be created or edited in Visual mode                                                                                           |
 | `if` / `else-if`, the question, outcome labels, colours                                                                                                                 | Editable                          | Colours are swatches, not names                                                                                                     |
-| `if [lane]`                                                                                                                                                             | **Text mode only**                | Kept on save; nothing is drawn from it yet                                                                                          |
 | `fork` / `case`                                                                                                                                                         | Insertable, colour editable       | A parallel path can carry a label in the grammar, but Visual mode doesn't expose a field for it yet — set one in Text mode          |
 | `section` / `branch` / `phase`, name and colour                                                                                                                         | Editable                          | No way to turn one into another; `phase` is shown as a group but can only be created as a `section` or `branch`                     |
 | `loop`, `loop @id`                                                                                                                                                      | Insertable only                   | Nothing to configure                                                                                                                |
