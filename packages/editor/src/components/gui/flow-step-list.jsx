@@ -91,7 +91,7 @@ export function FlowStepList({
               className={`sw-flow-badge sw-badge-${rowBadgeKind(row)}`}
               style={branchCaseBadgeStyle(row)}
             >
-              {rowBadgeLabel(row, t)}
+              {rowBadgeLabel(row, t, rows, index)}
             </span>
             {lane && (
               <span

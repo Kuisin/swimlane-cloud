@@ -186,9 +186,13 @@ export const EN = {
   "badge.step": "step",
   "badge.blank": "blank",
   "badge.if": "if",
-  "badge.case": "case",
+  // An if's first clause is fused onto the `if` line as `is (…) than`; every
+  // later one is its own `else-if (…) than`. A fork's non-first path is
+  // `case (…)` — `case` says nothing about an `if` any more.
+  "badge.firstCase": "is",
+  "badge.case": "else-if",
   "badge.otherwise": "otherwise",
-  "badge.and": "and",
+  "badge.forkCase": "case",
   "badge.fork": "fork",
   "badge.endif": "end-if",
   "badge.endfork": "end-fork",
@@ -264,9 +268,9 @@ export const EN = {
   "help.block": "Reusable step styles referenced as [role: text] <blockId>.",
   "help.prop": "Side annotations attached to a step via one or more +propId suffixes.",
   "help.ifCase":
-    'Exclusive branch: if (question) opens it, case (label) starts each path, a blank case () is the catch-all — there is no "else".',
+    'Exclusive branch: if (question) is (label) than opens it and names its first path, else-if (label) than starts each later one, and a blank else-if () than is the catch-all — there is no bare "else".',
   "help.line":
-    "The flow. [role: text] steps, if / case / end-if, fork / and / end-fork, branch / end-branch, section / end-section, goto / merge, loop.",
+    "The flow. [role: text] steps, if / else-if / end-if, fork / case / end-fork, branch / end-branch, section / end-section, goto / merge, loop.",
   "help.icon": "#name for a Lucide icon (e.g. #check, #zap), or any plain character/emoji.",
   "help.comment":
     "Lines starting with // or /* … */ are comments. Inside /line/ they're kept attached to the next line on format.",
@@ -516,9 +520,10 @@ export const JA = {
   "badge.step": "ステップ",
   "badge.blank": "空行",
   "badge.if": "分岐",
+  "badge.firstCase": "最初",
   "badge.case": "ケース",
   "badge.otherwise": "その他",
-  "badge.and": "並列",
+  "badge.forkCase": "並列",
   "badge.fork": "フォーク",
   "badge.endif": "end-if",
   "badge.endfork": "end-fork",
@@ -592,9 +597,9 @@ export const JA = {
   "help.block": "再利用するステップ形状。[role: text] <blockId> で参照します。",
   "help.prop": "ステップに付ける注釈。+propId のサフィックス（複数可）で付与します。",
   "help.ifCase":
-    "排他分岐：if (質問) で開始し、case (ラベル) が各パス。空の case () がその他すべて — 「else」という綴りはありません。",
+    "排他分岐：if (質問) is (ラベル) than で開始し、最初のパスも同じ行で名付けます。以降のパスは else-if (ラベル) than、空の else-if () than がその他すべて — 単独の「else」という綴りはありません。",
   "help.line":
-    "フロー本体。[role: text] のステップ、if / case / end-if、fork / and / end-fork、branch / end-branch、section / end-section、goto / merge、loop。",
+    "フロー本体。[role: text] のステップ、if / else-if / end-if、fork / case / end-fork、branch / end-branch、section / end-section、goto / merge、loop。",
   "help.icon":
     "#名前 で Lucide アイコンを指定（例：#check、#zap）。# 無しは文字・絵文字としてそのまま表示。",
   "help.comment":

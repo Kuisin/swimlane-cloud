@@ -179,14 +179,13 @@ section (初期化・アップロード) #blue
   label: F_FILE_OPEN;
   remark: OPEN DATASET ... FOR INPUT IN TEXT MODE;
 
-if (オープン成功?) #red
-case (いいえ)
+if (オープン成功?) is (いいえ) than #red
   [role_program: S021 を表示してリスト処理を終了する] <block_reject> +ERROR_LIST
   label: オープン失敗;
   desc: SY-SUBRC <> 0 の場合、読み込み失敗メッセージを出して終了する;
   [goto: finish_error]
 
-case ()
+else-if () than
   [role_file: ファイルを1行ずつ読み込む] <block_system>
   label: F_FILE_READ;
   desc: READ DATASET を EOF まで繰り返し、1行ずつワーク領域へ取得する;
@@ -200,14 +199,13 @@ case ()
   [role_program: 読込件数を確認する] <block_neutral> +AUDIT
   label: 件数チェック;
   desc: DESCRIBE TABLE で G_CNT_ALL を設定する;
-  if (読込件数) #red
-  case (0件)
+  if (読込件数) is (0件) than #red
     [role_program: S020 を表示しエラーフラグをONにして終了する] <block_reject> +ERROR_LIST
     label: データなし;
     desc: ファイルにデータが無い場合は主処理へ進まない;
     [goto: finish_error]
 
-  case ()
+  else-if () than
     [role_program: 伝票登録処理へ進む] <block_approve>
     label: アップロード完了;
     remark: G_FLG_ERR が未設定のまま次工程へ;
@@ -228,14 +226,13 @@ section (会計伝票登録) #purple
   desc: 会社コード(BUKRS)と参照伝票番号(XBLNR)の組み合わせで既存履歴を確認する;
   remark: SELECT SINGLE ... FROM ZTR0500;
 
-if (履歴重複?) #red
-case (あり)
+if (履歴重複?) is (あり) than #red
   [role_program: エラー一覧へ追加し、その伝票の登録をスキップする] <block_reject> +ERROR_LIST +HISTORY
   label: 重複エラー;
   desc: S024 をメッセージ変数へ入れ、F_SET_LIST で G_TAB_LIST に追加する;
   [goto: next_document]
 
-case ()
+else-if () than
   [role_bapi: BAPIヘッダと明細テーブルを作成する] <block_system> +BAPI_DOC
   label: BAPIデータ組立;
   desc: 第1明細で DOCUMENTHEADER を作成し、全明細で ITEMNO_ACC・勘定科目・金額を設定する。貸方(50)は金額をマイナスにする;
@@ -244,13 +241,12 @@ case ()
   label: 伝票登録;
   desc: 同一伝票の最終明細到達時に BAPI を実行し、RETURN テーブルを取得する;
   remark: FORM F_CALL_FUNC;
-  if (BAPI返却結果) #red
-  case (エラーあり)
+  if (BAPI返却結果) is (エラーあり) than #red
     [role_program: RETURN の E/A メッセージを一覧化してロールバックする] <block_reject> +RETURN_MSG +ERROR_LIST
     label: BAPIエラー;
     desc: 各 RETURN をメッセージ化して F_SET_LIST に追加し、BAPI_TRANSACTION_ROLLBACK を実行する;
 
-  case ()
+  else-if () than
     [role_bapi: BAPIトランザクションをコミットする] <block_approve>
     label: COMMIT;
     remark: BAPI_TRANSACTION_COMMIT;
@@ -258,13 +254,12 @@ case ()
     label: F_INSERT_ZTR0500;
     desc: 汎用モジュール Z_TGL_00 で BUKRS と XBLNR を履歴テーブルへ登録する;
     remark: 成功時は G_CNT_SUCC を加算;
-    if (履歴登録) #red
-    case (失敗)
+    if (履歴登録) is (失敗) than #red
       [role_program: エラーメッセージを一覧へ追加する] <block_reject> +ERROR_LIST +HISTORY
       label: 履歴登録失敗;
       desc: FM の SY-MSG* を整形して F_SET_LIST に追加する;
 
-    case ()
+    else-if () than
       [role_program: 成功件数を更新する] <block_approve> +AUDIT
       label: 成功カウント;
       desc: 文書履歴登録が成功した伝票を成功件数として計上する;
@@ -287,14 +282,13 @@ section (帳票出力) #green
   desc: エラーがある場合のみ、会社コード・伝票タイプ・日付・参照伝票番号・メッセージを明細出力する;
   remark: G_TAB_LIST が初期なら件数のみ表示;
 
-if (終了状態) #red
-case (エラー終了)
+if (終了状態) is (エラー終了) than #red
   [role_output: エラー内容を確認して終了] <block_reject>
   id: finish_error;
   label: エラー終了;
   desc: ファイルオープン失敗、データ0件、重複、BAPIエラー、履歴登録エラーを含む;
 
-case ()
+else-if () than
   [role_output: 正常終了] <block_approve>
   id: finish_success;
   label: 正常終了;

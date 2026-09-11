@@ -169,10 +169,9 @@ shape: subroutine;
 [role_recruiter: 書類選考] <block_review>
 label: スクリーニング;
 
-if (合格)
-case (はい)
+if (合格) is (はい) than
   [role_recruiter: 面接を設定]
-case (いいえ)
+else-if (いいえ) than
   [role_recruiter: お見送り連絡]
 end-if
 
@@ -207,11 +206,10 @@ level: 2;
 [ops: Warehouse B]
 level: 2;
 
-if (In stock?)
-case (yes)
+if (In stock?) is (yes) than
   [ops: Pick and pack] => ../hr/hiring.txt
   [goto: invoice]
-case (no)
+else-if (no) than
   [sales: Back-order]
 end-if
 

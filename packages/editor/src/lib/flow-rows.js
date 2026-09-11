@@ -354,8 +354,26 @@ export function rowLaneInfo(row, lanes, t = defaultT) {
   };
 }
 
-/** Localized type tag shown in the list badge. */
-export function rowBadgeLabel(row, t = defaultT) {
+/**
+ * True for the `branchCase` an `if`'s first clause was lifted into by
+ * `normalizeBranchRows` — the one whose text lives fused on the `if` line as
+ * `is (…) than` rather than on an `else-if (…) than` line of its own.
+ * Same adjacency test the serializer uses (`isExtractedFirstCase`).
+ */
+function isFusedFirstCase(rows, index) {
+  const row = rows?.[index];
+  if (!row || row.kind !== "branchCase" || row.parallel) return false;
+  const prev = rows[index - 1];
+  return !!prev && prev.kind === "branchStart" && !prev.parallel && prev.id === row.id;
+}
+
+/**
+ * Localized type tag shown in the list badge. `rows`/`rowIndex` are optional
+ * and only sharpen an if clause's badge: with them, the clause fused onto the
+ * `if` line reads `is` and every later one reads `else-if`, matching exactly
+ * what the document says.
+ */
+export function rowBadgeLabel(row, t = defaultT, rows = null, rowIndex = -1) {
   if (!row) return "";
   switch (row.kind) {
     case "step":
@@ -363,8 +381,9 @@ export function rowBadgeLabel(row, t = defaultT) {
     case "branchStart":
       return row.parallel ? t("badge.fork") : t("badge.if");
     case "branchCase":
-      if (row.parallel) return t("badge.and");
-      return (row.label || "").trim() === "" ? t("badge.otherwise") : t("badge.case");
+      if (row.parallel) return t("badge.forkCase");
+      if ((row.label || "").trim() === "") return t("badge.otherwise");
+      return isFusedFirstCase(rows, rowIndex) ? t("badge.firstCase") : t("badge.case");
     case "branchEnd":
       return row.parallel ? t("badge.endfork") : t("badge.endif");
     case "branchLoop":

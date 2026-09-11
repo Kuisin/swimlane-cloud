@@ -16,10 +16,9 @@ background-color: #dcfce7;
 desc: Organize them with folders however you like.;
 [share: Generates tokened links]
 remark: Links are unguessable without the secret.;
-if (Share what?) #blue
-case (One file)
+if (Share what?) is (One file) than #blue
   [you: Send the /d/ link]
-case ()
+else-if () than
   [you: Send the /f/ folder link]
 end-if
 [share: Anyone with the link views it]

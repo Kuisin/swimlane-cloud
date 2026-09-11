@@ -130,7 +130,7 @@ describe("a step's id through the GUI edit path", () => {
 
   it("a `[goto: id]` pointed at it round-trips through the same path", () => {
     const src = doc(
-      "/role/\n<a>\nlabel: A;\n\n/line/\nif (q?)\ncase (yes)\n  [a: one]\n  [goto: done]\ncase ()\n  [a: two]\nend-if\n[a: finish]\n  id: done;",
+      "/role/\n<a>\nlabel: A;\n\n/line/\nif (q?) is (yes) than\n  [a: one]\n  [goto: done]\nelse-if () than\n  [a: two]\nend-if\n[a: finish]\n  id: done;",
     );
     const out = applyModelEdit(src, (draft) => {
       const i = draft.rows.findIndex((r) => r.kind === "step" && r.text === "one");
@@ -153,7 +153,7 @@ describe("a step's id through the GUI edit path", () => {
  */
 describe("ids are assigned and reclaimed around a jump, never typed", () => {
   const SRC = doc(
-    "/role/\n<a>\nlabel: A;\n\n/line/\nif (q?)\ncase (yes)\n  [a: one]\n  [goto: step-1]\ncase ()\n  [a: two]\nend-if\n[a: finish]\n  id: step-1;\n[a: after]",
+    "/role/\n<a>\nlabel: A;\n\n/line/\nif (q?) is (yes) than\n  [a: one]\n  [goto: step-1]\nelse-if () than\n  [a: two]\nend-if\n[a: finish]\n  id: step-1;\n[a: after]",
   );
 
   /** What gui-mode's `pickMergeTarget` does, minus the React plumbing. */
@@ -191,7 +191,7 @@ describe("ids are assigned and reclaimed around a jump, never typed", () => {
     // Two jumps at the same step: retargeting one must not strip the id the
     // other is still using.
     const src = doc(
-      "/role/\n<a>\nlabel: A;\n\n/line/\nif (q?)\ncase (yes)\n  [a: one]\n  [goto: prog_end]\ncase ()\n  [a: two]\n  loop @prog_end\nend-if\n[a: finish]\n  id: prog_end;\n[a: after]",
+      "/role/\n<a>\nlabel: A;\n\n/line/\nif (q?) is (yes) than\n  [a: one]\n  [goto: prog_end]\nelse-if () than\n  [a: two]\n  loop @prog_end\nend-if\n[a: finish]\n  id: prog_end;\n[a: after]",
     );
     const out = retarget(src, "after");
     const finish = parseGuiModel(out).rows.find((r) => r.kind === "step" && r.text === "finish");
@@ -207,6 +207,137 @@ describe("ids are assigned and reclaimed around a jump, never typed", () => {
     });
     expect(out).not.toContain("id:");
     expect(out).not.toContain("goto");
+    expect(parseGuiModel(out).errors).toEqual([]);
+  });
+});
+
+/**
+ * The `if` keyword migration (`if (q) is (a) than` / `else-if (b) than`, and a
+ * fork's later paths as `case (c)`) changed only what the parser reads and the
+ * serializer writes — `branchStart`/`branchCase` and their `cond`,
+ * `firstCase`, `label`, `parallel` fields are untouched, so the GUI's
+ * row-editing code needs no change at all.
+ *
+ * That is a claim about behaviour, not about a diff, so it is checked the only
+ * way that stays true later: drive the same model edits the GUI makes (the
+ * branch inspector patches a field, the Add menu splices a row) and read the
+ * text that comes back out.
+ */
+describe("GUI edits write today's branch grammar, with no keyword of their own", () => {
+  const IF_SRC = doc(
+    "/role/\n<a>\nlabel: A;\n\n/line/\nif (q?) is (yes) than\n  [a: one]\nelse-if (no) than\n  [a: two]\nend-if",
+  );
+  const FORK_SRC = doc(
+    "/role/\n<a>\nlabel: A;\n\n/line/\nfork (Shipping)\n  [a: ship]\ncase (Billing)\n  [a: bill]\nend-fork",
+  );
+
+  /** What `BranchInspector`'s `onPatch` does: merge fields into one row. */
+  const patch = (src, find, fields) =>
+    applyModelEdit(src, (draft) => {
+      const i = draft.rows.findIndex(find);
+      expect(i).toBeGreaterThanOrEqual(0);
+      draft.rows[i] = { ...draft.rows[i], ...fields };
+    });
+
+  it("retypes an if's condition without disturbing the fused first clause", () => {
+    const out = patch(IF_SRC, (r) => r.kind === "branchStart", { cond: "approved?" });
+    expect(out).toContain("if (approved?) is (yes) than");
+    expect(out).toContain("else-if (no) than");
+    expect(parseGuiModel(out).errors).toEqual([]);
+  });
+
+  it("relabels the first clause back onto the if line, not onto an else-if", () => {
+    // After `normalizeBranchRows` the first clause is a `branchCase` row like
+    // any other, which is exactly why the inspector needs no special case.
+    const out = patch(IF_SRC, (r) => r.kind === "branchCase" && r.label === "yes", {
+      label: "approved",
+    });
+    expect(out).toContain("if (q?) is (approved) than");
+    expect(out).not.toMatch(/else-if \(approved\)/);
+    expect(parseGuiModel(out).errors).toEqual([]);
+  });
+
+  it("relabels a later clause as an else-if", () => {
+    const out = patch(IF_SRC, (r) => r.kind === "branchCase" && r.label === "no", {
+      label: "rejected",
+    });
+    expect(out).toContain("else-if (rejected) than");
+    expect(parseGuiModel(out).errors).toEqual([]);
+  });
+
+  it("blanking a later clause's label writes the catch-all, never a bare else", () => {
+    const out = patch(IF_SRC, (r) => r.kind === "branchCase" && r.label === "no", { label: "" });
+    expect(out).toContain("else-if () than");
+    expect(out).not.toMatch(/^\s*else\s*$/m);
+    expect(parseGuiModel(out).errors).toEqual([]);
+  });
+
+  it("adds a clause the way the inspector's Add case button does", () => {
+    // gui-mode's `addCaseToBranch`: splice a branchCase in before branchEnd.
+    const out = applyModelEdit(IF_SRC, (draft) => {
+      const endIdx = draft.rows.findIndex((r) => r.kind === "branchEnd");
+      const branchId = draft.rows[endIdx].id;
+      draft.rows.splice(endIdx, 0, {
+        kind: "branchCase",
+        id: branchId,
+        label: "New case",
+        parallel: false,
+        branchColor: null,
+        depth: 0,
+      });
+    });
+    expect(out).toContain("else-if (New case) than");
+    expect(parseGuiModel(out).errors).toEqual([]);
+  });
+
+  it("adds a fork path as `case (…)`, never as `and (…)`", () => {
+    const out = applyModelEdit(FORK_SRC, (draft) => {
+      const endIdx = draft.rows.findIndex((r) => r.kind === "branchEnd");
+      const branchId = draft.rows[endIdx].id;
+      draft.rows.splice(endIdx, 0, {
+        kind: "branchCase",
+        id: branchId,
+        label: "Audit",
+        parallel: true,
+        branchColor: null,
+        depth: 0,
+      });
+    });
+    expect(out).toContain("case (Audit)");
+    expect(out).not.toMatch(/^\s*and\b/m);
+    expect(parseGuiModel(out).errors).toEqual([]);
+  });
+
+  it("colours the catch-all clause and keeps the colour on the else-if line", () => {
+    const out = patch(IF_SRC, (r) => r.kind === "branchCase" && r.label === "no", {
+      label: "",
+      branchColor: "red",
+    });
+    expect(out).toContain("else-if () than #red");
+    expect(parseGuiModel(out).errors).toEqual([]);
+  });
+
+  it("writes a whole new if the way gui-mode's Add menu builds one", () => {
+    const out = applyModelEdit(doc("/role/\n<a>\nlabel: A;\n\n/line/\n[a: start]"), (draft) => {
+      draft.rows.push(
+        {
+          kind: "branchStart",
+          id: "b1",
+          cond: "Condition",
+          firstCase: "Case A",
+          parallel: false,
+          branchColor: null,
+          depth: 0,
+        },
+        { kind: "branchCase", id: "b1", label: "Case B", parallel: false, depth: 0 },
+        { kind: "branchCase", id: "b1", label: "", parallel: false, depth: 0 },
+        { kind: "branchEnd", id: "b1", parallel: false, depth: 0 },
+      );
+    });
+    expect(out).toContain("if (Condition) is (Case A) than");
+    expect(out).toContain("else-if (Case B) than");
+    expect(out).toContain("else-if () than");
+    expect(out).toContain("end-if");
     expect(parseGuiModel(out).errors).toEqual([]);
   });
 });

@@ -155,14 +155,13 @@ section (ステップ2 ファイルの場所を特定) #blue
   label: 変換成否判定;
   desc: パス変換が成功したかを確認する;
 
-if (変換結果) #red
-case (失敗)
+if (変換結果) is (失敗) than #red
   [role_prog: 変換エラー終了] <block_error>
   label: 変換エラー終了;
   desc: エラーメッセージを出力して処理を打ち切る;
   [goto: prog_end]
 
-case (成功) #green
+else-if (成功) than #green
   [role_prog: ファイルを開く] <block_proc>
   label: ファイルオープン;
   desc: 変換したパスでサーバー上のファイルを開く;
@@ -173,14 +172,13 @@ section (ステップ3 ファイルアップロード) #blue
   label: オープン成否判定;
   desc: ファイルが正常に開けたかを確認する;
 
-if (オープン) #red
-case (失敗)
+if (オープン) is (失敗) than #red
   [role_prog: 開封エラー終了] <block_error>
   label: オープンエラー終了;
   desc: ファイルが開けないためエラー終了する;
   [goto: prog_end]
 
-case (成功) #green
+else-if (成功) than #green
   [role_prog: 1行を読み込む] <block_proc>
   label: 先頭行の読込;
   desc: ファイルの読み込みを開始する;
@@ -189,8 +187,7 @@ end-if
   label: ファイル末尾判定;
   desc: 最終行まで読み終えたかを確認する;
 
-if (ファイル末尾) #blue
-case (未到達)
+if (ファイル末尾) is (未到達) than #blue
   [role_prog: 分割して追加] <block_proc> +ITAB
   label: 行分割・テーブル追加;
   desc: タブ区切りで「会社コード〜テキスト」の9項目に分割し内部テーブルへ追加;
@@ -200,7 +197,7 @@ case (未到達)
   desc: 続きの行を読み込み、末尾判定へ戻る;
   loop
 
-case (到達) #green
+else-if (到達) than #green
   [role_prog: ファイルを閉じる] <block_proc>
   label: ファイルクローズ;
   desc: 読込が完了したのでファイルを閉じる;
@@ -209,14 +206,13 @@ end-if
   label: 読込件数チェック;
   desc: 内部テーブルに読み込んだ件数を数える;
 
-if (読込件数) #red
-case (0件)
+if (読込件数) is (0件) than #red
   [role_prog: 終了メッセージ] <block_error>
   label: 0件終了;
   desc: 処理対象がないためメッセージを出して終了する;
   [goto: prog_end]
 
-case (1件以上) #green
+else-if (1件以上) than #green
   [role_prog: データを並べ替え] <block_proc> +ITAB
   label: 伝票キーでソート;
   desc: 会社コード→伝票タイプ→転記日付→伝票日付→参照伝票番号の順に並べ替え;
@@ -232,8 +228,7 @@ section (ステップ4 伝票登録 メイン処理) #purple
   label: 伝票ループ判定;
   desc: 未処理の伝票が残っているかを確認し、1伝票ずつ処理する;
 
-if (未処理の伝票) #blue
-case (あり)
+if (未処理の伝票) is (あり) than #blue
   [role_prog: フラグを初期化] <block_proc>
   label: 新伝票の開始;
   desc: 新しい伝票の先頭明細でフラグを初期化し、伝票件数を+1する;
@@ -246,14 +241,13 @@ case (あり)
 
 登録前に必ず履歴テーブルをチェックし、同じ伝票を2回登録しない。
   ```;
-  if (履歴テーブル) #red
-  case (登録済)
+  if (履歴テーブル) is (登録済) than #red
     [role_prog: エラー一覧追加] <block_error> +ERRL
     label: 重複エラー追加;
     desc: エラーリストへ追加し、この伝票の残り明細はスキップする;
     [goto: clear_tab]
 
-  case (未登録) #green
+  else-if (未登録) than #green
     [role_prog: BAPIデータ作成] <block_proc>
     label: ヘッダ・第1明細作成;
     desc: 明細番号を1にして、ヘッダ情報と第1明細のBAPI用データを作る;
@@ -262,14 +256,13 @@ case (あり)
   [role_prog: 明細有無を判定] <block_judge>
   label: 同一伝票の明細判定;
   desc: 同じ伝票に続きの明細があるかを確認する;
-  if (続きの明細) #blue
-  case (あり)
+  if (続きの明細) is (あり) than #blue
     [role_prog: 明細を追加] <block_proc>
     label: 明細データ追加;
     desc: 明細番号を+1して追加。転記キー50（貸方）なら金額をマイナスにする;
     loop
 
-  case (なし＝最終明細) #green
+  else-if (なし＝最終明細) than #green
     [role_bapi: BAPIで登録] <block_system>
     label: BAPI呼び出し;
     desc: SAP標準の登録機能を呼び出して伝票を登録する;
@@ -283,8 +276,7 @@ case (あり)
 
 一部だけ登録される中途半端な状態を許さず、成功なら全部確定、失敗なら全部取り消す。
   ```;
-  if (BAPI結果) #green
-  case (エラーなし)
+  if (BAPI結果) is (エラーなし) than #green
     [role_bapi: COMMIT実行] <block_system>
     label: COMMIT（確定）;
     desc: 伝票登録を確定する;
@@ -297,7 +289,7 @@ case (あり)
     label: 成功件数+1;
     desc: 成功件数カウンタを加算する;
 
-  case (エラーあり) #red
+  else-if (エラーあり) than #red
     [role_bapi: ROLLBACK実行] <block_system>
     label: ROLLBACK（取消）;
     desc: 登録をすべて取り消す;
@@ -313,7 +305,7 @@ case (あり)
   desc: 次の伝票の処理に備えて明細テーブルを空にし、ループ先頭へ戻る;
   loop
 
-case (なし) #green
+else-if (なし) than #green
   [role_prog: ループを終了] <block_proc>
   label: 全伝票処理完了;
   desc: すべての伝票を処理し終えたためループを抜ける;
@@ -328,13 +320,12 @@ section (ステップ5 結果リスト出力) #green
   label: エラー件数チェック;
   desc: エラーが1件でもあるかを確認する;
 
-if (エラー件数) #red
-case (あり)
+if (エラー件数) is (あり) than #red
   [role_prog: エラー一覧を表示] <block_error> +ERRL
   label: エラー伝票一覧表示;
   desc: 会社コード・伝票タイプ・日付・参照番号・エラーメッセージを一覧表示;
 
-case (0件) #green
+else-if (0件) than #green
   [role_prog: 件数のみで終了] <block_proc>
   label: 正常終了表示;
   desc: エラーがないため件数表示のみで終了する;

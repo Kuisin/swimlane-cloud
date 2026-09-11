@@ -44,10 +44,9 @@ label: Approver;
 /line/
 
 [applicant: Submit request]
-if (approved?) #green
-case (yes) #green
+if (approved?) is (yes) than #green
   [approver: Approve request]
-case (no) #red
+else-if (no) than #red
   [approver: Reject request]
 end-if
 
@@ -73,11 +72,11 @@ label: HR;
 /line/
 
 [system: Receive order]
-fork
+fork (Confirmation)
   [system: Send confirmation email]
-and
+case (Ledger)
   [accounting: Update ledger]
-and
+case (Record)
   [hr_team: Save record]
 end-fork
 

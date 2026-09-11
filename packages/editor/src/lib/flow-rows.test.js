@@ -71,6 +71,28 @@ describe("rowBadgeLabel localization", () => {
     const step = { kind: "step", role: "r", text: "x" };
     expect(rowBadgeLabel(step, jaT)).toBe("ステップ");
   });
+
+  // The keyword an if's clause is actually spelled with depends on whether it
+  // is the one fused onto the `if` line (`is (…) than`) or a later
+  // `else-if (…) than`; a fork's non-first path is `case (…)`.
+  it("names an if clause by the keyword the document really uses", () => {
+    const rows = [
+      { kind: "branchStart", id: "x", cond: "q?" },
+      { kind: "branchCase", id: "x", label: "yes" },
+      { kind: "branchCase", id: "x", label: "no" },
+      { kind: "branchCase", id: "x", label: "" },
+      { kind: "branchEnd", id: "x" },
+    ];
+    expect(rowBadgeLabel(rows[1], enT, rows, 1)).toBe("is");
+    expect(rowBadgeLabel(rows[2], enT, rows, 2)).toBe("else-if");
+    expect(rowBadgeLabel(rows[3], enT, rows, 3)).toBe("otherwise");
+    // No keyword the grammar dropped survives anywhere in the badges.
+    const fork = [
+      { kind: "branchStart", id: "f", parallel: true },
+      { kind: "branchCase", id: "f", parallel: true, label: "Billing" },
+    ];
+    expect(rowBadgeLabel(fork[1], enT, fork, 1)).toBe("case");
+  });
 });
 
 describe("collectMergeTargetOptions", () => {
