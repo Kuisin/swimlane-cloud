@@ -52,22 +52,22 @@ label: C;
 [a: 開始]
 fork
 [a: メール送信]
-and
+case
 [b: 台帳更新]
-and
+case
 [c: 配送初期化]
 end-fork
 [a: 完了]
 @end`;
 
 describe("parallel fork/join", () => {
-  it("parses fork/and/end-fork into parallel branch rows", () => {
+  it("parses fork/case/end-fork into parallel branch rows", () => {
     const model = parseDSL(FORK);
     expect(model.errors).toEqual([]);
     const start = model.rows.find((r) => r.kind === "branchStart");
     expect(start.parallel).toBe(true);
     const cases = model.rows.filter((r) => r.kind === "branchCase");
-    // `fork`'s own first path, plus the two `and`s.
+    // `fork`'s own first path, plus the two `case`s.
     expect(cases.length).toBe(3);
     expect(cases.every((c) => c.parallel)).toBe(true);
     const end = model.rows.find((r) => r.kind === "branchEnd");
@@ -96,8 +96,7 @@ end-if
 <a>
 label: A;
 /line/
-if (y)
-case (z)
+if (y) is (z) than
 [a: x]
 end-fork
 @end`);
@@ -105,7 +104,7 @@ end-fork
   });
 });
 
-describe("labeled fork (fork (label) / and (label))", () => {
+describe("labeled fork (fork (label) / case (label))", () => {
   // The reader emits an explicit `branchCase` for `fork (label)` itself,
   // right after the `branchStart` row (parser-v2.js). The renderer must not
   // *also* synthesize an implicit first-path case on top of that — doing so
@@ -120,15 +119,15 @@ describe("labeled fork (fork (label) / and (label))", () => {
 [a: 開始]
 fork (書類) #orange
   [a: 契約]
-and (アカウント) #purple
+case (アカウント) #purple
   [a: 発行]
-and (備品) #blue
+case (備品) #blue
   [a: 手配]
 end-fork
 [a: 完了]
 @end`;
 
-  it("parses fork (label)/and (label) into exactly 3 parallel branchCase rows", () => {
+  it("parses fork (label)/case (label) into exactly 3 parallel branchCase rows", () => {
     const model = parseDSL(FORK_LABELED);
     expect(model.errors).toEqual([]);
     const cases = model.rows.filter((r) => r.kind === "branchCase" && r.parallel);
@@ -147,13 +146,13 @@ end-fork
   });
 
   it("does not double-count an unlabeled fork's own first path either", () => {
-    // FORK (above) has no label at all: `fork`'s own path plus 2 `and`s is
+    // FORK (above) has no label at all: `fork`'s own path plus 2 `case`s is
     // 3 explicit cases, so this must also fan out to exactly 3 edges, not 4.
     expect(largestFanOutGroup(render(FORK))).toBe(3);
   });
 });
 
-describe("blank case () draws no label chip", () => {
+describe("blank else-if () than draws no label chip", () => {
   const IF_WITH_BLANK_CASE = `@kai-swimlane
 /role/
 <a>
@@ -161,10 +160,9 @@ describe("blank case () draws no label chip", () => {
 
 /line/
 [a: 開始]
-if [a] (q?)
-case (はい) #green
+if [a] (q?) is (はい) than #green
   [a: 対応]
-case ()
+else-if () than
   [a: 何もしない]
 end-if
 [a: 完了]

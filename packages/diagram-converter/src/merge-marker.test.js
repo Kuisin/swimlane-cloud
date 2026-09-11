@@ -22,11 +22,10 @@ describe("goto", () => {
   it("parses `[goto: id]`, pointing at the step carrying that `id:`", () => {
     const model = parseDSL(
       doc(`[a: start]
-if (cancel?)
-case (yes)
+if (cancel?) is (yes) than
   [a: accept]
   [goto: late]
-case ()
+else-if () than
   [b: normal]
 end-if
 [a: refund]
@@ -41,8 +40,7 @@ end-if
 
   it("rejects a `[goto: id]` naming an id that does not exist", () => {
     const model = parseDSL(
-      doc(`if (x?)
-case (yes)
+      doc(`if (x?) is (yes) than
   [a: one]
   [goto: nowhere]
 end-if
@@ -120,10 +118,9 @@ describe("a backward goto's routing", () => {
   id: again;
 [a: middle]
 [a: check]
-if (ok?)
-case (no)
+if (ok?) is (no) than
   [goto: again]
-case ()
+else-if () than
   [a: done]
 end-if`),
     );

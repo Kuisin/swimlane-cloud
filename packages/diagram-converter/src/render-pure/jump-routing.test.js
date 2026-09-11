@@ -172,11 +172,10 @@ const endY = (arrow) => arrow.points[arrow.points.length - 1][1];
 
 describe("1. a forward `[goto: id]` to a later block in the same lane", () => {
   const svg = render(`[a: start]
-if (q1?)
-case (yes)
+if (q1?) is (yes) than
 [a: one]
 [goto: later]
-case (no)
+else-if (no) than
 [a: two]
 end-if
 [a: three]
@@ -194,11 +193,10 @@ end-if
 
 describe("2. a forward `[goto: id]` into another lane", () => {
   const svg = render(`[a: start]
-if (q1?)
-case (yes)
+if (q1?) is (yes) than
 [a: one]
 [goto: later]
-case (no)
+else-if (no) than
 [a: two]
 end-if
 [b: three]
@@ -217,11 +215,10 @@ describe("3. a backward `[goto: id]`", () => {
     const svg = render(`[a: start]
   id: top;
 [a: middle]
-if (q1?)
-case (yes)
+if (q1?) is (yes) than
 [a: one]
 [goto: top]
-case (no)
+else-if (no) than
 [a: two]
 end-if
 [a: done]`);
@@ -235,11 +232,10 @@ end-if
     const svg = render(`[c: start]
   id: top;
 [a: middle]
-if (q1?)
-case (yes)
+if (q1?) is (yes) than
 [a: one]
 [goto: top]
-case (no)
+else-if (no) than
 [a: two]
 end-if
 [a: done]`);
@@ -254,16 +250,14 @@ end-if
 
 describe("4. a jump from inside a nested if", () => {
   const svg = render(`[a: start]
-if (outer?)
-case (yes)
-if (inner?)
-case (deep)
+if (outer?) is (yes) than
+if (inner?) is (deep) than
 [a: deep]
 [goto: later]
-case (shallow)
+else-if (shallow) than
 [a: shallow]
 end-if
-case (no)
+else-if (no) than
 [b: two]
 end-if
 [a: later]
@@ -276,16 +270,14 @@ end-if
 
   it("a case that ends with a whole nested if jumps from that block's join", () => {
     const nested = render(`[a: start]
-if (outer?)
-case (yes)
-if (inner?)
-case (a)
+if (outer?) is (yes) than
+if (inner?) is (a) than
 [a: one]
-case (b)
+else-if (b) than
 [a: two]
 end-if
 [goto: later]
-case (no)
+else-if (no) than
 [b: three]
 end-if
 [a: later]
@@ -302,14 +294,13 @@ describe("5. a jump out of a fork path, a section and a branch group", () => {
     const svg = render(`[a: start]
 fork (left)
 [a: l1]
-if (q?)
-case (yes)
+if (q?) is (yes) than
 [a: l2]
 [goto: later]
-case (no)
+else-if (no) than
 [a: l3]
 end-if
-and (right)
+case (right)
 [b: r1]
 end-fork
 [a: later]
@@ -320,11 +311,10 @@ end-fork
   it("from inside a section", () => {
     const svg = render(`[a: start]
 section (audit)
-if (q?)
-case (yes)
+if (q?) is (yes) than
 [a: inside]
 [goto: later]
-case (no)
+else-if (no) than
 [a: other]
 end-if
 end-section
@@ -336,11 +326,10 @@ end-section
   it("from inside a branch group, which is where the tail comes from", () => {
     const svg = render(`[a: start]
 branch (side)
-if (q?)
-case (yes)
+if (q?) is (yes) than
 [b: aside]
 [goto: later]
-case (no)
+else-if (no) than
 [b: other]
 end-if
 end-branch
@@ -356,10 +345,9 @@ describe("6. a case whose only row is a jump", () => {
   it("`loop`: turns back just under its label, not from the bottom of the page", () => {
     const svg = render(`[a: start]
   id: top;
-if (retry?)
-case (yes)
+if (retry?) is (yes) than
 [a: work]
-case (no)
+else-if (no) than
 loop
 end-if
 [a: done]`);
@@ -374,10 +362,9 @@ end-if
 
   it("`[goto: id]`: starts on the case's own rail, not at the jump row's y", () => {
     const svg = render(`[a: start]
-if (q1?)
-case (yes)
+if (q1?) is (yes) than
 [a: work]
-case (no)
+else-if (no) than
 [goto: later]
 end-if
 [a: middle]
@@ -402,10 +389,9 @@ end-if
     const svg = render(`[a: start]
   id: top;
 [b: gate]
-if (retry?)
-case (yes)
+if (retry?) is (yes) than
 [a: work]
-case (no)
+else-if (no) than
 loop @top
 end-if
 [a: done]`);
@@ -417,19 +403,17 @@ end-if
 
 describe("7. several jumps onto one block", () => {
   const svg = render(`[a: start]
-if (q1?)
-case (yes)
+if (q1?) is (yes) than
 [a: one]
 [goto: later]
-case (no)
+else-if (no) than
 [b: two]
 [goto: later]
 end-if
-if (q2?)
-case (yes)
+if (q2?) is (yes) than
 [c: three]
 [goto: later]
-case (no)
+else-if (no) than
 [a: four]
 end-if
 [a: later]
@@ -445,11 +429,10 @@ end-if
 
 describe("8. a target one row after the end-if", () => {
   const svg = render(`[a: start]
-if (q1?)
-case (yes)
+if (q1?) is (yes) than
 [a: one]
 [goto: next]
-case (no)
+else-if (no) than
 [a: two]
 end-if
 [a: next]
@@ -467,11 +450,10 @@ describe("a jump with nothing to land on", () => {
   // off a target that does not exist.
   it("`[goto: unknown]` draws no arrow and leaves the case merging into the join", () => {
     const svg = renderAnyway(`[a: start]
-if (q?)
-case (yes)
+if (q?) is (yes) than
 [a: one]
 [goto: nope]
-case (no)
+else-if (no) than
 [a: two]
 end-if
 [a: done]`);

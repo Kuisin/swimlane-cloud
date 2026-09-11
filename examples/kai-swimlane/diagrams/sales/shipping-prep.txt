@@ -31,11 +31,10 @@ right-title: 備考 | Remarks;
 
 [warehouse: ピッキング | Pick]
 
-if [warehouse] (破損あり？ | Any damage?)
-case (あり | Yes) #red
+if [warehouse] (破損あり？ | Any damage?) is (あり | Yes) than #red
   [warehouse: 代替品を引当 | Allocate a replacement]
   loop
-case (なし | No) #green
+else-if (なし | No) than #green
   [warehouse: 梱包 | Pack]
 end-if
 

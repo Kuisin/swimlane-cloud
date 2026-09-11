@@ -17,11 +17,10 @@ label: A;
 label: B;
 /line/
 [a: 開始]
-if (キャンセル?) #red
-case (あり)
+if (キャンセル?) is (あり) than #red
 [a: キャンセル受付]
 [goto: done]
-case ()
+else-if () than
 [b: 通常処理]
 end-if
 [a: 取引完了]
@@ -55,8 +54,7 @@ describe("mid-flow merge", () => {
 <a>
 label: A;
 /line/
-if (x)
-case (y)
+if (x) is (y) than
 [a: step]
 [goto: nowhere]
 end-if
