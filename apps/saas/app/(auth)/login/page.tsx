@@ -37,7 +37,7 @@ function LoginInner() {
         provider: "github",
         // `repo` is what lets the app read and commit diagrams in private
         // repositories the user already has access to.
-        options: { scopes: "repo", redirectTo },
+        options: { scopes: "repo workflow", redirectTo },
       });
       if (error) throw error;
     } catch (e) {

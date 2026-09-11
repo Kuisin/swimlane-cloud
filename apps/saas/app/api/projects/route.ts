@@ -10,6 +10,7 @@ import { withRepo } from "@/lib/github";
 import { assertOwnerRepo } from "@/lib/guard";
 import { assertPlanAllowsRepoCreation } from "@/lib/plans";
 import { requireUserWithGitHub } from "@/lib/projects";
+import { enforceMainPullRequestOnly } from "@/lib/protect-main";
 import { repoConfigJson, seedRepoFiles } from "@/lib/seed";
 
 export const dynamic = "force-dynamic";
@@ -106,9 +107,16 @@ export const POST = withApi(async (req) => {
     await write.ensureBranch(INTEGRATION_BRANCH, PROD_BRANCH);
     await ctx.repos.addTopic(created.owner, created.name, PROJECT_TOPIC);
 
+    // Last, and deliberately so: this protects `main`, which turns every
+    // direct write above into an error. Ordering is what keeps them working.
+    const guard = await enforceMainPullRequestOnly(ctx, {
+      owner: created.owner,
+      repo: created.name,
+    });
+
     const info = await ctx.repos.getRepo(created.owner, created.name);
     const result = await ensureProject(info, actor);
-    return json({ projectId: result.projectId, htmlUrl: info.htmlUrl }, 201);
+    return json({ projectId: result.projectId, htmlUrl: info.htmlUrl, guard }, 201);
   }
 
   if (body.mode === "mark") {
@@ -137,9 +145,15 @@ export const POST = withApi(async (req) => {
     await write.ensureBranch(INTEGRATION_BRANCH, PROD_BRANCH);
     await ctx.repos.addTopic(info.owner, info.name, PROJECT_TOPIC);
 
+    // See the note in `create`: protection goes on after the writes above.
+    const guard = await enforceMainPullRequestOnly(ctx, {
+      owner: info.owner,
+      repo: info.name,
+    });
+
     const marked = await ctx.repos.getRepo(info.owner, info.name);
     const result = await ensureProject(marked, actor);
-    return json({ projectId: result.projectId, htmlUrl: marked.htmlUrl }, 201);
+    return json({ projectId: result.projectId, htmlUrl: marked.htmlUrl, guard }, 201);
   }
 
   throw new ApiError(400, "mode must be create or mark");
