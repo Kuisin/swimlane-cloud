@@ -77,9 +77,10 @@ phase (検知 | Detection) @detect #gray
       desc: 発生時刻・影響範囲・再現手順;
       desc.en: Time, blast radius and reproduction steps;
   end-if
-  [support: 重大度を判定 | Triage severity] @triage
+  [support: 重大度を判定 | Triage severity]
     remark: 判定基準は運用規程 4.2;
     remark.en: Criteria in operations policy 4.2;
+    id: triage;
 end-phase
 
 phase (対応 | Response) @respond #red
@@ -95,7 +96,8 @@ phase (対応 | Response) @respond #red
         remark.en: Within 30 minutes;
     end-fork
   case (Sev2) #orange
-    [engineer: 暫定対処 | Mitigate] @mitigate
+    [engineer: 暫定対処 | Mitigate]
+      id: mitigate;
     if [engineer] (収束した？ | Contained?)
     case (はい | Yes) #green
       [support: 顧客へ経過連絡 | Send a progress update]
@@ -105,12 +107,13 @@ phase (対応 | Response) @respond #red
     end-if
   case (Sev3+) #green
     [support: 通常サポートで対応 | Handle as regular support]
-    goto @close
+    [goto: close]
   end-if
   branch (記録 | Record) #gray
     [system: 対応ログを保存 | Store the response log] +TICKET
   end-branch
-  [engineer: 恒久対策を実施 | Apply the permanent fix] @fix
+  [engineer: 恒久対策を実施 | Apply the permanent fix]
+    id: fix;
 end-phase
 
 section (振り返り | Retrospective) @retro #blue
@@ -128,6 +131,7 @@ section (振り返り | Retrospective) @retro #blue
   end-if
 end-section
 
-[support: インシデントをクローズ | Close the incident] <terminal> @close
+[support: インシデントをクローズ | Close the incident] <terminal>
+  id: close;
 
 @end

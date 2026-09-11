@@ -20,16 +20,17 @@ label: B;
 if (キャンセル?) #red
 case (あり)
 [a: キャンセル受付]
-goto @done
+[goto: done]
 case ()
 [b: 通常処理]
 end-if
-[a: 取引完了] @done
+[a: 取引完了]
 label: 完了;
+id: done;
 @end`;
 
 describe("mid-flow merge", () => {
-  it("parses merge into a branchMerge row pointing at the step id", () => {
+  it("parses [goto: id] into a branchMerge row pointing at the step id", () => {
     const model = parseDSL(MERGE);
     expect(model.errors).toEqual([]);
     const merge = model.rows.find((r) => r.kind === "branchMerge");
@@ -48,7 +49,7 @@ describe("mid-flow merge", () => {
     expect((svg.match(/stroke-dasharray="6 3"/g) || []).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("errors when the merge target id does not exist", () => {
+  it("errors when the goto target id does not exist", () => {
     const model = parseDSL(`@kai-swimlane
 /role/
 <a>
@@ -57,7 +58,7 @@ label: A;
 if (x)
 case (y)
 [a: step]
-goto @nowhere
+[goto: nowhere]
 end-if
 @end`);
     expect(model.errors.map((e) => e.msg)).toContain('no node with id "nowhere"');
@@ -69,30 +70,32 @@ end-if
 <a>
 label: A;
 /line/
-[a: one] @dup
-[a: two] @dup
+[a: one]
+id: dup;
+[a: two]
+id: dup;
 @end`);
     expect(model.errors.filter((e) => e.msg.includes('duplicate node id "dup"')).length).toBe(1);
   });
 
-  it("errors on a bare goto outside any if", () => {
+  it("errors on a goto outside any if", () => {
     const model = parseDSL(`@kai-swimlane
 /role/
 <a>
 label: A;
 /line/
-[a: step] @home
-goto @home
+[a: step]
+id: home;
+[goto: home]
 @end`);
     expect(model.errors.map((e) => e.msg)).toContain(
       "goto outside if is not supported by this renderer",
     );
   });
 
-  // `merge` (the landing marker) is not context-sensitive the way the earlier
-  // grammar's bracket form was — it is always a marker, inside or outside an
-  // if, so there is nothing left to assert about using it "outside an if".
-  it("places a bare merge marker even outside any if", () => {
+  // There is no landing-marker row any more: a jump always names a real
+  // step's own `id:`, so a bare `merge` is just an unrecognized statement.
+  it("errors on a bare `merge` — there is no marker any more", () => {
     const model = parseDSL(`@kai-swimlane
 /role/
 <a>
@@ -101,7 +104,7 @@ label: A;
 [a: step]
 merge
 @end`);
-    expect(model.errors).toEqual([]);
-    expect(model.rows.some((r) => r.kind === "mergeMarker")).toBe(true);
+    expect(model.errors.length).toBeGreaterThan(0);
+    expect(model.rows.some((r) => r.kind === "mergeMarker")).toBe(false);
   });
 });

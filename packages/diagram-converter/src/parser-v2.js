@@ -765,6 +765,11 @@ export function parseDSLv2(src, options = {}) {
           activeDef = null;
           continue;
         }
+        if (section === "role" && id === "goto") {
+          err(pos, `role id "goto" is reserved for the [goto: id] statement`);
+          activeDef = null;
+          continue;
+        }
         activeDef = id;
         const bag = section === "role" ? roles : section === "block" ? blocks : props;
         if (localDefIds[section].has(id)) err(pos, `duplicate ${section} definition <${id}>`);
@@ -845,20 +850,6 @@ export function parseDSLv2(src, options = {}) {
       errors.push({ line: sc.lineAt(j.pos), text: "", msg: `no node with id "${j.target}"` });
     }
   }
-  rows.forEach((r, i) => {
-    if (r.kind !== "branchMerge" || r.mergeTarget) return;
-    const endIdx = rows.findIndex(
-      (x, j) => j > i && x.kind === "branchEnd" && x.id === r.mergeBranchId,
-    );
-    const hasMarker = endIdx >= 0 && rows.some((x, j) => j > endIdx && x.kind === "mergeMarker");
-    if (!hasMarker) {
-      errors.push({
-        line: r.dslLines?.[0],
-        text: "",
-        msg: "goto has no merge marker after this if",
-      });
-    }
-  });
 
   const seen = new Set();
   const ordered = [];
@@ -1071,8 +1062,13 @@ export function parseDSLv2(src, options = {}) {
   }
 
   function readFlowStatement(pos) {
-    // Step or spacer.
+    // `[goto: id]` is a standalone statement, not a step — checked before
+    // readStep gets a chance to read "goto" as a role id.
     if (sc.s[sc.i] === "[") {
+      if (/^\[\s*goto\s*:/.test(sc.s.slice(sc.i))) {
+        readGoto(pos);
+        return;
+      }
       readStep(pos);
       return;
     }
@@ -1090,12 +1086,8 @@ export function parseDSLv2(src, options = {}) {
       readAnd(pos);
       return;
     }
-    if (w === "goto" || w === "loop") {
-      readJump(w, pos);
-      return;
-    }
-    if (w === "merge") {
-      readMergeMarker(pos);
+    if (w === "loop") {
+      readLoop(pos);
       return;
     }
     if (OPENERS.includes(w)) {
@@ -1137,7 +1129,6 @@ export function parseDSLv2(src, options = {}) {
     else err(pos, "unclosed [ — the run must end with ]");
 
     let blockRef = null;
-    let stepId = null;
     let arrowLine = null;
     let link = null;
     const stepProps = [];
@@ -1154,18 +1145,6 @@ export function parseDSLv2(src, options = {}) {
         once("<block>", blockRef != null, at);
         blockRef = readRun(sc, [">"], null).trim();
         if (sc.s[sc.i] === ">") sc.i++;
-        continue;
-      }
-      if (sc.s[sc.i] === "@") {
-        sc.i++;
-        const w = sc.word();
-        if (["end", "use", "lang", "kai-swimlane"].includes(w)) {
-          sc.i = mark;
-          break;
-        }
-        once("@id", stepId != null, at);
-        if (!w) err(at, "@ needs an id");
-        else stepId = w;
         continue;
       }
       if (sc.s[sc.i] === "+") {
@@ -1215,16 +1194,13 @@ export function parseDSLv2(src, options = {}) {
       text$langs: langsOf(text),
       depth: stepDepth(),
       blockRef,
-      stepId: stepId || `step-${rows.length + 1}`,
+      // A destination name comes from a following `id: …;` line (applyStepProp),
+      // not from anything on this line — the auto id below is internal only.
+      stepId: `step-${rows.length + 1}`,
     };
     if (stepProps.length) fields.props = stepProps;
     if (arrowLine) fields.arrowLine = arrowLine;
     if (link) fields.link = link;
-    if (stepId) {
-      fields.mergeId = stepId;
-      if (stepIds.has(stepId)) err(pos, `duplicate node id "${stepId}"`);
-      stepIds.set(stepId, rows.length);
-    }
     lastStep = push(fields, pos);
   }
 
@@ -1263,6 +1239,23 @@ export function parseDSLv2(src, options = {}) {
       case "skip":
         target.skipIndex = true;
         return;
+      case "id": {
+        if (!isStep) return;
+        const id = String(prop.value).trim();
+        if (!id) {
+          err(prop.pos, "id: needs a value");
+          return;
+        }
+        if (target.mergeId != null) {
+          err(prop.pos, "id given twice on one step");
+          return;
+        }
+        if (stepIds.has(id)) err(prop.pos, `duplicate node id "${id}"`);
+        stepIds.set(id, lastStatement);
+        target.mergeId = id;
+        target.stepId = id;
+        return;
+      }
       case "level": {
         if (!isStep) return;
         const level = Number(String(prop.value).trim());
@@ -1496,51 +1489,54 @@ export function parseDSLv2(src, options = {}) {
     return w;
   }
 
-  function readJump(kw, pos) {
+  /** `loop` / `loop @id` — back to the enclosing `if`, or to a named step. */
+  function readLoop(pos) {
     const target = readInlineTarget();
     const top = stack[stack.length - 1];
-    if (kw === "loop") {
-      if (!top || top.type !== "if") {
-        err(pos, "loop outside if");
-        return;
-      }
-      if (target) jumps.push({ target, pos });
-      push(
-        {
-          kind: "branchLoop",
-          loopBranchId: top.id,
-          loopTarget: target || null,
-          depth: branchBodyDepth(),
-        },
-        pos,
-      );
-      return;
-    }
     if (!top || top.type !== "if") {
-      err(pos, "goto outside if is not supported by this renderer");
+      err(pos, "loop outside if");
       return;
     }
-    // A bare `goto` lands on the next `merge` marker after this if.
     if (target) jumps.push({ target, pos });
     push(
       {
-        kind: "branchMerge",
-        mergeTarget: target || null,
-        mergeBranchId: top.id,
+        kind: "branchLoop",
+        loopBranchId: top.id,
+        loopTarget: target || null,
         depth: branchBodyDepth(),
       },
       pos,
     );
   }
 
-  /** `merge` / `merge @id` — a landing marker a case's `goto` lands on. */
-  function readMergeMarker(pos) {
-    const name = readInlineTarget();
-    if (name) {
-      if (stepIds.has(name)) err(pos, `duplicate node id "${name}"`);
-      stepIds.set(name, rows.length);
+  /**
+   * `[goto: id]` — jumps forward or backward, inside a case, to the step
+   * named by its own `id: id;` line. There is no separate landing marker;
+   * every jump targets a real step.
+   */
+  function readGoto(pos) {
+    sc.i++; // "["
+    sc.word(); // "goto"
+    sc.skipWs();
+    if (sc.s[sc.i] === ":") sc.i++;
+    sc.skipWs();
+    const target = readRun(sc, ["]"], null).trim();
+    if (sc.s[sc.i] === "]") sc.i++;
+    else err(pos, "unclosed [ — the run must end with ]");
+    const top = stack[stack.length - 1];
+    if (!top || top.type !== "if") {
+      err(pos, "goto outside if is not supported by this renderer");
+      return;
     }
-    push({ kind: "mergeMarker", name, depth: stepDepth() }, pos);
+    if (!target) {
+      err(pos, "[goto: id] needs an id");
+      return;
+    }
+    jumps.push({ target, pos });
+    push(
+      { kind: "branchMerge", mergeTarget: target, mergeBranchId: top.id, depth: branchBodyDepth() },
+      pos,
+    );
   }
 }
 

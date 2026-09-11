@@ -821,11 +821,6 @@ function renderDiagramSvg({
       rowMeta[i] = { y, kind: "branchMerge" };
       pushToActiveCase(i);
       y += branchMergeH;
-    } else if (r.kind === "mergeMarker") {
-      // Invisible: the merge arrow it attracts is what shows where it is.
-      stepRowHeightByIndex.set(i, 0);
-      rowMeta[i] = { y, kind: "mergeMarker" };
-      pushToActiveCase(i);
     } else if (r.kind === "groupStart") {
       stepRowHeightByIndex.set(i, groupMarkerH);
       rowMeta[i] = { y, kind: "groupStart" };
@@ -1631,41 +1626,17 @@ function renderDiagramSvg({
     if (!plan) return null;
     return { loopIdx, prevStepIdx: plan.sourceIdx >= 0 ? plan.sourceIdx : null, plan };
   }
-  function firstRealStepAfter(idx) {
-    for (let i = idx + 1; i < rows.length; i++) {
-      const r = rows[i];
-      if (r.kind === "step" && !r.empty && r.role) return i;
-    }
-    return -1;
-  }
-  /**
-   * A named jump target: a step carrying that `@id`, or a `merge @name`
-   * landing marker — which is itself invisible, so the arrow lands on the
-   * first real step after it.
-   */
+  /** A named jump target: the step carrying that `id:`. */
   function resolveNamedTargetIdx(name) {
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       if (r.kind === "step" && !r.empty && r.role && r.mergeId === name) return i;
-      if (r.kind === "mergeMarker" && r.name === name) return firstRealStepAfter(i);
     }
     return -1;
   }
-  /**
-   * The step a `goto` lands on. `goto @id` names it; a bare `goto` lands on
-   * the first `merge` marker after its own `if`'s `end-if` (and so on the
-   * first real step after that marker).
-   */
+  /** The step a `[goto: id]` lands on. There is no bare, unnamed form. */
   function resolveMergeTargetIdx(mergeIdx) {
-    const merge = rows[mergeIdx];
-    const name = (merge.mergeTarget || "").trim();
-    if (name) return resolveNamedTargetIdx(name);
-    const endIdx = rows.findIndex(
-      (r, i) => i > mergeIdx && r.kind === "branchEnd" && r.id === merge.mergeBranchId,
-    );
-    if (endIdx < 0) return -1;
-    const markerIdx = rows.findIndex((r, i) => i > endIdx && r.kind === "mergeMarker");
-    return markerIdx < 0 ? -1 : firstRealStepAfter(markerIdx);
+    return resolveNamedTargetIdx((rows[mergeIdx].mergeTarget || "").trim());
   }
   function mergeAnchorInCase(rowIndices, branchId) {
     const mergeIdx = [...rowIndices]

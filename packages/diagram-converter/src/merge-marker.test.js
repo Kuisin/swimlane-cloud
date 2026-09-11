@@ -5,14 +5,6 @@ import { renderDiagramSvg } from "./render-pure/diagram.js";
 
 const render = (dsl) => renderDiagramSvg({ model: parseDSL(dsl), theme: THEMES.basic });
 
-/**
- * A jump arrow carries the row indices it connects (`data-jump-*`), and a
- * `merge` marker is a row — so the same drawing has every index after the
- * marker shifted by one. Drop them when the question is only whether the two
- * spellings *draw* the same thing.
- */
-const withoutJumpRowIds = (svg) => svg.replace(/ data-jump-(?:row|from|to)="[^"]*"/g, "");
-
 const doc = (body) => `@kai-swimlane
 /role/
 <a>
@@ -24,75 +16,49 @@ ${body}
 @end
 `;
 
-describe("a landing marker", () => {
-  it("parses `merge` / `merge @name` and a bare or named `goto`", () => {
+// There is no landing-marker row any more — every jump names a real step's
+// own `id:`, written as `[goto: id]`.
+describe("goto", () => {
+  it("parses `[goto: id]`, pointing at the step carrying that `id:`", () => {
     const model = parseDSL(
       doc(`[a: start]
 if (cancel?)
 case (yes)
   [a: accept]
-  goto
+  [goto: late]
 case ()
   [b: normal]
-  goto @late
 end-if
 [a: refund]
-merge
 [a: done]
-merge @late
+  id: late;
 [a: very late]`),
     );
     expect(model.errors).toEqual([]);
     const merges = model.rows.filter((r) => r.kind === "branchMerge").map((r) => r.mergeTarget);
-    expect(merges).toEqual([null, "late"]);
-    const markers = model.rows.filter((r) => r.kind === "mergeMarker").map((r) => r.name);
-    expect(markers).toEqual([null, "late"]);
+    expect(merges).toEqual(["late"]);
   });
 
-  it("rejects a bare goto with no marker after its if", () => {
+  it("rejects a `[goto: id]` naming an id that does not exist", () => {
     const model = parseDSL(
       doc(`if (x?)
 case (yes)
   [a: one]
-  goto
+  [goto: nowhere]
 end-if
 [a: after]`),
     );
-    expect(model.errors.map((e) => e.msg)).toContain("goto has no merge marker after this if");
+    expect(model.errors.map((e) => e.msg)).toContain('no node with id "nowhere"');
   });
 
-  it("rejects a marker name that is also a step id", () => {
+  it("rejects the same id given to two steps", () => {
     const model = parseDSL(
-      doc(`[a: one] @done
+      doc(`[a: one]
+  id: done;
 [a: two]
-merge @done`),
+  id: done;`),
     );
     expect(model.errors.filter((e) => e.msg === 'duplicate node id "done"')).toHaveLength(1);
-  });
-
-  it("renders exactly as the id-based form does, with the marker taking no space", () => {
-    const withMarker = doc(`[a: start]
-if (cancel?)
-case (yes)
-  [a: accept]
-  goto
-case ()
-  [b: normal]
-end-if
-[a: refund]
-merge
-[a: done]`);
-    const withId = doc(`[a: start]
-if (cancel?)
-case (yes)
-  [a: accept]
-  goto @done
-case ()
-  [b: normal]
-end-if
-[a: refund]
-[a: done] @done`);
-    expect(withoutJumpRowIds(render(withMarker))).toBe(withoutJumpRowIds(render(withId)));
   });
 });
 
@@ -147,22 +113,16 @@ level: 2;
   });
 });
 
-// The earlier grammar's `[merge]` / `[merge: id]` bracket form was two
-// spellings collapsed onto one meaning depending on context — a marker
-// outside an if, a jump inside one. `legacy-migrate.test.js` covers that
-// ambiguity being converted away; the current grammar has no such thing to
-// assert here, since `goto` (jump) and `merge` (marker) are distinct
-// keywords regardless of nesting. What is still worth asserting on its own
-// is the renderer's routing geometry for a backward jump.
 describe("a backward goto's routing", () => {
   it("routes around the blocks between, not up the flow's spine", () => {
     const svg = render(
-      doc(`[a: start] @again
+      doc(`[a: start]
+  id: again;
 [a: middle]
 [a: check]
 if (ok?)
 case (no)
-  goto @again
+  [goto: again]
 case ()
   [a: done]
 end-if`),

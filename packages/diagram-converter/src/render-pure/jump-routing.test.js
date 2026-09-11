@@ -170,17 +170,18 @@ const railX = (arrow) => {
 
 const endY = (arrow) => arrow.points[arrow.points.length - 1][1];
 
-describe("1. a forward `goto @id` to a later block in the same lane", () => {
+describe("1. a forward `[goto: id]` to a later block in the same lane", () => {
   const svg = render(`[a: start]
 if (q1?)
 case (yes)
 [a: one]
-goto @later
+[goto: later]
 case (no)
 [a: two]
 end-if
 [a: three]
-[a: later] @later`);
+[a: later]
+  id: later;`);
 
   it("draws one arrow, from `one`'s bottom edge to `later`'s side", () => {
     const [jump] = checkedArrows(svg, 1);
@@ -191,17 +192,18 @@ end-if
   });
 });
 
-describe("2. a forward `goto @id` into another lane", () => {
+describe("2. a forward `[goto: id]` into another lane", () => {
   const svg = render(`[a: start]
 if (q1?)
 case (yes)
 [a: one]
-goto @later
+[goto: later]
 case (no)
 [a: two]
 end-if
 [b: three]
-[c: later] @later`);
+[c: later]
+  id: later;`);
 
   it("crosses the lanes without running over anything", () => {
     const [jump] = checkedArrows(svg, 1);
@@ -210,14 +212,15 @@ end-if
   });
 });
 
-describe("3. a backward `goto @id`", () => {
+describe("3. a backward `[goto: id]`", () => {
   it("reaches an earlier block in the same lane", () => {
-    const svg = render(`[a: start] @top
+    const svg = render(`[a: start]
+  id: top;
 [a: middle]
 if (q1?)
 case (yes)
 [a: one]
-goto @top
+[goto: top]
 case (no)
 [a: two]
 end-if
@@ -229,12 +232,13 @@ end-if
   });
 
   it("reaches an earlier block in another lane", () => {
-    const svg = render(`[c: start] @top
+    const svg = render(`[c: start]
+  id: top;
 [a: middle]
 if (q1?)
 case (yes)
 [a: one]
-goto @top
+[goto: top]
 case (no)
 [a: two]
 end-if
@@ -248,56 +252,22 @@ end-if
   });
 });
 
-describe("4. the landing marker", () => {
-  it("a bare `goto` lands after the first `merge` past its own end-if", () => {
-    const svg = render(`[a: start]
-if (q1?)
-case (yes)
-[a: one]
-goto
-case (no)
-[a: two]
-end-if
-merge
-[a: after]`);
-    const [jump] = checkedArrows(svg, 1);
-    expect(jump.to).toBe("8"); // the `after` step row, not the (invisible) marker
-  });
-
-  it("`goto @name` lands on the `merge @name` marker, not on the `if`'s join", () => {
-    const svg = render(`[a: start]
-if (q1?)
-case (yes)
-[a: one]
-goto @join
-case (no)
-[a: two]
-end-if
-[a: middle]
-merge @join
-[b: after]`);
-    const [jump] = checkedArrows(svg, 1);
-    const boxes = stepBoxes(svg);
-    const after = boxes[boxes.length - 1];
-    expect(endY(jump)).toBeCloseTo((after.top + after.bottom) / 2, 5);
-  });
-});
-
-describe("5. a jump from inside a nested if", () => {
+describe("4. a jump from inside a nested if", () => {
   const svg = render(`[a: start]
 if (outer?)
 case (yes)
 if (inner?)
 case (deep)
 [a: deep]
-goto @later
+[goto: later]
 case (shallow)
 [a: shallow]
 end-if
 case (no)
 [b: two]
 end-if
-[a: later] @later`);
+[a: later]
+  id: later;`);
 
   it("leaves the inner case's last block and clears both joins", () => {
     const [jump] = checkedArrows(svg, 1);
@@ -314,11 +284,12 @@ case (a)
 case (b)
 [a: two]
 end-if
-goto @later
+[goto: later]
 case (no)
 [b: three]
 end-if
-[a: later] @later`);
+[a: later]
+  id: later;`);
     const [jump] = checkedArrows(nested, 1);
     // Not `two`: the last block of one of the nested cases is not where the
     // outer case's flow leaves from — the nested join is.
@@ -326,7 +297,7 @@ end-if
   });
 });
 
-describe("6. a jump out of a fork path, a section and a branch group", () => {
+describe("5. a jump out of a fork path, a section and a branch group", () => {
   it("from a fork path", () => {
     const svg = render(`[a: start]
 fork (left)
@@ -334,14 +305,15 @@ fork (left)
 if (q?)
 case (yes)
 [a: l2]
-goto @later
+[goto: later]
 case (no)
 [a: l3]
 end-if
 and (right)
 [b: r1]
 end-fork
-[a: later] @later`);
+[a: later]
+  id: later;`);
     checkedArrows(svg, 1);
   });
 
@@ -351,12 +323,13 @@ section (audit)
 if (q?)
 case (yes)
 [a: inside]
-goto @later
+[goto: later]
 case (no)
 [a: other]
 end-if
 end-section
-[b: later] @later`);
+[b: later]
+  id: later;`);
     checkedArrows(svg, 1);
   });
 
@@ -366,21 +339,23 @@ branch (side)
 if (q?)
 case (yes)
 [b: aside]
-goto @later
+[goto: later]
 case (no)
 [b: other]
 end-if
 end-branch
 [a: middle]
-[a: later] @later`);
+[a: later]
+  id: later;`);
     const [jump] = checkedArrows(svg, 1);
     expect(jump.from).toBe(3); // `aside`, inside the group — not the block before it
   });
 });
 
-describe("7. a case whose only row is a jump", () => {
+describe("6. a case whose only row is a jump", () => {
   it("`loop`: turns back just under its label, not from the bottom of the page", () => {
-    const svg = render(`[a: start] @top
+    const svg = render(`[a: start]
+  id: top;
 if (retry?)
 case (yes)
 [a: work]
@@ -397,16 +372,17 @@ end-if
     for (const [, y] of jump.points) expect(y).toBeLessThan(done.top);
   });
 
-  it("`goto @id`: starts on the case's own rail, not at the jump row's y", () => {
+  it("`[goto: id]`: starts on the case's own rail, not at the jump row's y", () => {
     const svg = render(`[a: start]
 if (q1?)
 case (yes)
 [a: work]
 case (no)
-goto @later
+[goto: later]
 end-if
 [a: middle]
-[a: later] @later`);
+[a: later]
+  id: later;`);
     const [jump] = checkedArrows(svg, 1);
     expect(jump.from).toBeNull();
     // The rail the decision drew ends exactly where the jump picks up.
@@ -423,7 +399,8 @@ end-if
   });
 
   it("`loop @id` goes to the named block, not to the enclosing question", () => {
-    const svg = render(`[a: start] @top
+    const svg = render(`[a: start]
+  id: top;
 [b: gate]
 if (retry?)
 case (yes)
@@ -434,28 +411,29 @@ end-if
 [a: done]`);
     const [jump] = checkedArrows(svg, 1);
     expect(jump.kind).toBe("loop");
-    expect(jump.to).toBe("0"); // `start`, the `@top` block
+    expect(jump.to).toBe("0"); // `start`, the `id: top` block
   });
 });
 
-describe("8. several jumps onto one block", () => {
+describe("7. several jumps onto one block", () => {
   const svg = render(`[a: start]
 if (q1?)
 case (yes)
 [a: one]
-goto @later
+[goto: later]
 case (no)
 [b: two]
-goto @later
+[goto: later]
 end-if
 if (q2?)
 case (yes)
 [c: three]
-goto @later
+[goto: later]
 case (no)
 [a: four]
 end-if
-[a: later] @later`);
+[a: later]
+  id: later;`);
 
   it("draws one arrow each, on its own rail, with its own arrowhead", () => {
     const arrows = checkedArrows(svg, 3);
@@ -465,16 +443,17 @@ end-if
   });
 });
 
-describe("9. a target one row after the end-if", () => {
+describe("8. a target one row after the end-if", () => {
   const svg = render(`[a: start]
 if (q1?)
 case (yes)
 [a: one]
-goto @next
+[goto: next]
 case (no)
 [a: two]
 end-if
-[a: next] @next`);
+[a: next]
+  id: next;`);
 
   it("still routes around the join instead of cutting through it", () => {
     const [jump] = checkedArrows(svg, 1);
@@ -483,43 +462,19 @@ end-if
 });
 
 describe("a jump with nothing to land on", () => {
-  // These are all diagnosed by the reader, but the editor still renders while
-  // the text is being typed — so the picture has to stay sane, with no arrow
-  // dangling off a target that does not exist.
-  it("`goto @unknown` draws no arrow and leaves the case merging into the join", () => {
+  // Diagnosed by the reader, but the editor still renders while the text is
+  // being typed — so the picture has to stay sane, with no arrow dangling
+  // off a target that does not exist.
+  it("`[goto: unknown]` draws no arrow and leaves the case merging into the join", () => {
     const svg = renderAnyway(`[a: start]
 if (q?)
 case (yes)
 [a: one]
-goto @nope
+[goto: nope]
 case (no)
 [a: two]
 end-if
 [a: done]`);
-    expect(jumpArrows(svg)).toHaveLength(0);
-  });
-
-  it("a bare `goto` with no `merge` marker after its end-if draws no arrow", () => {
-    const svg = renderAnyway(`[a: start]
-if (q?)
-case (yes)
-goto
-case (no)
-[a: two]
-end-if`);
-    expect(jumpArrows(svg)).toHaveLength(0);
-  });
-
-  it("a `merge` marker with nothing after it draws no arrow", () => {
-    const svg = renderAnyway(`[a: start]
-if (q?)
-case (yes)
-[a: one]
-goto
-case (no)
-[a: two]
-end-if
-merge`);
     expect(jumpArrows(svg)).toHaveLength(0);
   });
 });

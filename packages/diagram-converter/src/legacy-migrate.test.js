@@ -79,54 +79,49 @@ describe("migrateLegacyDsl", () => {
     expect(parseDSL(text).errors).toEqual([]);
   });
 
-  it("rewrites `merge: id;` and a bare `merge;` inside a case into `goto`", () => {
-    const named = migrateLegacyDsl(
-      doc("if (q) is (a) than\n[a: x]\nmerge: done;\nend-if\n[merge: done]"),
-    );
-    expect(named.text).toBe(doc("if (q)\ncase (a)\n[a: x]\ngoto @done\nend-if\nmerge @done"));
-    expect(parseDSL(named.text).errors).toEqual([]);
-
-    const bare = migrateLegacyDsl(doc("if (q) is (a) than\n[a: x]\nmerge;\nend-if\n[merge]"));
-    expect(bare.text).toBe(doc("if (q)\ncase (a)\n[a: x]\ngoto\nend-if\nmerge"));
-    expect(parseDSL(bare.text).errors).toEqual([]);
+  it("rewrites `merge: id;` inside a case into `[goto: id]`", () => {
+    const named = migrateLegacyDsl(doc("if (q) is (a) than\n[a: x]\nmerge: done;\nend-if"));
+    expect(named.text).toBe(doc("if (q)\ncase (a)\n[a: x]\n[goto: done]\nend-if"));
   });
 
-  it("rewrites `[merge: id]` inside a case into `goto @id`", () => {
+  it("rewrites `[merge: id]` inside a case into `[goto: id]`, leaving a step's own `id:` line alone", () => {
     const src = doc(
       "[a: start]\nid: again;\n[a: mid]\nif (ok) is (no) than\n[merge: again]\nelse\n[a: done]\nend-if",
     );
     const { text } = migrateLegacyDsl(src);
     expect(text).toBe(
       doc(
-        "[a: start] @again\n[a: mid]\nif (ok)\ncase (no)\ngoto @again\ncase ()\n[a: done]\nend-if",
+        "[a: start]\nid: again;\n[a: mid]\nif (ok)\ncase (no)\n[goto: again]\ncase ()\n[a: done]\nend-if",
       ),
     );
     expect(parseDSL(text).errors).toEqual([]);
   });
 
-  it("rewrites a bare `[merge]` inside a case into a bare `goto`", () => {
-    const src = doc("if (ok) is (no) than\n[merge]\nelse\n[a: done]\nend-if\n[merge]\n[a: after]");
-    const { text } = migrateLegacyDsl(src);
-    expect(text).toBe(
-      doc("if (ok)\ncase (no)\ngoto\ncase ()\n[a: done]\nend-if\nmerge\n[a: after]"),
-    );
-    expect(parseDSL(text).errors).toEqual([]);
+  // There is no marker concept any more — every jump needs a real target id
+  // — so a bare `merge;` / `[merge]`, in a case or as a landing marker, has
+  // no automatic mapping. Left untouched; the reader errors on it, pointing
+  // at the exact line to fix by hand.
+  it("leaves an unmappable bare `merge;` / `[merge]` untouched for the reader to flag", () => {
+    const inCase = migrateLegacyDsl(doc("if (ok) is (no) than\n[merge]\nelse\n[a: done]\nend-if"));
+    expect(inCase.text).toBe(doc("if (ok)\ncase (no)\n[merge]\ncase ()\n[a: done]\nend-if"));
+    expect(parseDSL(inCase.text).errors).not.toEqual([]);
+
+    const marker = migrateLegacyDsl(doc("[a: x]\n[merge]\n[a: y]"));
+    expect(marker.text).toBe(doc("[a: x]\n[merge]\n[a: y]"));
+    expect(parseDSL(marker.text).errors).not.toEqual([]);
   });
 
-  it("rewrites `[merge]` / `[merge: n]` markers outside any if into `merge` / `merge @n`", () => {
-    const bare = migrateLegacyDsl(doc("[a: x]\n[merge]\n[a: y]"));
-    expect(bare.text).toBe(doc("[a: x]\nmerge\n[a: y]"));
-    expect(parseDSL(bare.text).errors).toEqual([]);
-
-    const named = migrateLegacyDsl(doc("[a: x]\n[merge: n]\n[a: y]"));
-    expect(named.text).toBe(doc("[a: x]\nmerge @n\n[a: y]"));
-    expect(parseDSL(named.text).errors).toEqual([]);
+  it("leaves a `[goto: id]` line — already the current grammar — untouched", () => {
+    const src = doc("if (q)\ncase (a)\n  [goto: home]\nend-if");
+    const { text, changed } = migrateLegacyDsl(src);
+    expect(text).toBe(src);
+    expect(changed).toBe(0);
   });
 
-  it("rewrites `id:`, `props:`, `arrow:` and `link:` lines onto the step's own suffixes", () => {
+  it("rewrites `props:`, `arrow:` and `link:` lines onto the step's own suffixes, leaving `id:` as its own line", () => {
     const src = doc("[a: x]\nid: home;\nprops: A,B;\narrow: dashed;\nlink: ./y.txt;");
     const { text, changed } = migrateLegacyDsl(src);
-    expect(text).toBe(doc("[a: x] @home +A +B ~> => ./y.txt"));
+    expect(text).toBe(doc("[a: x] +A +B ~> => ./y.txt\nid: home;"));
     expect(changed).toBeGreaterThan(0);
     expect(parseDSL(text).errors).toEqual([]);
   });
@@ -157,10 +152,11 @@ describe("migrateLegacyDsl", () => {
 
   it("returns a current-grammar document unchanged", () => {
     const src = doc(
-      "if (q)\ncase (a)\n  [a: x] @done\n  goto\ncase ()\n  [a: y]\nend-if\nmerge\n[a: z]",
+      "[a: z]\n  id: done;\nif (q)\ncase (a)\n  [goto: done]\ncase ()\n  [a: y]\nend-if",
     );
     const { text, changed } = migrateLegacyDsl(src);
     expect(text).toBe(src);
     expect(changed).toBe(0);
+    expect(parseDSL(text).errors).toEqual([]);
   });
 });

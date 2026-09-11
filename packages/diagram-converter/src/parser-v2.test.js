@@ -32,8 +32,8 @@ describe("version dispatch", () => {
 });
 
 describe("kai-swimlane", () => {
-  it("parses a step with every suffix in any order", () => {
-    const m = parseDSL(doc("/line/\n[sales: 見積作成] <hex> @quote +RQ ~>"));
+  it("parses a step with every suffix in any order, and its id: line", () => {
+    const m = parseDSL(doc("/line/\n[sales: 見積作成] <hex> +RQ ~>\n  id: quote;"));
     expect(m.errors).toEqual([]);
     const step = m.rows[0];
     expect(step).toMatchObject({
@@ -119,7 +119,9 @@ describe("kai-swimlane", () => {
   });
 
   it("keeps a loop's own target so it can round-trip", () => {
-    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  [x: y] @start\n  loop @start\nend-if"));
+    const m = parseDSL(
+      doc("/line/\nif (q)\ncase (a)\n  [x: y]\n    id: start;\n  loop @start\nend-if"),
+    );
     expect(m.errors).toEqual([]);
     expect(m.rows.find((r) => r.kind === "branchLoop")).toMatchObject({ loopTarget: "start" });
   });
@@ -131,7 +133,7 @@ describe("kai-swimlane", () => {
   });
 
   it("reports a jump whose target does not exist", () => {
-    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  goto @nope\nend-if"));
+    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  [goto: nope]\nend-if"));
     expect(m.errors.map((e) => e.msg)).toContain('no node with id "nope"');
   });
 });
