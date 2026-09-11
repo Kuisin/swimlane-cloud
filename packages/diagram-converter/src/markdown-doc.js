@@ -61,7 +61,12 @@
 
 const FENCE_LANG = "kai-swimlane";
 
-/** Every section marker, in the canonical order of dsl-rule.md:324. */
+/**
+ * Every section marker, in the canonical order dsl-rule.md gives under
+ * "Canonical order is `/meta/ /title/ /page/ …`". Named rather than cited by
+ * line: the two line numbers that used to be here had both drifted, and a
+ * stale reference is worse than none — it reads as though someone checked.
+ */
 const SECTION_MARKERS = [
   "/meta/",
   "/title/",
@@ -74,7 +79,11 @@ const SECTION_MARKERS = [
   "/i18n/",
 ];
 
-/** `/meta/`'s five reserved keys, in the order dsl-rule.md:376 serialises them. */
+/**
+ * `/meta/`'s five reserved keys, in the order dsl-rule.md's "Canonical key and
+ * entry order" table gives for `/meta/` — every other key follows by code
+ * point, which `orderedMetaKeys` does.
+ */
 const META_KEY_ORDER = ["owner", "status", "tags", "version", "updated"];
 
 const FRONTMATTER_DELIM = "---";
@@ -576,10 +585,21 @@ export function isMarkdownDiagram(md) {
  * section and refuses anything it cannot flatten losslessly. This one never
  * refuses: it is for showing, not for storing, so it is lossy on purpose.
  *
- * It lives here rather than in the renderer because more than one place has to
- * do it — the diagram's document-info panel, and any host whose own contract is
- * strings (`saas-host`'s `metaOf`). Two implementations would drift, and the
- * same document would then read differently in two products.
+ * It is exported, and lives here rather than in the renderer, because a host
+ * whose own contract is strings has to flatten at its boundary and must not
+ * reinvent this — two implementations drift, and the same document then reads
+ * differently in two products.
+ *
+ * In *this* tree it has exactly one caller: the diagram's document-info panel
+ * (`render-pure/diagram.js`). That is a fact about today's callers, not a
+ * design intent — the export exists precisely so the second and third caller
+ * use it instead of writing their own.
+ *
+ * Not for a write path. It is lossy by design, so a value that has been through
+ * it must never be stored: `{ repo: { name: "docs" } }` becomes the *string*
+ * `"repo: name: docs"`, which then serializes and reads back perfectly, so
+ * nothing downstream can tell the structure was destroyed. Use `projectMeta`
+ * when the result is going to be written.
  */
 export function metaText(value) {
   if (Array.isArray(value)) return value.map(metaText).filter(Boolean).join(LIST_SEP);
@@ -645,7 +665,7 @@ export function readMetaSection(dsl) {
 
 /**
  * Insert a `/meta/` section built from `meta`, ahead of the first other
- * section — `/meta/` sorts first in dsl-rule.md:324's order.
+ * section — `/meta/` sorts first in `SECTION_MARKERS`' canonical order.
  *
  * `/meta/` is scalar-only, so `meta` must already be the projection
  * `projectMeta` produces.

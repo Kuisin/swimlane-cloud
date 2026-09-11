@@ -31,16 +31,25 @@ import {
 
 // The parser's tokenizer marks every unescaped `|`/`｜` with this byte before
 // most fields decide whether they're actually translatable — a value that never
-// goes through `seg()` (`icon:`, a path, an `/i18n/` value) can still carry a
-// stray one. Never write this raw byte into a file; when a value wasn't run
-// through `escapeBarSegment` (which already turns a real literal bar back into
-// `\|`), fall back to this lossy but always-safe swap.
+// goes through `seg()` can still carry a stray one. Never write this raw byte
+// into a file; when a value wasn't run through `escapeBarSegment` (which already
+// turns a real literal bar back into `\|`), fall back to this lossy but
+// always-safe swap.
 //
 // It is lossy in two ways — `｜` comes back as `|`, and an escaped `\|` loses
-// its escape — which is why it is a patch, not the fix. `/meta/` no longer
-// needs it at all: dsl-rule.md excludes `/meta/` from the translatable set, so
-// `readProperty` now reads those values without bar-splitting and they arrive
-// here as ordinary text. The remaining callers are not fixed yet.
+// its escape — which is why it is a patch, not the fix.
+//
+// Two paths still reach it, both verified by probing the parser rather than by
+// reading it (an earlier version of this comment named `icon:` and "a path",
+// and neither is true — both go through `seg()`):
+//   - an `/i18n/` value, which dsl-rule.md's same sentence calls non-translatable
+//     and which the reader nonetheless bar-splits, exactly as `/meta/` used to;
+//   - an unrecognised key kept on a definition, written back by
+//     `emitUnknownKeys` below — the one that actually puts a sanitized value in
+//     a user's file.
+// `/meta/` no longer reaches it: `readProperty` now reads those values without
+// bar-splitting, so they arrive here as ordinary text. Fixing the other two is
+// the same one-line change on the read side, not more of this.
 const RAW_SEG_MARKER = String.fromCharCode(0);
 function sanitizeStrayMarker(value) {
   return typeof value === "string" && value.includes(RAW_SEG_MARKER)
