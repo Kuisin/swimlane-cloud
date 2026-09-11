@@ -22,7 +22,13 @@ import { gfm } from "@milkdown/kit/preset/gfm";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
 import { AlertTriangle, Lock, Plus, Trash2, X } from "lucide-react";
 import { useT } from "@/i18n";
-import { carriedValues, fromProse, toProse, type MarkdownParts } from "@/lib/markdown-prose";
+import {
+  carriedValues,
+  fromProse,
+  toProse,
+  unwritableKeys,
+  type MarkdownParts,
+} from "@/lib/markdown-prose";
 import {
   booleanValueOf,
   hasFillableDefaults,
@@ -260,7 +266,15 @@ function ListControl({
   );
 }
 
-/** A nested map: key/value pairs one level deep, which is what a schema `map` is. */
+/**
+ * A nested map, edited one level of key/value pairs at a time.
+ *
+ * That is a limit of this control, not of the type: a `map` is any plain object
+ * and `validateMetadata` accepts one nested to any depth. An entry that is
+ * itself a list or a map is therefore shown as a line and refused as an edit —
+ * `mapEntriesOf` marks which — rather than being flattened into text the box
+ * would then write back over the structure.
+ */
 function MapControl({
   value,
   readOnly,
@@ -372,6 +386,7 @@ function MetadataForm({
   meta,
   fields,
   carried,
+  frozen,
   readOnly,
   onChange,
 }: {
@@ -379,6 +394,8 @@ function MetadataForm({
   fields: MetadataField[];
   /** Keys the engine can only carry verbatim, with the lines it holds them on. */
   carried: Map<string, string[]>;
+  /** The whole block is unrewritable — see `rewritable` in markdown-prose.ts. */
+  frozen: boolean;
   readOnly: boolean;
   onChange: (next: MetaRecord) => void;
 }) {
@@ -388,6 +405,7 @@ function MetadataForm({
   const problems = problemsByKey(
     withoutCarried(validateMetadata(meta, fields), [...carried.keys()]),
   );
+  const unwritable = new Set(unwritableKeys(meta, undefined, { rewritable: !frozen }));
 
   const setValue = (key: string, value: MetaValue) => onChange({ ...meta, [key]: value });
 
@@ -410,7 +428,14 @@ function MetadataForm({
       </h2>
       {rows.length === 0 && <p className="text-xs text-neutral-400">{t("md.noMetadata")}</p>}
 
-      {!readOnly && hasFillableDefaults(meta, fields) && (
+      {frozen && (
+        <p className="flex items-start gap-1 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
+          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+          {t("md.frozen")}
+        </p>
+      )}
+
+      {!readOnly && !frozen && hasFillableDefaults(meta, fields) && (
         <button
           type="button"
           onClick={() => onChange(withDefaults(meta, fields))}
@@ -474,6 +499,12 @@ function MetadataForm({
                 {problemText(problem, t)}
               </p>
             ))}
+            {unwritable.has(row.key) && (
+              <p className="flex items-start gap-1 text-[11px] text-amber-700">
+                <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+                {t("md.notWritable")}
+              </p>
+            )}
           </div>
         );
       })}
@@ -586,6 +617,7 @@ export default function MarkdownEditor({
           meta={meta}
           fields={fields}
           carried={carried}
+          frozen={!initial.rewritable}
           readOnly={readOnly}
           onChange={onMetaChange}
         />

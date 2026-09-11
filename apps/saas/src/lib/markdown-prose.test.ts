@@ -160,6 +160,38 @@ describe("rich frontmatter", () => {
     expect(toProse(out).meta.sourceRef).toEqual({ repo: "other", ref: "main" });
   });
 
+  /**
+   * A sequence of mappings is the one shape whose classification moves under
+   * us: today's engine reads it as a flattenable list, and on
+   * `feat/md-metadata-engine` it becomes `verbatim`. Either way editing a
+   * different key must leave it exactly as the author wrote it, so this holds
+   * across that merge rather than pinning which side of it we are on.
+   */
+  it("leaves a sequence of mappings alone when another key is edited", () => {
+    const source = "---\nowner: a\nreviewers:\n  - name: Jane\n  - name: Sam\n---\n\nProse.\n";
+    const parts = toProse(source);
+    // Today's engine reads those two items as the strings "name: Jane" and
+    // "name: Sam" and would re-emit them quoted, turning a sequence of mappings
+    // into a sequence of strings. The document is therefore not rewritable, and
+    // the metadata edit is refused rather than written over the structure.
+    expect(parts.rewritable).toBe(false);
+    expect(unwritableKeys(parts.meta, parts.shape, parts)).toContain("reviewers");
+
+    const out = fromProse({ ...parts, meta: { ...parts.meta, owner: "b" } }, parts.prose);
+    expect(out).toContain("reviewers:\n  - name: Jane\n  - name: Sam");
+    expect(out).not.toContain('"name: Jane"');
+    // The prose still saves; only the metadata edit is held back.
+    expect(fromProse({ ...parts, meta: parts.meta }, "# Edited\n")).toBe(
+      `${parts.frontmatter}# Edited\n`,
+    );
+  });
+
+  it("counts an ordinary document as rewritable, however rich its frontmatter", () => {
+    expect(toProse(RICH).rewritable).toBe(true);
+    expect(toProse(STORED).rewritable).toBe(true);
+    expect(toProse("# Notes\n").rewritable).toBe(true);
+  });
+
   it("leaves a document with no frontmatter without any", () => {
     const parts = toProse("# Notes\n");
     expect(metaOf("# Notes\n").hadFrontmatter).toBe(false);
