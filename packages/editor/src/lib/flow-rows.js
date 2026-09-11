@@ -272,6 +272,17 @@ export function stepBlockDisplayName(row, rowIndex = 0, t = defaultT) {
   return name || text || t("flow.stepN", { n: rowIndex + 1 });
 }
 
+/** The human label of the step named by `id`, or "" when nothing claims it. */
+function stepLabelForId(rows, id, t = defaultT) {
+  if (!rows || !id) return "";
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (row?.kind !== "step" || row.empty) continue;
+    if ((row.mergeId || "").trim() === id) return stepBlockDisplayName(row, i, t);
+  }
+  return "";
+}
+
 function laneLabel(lanes, roleId, t = defaultT) {
   if (!roleId) return t("flow.noRole");
   const lane = (lanes || []).find((l) => l.id === roleId);
@@ -406,7 +417,12 @@ export function rowLaneLabel(row, lanes, t = defaultT) {
   return laneLabel(lanes, row.role, t);
 }
 
-export function rowSummaryText(row, lanes, t = defaultT) {
+/**
+ * `rows` is optional and only used to turn a jump's target id back into the
+ * destination step's own label — an id is a machine detail the GUI assigns,
+ * never something the reader should have to decode (see `makeStepId`).
+ */
+export function rowSummaryText(row, lanes, t = defaultT, rows = null) {
   if (!row) return "";
   switch (row.kind) {
     case "step": {
@@ -423,8 +439,12 @@ export function rowSummaryText(row, lanes, t = defaultT) {
       return row.parallel ? t("flow.endParallel") : t("flow.endBranch");
     case "branchLoop":
       return t("flow.loopInBranch");
-    case "branchMerge":
-      return t("flow.mergeTo", { id: (row.mergeTarget || "").trim() || t("flow.unset") });
+    case "branchMerge": {
+      const target = (row.mergeTarget || "").trim();
+      return t("flow.mergeTo", {
+        id: (target && stepLabelForId(rows, target, t)) || target || t("flow.unset"),
+      });
+    }
     case "groupStart":
       return (row.groupMode ?? "branch") === "branch" ? t("flow.subbranch") : t("flow.sectionBox");
     case "groupEnd":
@@ -436,11 +456,15 @@ export function rowSummaryText(row, lanes, t = defaultT) {
   }
 }
 
-/** Tiny muted meta suffix for a step (merge id / non-default arrow). */
+/**
+ * Tiny muted meta suffix for a step (non-default arrow). A step's `id:` is
+ * deliberately absent: it is assigned by the tool when a jump is pointed at
+ * the step and removed again when the last jump stops pointing at it, so
+ * showing it would surface a name the user never chose and can't act on.
+ */
 export function rowStepMeta(row) {
   if (!row || row.kind !== "step" || row.empty) return "";
   const parts = [];
-  if ((row.mergeId || "").trim()) parts.push(`#${row.mergeId.trim()}`);
   if (row.arrowLine && row.arrowLine !== "solid") parts.push(row.arrowLine);
   return parts.join(" · ");
 }
@@ -465,50 +489,80 @@ export function branchCaseBadgeStyle(row) {
  * "") because it is a perfectly good destination: a caller that lets the user
  * pick it is expected to give it an id (see `makeStepId`) as part of the same
  * edit. Callers that can only *reference* an existing id filter on `mergeId`.
+ *
+ * `label` is the step's own human label, never its id: the picker reads as a
+ * list of steps in the flow, which is what the author actually chose between.
  */
-export function collectMergeTargetOptions(rows) {
+export function collectMergeTargetOptions(rows, t = defaultT) {
   const options = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     if (row.kind !== "step" || row.empty || !row.role) continue;
-    const mergeId = (row.mergeId || "").trim();
-    const blockName = stepBlockDisplayName(row, i);
+    const blockName = stepBlockDisplayName(row, i, t);
     options.push({
       kind: "step",
       stepIndex: i,
-      mergeId,
+      mergeId: (row.mergeId || "").trim(),
       blockName,
-      label: mergeId ? `${blockName} (id: ${mergeId})` : blockName,
+      label: blockName,
     });
   }
   return options;
 }
 
-/** ASCII slug for an id, or "" when the text has nothing usable in it. */
-function idSlug(text) {
-  return String(text ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 24)
-    .replace(/-+$/g, "");
+/** Every id some `[goto: id]` or `loop @id` in `rows` still points at. */
+function referencedStepIds(rows) {
+  const used = new Set();
+  for (const row of rows || []) {
+    if (row?.kind === "branchMerge") {
+      const id = (row.mergeTarget || "").trim();
+      if (id) used.add(id);
+    } else if (row?.kind === "branchLoop") {
+      const id = (row.loopTarget || "").trim();
+      if (id) used.add(id);
+    }
+  }
+  return used;
 }
 
 /**
- * A fresh `id:` for the step at `index`, unique against every id already used
- * in `rows`. Derived from the step's label/text so the written DSL reads as
- * `id: send-invoice;` rather than an opaque token; a step whose text has no
- * ASCII in it (e.g. Japanese-only) falls back to `step-<n>`, since an id is a
- * cross-reference the `[goto: …]` line has to repeat verbatim.
+ * A fresh `id:` for the step at `index`: the first free `step-<n>`.
+ *
+ * Deliberately not derived from the step's own text. An id exists only so a
+ * `[goto: …]` line has something to name, and the GUI has no field for typing
+ * one — it is assigned when a jump is pointed at a step and removed again
+ * when the last jump stops pointing there (see `pruneUnreferencedStepIds`).
+ * A slug of the label would look like a name the user chose and would go
+ * stale the moment they reworded the step; a sequential token reads as what
+ * it is, plumbing.
  */
-export function makeStepId(rows, index) {
+export function makeStepId(rows) {
   const taken = new Set(
     (rows || []).map((r) => (r?.mergeId || "").trim()).filter((id) => id.length > 0),
   );
-  const row = (rows || [])[index] || {};
-  const base = idSlug(row.name || row.text) || `step-${index + 1}`;
-  if (!taken.has(base)) return base;
-  let n = 2;
-  while (taken.has(`${base}-${n}`)) n++;
-  return `${base}-${n}`;
+  let n = 1;
+  while (taken.has(`step-${n}`)) n++;
+  return `step-${n}`;
+}
+
+/**
+ * Drop every step `id:` no `[goto: …]` / `loop @…` points at any more, so a
+ * retargeted or deleted jump doesn't leave an orphan `id:` line behind in the
+ * document. Safe precisely because the GUI never lets anyone author an id by
+ * hand: an unreferenced one is always a leftover the tool itself wrote.
+ *
+ * Returns a new array (the same one when nothing changed), so a caller can
+ * assign it straight back onto an `applyModelEdit` draft.
+ */
+export function pruneUnreferencedStepIds(rows) {
+  const used = referencedStepIds(rows);
+  let changed = false;
+  const out = (rows || []).map((row) => {
+    if (row?.kind !== "step") return row;
+    const id = (row.mergeId || "").trim();
+    if (!id || used.has(id)) return row;
+    changed = true;
+    return { ...row, mergeId: "" };
+  });
+  return changed ? out : rows;
 }

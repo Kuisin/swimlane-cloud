@@ -276,13 +276,19 @@ export interface MergeTargetOption {
   stepIndex: number;
   /** "" for a step with no `id:` yet — still a valid destination, see makeStepId. */
   mergeId: string;
+  /** The step's own human label — never its id, which the GUI keeps hidden. */
   blockName: string;
   label: string;
 }
 /** Every step row a `[goto: id]` could land on, labelled for a picker. */
-export declare function collectMergeTargetOptions(rows: GuiRow[]): MergeTargetOption[];
-/** A fresh, unique `id:` for the step at `index`, derived from its label/text. */
-export declare function makeStepId(rows: GuiRow[], index: number): string;
+export declare function collectMergeTargetOptions(
+  rows: GuiRow[],
+  t?: (key: string, vars?: Record<string, unknown>) => string,
+): MergeTargetOption[];
+/** The first free `step-<n>` id, for a step a jump was just pointed at. */
+export declare function makeStepId(rows: GuiRow[]): string;
+/** Clear every step `id:` no `[goto: …]` / `loop @…` references any more. */
+export declare function pruneUnreferencedStepIds(rows: GuiRow[]): GuiRow[];
 
 /** Index of the `branchEnd` closing the `branchStart` at `startIndex`, or -1. */
 export declare function findBranchEndIndex(rows: GuiRow[], startIndex: number): number;

@@ -32,8 +32,9 @@ test.describe("the demo editor", () => {
     await openFile(page, "order-to-cash.txt");
     test.skip(onPhone(), "no preview on a phone");
     const svg = diagram(page);
-    // Numbering levels reach the gutter, a landing marker takes no space,
-    // and the linked step carries its ↗ tile.
+    // Numbering levels reach the gutter and the linked step carries its ↗
+    // tile. (The sample's `[goto: invoice]` lands on a real step, so there
+    // is no marker row taking up space either way.)
     await expect(svg).toContainText("2-1. ");
     await expect(svg.locator("[data-link]")).toHaveCount(1);
   });

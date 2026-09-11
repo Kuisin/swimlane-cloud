@@ -173,8 +173,6 @@ export const EN = {
   "step.block": "Look/style (optional)",
   "step.none": "(none)",
   "step.arrow": "Arrow",
-  "step.mergeId": "Step id (optional) — lets a jump land here",
-  "step.mergeIdHint": "Written under the step as `id: …;`, so a `[goto: …]` can name it.",
   "step.link": "Link to another flow",
   "step.linkNone": "(none)",
   "step.linkHint": "Shown as ↗ on the block; click it in the preview to open the flow.",
@@ -232,8 +230,7 @@ export const EN = {
   "branch.default": "(default)",
   "branch.mergeTarget": "Jump to step",
   "branch.mergeTargetUnset": "Not set — pick a step",
-  "branch.mergeTargetHint":
-    "This case skips the rest of the if and continues from that step. The step gets an id: line so the jump can name it.",
+  "branch.mergeTargetHint": "This case skips the rest of the if and continues from that step.",
   // gui – add block dropdown
   "gui.addSwitch": "Switch / multi-case",
   // color
@@ -505,8 +502,6 @@ export const JA = {
   "step.block": "見た目のスタイル（任意）",
   "step.none": "（なし）",
   "step.arrow": "矢印",
-  "step.mergeId": "ステップID（任意）— ジャンプの着地先にできます",
-  "step.mergeIdHint": "ステップの下に `id: …;` として書き出され、`[goto: …]` から指定できます。",
   "step.link": "別のフローへリンク",
   "step.linkNone": "（なし）",
   "step.linkHint":
@@ -565,8 +560,7 @@ export const JA = {
   "branch.default": "（デフォルト）",
   "branch.mergeTarget": "ジャンプ先のステップ",
   "branch.mergeTargetUnset": "未設定——ステップを選んでください",
-  "branch.mergeTargetHint":
-    "このケースはifの残りを飛ばして、選んだステップから続きます。ジャンプで指定できるよう、そのステップには id: 行が付きます。",
+  "branch.mergeTargetHint": "このケースはifの残りを飛ばして、選んだステップから続きます。",
   // color
   "color.presets": "プリセット…",
   // preview

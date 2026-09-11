@@ -102,7 +102,9 @@ export function FlowStepList({
                 {lane.label}
               </span>
             )}
-            <span className="sw-flow-summary">{rowSummaryText(row, lanes, t)}</span>
+            {/* `rows` so a jump reads "goto → Send invoice", by the
+                destination step's own label, not by the id the tool gave it. */}
+            <span className="sw-flow-summary">{rowSummaryText(row, lanes, t, rows)}</span>
             {meta && <span className="sw-flow-meta">{meta}</span>}
           </li>
         );

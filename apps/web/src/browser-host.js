@@ -179,7 +179,7 @@ end-if
 @end
 `;
 
-// A sample that uses the newer flow features — a landing marker, numbering
+// A sample that uses the newer flow features — a named jump target, numbering
 // levels, a link to another flow — so the demo (and the end-to-end tests
 // that drive it) exercise them without typing them in first.
 const SAMPLE_LINKED = `@kai-swimlane
@@ -210,16 +210,15 @@ level: 2;
 if (In stock?)
 case (yes)
   [ops: Pick and pack] => ../hr/hiring.txt
-  goto
+  [goto: invoice]
 case (no)
   [sales: Back-order]
 end-if
 
 [sales: Confirm]
 
-merge
-
 [sales: Invoice]
+id: invoice;
 
 @end
 `;

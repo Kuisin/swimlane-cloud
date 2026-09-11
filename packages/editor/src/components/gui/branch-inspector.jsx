@@ -23,10 +23,11 @@ export function BranchInspector({
   const isMerge = row.kind === "branchMerge";
   const canAddCase = (isStart || isCase) && !isGroup;
   const addCaseLabel = row.parallel ? t("branch.addPath") : t("branch.addCase");
-  // Every step is a candidate, named or not: picking an unnamed one gives it
-  // an `id:` (see gui-mode's onPickMergeTarget), because `[goto: id]` has no
-  // bare form — the GUI must never be able to write a target-less jump.
-  const mergeTargets = isMerge ? collectMergeTargetOptions(rows || []) : [];
+  // Every step is a candidate, listed by its own label. Picking one that has
+  // no `id:` yet quietly gives it one (see gui-mode's onPickMergeTarget),
+  // because `[goto: id]` has no bare form — but the id itself never surfaces
+  // here: as far as this picker is concerned the author is choosing a step.
+  const mergeTargets = isMerge ? collectMergeTargetOptions(rows || [], t) : [];
   const current = mergeTargets.find(
     (o) => o.mergeId && o.mergeId === (row.mergeTarget || "").trim(),
   );

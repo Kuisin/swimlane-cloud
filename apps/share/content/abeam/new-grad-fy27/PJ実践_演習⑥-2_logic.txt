@@ -160,7 +160,7 @@ case (失敗)
   [role_prog: 変換エラー終了] <block_error>
   label: 変換エラー終了;
   desc: エラーメッセージを出力して処理を打ち切る;
-  goto @prog_end
+  [goto: prog_end]
 
 case (成功) #green
   [role_prog: ファイルを開く] <block_proc>
@@ -178,7 +178,7 @@ case (失敗)
   [role_prog: 開封エラー終了] <block_error>
   label: オープンエラー終了;
   desc: ファイルが開けないためエラー終了する;
-  goto @prog_end
+  [goto: prog_end]
 
 case (成功) #green
   [role_prog: 1行を読み込む] <block_proc>
@@ -214,7 +214,7 @@ case (0件)
   [role_prog: 終了メッセージ] <block_error>
   label: 0件終了;
   desc: 処理対象がないためメッセージを出して終了する;
-  goto @prog_end
+  [goto: prog_end]
 
 case (1件以上) #green
   [role_prog: データを並べ替え] <block_proc> +ITAB
@@ -251,7 +251,7 @@ case (あり)
     [role_prog: エラー一覧追加] <block_error> +ERRL
     label: 重複エラー追加;
     desc: エラーリストへ追加し、この伝票の残り明細はスキップする;
-    goto @clear_tab
+    [goto: clear_tab]
 
   case (未登録) #green
     [role_prog: BAPIデータ作成] <block_proc>
@@ -307,7 +307,8 @@ case (あり)
     desc: エラーリストへ追加し、エラー件数を+1する;
   end-if
 
-  [role_prog: 明細表をクリア] <block_proc> @clear_tab
+  [role_prog: 明細表をクリア] <block_proc>
+  id: clear_tab;
   label: 明細テーブル初期化;
   desc: 次の伝票の処理に備えて明細テーブルを空にし、ループ先頭へ戻る;
   loop
@@ -340,7 +341,8 @@ case (0件) #green
 end-if
 end-section
 
-[role_prog: 処理終了] <block_end> @prog_end
+[role_prog: 処理終了] <block_end>
+id: prog_end;
 label: プログラム終了;
 desc: すべての処理を完了して終了する;
 

@@ -15,6 +15,7 @@ import {
   getReorderBounds,
   isStepRow,
   makeStepId,
+  pruneUnreferencedStepIds,
   resolveInspectorTarget,
   swapStepRows,
   moveRow,
@@ -132,8 +133,12 @@ export function GuiMode({
 
   function deleteRow() {
     if (saveIndex < 0 || lockedRows.has(saveIndex)) return;
+    // Deleting a jump can leave the step it pointed at holding an id nothing
+    // references any more; the same sweep as retargeting clears it.
+    const wasJump = ["branchMerge", "branchLoop"].includes(rows[saveIndex]?.kind);
     commit((draft) => {
       draft.rows.splice(saveIndex, 1);
+      if (wasJump) draft.rows = pruneUnreferencedStepIds(draft.rows);
     });
     setSelectedIndex(-1);
   }
@@ -338,17 +343,27 @@ export function GuiMode({
     const step = draft.rows[index];
     const existing = (step?.mergeId || "").trim();
     if (existing) return existing;
-    const id = makeStepId(draft.rows, index);
+    const id = makeStepId(draft.rows);
     draft.rows[index] = { ...step, mergeId: id };
     return id;
   }
 
-  /** Point the selected `[goto: …]` row at the step at `stepIndex`. */
+  /**
+   * Point the selected `[goto: …]` row at the step at `stepIndex`, giving
+   * that step an id if it has none — then sweep up the id the jump just
+   * stopped using, so retargeting doesn't leave an orphan `id:` line on the
+   * old destination.
+   */
   function pickMergeTarget(stepIndex) {
     if (saveIndex < 0 || lockedRows.has(saveIndex)) return;
     commit((draft) => {
       const step = draft.rows[stepIndex];
       if (!step || step.kind !== "step" || step.empty) return;
+      // Let go of the old target *before* naming the new one, so the sweep
+      // frees that id and the fresh one can reuse it — otherwise every
+      // retarget would ratchet the counter up and leave a hole behind.
+      draft.rows[saveIndex] = { ...draft.rows[saveIndex], mergeTarget: "" };
+      draft.rows = pruneUnreferencedStepIds(draft.rows);
       const id = ensureStepIdAt(draft, stepIndex);
       draft.rows[saveIndex] = { ...draft.rows[saveIndex], mergeTarget: id };
     });

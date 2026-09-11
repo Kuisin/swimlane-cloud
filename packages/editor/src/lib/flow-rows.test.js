@@ -6,6 +6,7 @@ import {
   rowBadgeLabel,
   collectMergeTargetOptions,
   makeStepId,
+  pruneUnreferencedStepIds,
 } from "./flow-rows.js";
 import { EN, JA, tr } from "../i18n.jsx";
 
@@ -73,10 +74,10 @@ describe("rowBadgeLabel localization", () => {
 });
 
 describe("collectMergeTargetOptions", () => {
-  it("lists every named step, flagging its merge id when set", () => {
+  it("lists every step by its own label, reporting its id without showing it", () => {
     const rows = [
       { kind: "step", role: "r", text: "start" },
-      { kind: "step", role: "r", text: "done step", mergeId: "done" },
+      { kind: "step", role: "r", text: "done step", mergeId: "step-1" },
       { kind: "step", role: "", text: "no role" }, // excluded: no role
       { kind: "branchStart", id: "x", cond: "?" }, // excluded: not a step
     ];
@@ -87,13 +88,12 @@ describe("collectMergeTargetOptions", () => {
       stepIndex: 0,
       mergeId: "",
       blockName: "start",
+      label: "start",
     });
-    expect(options[1]).toMatchObject({
-      kind: "step",
-      stepIndex: 1,
-      mergeId: "done",
-      label: "done step (id: done)",
-    });
+    // The id is on the option for the caller to use, but the label the user
+    // reads is the step, not `step-1` — ids are never shown in the GUI.
+    expect(options[1]).toMatchObject({ stepIndex: 1, mergeId: "step-1", label: "done step" });
+    expect(options.every((o) => !o.label.includes("step-1"))).toBe(true);
   });
 
   // Every jump names a real step now, so a step is the *only* kind of
@@ -113,23 +113,58 @@ describe("collectMergeTargetOptions", () => {
   });
 });
 
+/**
+ * Ids are plumbing: the GUI has no field for typing one, assigns them only
+ * when a jump is pointed at a step, and takes them away again when the last
+ * jump stops pointing there. So they are sequential tokens, not slugs of a
+ * label the author might later reword.
+ */
 describe("makeStepId", () => {
-  it("slugs the step's label, preferring it over the raw text", () => {
+  it("hands out step-1, step-2, … rather than a slug of the step's text", () => {
     const rows = [{ kind: "step", role: "r", text: "Send the invoice", name: "Send invoice" }];
-    expect(makeStepId(rows, 0)).toBe("send-invoice");
+    expect(makeStepId(rows)).toBe("step-1");
   });
 
-  it("falls back to step-<n> when the text has no ASCII to slug", () => {
-    const rows = [{ kind: "step", role: "r", text: "請求書を送る" }];
-    expect(makeStepId(rows, 0)).toBe("step-1");
-  });
-
-  it("never collides with an id already in use", () => {
+  it("skips ids already in use, including ones written by hand in Text mode", () => {
     const rows = [
-      { kind: "step", role: "r", text: "Review", mergeId: "review" },
-      { kind: "step", role: "r", text: "Review", mergeId: "review-2" },
-      { kind: "step", role: "r", text: "Review" },
+      { kind: "step", role: "r", text: "a", mergeId: "step-1" },
+      { kind: "step", role: "r", text: "b", mergeId: "prog_end" },
+      { kind: "step", role: "r", text: "c", mergeId: "step-2" },
+      { kind: "step", role: "r", text: "d" },
     ];
-    expect(makeStepId(rows, 2)).toBe("review-3");
+    expect(makeStepId(rows)).toBe("step-3");
+  });
+});
+
+describe("pruneUnreferencedStepIds", () => {
+  const goto = (target) => ({ kind: "branchMerge", mergeTarget: target });
+
+  it("clears an id no jump points at any more", () => {
+    const rows = [
+      { kind: "step", role: "r", text: "a", mergeId: "step-1" },
+      { kind: "step", role: "r", text: "b", mergeId: "step-2" },
+      goto("step-2"),
+    ];
+    const out = pruneUnreferencedStepIds(rows);
+    expect(out[0].mergeId).toBe("");
+    expect(out[1].mergeId).toBe("step-2");
+  });
+
+  it("keeps an id a `loop @id` still references", () => {
+    const rows = [
+      { kind: "step", role: "r", text: "a", mergeId: "step-1" },
+      { kind: "branchLoop", loopTarget: "step-1" },
+    ];
+    expect(pruneUnreferencedStepIds(rows)[0].mergeId).toBe("step-1");
+  });
+
+  it("returns the same array when nothing needs clearing", () => {
+    const rows = [{ kind: "step", role: "r", text: "a", mergeId: "step-1" }, goto("step-1")];
+    expect(pruneUnreferencedStepIds(rows)).toBe(rows);
+  });
+
+  it("leaves non-step rows alone", () => {
+    const rows = [{ kind: "branchStart", id: "x", cond: "?" }, goto("gone")];
+    expect(pruneUnreferencedStepIds(rows)).toBe(rows);
   });
 });
