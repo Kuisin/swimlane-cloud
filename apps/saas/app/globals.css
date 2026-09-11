@@ -54,3 +54,34 @@ body {
     align-items: center;
   }
 }
+
+/*
+ * The same problem away from the headers. Measured against the sample
+ * repository's real contents, 37 distinct controls came out under 32px tall —
+ * a 13px checkbox on the settings page, 16px buttons for "Unshare" and
+ * "Discard edit", both of which do something a reader would rather not do by
+ * accident.
+ *
+ * Only real controls are given a floor. A link inside a sentence — a commit
+ * sha, a share URL — is deliberately left alone: WCAG 2.5.8 exempts inline
+ * targets, and giving one a height would push the line it sits in around
+ * instead of making it easier to hit.
+ *
+ * `min-height` rather than `height`, and no `display` change, so a control
+ * that is already tall enough is untouched and nothing reflows. `pointer:
+ * coarse` keeps all of it away from a mouse.
+ */
+@media (pointer: coarse) {
+  button,
+  select,
+  textarea,
+  input:not([type="checkbox"]):not([type="radio"]) {
+    min-height: 32px;
+  }
+  /* A default checkbox is 13px square; WCAG 2.5.8 (AA) asks for 24. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 24px;
+    height: 24px;
+  }
+}
