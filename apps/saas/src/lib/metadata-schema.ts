@@ -1,0 +1,635 @@
+/**
+ * The document-metadata schema a project declares, and everything pure that
+ * hangs off it: parsing it out of the settings file, validating a document's
+ * frontmatter against it, turning it into form rows, and matching a document
+ * against a search query.
+ *
+ * A `.md` diagram carries its metadata in YAML frontmatter, which the engine
+ * (`@swimlane-cloud/diagram-converter/markdown-doc`) reads and writes; the
+ * frontmatter is the source of truth and `/meta/` inside the fence is only a
+ * scalar projection of it. This module never parses or writes frontmatter
+ * itself — it only describes what the keys are allowed to look like.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * NOTE while `feat/md-metadata-engine` is unmerged
+ * ─────────────────────────────────────────────────────────────────────────
+ * The types, `parseMetadataSchema` and `validateMetadata` below are written to
+ * the signatures `packages/github-client/src/metadata-schema.ts` confirmed on
+ * that branch — same names, same argument order, same problem shape, same
+ * rules — and `readMetadataFields` reads `metadata.fields` straight out of the
+ * settings JSON because the `SwimlaneSettings` this app builds against does not
+ * carry that key yet. When the engine branch lands, everything above the "form
+ * state" heading becomes a re-export of the package's own; the form and search
+ * helpers below it stay here either way. Nothing else in `apps/saas` may
+ * hand-roll any of it — everything goes through this module, so that swap is
+ * one diff in one file.
+ */
+
+import {
+  parseRepoSettings,
+  repoSettingsJson,
+  type SwimlaneSettings,
+} from "@swimlane-cloud/github-client";
+
+export const METADATA_FIELD_TYPES = [
+  "string",
+  "text",
+  "enum",
+  "list",
+  "date",
+  "number",
+  "boolean",
+  "map",
+] as const;
+
+export type MetadataFieldType = (typeof METADATA_FIELD_TYPES)[number];
+
+/** A frontmatter value as the engine models it: a scalar, a sequence, or a map. */
+export type MetadataValue = string | string[] | { [key: string]: MetadataValue };
+
+/** One declared key. `values` is only meaningful for `enum`. */
+export interface MetadataField {
+  key: string;
+  type: MetadataFieldType;
+  values?: string[];
+  label?: string;
+  required?: boolean;
+  default?: MetadataValue;
+  help?: string;
+}
+
+export interface MetadataSchema {
+  fields: MetadataField[];
+}
+
+export type MetaValue = MetadataValue;
+export type MetaRecord = Record<string, MetadataValue>;
+
+export const METADATA_PROBLEM_CODES = ["required", "enum", "type", "date"] as const;
+export type MetadataProblemCode = (typeof METADATA_PROBLEM_CODES)[number];
+
+/**
+ * One thing wrong with one key. Deliberately machine-readable: the message a
+ * person reads is built from `code` and `type` in `i18n.tsx`, in their
+ * language, rather than being baked in English here.
+ */
+export interface MetadataProblem {
+  key: string;
+  code: MetadataProblemCode;
+  /** The type the field was declared as — what the message says it must be. */
+  type: MetadataFieldType;
+  /** For `enum`, the values it may take. */
+  values?: string[];
+}
+
+/* ─────────────────────────────── the schema ────────────────────────────── */
+
+function isFieldType(value: unknown): value is MetadataFieldType {
+  return (METADATA_FIELD_TYPES as readonly unknown[]).includes(value);
+}
+
+function stringsOf(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  for (const v of raw) {
+    if (typeof v !== "string") continue;
+    const s = v.trim();
+    if (s) seen.add(s);
+  }
+  return [...seen];
+}
+
+/**
+ * A key that can be written as a plain YAML key and matched in a query.
+ * Whitespace, `:` and `#` are what the engine refuses, for the same reason: a
+ * key holding one of those cannot be written back and read as itself.
+ */
+export function isMetadataKey(key: string): boolean {
+  return key !== "" && !/[\s:#]/.test(key);
+}
+
+/**
+ * The declared fields in `raw`, skipping anything malformed.
+ *
+ * A settings file is edited by hand as often as through the app, so a broken
+ * entry must cost only itself: an unusable field is dropped, not fatal. An
+ * `enum` with no values would be a dropdown with nothing in it, so it degrades
+ * to a plain string rather than trapping the author.
+ */
+export function parseMetadataFields(raw: unknown): MetadataField[] {
+  if (!Array.isArray(raw)) return [];
+  const out: MetadataField[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const key = typeof e.key === "string" ? e.key.trim() : "";
+    if (!key || !isMetadataKey(key) || seen.has(key)) continue;
+    const values = stringsOf(e.values);
+    let type: MetadataFieldType = isFieldType(e.type) ? e.type : "string";
+    if (type === "enum" && values.length === 0) type = "string";
+    const field: MetadataField = { key, type };
+    if (type === "enum") field.values = values;
+    if (typeof e.label === "string" && e.label.trim()) field.label = e.label.trim();
+    if (e.required === true) field.required = true;
+    const fallback = normalizeDefault(e.default);
+    // A default the field would itself reject is worse than no default: it
+    // would offer a value that then fails validation the moment it is used.
+    if (fallback !== undefined && !validateValue(field, fallback)) field.default = fallback;
+    if (typeof e.help === "string" && e.help.trim()) field.help = e.help.trim();
+    seen.add(key);
+    out.push(field);
+  }
+  return out;
+}
+
+/** A JSON number or boolean default written as the string the file will hold. */
+function normalizeDefault(raw: unknown): MetadataValue | undefined {
+  if (typeof raw === "string") return raw === "" ? undefined : raw;
+  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
+  if (Array.isArray(raw)) return stringsOf(raw);
+  if (raw && typeof raw === "object") return raw as { [key: string]: MetadataValue };
+  return undefined;
+}
+
+/** `{ fields: [...] }`, or the bare array a hand-edited file may hold. */
+export function parseMetadataSchema(raw: unknown): MetadataSchema {
+  if (Array.isArray(raw)) return { fields: parseMetadataFields(raw) };
+  if (!raw || typeof raw !== "object") return { fields: [] };
+  return { fields: parseMetadataFields((raw as Record<string, unknown>).fields) };
+}
+
+/** The values a new document should be prefilled with. */
+export function metadataDefaults(schema: MetadataSchema | readonly MetadataField[]): MetaRecord {
+  const out: MetaRecord = {};
+  for (const field of fieldsOf(schema)) {
+    if (field.default !== undefined) out[field.key] = field.default;
+  }
+  return out;
+}
+
+function fieldsOf(schema: MetadataSchema | readonly MetadataField[]): readonly MetadataField[] {
+  return Array.isArray(schema) ? schema : (schema as MetadataSchema).fields;
+}
+
+/**
+ * The fields declared in a settings file's text.
+ *
+ * Reads the raw JSON rather than `parseRepoSettings`, which does not carry the
+ * `metadata` key yet — see the note at the top of this file.
+ */
+export function readMetadataFields(text: string | null): MetadataField[] {
+  if (!text) return [];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!raw || typeof raw !== "object") return [];
+  return parseMetadataSchema((raw as Record<string, unknown>).metadata).fields;
+}
+
+/**
+ * The settings file as the app reads it: everything `parseRepoSettings` knows
+ * about, plus the metadata schema it does not carry yet.
+ */
+export type ProjectSettings = SwimlaneSettings & {
+  metadata?: { fields: MetadataField[] };
+};
+
+export function parseProjectSettings(text: string | null): ProjectSettings {
+  const fields = readMetadataFields(text);
+  const settings = parseRepoSettings(text);
+  return fields.length ? { ...settings, metadata: { fields } } : settings;
+}
+
+/**
+ * The file's canonical text for `settings`.
+ *
+ * `repoSettingsJson` only serialises the keys `SwimlaneSettings` declares, so
+ * the metadata block is appended here rather than being dropped on the first
+ * save from any other settings page. One more thing that collapses to nothing
+ * once the package's own type carries `metadata`.
+ */
+export function projectSettingsJson(settings: ProjectSettings): string {
+  const base = JSON.parse(repoSettingsJson(settings)) as Record<string, unknown>;
+  const fields = settings.metadata?.fields ?? [];
+  if (fields.length) base.metadata = { fields };
+  return `${JSON.stringify(base, null, 2)}\n`;
+}
+
+export function fieldFor(fields: MetadataField[], key: string): MetadataField | null {
+  return fields.find((f) => f.key === key) ?? null;
+}
+
+export function labelOf(field: MetadataField): string {
+  return field.label?.trim() || field.key;
+}
+
+/* ───────────────────────────────── values ──────────────────────────────── */
+
+export function isListValue(value: MetadataValue | undefined): value is string[] {
+  return Array.isArray(value);
+}
+
+export function isMapValue(
+  value: MetadataValue | undefined,
+): value is { [key: string]: MetadataValue } {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Absent, as the validator means it: nothing filled in. */
+export function isEmptyValue(value: MetadataValue | undefined): boolean {
+  if (value === undefined || value === null) return true;
+  if (typeof value === "string") return value === "";
+  if (Array.isArray(value)) return value.length === 0;
+  return Object.keys(value).length === 0;
+}
+
+/** The separator the engine flattens a sequence to, and the one we split on. */
+const LIST_SEP = ", ";
+
+/** A value as one line of text — what is shown in a list and searched over. */
+export function metaText(value: MetadataValue | undefined): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map((v) => String(v)).join(LIST_SEP);
+  return Object.entries(value)
+    .map(([k, v]) => `${k}: ${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`)
+    .join(LIST_SEP);
+}
+
+/** The items of a list value, however it happens to be stored. */
+export function listItemsOf(value: MetadataValue | undefined): string[] {
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+/** A map value's entries as strings, for the nested-map editor. */
+export function mapEntriesOf(value: MetadataValue | undefined): [string, string][] {
+  if (!isMapValue(value)) return [];
+  return Object.entries(value).map(([k, v]) => [
+    k,
+    typeof v === "object" && v !== null ? JSON.stringify(v) : String(v),
+  ]);
+}
+
+/** `YYYY-MM-DD`, and a date that actually exists. */
+export function isIsoDate(text: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text.trim());
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+  const at = new Date(Date.UTC(y, mo - 1, d));
+  return at.getUTCFullYear() === y && at.getUTCMonth() === mo - 1 && at.getUTCDate() === d;
+}
+
+export const BOOLEAN_TRUE = "true";
+export const BOOLEAN_FALSE = "false";
+
+/** Exactly `true` or `false` — not `TRUE`, not `yes`, not `1`. */
+export function isBooleanText(text: string): boolean {
+  return text === BOOLEAN_TRUE || text === BOOLEAN_FALSE;
+}
+
+export function booleanValueOf(value: MetadataValue | undefined): boolean {
+  return metaText(value) === BOOLEAN_TRUE;
+}
+
+/** A JSON number, which is what a `number` field may hold. */
+export function isNumberText(text: string): boolean {
+  return /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/.test(text);
+}
+
+/* ─────────────────────────────── validation ────────────────────────────── */
+
+/**
+ * What is wrong with one value for one field, or `null` when nothing is.
+ *
+ * Shared by the validator and by `parseMetadataFields`, which uses it to refuse
+ * a default the field would then reject.
+ */
+function validateValue(
+  field: MetadataField,
+  value: MetadataValue,
+): Omit<MetadataProblem, "key"> | null {
+  const problem = (code: MetadataProblemCode): Omit<MetadataProblem, "key"> =>
+    field.type === "enum"
+      ? { code, type: field.type, values: field.values ?? [] }
+      : { code, type: field.type };
+  const isText = typeof value === "string";
+  switch (field.type) {
+    case "enum":
+      return isText && (field.values ?? []).includes(value) ? null : problem("enum");
+    case "date":
+      if (!isText) return problem("type");
+      return isIsoDate(value) ? null : problem("date");
+    case "number":
+      return isText && isNumberText(value) ? null : problem("type");
+    case "boolean":
+      return isText && isBooleanText(value) ? null : problem("type");
+    case "map":
+      return isMapValue(value) ? null : problem("type");
+    case "list":
+      // A sequence, or the comma-joined scalar `/meta/` projects one to —
+      // flagging the projection would light up every diagram in the project.
+      return Array.isArray(value) || isText ? null : problem("type");
+    case "string":
+      // A newline is what `text` is for; a `string` holding one cannot be
+      // written back as the plain scalar it claims to be.
+      return isText && !value.includes("\n") ? null : problem("type");
+    case "text":
+      return isText ? null : problem("type");
+  }
+}
+
+/**
+ * What is wrong with `meta` against a schema, at most one problem per field.
+ *
+ * Only declared keys are judged: a key someone wrote by hand that the schema
+ * says nothing about is theirs to keep, not an error. An empty value is
+ * "absent", and suppresses every other check on that field — telling somebody
+ * their blank date is not a date helps nobody.
+ */
+export function validateMetadata(
+  meta: unknown,
+  schema: MetadataSchema | readonly MetadataField[],
+): MetadataProblem[] {
+  const values: MetaRecord =
+    meta && typeof meta === "object" && !Array.isArray(meta) ? (meta as MetaRecord) : {};
+  const problems: MetadataProblem[] = [];
+  for (const field of fieldsOf(schema)) {
+    const value = values[field.key];
+    if (isEmptyValue(value)) {
+      if (field.required) problems.push({ key: field.key, code: "required", type: field.type });
+      continue;
+    }
+    const problem = validateValue(field, value as MetadataValue);
+    if (problem) problems.push({ key: field.key, ...problem });
+  }
+  return problems;
+}
+
+/** Problems grouped by key, which is how the form asks for them. */
+export function problemsByKey(problems: MetadataProblem[]): Record<string, MetadataProblem[]> {
+  const out: Record<string, MetadataProblem[]> = {};
+  for (const p of problems) (out[p.key] ??= []).push(p);
+  return out;
+}
+
+/**
+ * Problems about keys whose value the engine can only carry verbatim, removed.
+ *
+ * Such a key is absent from `meta` because it could not be modelled, not
+ * because the document lacks it — calling it missing would be wrong, and would
+ * block a push over a value that is right there in the file.
+ */
+export function withoutCarried(
+  problems: MetadataProblem[],
+  carried: readonly string[],
+): MetadataProblem[] {
+  return carried.length ? problems.filter((p) => !carried.includes(p.key)) : problems;
+}
+
+/* ────────────────────────────── form state ─────────────────────────────── */
+
+/**
+ * Where a row in the metadata form came from.
+ * `declared` — the schema names it; `extra` — the file has it and the schema
+ * does not; `carried` — the engine can only carry the value verbatim, so it is
+ * shown but not editable.
+ */
+export type MetaRowKind = "declared" | "extra" | "carried";
+
+export interface MetaRow {
+  key: string;
+  kind: MetaRowKind;
+  /** The declared field, when there is one. */
+  field: MetadataField | null;
+  /** The current value; `""` for a declared key the file does not have yet. */
+  value: MetadataValue;
+  /** True when the file has this key at all (as opposed to the schema alone). */
+  present: boolean;
+  /** For `carried` rows: the lines exactly as the file holds them. */
+  lines?: string[];
+}
+
+/**
+ * The rows to render: every declared field in schema order, then every key the
+ * file has that the schema does not, then the values carried verbatim.
+ *
+ * Declared-first is what makes the form feel like a form rather than a dump of
+ * a file; keeping the undeclared keys is what stops the app quietly eating a
+ * key somebody wrote by hand.
+ */
+export function metadataRows(
+  meta: MetaRecord | undefined,
+  fields: MetadataField[],
+  carried: Map<string, string[]> = new Map(),
+): MetaRow[] {
+  const values = meta ?? {};
+  const declared = new Set(fields.map((f) => f.key));
+  const carriedRow = (key: string, field: MetadataField | null): MetaRow => ({
+    key,
+    kind: "carried",
+    field,
+    value: "",
+    present: true,
+    lines: carried.get(key) ?? [],
+  });
+  // A declared key the file writes in a shape the engine can only carry has
+  // exactly one row — the read-only one. Showing an empty control beside it
+  // would say the document has no value for a key that plainly does.
+  const rows: MetaRow[] = fields.map((field) =>
+    carried.has(field.key)
+      ? carriedRow(field.key, field)
+      : {
+          key: field.key,
+          kind: "declared",
+          field,
+          value: values[field.key] ?? "",
+          present: field.key in values,
+        },
+  );
+  for (const key of Object.keys(values)) {
+    if (declared.has(key) || carried.has(key)) continue;
+    rows.push({ key, kind: "extra", field: null, value: values[key] ?? "", present: true });
+  }
+  for (const key of carried.keys()) if (!declared.has(key)) rows.push(carriedRow(key, null));
+  return rows;
+}
+
+/** The value a declared field starts at when the file does not have the key. */
+export function defaultValueOf(field: MetadataField): MetadataValue {
+  if (field.default === undefined) return field.type === "list" ? [] : "";
+  return field.type === "list" ? listItemsOf(field.default) : field.default;
+}
+
+/**
+ * `meta` with every declared field that the file is missing set to its default.
+ *
+ * Deliberately explicit — the form offers it as a button rather than applying
+ * it on load, because writing keys into somebody's file merely because they
+ * opened it would put a diff on every document in the project.
+ */
+export function withDefaults(meta: MetaRecord | undefined, fields: MetadataField[]): MetaRecord {
+  const next: MetaRecord = { ...(meta ?? {}) };
+  for (const field of fields) {
+    if (field.default === undefined) continue;
+    if (!isEmptyValue(next[field.key])) continue;
+    next[field.key] = defaultValueOf(field);
+  }
+  return next;
+}
+
+/** True when any declared field could be filled in from its default. */
+export function hasFillableDefaults(
+  meta: MetaRecord | undefined,
+  fields: MetadataField[],
+): boolean {
+  return fields.some((f) => f.default !== undefined && isEmptyValue((meta ?? {})[f.key]));
+}
+
+/** `meta` with `key` set — or removed, when the new value is empty and the key is not declared. */
+export function setMetaValue(meta: MetaRecord, key: string, value: MetadataValue): MetaRecord {
+  return { ...meta, [key]: value };
+}
+
+export function removeMetaKey(meta: MetaRecord, key: string): MetaRecord {
+  const next = { ...meta };
+  delete next[key];
+  return next;
+}
+
+/* ──────────────────────────────── search ───────────────────────────────── */
+
+export interface MetadataFilter {
+  key: string;
+  value: string;
+  /**
+   * Match the whole value rather than part of it. A filter picked from a
+   * dropdown means *that* value — `owner: ops` chosen from a list must not also
+   * bring back `sales-ops` — while `owner:ops` typed into the box is someone
+   * narrowing down and wants the substring.
+   */
+  exact?: boolean;
+}
+
+export interface MetadataQuery {
+  /** `key:value` terms, which must all match. */
+  filters: MetadataFilter[];
+  /** Bare words, each of which must appear somewhere in the document's metadata or path. */
+  words: string[];
+}
+
+/**
+ * Split a search box's text into `key: value` filters and free words.
+ *
+ * `status:review` and `status: review` mean the same thing, and a quoted value
+ * keeps its spaces — `owner:"sales ops"`.
+ */
+export function parseMetadataQuery(text: string): MetadataQuery {
+  const filters: MetadataFilter[] = [];
+  const words: string[] = [];
+  const tokens = String(text ?? "").match(/(?:[^\s"]+|"[^"]*")+/g) ?? [];
+  for (let i = 0; i < tokens.length; i++) {
+    let token = tokens[i];
+    // `key:` alone, with the value in the next token (`status: review`).
+    if (/^[^\s:"]+:$/.test(token) && tokens[i + 1] !== undefined) token += tokens[++i];
+    const cut = token.indexOf(":");
+    const key = cut > 0 ? token.slice(0, cut) : "";
+    if (cut > 0 && isMetadataKey(key)) {
+      const value = unquote(token.slice(cut + 1));
+      if (value) filters.push({ key, value });
+      continue;
+    }
+    const word = unquote(token);
+    if (word) words.push(word);
+  }
+  return { filters, words };
+}
+
+function unquote(text: string): string {
+  const t = text.trim();
+  return t.startsWith('"') && t.endsWith('"') && t.length > 1 ? t.slice(1, -1).trim() : t;
+}
+
+/** True when `value` holds `needle` — an exact item for a list, a substring otherwise. */
+function valueMatches(value: MetadataValue | undefined, needle: string, exact = false): boolean {
+  const wanted = needle.toLowerCase();
+  const items = listItemsOf(value);
+  if (items.some((item) => item.toLowerCase() === wanted)) return true;
+  const text = metaText(value).toLowerCase();
+  return exact ? text === wanted : text.includes(wanted);
+}
+
+export interface MetadataDocument {
+  path: string;
+  meta: MetaRecord;
+  /** Keys the engine can only carry verbatim, shown but not searchable by value. */
+  carried?: string[];
+}
+
+/** True when `doc` satisfies every filter and contains every free word. */
+export function documentMatches(doc: MetadataDocument, query: MetadataQuery): boolean {
+  for (const filter of query.filters) {
+    if (!valueMatches(doc.meta[filter.key], filter.value, filter.exact)) return false;
+  }
+  if (!query.words.length) return true;
+  const haystack = [doc.path, ...Object.entries(doc.meta).map(([k, v]) => `${k} ${metaText(v)}`)]
+    .join("\n")
+    .toLowerCase();
+  return query.words.every((w) => haystack.includes(w.toLowerCase()));
+}
+
+export function searchDocuments(
+  docs: MetadataDocument[],
+  text: string,
+  filters: MetadataFilter[] = [],
+): MetadataDocument[] {
+  const query = parseMetadataQuery(text);
+  const all: MetadataQuery = { filters: [...query.filters, ...filters], words: query.words };
+  if (!all.filters.length && !all.words.length) return docs;
+  return docs.filter((d) => documentMatches(d, all));
+}
+
+/**
+ * Every value seen for `key` across `docs`, sorted — what the filter dropdowns
+ * offer. A declared `enum` still shows its own values; this is for everything
+ * else, where the only source of truth for "what is in use" is the documents.
+ */
+export function valuesInUse(docs: MetadataDocument[], key: string): string[] {
+  const seen = new Set<string>();
+  for (const doc of docs) {
+    const value = doc.meta[key];
+    if (isEmptyValue(value)) continue;
+    const items = listItemsOf(value);
+    if (items.length && (Array.isArray(value) || typeof value === "string")) {
+      for (const item of items) seen.add(item);
+    } else {
+      seen.add(metaText(value));
+    }
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b));
+}
+
+/** Keys worth offering as filters: the declared ones, then whatever else is in use. */
+export function filterableKeys(docs: MetadataDocument[], fields: MetadataField[]): string[] {
+  const keys = fields.map((f) => f.key);
+  const seen = new Set(keys);
+  for (const doc of docs) {
+    for (const key of Object.keys(doc.meta)) {
+      if (seen.has(key) || isEmptyValue(doc.meta[key])) continue;
+      seen.add(key);
+      keys.push(key);
+    }
+  }
+  return keys;
+}

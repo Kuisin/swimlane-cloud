@@ -13,6 +13,7 @@ import type {
   CompareResponse,
   FileResponse,
   LockReason,
+  MetadataResponse,
   PendingChange,
   ProjectState,
   PullDetail,
@@ -65,6 +66,14 @@ export const getSnapshot = async (pid: string, ref: string, withDrafts = false) 
   if (immutable) localCache.set(key, res);
   return res;
 };
+
+/**
+ * Every document at a ref with the metadata it carries — what the "Find by
+ * metadata" panel searches. Never cached: the whole point is to reflect what is
+ * on the branch, drafts included, the moment somebody looks.
+ */
+export const getMetadata = (pid: string, ref: string) =>
+  api<MetadataResponse>(`${base(pid)}/metadata?${q({ ref })}`);
 
 /** Same rule as `getSnapshot`: a comparison between two commit shas never changes. */
 export const compare = async (pid: string, baseRef: string, head: string) => {
