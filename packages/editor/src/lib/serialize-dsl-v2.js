@@ -30,11 +30,17 @@ import {
 } from "@swimlane-cloud/diagram-converter/diagram-options";
 
 // The parser's tokenizer marks every unescaped `|`/`｜` with this byte before
-// any field decides whether it's actually translatable — a value that never
-// goes through `seg()` (meta, and a few other non-translatable properties)
-// can still carry a stray one. Never write this raw byte into a file; when a
-// value wasn't run through `escapeBarSegment` (which already turns a real
-// literal bar back into `\|`), fall back to a lossy but always-safe swap.
+// most fields decide whether they're actually translatable — a value that never
+// goes through `seg()` (`icon:`, a path, an `/i18n/` value) can still carry a
+// stray one. Never write this raw byte into a file; when a value wasn't run
+// through `escapeBarSegment` (which already turns a real literal bar back into
+// `\|`), fall back to this lossy but always-safe swap.
+//
+// It is lossy in two ways — `｜` comes back as `|`, and an escaped `\|` loses
+// its escape — which is why it is a patch, not the fix. `/meta/` no longer
+// needs it at all: dsl-rule.md excludes `/meta/` from the translatable set, so
+// `readProperty` now reads those values without bar-splitting and they arrive
+// here as ordinary text. The remaining callers are not fixed yet.
 const RAW_SEG_MARKER = String.fromCharCode(0);
 function sanitizeStrayMarker(value) {
   return typeof value === "string" && value.includes(RAW_SEG_MARKER)

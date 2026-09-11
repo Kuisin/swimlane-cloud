@@ -189,7 +189,8 @@ Every project route runs `requireProjectRole(projectId, role)` first.
 | GET                   | `…/activity`                                             | viewer          | audit trail                                                                                                    |
 | POST                  | `/api/billing/webhook`                                   | Stripe          | updates `workspaces.plan` (deferred)                                                                           |
 
-`…` = `/api/projects/[projectId]`.
+`…` = `/api/projects/[projectId]`. `GET`/`POST /api/mcp` is the one route with
+no signed-in caller — see [MCP server](#mcp-server-apimcp-public-unauthenticated).
 
 GitLab (see the section above; unauthenticated routes below are the OAuth
 round trip itself, so they redirect rather than requiring a signed-in caller
@@ -203,6 +204,54 @@ via `requireProjectRole`):
 | GET        | `/api/gitlab/namespaces?instanceId=` | the caller's Owner-level groups (claim/create picker)      |
 | POST       | `/api/gitlab/instances/[id]/claim`   | bind an unclaimed instance to a new workspace              |
 | GET · POST | `/api/gitlab/projects`               | discover `swimlane`-topic projects / create or attach one  |
+
+## MCP server (`/api/mcp`, public, unauthenticated)
+
+`app/api/mcp/route.ts` is an MCP server (`mcp-handler`) whose single purpose is
+**letting an LLM write correct kai-swimlane DSL**: learn the grammar, copy a
+worked document, check the draft, look at the picture, canonicalise it, and
+bring an old file across. It sits outside `middleware.ts`'s auth matcher on
+purpose — every tool is a pure function of the text it is handed plus two
+read-only bundles, so nothing here reads a secret, opens a connection, or
+touches a user's repository. Keep it that way: a tool that would need a token
+does not belong on this route.
+
+| Tool              | What it is for                                                                                                                                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_dsl_syntax`  | The grammar spec by `##` section. No argument → table of contents + "Design invariants" + "Example".                                                                                                  |
+| `get_dsl_example` | A complete, parse-clean document. No argument → the catalogue (title, what it is, which constructs it shows); `name` → the full text.                                                                 |
+| `validate_dsl`    | Every error and warning, with line numbers. A document with any error does not render.                                                                                                                |
+| `render_dsl`      | The SVG, preceded by its pixel size and byte count — "is the picture sane", not "is the text legal". `theme` (`basic`\|`washi`\|`ink`\|`mono`) and `maxBytes` (default 60 000) are optional.          |
+| `format_dsl`      | Parse + re-serialise into exactly the layout the editor writes, so a model's output is not a diff the moment a human opens it. Doubles as a round-trip check. Refuses a document that does not parse. |
+| `migrate_dsl`     | An older spelling (`@kai-swimlane-v2`, bare `else`, `endif`, `case` under an `if`, a fork's `and`, `[loop]`, `merge:`, `section-start`, `***`, `props:`/`arrow:`/`link:`) rewritten, then validated.  |
+
+Notes:
+
+- **The SVG is returned whole or not at all.** A truncated SVG will not
+  display, so past `maxBytes` only the dimensions and diagnostics come back,
+  naming the number to pass to get the markup. The largest bundled example
+  renders to ~51 kB, which the default covers.
+- **`content/` is generated, and gitignored.** `scripts/sync-dsl-rule.mjs`
+  (`prebuild`/`predev`) copies the repo-root `dsl-rule.md` and the curated
+  examples out of `examples/kai-swimlane/diagrams/` into `content/`, because
+  Vercel only traces a function's own app directory into its bundle — reading
+  the repo-root originals at request time works in `next dev` and 404s in
+  production. `next.config.ts`'s `outputFileTracingIncludes` pins both. The
+  script **parses every example and throws** if one stopped being clean: an
+  example a model will copy must never ship broken. Edit the originals.
+- **`brand/asset-showcase.txt` is deliberately not offered** — its
+  `@use ../../assets/…` images only resolve inside a repository, and this
+  route has none.
+- **The diff renderer (`textDiffToSvg`) is deliberately not exposed.** It
+  answers "what changed between two versions", which is a reviewer's question,
+  not an author's: a model holding both texts already has better tools for
+  that, and it would double the response-size problem for no authoring gain.
+- Tool bodies live in `src/lib/dsl-mcp.ts` (unit-tested in
+  `dsl-mcp.test.ts`); the route is registration, descriptions and the MCP
+  content envelope. `format_dsl` imports the serializer through
+  `@swimlane-cloud/editor/serialize` rather than the package barrel — the
+  barrel re-exports React components, which Next refuses to pull into a route
+  handler's server layer.
 
 ## Pages
 

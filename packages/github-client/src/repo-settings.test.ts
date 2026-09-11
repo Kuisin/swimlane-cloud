@@ -98,6 +98,51 @@ describe("diagram settings and template modes", () => {
 });
 
 /**
+ * The metadata schema is a section of this file like any other, so it has to
+ * behave like one: absent means "no declared fields", which is exactly how
+ * every repository behaves today.
+ */
+describe("the metadata schema", () => {
+  it("defaults to declaring nothing", () => {
+    expect(DEFAULT_SETTINGS.metadata).toEqual({ fields: [] });
+    expect(parseRepoSettings("{}").metadata).toEqual({ fields: [] });
+  });
+
+  it("keeps a declared schema, dropping only what it cannot use", () => {
+    const text = JSON.stringify({
+      metadata: {
+        fields: [
+          { key: "owner", type: "string", label: "Owner", required: true },
+          { key: "status", type: "enum", values: ["draft", "approved"], default: "draft" },
+          { key: "broken", type: "colour" },
+        ],
+      },
+    });
+    expect(parseRepoSettings(text).metadata.fields).toEqual([
+      { key: "owner", type: "string", label: "Owner", required: true },
+      { key: "status", type: "enum", values: ["draft", "approved"], default: "draft" },
+    ]);
+  });
+
+  it("survives a malformed block instead of taking the whole file down", () => {
+    for (const metadata of ["nonsense", 7, { fields: "all of them" }, { fields: [null] }]) {
+      expect(parseRepoSettings(JSON.stringify({ metadata })).metadata).toEqual({ fields: [] });
+    }
+  });
+
+  it("round-trips through the canonical text", () => {
+    const declared = repoSettingsJson({
+      ...DEFAULT_SETTINGS,
+      metadata: { fields: [{ key: "dueDate", type: "date", help: "ISO, YYYY-MM-DD" }] },
+    });
+    expect(isCurrentRepoSettings(declared)).toBe(true);
+    expect(parseRepoSettings(declared).metadata.fields).toEqual([
+      { key: "dueDate", type: "date", help: "ISO, YYYY-MM-DD" },
+    ]);
+  });
+});
+
+/**
  * Connecting a repository rewrites this file when it is not "current". That
  * must mean "missing a key a newer app added", never "differs from the
  * defaults" — or every reconnect would reset what the owner configured.

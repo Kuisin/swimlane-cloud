@@ -54,6 +54,22 @@ export type {
   TemplateMode,
   TemplateSection,
 } from "./repo-settings.ts";
+export {
+  DEFAULT_METADATA_SCHEMA,
+  METADATA_FIELD_TYPES,
+  METADATA_PROBLEM_CODES,
+  metadataDefaults,
+  parseMetadataSchema,
+  validateMetadata,
+} from "./metadata-schema.ts";
+export type {
+  MetadataField,
+  MetadataFieldType,
+  MetadataProblem,
+  MetadataProblemCode,
+  MetadataSchema,
+  MetadataValue,
+} from "./metadata-schema.ts";
 export { createProtectionApi } from "./protection.ts";
 export type { ProtectionApi, ProtectionOutcome } from "./protection.ts";
 export { createPullsApi } from "./pulls.ts";

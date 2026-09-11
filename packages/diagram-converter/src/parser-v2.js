@@ -490,8 +490,18 @@ export function parseDSLv2(src, options = {}) {
     return out;
   }
 
-  /** A `key: value;`, `key;` flag or `unset: a, b;` at the cursor, or null. */
-  function readProperty() {
+  /**
+   * A `key: value;`, `key;` flag or `unset: a, b;` at the cursor, or null.
+   *
+   * `splitBars` is dsl-rule.md's translatable/non-translatable divide. In a
+   * translatable position an unescaped `|`/`｜` separates languages and is
+   * marked for `pickSegment`; in `/meta/` — which the spec's translatable set
+   * excludes outright, `tags` included — a bar is ordinary content, so the
+   * marker must never be inserted there. It is a NUL byte: left in, it reaches
+   * `meta` as part of the value, and the next save writes a *different* value
+   * back out.
+   */
+  function readProperty({ splitBars = true } = {}) {
     const save = sc.i;
     sc.skipWs();
     const pos = sc.i;
@@ -552,7 +562,7 @@ export function parseDSLv2(src, options = {}) {
       if (sc.s[sc.i] === ";") sc.i++;
       value = dedent(bodyText);
     } else {
-      value = readText(sc, [";"], null);
+      value = readRun(sc, [";"], null, splitBars);
       if (sc.s[sc.i] === ";") sc.i++;
       else err(pos, `"${key}" must end with ';'`);
     }
@@ -794,7 +804,8 @@ export function parseDSLv2(src, options = {}) {
     }
 
     if (section === "page" || section === "option" || section === "meta" || section === "i18n") {
-      const prop = readProperty();
+      // `/meta/` is outside the translatable set, so its bars are content.
+      const prop = readProperty({ splitBars: section !== "meta" });
       if (!prop) {
         err(pos, `unrecognized /${section}/ statement`);
         skipLine();

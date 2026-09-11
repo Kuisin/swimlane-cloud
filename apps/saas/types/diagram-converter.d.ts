@@ -118,6 +118,18 @@ declare module "@swimlane-cloud/diagram-converter/themes" {
 
 declare module "@swimlane-cloud/editor/styles.css";
 
+/**
+ * The serializer on its own, reached without the package barrel. The barrel
+ * (`@swimlane-cloud/editor`) re-exports React components, so importing it from
+ * a route handler drags `createContext`/`useState` into Next's server layer
+ * and fails the build; `lib/serialize-dsl.js` has a React-free import graph
+ * (→ `serialize-dsl-v2.js` → `diagram-options` + `row-depths.js`) and is what
+ * `/api/mcp`'s `format_dsl` uses.
+ */
+declare module "@swimlane-cloud/editor/serialize" {
+  export function serializeDSL(model: { rows: unknown[]; [key: string]: unknown }): string;
+}
+
 // Mobile-view package (separate, JSX, no bundled types).
 declare module "@swimlane-cloud/diagram-converter/markdown-doc" {
   /** A diagram stored as markdown: frontmatter + prose + a ```kai-swimlane fence. */

@@ -59,7 +59,14 @@ has an error, so you always know whether what you're looking at is valid.
 A diagram can declare more than one content language with `@lang`
 (for example `@lang ja, en;`), after which any translatable text can carry
 every language either inline (`テキスト | Text`) or as a separate tagged
-line (`text.en: Text;`). See _Complete grammar_ below for the full rule.
+line (`text.en: Text;`).
+
+One thing to know before you write anything else: **a bar separates
+languages whether or not the file declares any.** A step written
+`[sales: Approve | reject]` reads as just "Approve" — everything after the
+bar is taken for a translation. Write `\|` for a bar you mean as a
+character. See _Multiple languages_ under _Complete grammar_ below for the
+full rule.
 
 ## Importing shared pieces
 
@@ -89,8 +96,8 @@ comment.
 
 Free-form metadata about the diagram, never rendered. `owner`, `status`
 (`draft`, `review`, `approved` or `deprecated`), `tags` (a comma-separated
-list) and `updated` (`YYYY-MM-DD`) are the keys the app understands; any
-other key is kept, unread.
+list), `version` (free text) and `updated` (`YYYY-MM-DD`) are the five keys
+the app understands; any other key is kept, unread.
 
 ```
 @kai-swimlane
@@ -124,27 +131,30 @@ Order approval;
 On/off switches, a handful of settings, and the four gutter headings.
 Anything you don't write keeps its default.
 
-| Key                                     | Values                                                                    | Default                    |
-| --------------------------------------- | ------------------------------------------------------------------------- | -------------------------- |
-| `show-left-gutter`, `show-right-gutter` | `true` / `false`                                                          | `true`                     |
-| `show-header`, `show-footer`            | `true` / `false`                                                          | `true`                     |
-| `show-description`                      | `true` / `false`                                                          | `true`                     |
-| `show-step-block-captions`              | `true` / `false`                                                          | `true`                     |
-| `merge-at-previous-block`               | `true` / `false`                                                          | `true`                     |
-| `show-notes`, `auto-define`             | `true` / `false`                                                          | `true`                     |
-| `branch-color-arrows`                   | `true` / `false`                                                          | `false`                    |
-| `i18n-strict`, `i18n-uniform-layout`    | `true` / `false` — see _Multiple languages_                               | `false`                    |
-| `show-gateway-icons`                    | `true` / `false` — the glyph inside an `if` diamond and a `fork` bar      | `true`                     |
-| `block-margin`                          | a whole number of pixels, `0`–`80` — the gap around a step box            | `0`                        |
-| `block-text`                            | `truncate` or `wrap` — what a too-long step text does                     | `truncate`                 |
-| `i18n-storage`                          | `as-written`, `catalog` or `inline` — where a translated value is written | `as-written`               |
-| `lane-order`                            | a comma-separated list of role ids — the drawing order of the lanes       | declaration order          |
-| `left-title`, `left-subtitle`           | text — the left gutter's two headings                                     | `Procedure`, `Description` |
-| `right-title`, `right-subtitle`         | text — the right gutter's two headings                                    | `Remark`, empty            |
+| Key                                     | Values                                                               | Default                    |
+| --------------------------------------- | -------------------------------------------------------------------- | -------------------------- |
+| `show-left-gutter`, `show-right-gutter` | `true` / `false`                                                     | `true`                     |
+| `show-header`, `show-footer`            | `true` / `false`                                                     | `true`                     |
+| `show-description`                      | `true` / `false`                                                     | `true`                     |
+| `show-step-block-captions`              | `true` / `false`                                                     | `true`                     |
+| `merge-at-previous-block`               | `true` / `false`                                                     | `true`                     |
+| `branch-color-arrows`                   | `true` / `false`                                                     | `false`                    |
+| `show-gateway-icons`                    | `true` / `false` — the glyph inside an `if` diamond and a `fork` bar | `true`                     |
+| `block-margin`                          | a whole number of pixels, `0`–`80` — the gap around a step box       | `0`                        |
+| `block-text`                            | `truncate` or `wrap` — what a too-long step text does                | `truncate`                 |
+| `left-title`, `left-subtitle`           | text — the left gutter's two headings                                | `Procedure`, `Description` |
+| `right-title`, `right-subtitle`         | text — the right gutter's two headings                               | `Remark`, empty            |
 
-`yes`/`on`/`1` and `no`/`off`/`0` are accepted for the switches. The four
-headings may also be written in `/page/`; if both carry one, `/option/`
-wins.
+A switch takes `true` or `false` and nothing else — `show-header: yes;` is
+an error — though upper case is fine, and the key on its own, `show-header;`,
+is short for `show-header: true;`. The four headings may also be written in
+`/page/`; if both carry one, `/option/` wins.
+
+Five more keys are accepted and kept but change nothing today:
+`show-notes`, `auto-define`, `i18n-strict`, `i18n-uniform-layout` and
+`i18n-storage`. Write them if a template you share expects them; don't expect
+them to do anything yet. `lane-order` is **not** accepted — it's reported as
+an unknown key. To reorder the lanes, reorder their `/role/` definitions.
 
 ### `/role/`, `/block/` and `/prop/`
 
@@ -192,6 +202,41 @@ max-chars: 12;
 
 /line/
 [sales: Draft the quote] <gateway> +RQ
+
+@end
+```
+
+#### Clearing a key an import set
+
+A definition that comes from an `@use`d file arrives with every key that file
+gave it. Two spellings drop one you don't want here:
+
+| Construct | What it does                                      | Example               |
+| --------- | ------------------------------------------------- | --------------------- |
+| `unset:`  | Drops one key, or several separated by commas     | `unset: icon, shape;` |
+| `none`    | The same thing said as a value, one key at a time | `icon: none;`         |
+
+The key has to be one this section has: `unset: shape;` in a `/role/` is an
+error, because a role has no shape. Neither is worth writing on a definition
+you wrote yourself — there, just delete the line. **Format**, and a save from
+Visual mode, rewrite the definition as the finished list of keys it ended up
+with, so the `unset:` line itself doesn't survive; the diagram looks the
+same, but the definition stops following the imported one.
+
+```
+@kai-swimlane
+
+/title/
+House style, minus the icon;
+
+/role/
+<sales>
+label: Sales;
+icon: none;
+unset: background-color;
+
+/line/
+[sales: Draft the quote]
 
 @end
 ```
@@ -276,6 +321,12 @@ then draft the quote.
 The ten colour names are `blue`, `green`, `red`, `orange`, `purple`,
 `gray`, `black`, `pink`, `teal` and `yellow`.
 
+A decision may name a lane, in square brackets between `if` and its
+question: `if [sales] (Approved?) is (Yes) than`. Only `if` takes it. It is
+read and kept through a save, but **nothing is drawn from it yet** — the
+diamond still appears in the lane of the step above it. Write it to record
+whose decision it is; don't expect it to move anything.
+
 ### Jumps
 
 There are no landing markers: a jump always names a node that is already
@@ -322,6 +373,66 @@ end-if
 @end
 ```
 
+### Multiple languages
+
+`@lang ja, en;` goes at the very top, above the first section, and lists the
+content languages in order. The first one is the original; a reader sees the
+language they picked, or the first one when that language has nothing to
+show.
+
+A translatable value can then carry every language two ways. Inline, with the
+languages in the declared order separated by a bar. Or on a line each, with
+the language tagged onto the key after a dot — `label.en: Sales;`. A tag
+`@lang` doesn't declare is an error.
+
+Translatable: the title, every `/page/` slot and gutter heading, a role's,
+block's or side note's `label` (and a side note's `title`), a step's text and
+its `label:`, `desc:`, `remark:` and `remark-desc:`, a question, an outcome
+label, and a section, branch or phase name. Everything else — ids, colours,
+icons, paths, `/meta/` values — is written once.
+
+**A bar always separates, even with no `@lang` at all.** A step written
+`[sales: Approve | reject]` reads as just "Approve": the rest is taken for a
+translation and, with no second language, never shown. No error is reported,
+so it's easy to miss. Write `\|` for a bar you mean as a character. The
+full-width bar `｜` separates in exactly the same way and escapes the same
+way, `\｜` — worth knowing when you write in Japanese.
+
+```
+@kai-swimlane
+
+@lang ja, en;
+
+/title/
+承認フロー | Order approval;
+
+/role/
+<sales>
+label: 営業;
+label.en: Sales;
+
+/line/
+[sales: 見積を作成する | Draft the quote]
+  remark: 上長が承認する | Manager signs off;
+
+[sales: 可否 \| 保留を判断する | Decide approve \| hold]
+
+@end
+```
+
+### `/i18n/`
+
+A place to keep translations out of the flow. Each line is
+`key.language: text;`, where the key is either a step's `id:` and the field
+it translates (`quote.remark.en:`) or the original text in quotes
+(`"監査ログ保存".en:`).
+
+**Nothing reads it yet.** The section is parsed and written back exactly as
+you typed it, so a file that carries one loses nothing on save — but no
+translation in it reaches the diagram. Until that changes, put a translation
+on the field itself: inline, or on a tagged line, as _Multiple languages_
+describes.
+
 ### Spellings no longer read
 
 Each of these is an error that names the replacement: `endif` → `end-if`,
@@ -367,10 +478,11 @@ unless this table says otherwise.
 | Title, page description, header and footer slots                                                                                                                        | Editable                          | In **Settings**. A slot is hidden while its `show-…` switch is off                                                                  |
 | Gutter headings                                                                                                                                                         | Editable                          | Left pair hidden while the left gutter is off, right pair while the right gutter is off                                             |
 | `show-left-gutter`, `show-right-gutter`, `show-header`, `show-footer`, `show-description`, `show-step-block-captions`, `merge-at-previous-block`, `branch-color-arrows` | Editable                          | Checkboxes in **Settings**                                                                                                          |
-| `show-gateway-icons`, `block-margin`, `block-text`, `show-notes`, `auto-define`, `i18n-strict`, `i18n-uniform-layout`, `i18n-storage`, `lane-order`                     | **Text mode only**                | No control yet; the values are preserved                                                                                            |
+| `show-gateway-icons`, `block-margin`, `block-text`, `show-notes`, `auto-define`, `i18n-strict`, `i18n-uniform-layout`, `i18n-storage`                                   | **Text mode only**                | No control yet; the values are preserved                                                                                            |
 | Role, block and side-note definitions                                                                                                                                   | Editable                          | Every property, plus add and delete                                                                                                 |
+| `unset:` in a definition                                                                                                                                                | **Text mode only**, and rewritten | Saving writes the definition's finished keys instead — the result is the same, the line isn't                                       |
 | Renaming a definition's `<id>`                                                                                                                                          | **Text mode only**                | The id is shown but not editable                                                                                                    |
-| Lane order                                                                                                                                                              | **Text mode only**                | Lanes appear in the order they're defined, unless `/option/ lane-order:` overrides it                                               |
+| Lane order                                                                                                                                                              | **Text mode only**                | Lanes appear in the order their `/role/` definitions do; reorder the definitions to reorder the lanes                               |
 | Add, edit, delete, reorder a step                                                                                                                                       | Editable                          | Up/down and **Move to…** stay inside the enclosing branch; drag can cross branches, and a drag that would break the file is refused |
 | `<block>` on a step                                                                                                                                                     | Editable                          | With a visual picker                                                                                                                |
 | `label:`, `desc:`, `remark:`, `+prop`, arrow                                                                                                                            | Editable                          | Under **More options**                                                                                                              |
@@ -381,6 +493,7 @@ unless this table says otherwise.
 | `remark-desc:`                                                                                                                                                          | **Text mode only**, and rewritten | Saving folds it into a single `remark:` — the text survives, the two-line form doesn't                                              |
 | The spacer `[]`                                                                                                                                                         | Visible, deletable                | Can't be created or edited in Visual mode                                                                                           |
 | `if` / `else-if`, the question, outcome labels, colours                                                                                                                 | Editable                          | Colours are swatches, not names                                                                                                     |
+| `if [lane]`                                                                                                                                                             | **Text mode only**                | Kept on save; nothing is drawn from it yet                                                                                          |
 | `fork` / `case`                                                                                                                                                         | Insertable, colour editable       | A parallel path can carry a label in the grammar, but Visual mode doesn't expose a field for it yet — set one in Text mode          |
 | `section` / `branch` / `phase`, name and colour                                                                                                                         | Editable                          | No way to turn one into another; `phase` is shown as a group but can only be created as a `section` or `branch`                     |
 | `loop`, `loop @id`                                                                                                                                                      | Insertable only                   | Nothing to configure                                                                                                                |
@@ -388,7 +501,7 @@ unless this table says otherwise.
 | Comments                                                                                                                                                                | **Text mode only**, and fragile   | Kept on save, but not shown anywhere in Visual mode, and deleting a step deletes the comments attached to it                        |
 | An unrecognised `/option/` key                                                                                                                                          | **Dropped**                       | It's reported as an error, and a Visual-mode save removes the line                                                                  |
 | Per-language values (`@lang`, inline `\|` segments, `field.lang:` lines)                                                                                                | **Text mode only**                | Editing a field in Visual mode changes the first language and leaves the others untouched                                           |
-| `@use`, `/meta/`                                                                                                                                                        | **Text mode only**                | Kept on save                                                                                                                        |
+| `@use`, `/meta/`, `/i18n/`                                                                                                                                              | **Text mode only**                | Kept on save                                                                                                                        |
 
 When a file has an error, only the rows the error touches are locked; the
 rest stay editable. An error in `/option/`, `/role/`, `/block/`, `/prop/`,
