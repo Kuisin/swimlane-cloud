@@ -48,8 +48,17 @@ import {
 //     `emitUnknownKeys` below — the one that actually puts a sanitized value in
 //     a user's file.
 // `/meta/` no longer reaches it: `readProperty` now reads those values without
-// bar-splitting, so they arrive here as ordinary text. Fixing the other two is
-// the same one-line change on the read side, not more of this.
+// bar-splitting, so they arrive here as ordinary text.
+//
+// The other two want fixing on the read side too, but they are NOT both the
+// one-line change `/meta/` was — an earlier version of this comment said they
+// were, which was wrong about the second:
+//   - `/i18n/` is: it is a whole section, so it is one more condition on the
+//     `splitBars` argument at `readProperty`'s call site.
+//   - an unknown definition key is not. The same `readProperty` call serves
+//     `/role/`, `/block/` and `/prop/`, whose `label:` *is* translatable, so
+//     the decision cannot be made per section — only once the key is known to
+//     be unrecognised, in `applyDefProp`'s `!field` branch.
 const RAW_SEG_MARKER = String.fromCharCode(0);
 function sanitizeStrayMarker(value) {
   return typeof value === "string" && value.includes(RAW_SEG_MARKER)
