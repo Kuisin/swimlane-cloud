@@ -1,5 +1,5 @@
 /**
- * `migrateLegacyDsl` is the one-shot rewrite from the earlier grammar into
+ * `migrateLegacyDsl` is the one-shot rewrite from an earlier grammar into
  * the current one (see the module docstring for the full list of
  * constructs it touches). Every case here checks two things: the exact
  * text it produces, and — since a rewrite that "looks right" but leaves an
@@ -31,39 +31,72 @@ describe("migrateLegacyDsl", () => {
     expect(changed).toBeGreaterThan(0);
   });
 
-  it("rewrites `if … is … than` into `if` + `case`", () => {
-    const src = doc("if (q) is (a) than\n[a: x]\nend-if");
+  it("fuses the previous grammar's bare `if (q)` and its first `case (a)` onto one line", () => {
+    const src = doc("if (q)\ncase (a)\n[a: x]\nend-if");
     const { text, changed } = migrateLegacyDsl(src);
-    expect(text).toBe(doc("if (q)\ncase (a)\n[a: x]\nend-if"));
+    expect(text).toBe(doc("if (q) is (a) than\n[a: x]\nend-if"));
     expect(changed).toBeGreaterThan(0);
     expect(parseDSL(text).errors).toEqual([]);
   });
 
-  it("carries a color suffix from `than #c` onto `if`, not `case`", () => {
-    const src = doc("if (q) is (a) than #green\n[a: x]\nend-if");
+  it("carries a color from the first `case` onto the fused if line when the if itself has none", () => {
+    const src = doc("if (q)\ncase (a) #green\n[a: x]\nend-if");
     const { text } = migrateLegacyDsl(src);
-    expect(text).toBe(doc("if (q) #green\ncase (a)\n[a: x]\nend-if"));
+    expect(text).toBe(doc("if (q) is (a) than #green\n[a: x]\nend-if"));
     expect(parseDSL(text).errors).toEqual([]);
   });
 
-  it("rewrites `else-if … than` into `case`, and `else` into a blank `case ()`", () => {
-    const src = doc("if (q) is (a) than\n[a: x]\nelse-if (b) than\n[a: y]\nelse\n[a: z]\nend-if");
+  it("prefers the if's own color over the first case's when both have one", () => {
+    const src = doc("if (q) #blue\ncase (a) #green\n[a: x]\nend-if");
+    const { text } = migrateLegacyDsl(src);
+    expect(text).toBe(doc("if (q) is (a) than #blue\n[a: x]\nend-if"));
+    expect(parseDSL(text).errors).toEqual([]);
+  });
+
+  it("rewrites a later, bare `case (b)` into `else-if (b) than`, and a blank `case ()` into `else-if () than`", () => {
+    const src = doc("if (q)\ncase (a)\n[a: x]\ncase (b)\n[a: y]\ncase ()\n[a: z]\nend-if");
     const { text, changed } = migrateLegacyDsl(src);
-    expect(text).toBe(doc("if (q)\ncase (a)\n[a: x]\ncase (b)\n[a: y]\ncase ()\n[a: z]\nend-if"));
+    expect(text).toBe(
+      doc("if (q) is (a) than\n[a: x]\nelse-if (b) than\n[a: y]\nelse-if () than\n[a: z]\nend-if"),
+    );
     expect(changed).toBeGreaterThan(0);
     expect(parseDSL(text).errors).toEqual([]);
   });
 
-  it("keeps `else`'s color suffix on the blank case", () => {
-    const src = doc("if (q) is (a) than\n[a: x]\nelse than #red\n[a: y]\nend-if");
+  it("keeps a later case's own color suffix", () => {
+    const src = doc("if (q)\ncase (a)\n[a: x]\ncase (b) #red\n[a: y]\nend-if");
     const { text } = migrateLegacyDsl(src);
-    expect(text).toBe(doc("if (q)\ncase (a)\n[a: x]\ncase () #red\n[a: y]\nend-if"));
+    expect(text).toBe(doc("if (q) is (a) than\n[a: x]\nelse-if (b) than #red\n[a: y]\nend-if"));
     expect(parseDSL(text).errors).toEqual([]);
+  });
+
+  it("rewrites the oldest bare `else` (no than, no parens) into `else-if () than`", () => {
+    const src = doc("if (q) is (a) than\n[a: x]\nelse\n[a: y]\nendif");
+    const { text, changed } = migrateLegacyDsl(src);
+    expect(text).toBe(doc("if (q) is (a) than\n[a: x]\nelse-if () than\n[a: y]\nend-if"));
+    expect(changed).toBeGreaterThan(0);
+    expect(parseDSL(text).errors).toEqual([]);
+  });
+
+  it("keeps the oldest bare else's color suffix", () => {
+    const src = doc("if (q) is (a) than\n[a: x]\nelse #red\n[a: y]\nend-if");
+    const { text } = migrateLegacyDsl(src);
+    expect(text).toBe(doc("if (q) is (a) than\n[a: x]\nelse-if () than #red\n[a: y]\nend-if"));
+    expect(parseDSL(text).errors).toEqual([]);
+  });
+
+  it("leaves an already-current `if … is … than` / `else-if … than` document untouched", () => {
+    const src = doc(
+      "if (q) is (a) than\n[a: x]\nelse-if (b) than #red\n[a: y]\nelse-if () than\n[a: z]\nend-if",
+    );
+    const { text, changed } = migrateLegacyDsl(src);
+    expect(text).toBe(src);
+    expect(changed).toBe(0);
   });
 
   it("rewrites the un-hyphenated closers `endif` and `endfork`", () => {
-    const endif = migrateLegacyDsl(doc("if (q) is (a) than\n[a: x]\nendif"));
-    expect(endif.text).toBe(doc("if (q)\ncase (a)\n[a: x]\nend-if"));
+    const endif = migrateLegacyDsl(doc("if (q)\ncase (a)\n[a: x]\nendif"));
+    expect(endif.text).toBe(doc("if (q) is (a) than\n[a: x]\nend-if"));
     expect(parseDSL(endif.text).errors).toEqual([]);
 
     const endfork = migrateLegacyDsl(doc("fork\n[a: x]\nendfork"));
@@ -71,27 +104,42 @@ describe("migrateLegacyDsl", () => {
     expect(parseDSL(endfork.text).errors).toEqual([]);
   });
 
-  it("rewrites a bare `[loop]` into `loop`", () => {
-    const src = doc("if (q) is (a) than\n[loop]\nend-if");
+  it("rewrites a fork path's `and (b)` into `case (b)`, leaving the fork's own opener alone", () => {
+    const src = doc("fork (p1)\n[a: x]\nand (p2) #blue\n[a: y]\nend-fork");
     const { text, changed } = migrateLegacyDsl(src);
-    expect(text).toBe(doc("if (q)\ncase (a)\nloop\nend-if"));
+    expect(text).toBe(doc("fork (p1)\n[a: x]\ncase (p2) #blue\n[a: y]\nend-fork"));
+    expect(changed).toBeGreaterThan(0);
+    expect(parseDSL(text).errors).toEqual([]);
+  });
+
+  it("leaves an already-current fork `case (b)` document untouched", () => {
+    const src = doc("fork (p1)\n[a: x]\ncase (p2) #blue\n[a: y]\nend-fork");
+    const { text, changed } = migrateLegacyDsl(src);
+    expect(text).toBe(src);
+    expect(changed).toBe(0);
+  });
+
+  it("rewrites a bare `[loop]` into `loop`", () => {
+    const src = doc("if (q)\ncase (a)\n[loop]\nend-if");
+    const { text, changed } = migrateLegacyDsl(src);
+    expect(text).toBe(doc("if (q) is (a) than\nloop\nend-if"));
     expect(changed).toBeGreaterThan(0);
     expect(parseDSL(text).errors).toEqual([]);
   });
 
   it("rewrites `merge: id;` inside a case into `[goto: id]`", () => {
-    const named = migrateLegacyDsl(doc("if (q) is (a) than\n[a: x]\nmerge: done;\nend-if"));
-    expect(named.text).toBe(doc("if (q)\ncase (a)\n[a: x]\n[goto: done]\nend-if"));
+    const named = migrateLegacyDsl(doc("if (q)\ncase (a)\n[a: x]\nmerge: done;\nend-if"));
+    expect(named.text).toBe(doc("if (q) is (a) than\n[a: x]\n[goto: done]\nend-if"));
   });
 
   it("rewrites `[merge: id]` inside a case into `[goto: id]`, leaving a step's own `id:` line alone", () => {
     const src = doc(
-      "[a: start]\nid: again;\n[a: mid]\nif (ok) is (no) than\n[merge: again]\nelse\n[a: done]\nend-if",
+      "[a: start]\nid: again;\n[a: mid]\nif (ok)\ncase (no)\n[merge: again]\ncase ()\n[a: done]\nend-if",
     );
     const { text } = migrateLegacyDsl(src);
     expect(text).toBe(
       doc(
-        "[a: start]\nid: again;\n[a: mid]\nif (ok)\ncase (no)\n[goto: again]\ncase ()\n[a: done]\nend-if",
+        "[a: start]\nid: again;\n[a: mid]\nif (ok) is (no) than\n[goto: again]\nelse-if () than\n[a: done]\nend-if",
       ),
     );
     expect(parseDSL(text).errors).toEqual([]);
@@ -102,8 +150,10 @@ describe("migrateLegacyDsl", () => {
   // no automatic mapping. Left untouched; the reader errors on it, pointing
   // at the exact line to fix by hand.
   it("leaves an unmappable bare `merge;` / `[merge]` untouched for the reader to flag", () => {
-    const inCase = migrateLegacyDsl(doc("if (ok) is (no) than\n[merge]\nelse\n[a: done]\nend-if"));
-    expect(inCase.text).toBe(doc("if (ok)\ncase (no)\n[merge]\ncase ()\n[a: done]\nend-if"));
+    const inCase = migrateLegacyDsl(doc("if (ok)\ncase (no)\n[merge]\ncase ()\n[a: done]\nend-if"));
+    expect(inCase.text).toBe(
+      doc("if (ok) is (no) than\n[merge]\nelse-if () than\n[a: done]\nend-if"),
+    );
     expect(parseDSL(inCase.text).errors).not.toEqual([]);
 
     const marker = migrateLegacyDsl(doc("[a: x]\n[merge]\n[a: y]"));
@@ -112,7 +162,7 @@ describe("migrateLegacyDsl", () => {
   });
 
   it("leaves a `[goto: id]` line — already the current grammar — untouched", () => {
-    const src = doc("if (q)\ncase (a)\n  [goto: home]\nend-if");
+    const src = doc("if (q) is (a) than\n  [goto: home]\nend-if");
     const { text, changed } = migrateLegacyDsl(src);
     expect(text).toBe(src);
     expect(changed).toBe(0);
@@ -143,7 +193,7 @@ describe("migrateLegacyDsl", () => {
   });
 
   it("leaves a fenced `desc:` value untouched, even one that looks like old syntax", () => {
-    const src = doc("[a: x]\ndesc: ```\n*** not a comment\nif (q) is (a) than\n```;");
+    const src = doc("[a: x]\ndesc: ```\n*** not a comment\nif (q)\ncase (a)\n```;");
     const { text, changed } = migrateLegacyDsl(src);
     expect(text).toBe(src);
     expect(changed).toBe(0);
@@ -152,7 +202,7 @@ describe("migrateLegacyDsl", () => {
 
   it("returns a current-grammar document unchanged", () => {
     const src = doc(
-      "[a: z]\n  id: done;\nif (q)\ncase (a)\n  [goto: done]\ncase ()\n  [a: y]\nend-if",
+      "[a: z]\n  id: done;\nif (q) is (a) than\n  [goto: done]\nelse-if () than\n  [a: y]\nend-if",
     );
     const { text, changed } = migrateLegacyDsl(src);
     expect(text).toBe(src);

@@ -1078,12 +1078,12 @@ export function parseDSLv2(src, options = {}) {
       closeFrame(w, pos);
       return;
     }
-    if (w === "case") {
-      readCase(pos);
+    if (w === "else-if") {
+      readElseIf(pos);
       return;
     }
-    if (w === "and") {
-      readAnd(pos);
+    if (w === "case") {
+      readForkCase(pos);
       return;
     }
     if (w === "loop") {
@@ -1291,6 +1291,29 @@ export function parseDSLv2(src, options = {}) {
       text = readText(sc, [")", "）"], ["(", ")"]);
       if (sc.s[sc.i] === ")" || sc.s[sc.i] === "）") sc.i++;
     }
+    // `if`'s first case is fused onto its own line: `if (q) is (a) than`.
+    // There is no bare `if (q)` — every if names its first case here, the
+    // same way a bare `else` no longer exists (see readElseIf).
+    let firstCaseText = null;
+    if (kw === "if") {
+      sc.skipWs();
+      const mark = sc.i;
+      if (sc.word() === "is") {
+        sc.skipWs();
+        if (sc.s[sc.i] === "(" || sc.s[sc.i] === "（") {
+          sc.i++;
+          firstCaseText = readText(sc, [")", "）"], ["(", ")"]);
+          if (sc.s[sc.i] === ")" || sc.s[sc.i] === "）") sc.i++;
+        } else {
+          firstCaseText = "";
+        }
+        sc.skipWs();
+        if (sc.word() !== "than") err(pos, 'if\'s is (...) clause must end with "than"');
+      } else {
+        sc.i = mark;
+        err(pos, "if requires is (...) than");
+      }
+    }
     const { color, id } = readOpenerSuffixes(pos);
 
     if (kw === "if" || kw === "fork") {
@@ -1298,15 +1321,15 @@ export function parseDSLv2(src, options = {}) {
       branchCounter++;
       const branchId = branchCounter;
       const depth = branchMarkerDepth();
-      stack.push({ id: branchId, depth, type: kw, awaitingCase: kw === "if", seq: ++frameSeq });
+      stack.push({ id: branchId, depth, type: kw, seq: ++frameSeq });
       const idx = push(
         {
           kind: "branchStart",
           ...(kw === "fork" ? { parallel: true } : {}),
           cond: kw === "if" ? seg(text ?? "") : null,
           cond$langs: kw === "if" ? langsOf(text ?? "") : null,
-          firstCase: null,
-          firstCase$langs: null,
+          firstCase: kw === "if" ? seg(firstCaseText ?? "") : null,
+          firstCase$langs: kw === "if" ? langsOf(firstCaseText ?? "") : null,
           branchColor: color,
           lane: lane || undefined,
           id: branchId,
@@ -1398,11 +1421,12 @@ export function parseDSLv2(src, options = {}) {
     );
   }
 
-  // A blank `case ()` (or a bare `case`, same as `and`) is the catch-all
-  // case: valid, but its chip is left unlabeled by the renderer, which
-  // suppresses any branchCase row with an empty label — the same way an
-  // unlabeled `and` path already renders.
-  function readCase(pos) {
+  // `else-if () than` (a blank clause) is the catch-all: valid, but its chip
+  // is left unlabeled by the renderer, which suppresses any branchCase row
+  // with an empty label — the same way an unlabeled fork `case` already
+  // renders. There is no bare `else` — every clause after the first is
+  // `else-if (...) than`, empty parens standing in for "otherwise".
+  function readElseIf(pos) {
     let text = "";
     sc.skipWs();
     if (sc.s[sc.i] === "(" || sc.s[sc.i] === "（") {
@@ -1410,22 +1434,13 @@ export function parseDSLv2(src, options = {}) {
       text = readText(sc, [")", "）"], ["(", ")"]);
       if (sc.s[sc.i] === ")" || sc.s[sc.i] === "）") sc.i++;
     }
+    sc.skipWs();
+    if (sc.word() !== "than") err(pos, 'else-if must end with "than"');
     const { color } = readOpenerSuffixes(pos);
     const top = stack[stack.length - 1];
     if (!top || top.type !== "if") {
-      err(pos, "case outside if");
+      err(pos, "else-if outside if");
       return;
-    }
-    // The model carries the first case on `branchStart`.
-    if (top.awaitingCase) {
-      top.awaitingCase = false;
-      const start = rows.findLast((r) => r.kind === "branchStart" && r.id === top.id);
-      if (start) {
-        start.firstCase = seg(text);
-        start.firstCase$langs = langsOf(text);
-        if (color) start.branchColor = start.branchColor || color;
-        return;
-      }
     }
     push(
       {
@@ -1440,7 +1455,8 @@ export function parseDSLv2(src, options = {}) {
     );
   }
 
-  function readAnd(pos) {
+  /** `case (label)` — a fork path after the first, which `fork (label)` names. */
+  function readForkCase(pos) {
     let text = "";
     sc.skipWs();
     if (sc.s[sc.i] === "(" || sc.s[sc.i] === "（") {
@@ -1451,7 +1467,7 @@ export function parseDSLv2(src, options = {}) {
     const { color } = readOpenerSuffixes(pos);
     const top = stack[stack.length - 1];
     if (!top || top.type !== "fork") {
-      err(pos, "and outside fork");
+      err(pos, "case outside fork");
       return;
     }
     push(
