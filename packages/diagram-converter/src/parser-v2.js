@@ -1052,7 +1052,10 @@ export function parseDSLv2(src, options = {}) {
       return;
     }
     err(pos, `unknown statement "${w || sc.s[sc.i]}"`);
-    sc.i = Math.max(sc.i + 1, pos + 1);
+    // One error per line: resuming a character later re-read the same line
+    // as "lse", "se", "e", … — a dozen errors for one stray `else`.
+    sc.i = Math.max(sc.i, pos);
+    while (!sc.eof && sc.s[sc.i] !== "\n") sc.i++;
   }
 
   function readStep(pos) {
