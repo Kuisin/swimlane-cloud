@@ -279,11 +279,14 @@ export function DiscardEditModal({
 
 /**
  * Rewrite every diagram on this branch from the earlier grammar into the
- * current one — the header, `if`/`else-if`/`else` into `if`/`case`,
- * `[loop]`/`merge:` into `loop`/`goto`, and a step's `id:`/`props:`/`arrow:`/
- * `link:` lines into suffixes — in one commit. The grammar has no
+ * current one — the header, `if`/`else-if`/`else` into `if`/`case`, `[loop]`
+ * into `loop`, `merge: id;` and `[merge: id]` into `[goto: id]`, and a step's
+ * `props:`/`arrow:`/`link:` lines into suffixes (a step's `id:` line is
+ * already current and is left alone) — in one commit. The grammar has no
  * compatibility layer, so a repository written before the change fails on
- * every file until this runs.
+ * every file until this runs. A jump with no target — a bare `merge;` /
+ * `[merge]`, or a `[merge]` / `[merge: name]` landing marker — has no
+ * automatic mapping and is left for a hand edit.
  */
 export function MigrateDslModal({
   projectId,

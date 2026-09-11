@@ -1881,7 +1881,7 @@ function AddBlockSheet({
  * Edit modal for every non-step row the mobile flow list shows: a fork/if
  * (`branchStart`), one clause of one (`branchCase`, or an `if`'s first clause
  * — which lives as `firstCase` on the branchStart, hence `firstCase`), a
- * section/sub-branch (`groupStart`), and a `goto` marker (`branchMerge`).
+ * section/sub-branch (`groupStart`), and a `[goto: id]` jump (`branchMerge`).
  * Between them these cover the same fields the desktop `BranchInspector`
  * does, plus add-case and delete.
  */
@@ -2018,9 +2018,21 @@ function GroupEditModal({
               onChange={(e) => setMergeTarget(e.target.value)}
               className={FIELD_CLASS}
             >
-              {/* Empty is a real, valid target now: a bare merge lands on
-                  the next landing marker after this if — not "unset". */}
-              <option value="">{t("mobile.mergeTargetNext")}</option>
+              {/* There is no bare `goto` any more — `[goto: ]` doesn't
+                  parse — so empty is never a value this control may
+                  produce. It still has to *render* when the row's current
+                  target names no step (a dangling jump written in Text
+                  mode), or the select would silently show the wrong step;
+                  that option is disabled, so it can't be chosen back. The
+                  `o.mergeId &&` guard matters: `collectMergeTargetOptions`
+                  lists unnamed steps too (mergeId ""), and those are
+                  filtered out of the list below, so an empty target must
+                  still count as "no matching option". */}
+              {!mergeTargets.some((o) => o.mergeId && o.mergeId === mergeTarget) && (
+                <option value={mergeTarget} disabled>
+                  {t("mobile.mergeTargetUnset")}
+                </option>
+              )}
               {mergeTargets
                 .filter((o) => o.mergeId)
                 .map((o) => (
