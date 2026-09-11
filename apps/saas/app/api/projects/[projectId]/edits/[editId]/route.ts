@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 /**
  * DELETE /api/projects/[projectId]/edits/[editId] — abandon an edit: delete
- * the tmp-* branch and its drafts. The author or an owner may do this; a
+ * the edit branch and its drafts. The author or an owner may do this; a
  * branch with an open pull request must be closed on the PR first.
  */
 export const DELETE = withApi(
@@ -34,7 +34,7 @@ export const DELETE = withApi(
       });
     }
 
-    await project.repos.deleteBranch(project.repo.owner, project.repo.repo, branch);
+    await project.repos.deleteBranch(branch);
     await supabase.from("drafts").delete().eq("project_id", projectId).eq("branch", branch);
     await supabase
       .from("edit_sessions")

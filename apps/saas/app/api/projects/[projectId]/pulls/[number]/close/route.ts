@@ -12,6 +12,12 @@ export const POST = withApi(
     const { projectId, number } = await ctx.params;
     const n = parsePullNumber(number);
     const project = await requireProjectRole(projectId, "editor");
+    if (project.project.provider !== "github") {
+      throw new ApiError(
+        400,
+        "Pull request review is only available for GitHub-backed projects in this release.",
+      );
+    }
 
     const pull = await project.pulls.getPullRequest(n);
     if (project.role !== "owner" && pull.author !== project.login) {

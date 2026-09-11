@@ -96,7 +96,7 @@ section (open)
 [a: step]
 end-section
 @end`);
-    expect(model.errors.some((e) => e.msg.includes("end-section without section"))).toBe(true);
+    expect(model.errors.some((e) => e.msg.includes("end-section closes nothing"))).toBe(true);
   });
 
   it("parses a section inside an if case", () => {
@@ -105,9 +105,9 @@ if (x) is (yes) than
   section (inner)
     [a: step]
   end-section
-else
+else-if () than
   [b: no]
-endif
+end-if
 @end`);
     expect(model.errors).toEqual([]);
     const gs = model.rows.find((r) => r.kind === "groupStart");
@@ -199,9 +199,9 @@ end-section
     const withSection = render(`${BASE_DSL}
 if (x) is (yes) than
   [a: yes]
-else
+else-if () than
   [b: no]
-endif
+end-if
 section (after)
   [a: after-step]
 end-section
@@ -209,9 +209,9 @@ end-section
     const withoutSection = render(`${BASE_DSL}
 if (x) is (yes) than
   [a: yes]
-else
+else-if () than
   [b: no]
-endif
+end-if
 [a: after-step]
 @end`);
     // Both flows are structurally identical (section is visual-only).
@@ -294,32 +294,31 @@ end-branch
     const model = parseDSL(`${BASE_DSL}
 fork
   [a: path1]
-and
+case
   section (fork-section)
     [b: section-step]
   end-section
-endfork
+end-fork
 [a: after]
 @end`);
     expect(model.errors).toEqual([]);
     const svg = render(`${BASE_DSL}
 fork
   [a: path1]
-and
+case
   section (fork-section)
     [b: section-step]
   end-section
-endfork
+end-fork
 [a: after]
 @end`);
     expect(sectionBoxCount(svg)).toBeGreaterThanOrEqual(1);
   });
 
-  it("applies arrow: line-type modifier for steps inside a section", () => {
+  it("applies the dashed-arrow suffix for steps inside a section", () => {
     const svgDashed = render(`${BASE_DSL}
 section (wrap)
-  [a: step1]
-  arrow: dashed;
+  [a: step1] ~>
   [b: step2]
 end-section
 @end`);
@@ -368,5 +367,55 @@ end-section
     expect(sectionBox).toBeTruthy();
     expect(+sectionBox.x).toBe(+gridBox.x + sectionEdgeInset);
     expect(+sectionBox.x + +sectionBox.width).toBe(+gridBox.x + +gridBox.width - sectionEdgeInset);
+  });
+});
+
+/**
+ * "The add-section button does nothing" turned out to be a rendering problem,
+ * not a lost row: the button inserts a correct, empty `section`/`end-section`
+ * pair, but the two group markers sit 16px apart, so after `sectionInset` on
+ * both sides the box came out 6px tall — a dashed sliver with its caption
+ * floating below it, which reads as debris rather than as a new section.
+ */
+describe("an empty section is still visibly a section", () => {
+  const EMPTY = `@kai-swimlane
+/title/
+T
+/role/
+<a>
+label: A;
+/line/
+[a: step]
+section (Audit)
+end-section
+@end`;
+
+  function sectionBoxAndLabel(dsl) {
+    const svg = render(dsl);
+    const box = [...svg.matchAll(/<rect ([^>]*?)\/?>/g)]
+      .map((m) => {
+        const a = {};
+        for (const kv of m[1].matchAll(/([a-zA-Z-]+)="([^"]*)"/g)) a[kv[1]] = kv[2];
+        return a;
+      })
+      .find((r) => r["stroke-dasharray"] === "6 4");
+    const label = /<text[^>]*?y="([\d.]+)"[^>]*>Audit<\/text>/.exec(svg);
+    return { box, labelY: label ? Number(label[1]) : null };
+  }
+
+  it("is tall enough to contain its own caption", () => {
+    const { box, labelY } = sectionBoxAndLabel(EMPTY);
+    expect(box).toBeTruthy();
+    expect(Number(box.height)).toBeGreaterThanOrEqual(DIAGRAM_LAYOUT.sectionMinH);
+    expect(labelY).not.toBeNull();
+    expect(labelY).toBeGreaterThan(Number(box.y));
+    expect(labelY).toBeLessThan(Number(box.y) + Number(box.height));
+  });
+
+  it("still grows to fit its contents", () => {
+    const withStep = EMPTY.replace("section (Audit)\n", "section (Audit)\n  [a: inside]\n");
+    const empty = sectionBoxAndLabel(EMPTY);
+    const full = sectionBoxAndLabel(withStep);
+    expect(Number(full.box.height)).toBeGreaterThan(Number(empty.box.height));
   });
 });

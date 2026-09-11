@@ -1,5 +1,7 @@
+import { isEditBranch } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { assertRef, assertRepoPath } from "@/lib/guard";
+import { moveFileId } from "@/lib/file-ids";
 import {
   assertBranchWritable,
   loadProjectTemplates,
@@ -12,9 +14,11 @@ import {
   loadDraftState,
   readTextAt,
   resolveSha,
+  withinDiagramsRoot,
 } from "@/lib/repo-files";
+import { dslOf, isMarkdownFile, storedFrom } from "@/lib/diagram-file";
 import { getServiceSupabase } from "@/lib/supabase/server";
-import { assertForcedSections } from "@/lib/templates";
+import { assertForcedSectionsForFile } from "@/lib/templates";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,12 +47,12 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   assertBranchWritable(body.branch, project.role, await lockedBranches(project));
 
   const supabase = getServiceSupabase();
-  const [state, committed] = await Promise.all([
+  const [state, listing] = await Promise.all([
     loadDraftState(projectId, body.branch),
-    resolveSha(project, body.branch)
-      .then((sha) => listDiagramFiles(project, sha))
-      .then(({ files }) => new Set(files)),
+    resolveSha(project, body.branch).then((sha) => listDiagramFiles(project, sha)),
   ]);
+  const committed = new Set(listing.files);
+  const config = listing.config;
   const now = new Date().toISOString();
   const actor = { updated_by: project.user.id, updated_by_login: project.login, updated_at: now };
 
@@ -97,16 +101,22 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   if (body.op === "rmdir") {
     const dir = assertRepoPath(body.dir).replace(/\/+$/, "");
     const prefix = `${dir}/`;
-    const targets = [...new Set([...committed, ...Object.keys(state.writes)])].filter(
-      (p) => p.startsWith(prefix) && isDraftablePath(p),
-    );
+    // Committed folder markers are not in `committed` (they are not diagrams),
+    // but an empty folder is *only* its marker — without them, deleting a
+    // folder that holds nothing else would answer "no files to remove".
+    const committedMarkers = listing.folders.map((f) => `${f}/.gitkeep`);
+    const targets = [
+      ...new Set([...committed, ...committedMarkers, ...Object.keys(state.writes)]),
+    ].filter((p) => p.startsWith(prefix) && isDraftablePath(p));
     if (targets.length === 0) throw new ApiError(404, `${dir} has no files to remove.`);
     return json(await markDeleted(targets));
   }
 
   if (body.op === "rename") {
     assertRepoPath(body.from);
-    const to = assertRepoPath(body.to);
+    // Same rule as a draft write: a destination outside the diagram root would
+    // be moved out of the very tree the editor lists, and vanish.
+    const to = withinDiagramsRoot(assertRepoPath(body.to), config);
     if (!isDraftablePath(body.from) || !isDraftablePath(to)) {
       throw new ApiError(400, "Only diagram paths can be moved.");
     }
@@ -121,10 +131,21 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     if (text === null || text === undefined) {
       throw new ApiError(404, `${body.from} does not exist on ${body.branch}.`);
     }
-    if (to.endsWith(".txt")) {
+    // Renaming across the two diagram formats converts the file: a `.txt`
+    // holds raw DSL and a `.md` holds it in a fence, so moving between them
+    // without rewriting the content would leave the destination unreadable —
+    // and, since a `.md` holding raw DSL parses as prose, would also slip past
+    // the forced-section check below.
+    const sourceDsl = dslOf(body.from, text);
+    const stored =
+      sourceDsl === null || isMarkdownFile(body.from) === isMarkdownFile(to)
+        ? text
+        : storedFrom(to, sourceDsl);
+
+    {
       const { policies, templatesById } = await loadProjectTemplates(projectId);
       if (Object.values(policies).some((p) => p.mode === "forced")) {
-        assertForcedSections(text, policies, templatesById);
+        assertForcedSectionsForFile(to, stored, policies, templatesById);
       }
     }
 
@@ -133,7 +154,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
         project_id: projectId,
         filepath: to,
         branch: body.branch,
-        dsl_text: text,
+        dsl_text: stored,
         deleted: false,
         ...actor,
       },
@@ -141,6 +162,13 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     );
     if (error) throw new ApiError(500, `rename failed: ${error.message}`);
     await markDeleted([body.from]);
+    // A file's identity follows a rename only once the rename is visible to
+    // everyone. On an edit branch that is when its pull request is approved
+    // (the merge route moves it then); repointing it here, for a private and
+    // possibly-abandoned edit, would make the id resolve to a path no other
+    // branch has yet — see the comment on moveFileId. Kept for the legacy
+    // case of a branch that is neither, which the guard above already rejects.
+    if (!isEditBranch(body.branch)) await moveFileId(projectId, body.from, to);
     return json({ renamed: true, from: body.from, to });
   }
 

@@ -5,7 +5,11 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Git, NotWritableError } from "../src/git/git-cli.ts";
 import { Repository } from "../src/git/repository.ts";
-import { isWritableBranch, tmpBranchName } from "@swimlane-cloud/github-client";
+import {
+  editBranchName,
+  isWritableBranch,
+  INTEGRATION_BRANCH,
+} from "@swimlane-cloud/github-client";
 import { setTrusted } from "./vscode-stub.ts";
 
 /**
@@ -51,7 +55,7 @@ beforeEach(() => {
   writeFileSync(join(root, "app.js"), "console.log('unrelated');\n");
   sh(["add", "-A"]);
   sh(["commit", "-qm", "init"]);
-  sh(["branch", "test"]);
+  sh(["branch", INTEGRATION_BRANCH]);
 
   git = new Git("git", channel);
   repo = new Repository(git, root, channel);
@@ -67,8 +71,8 @@ describe("the full edit -> checkpoint loop", () => {
     expect(onMain.wrongBranch).toBe(true);
     expect(onMain.branch).toBe("main");
 
-    const branch = tmpBranchName("kai", "expense approval");
-    await repo.startEditBranch(branch, "test", "diagrams");
+    const branch = editBranchName("kai", new Date("2026-09-05T12:00:00Z"), "abc123");
+    await repo.startEditBranch(branch, INTEGRATION_BRANCH, "diagrams");
     expect(sh(["rev-parse", "--abbrev-ref", "HEAD"]).trim()).toBe(branch);
 
     const onTmp = await repo.assertWritable(isWritableBranch);
@@ -83,7 +87,7 @@ describe("the full edit -> checkpoint loop", () => {
   });
 
   it("commits a brand-new diagram, which needs intent-to-add first", async () => {
-    await repo.startEditBranch("tmp-kai-new", "test", "diagrams");
+    await repo.startEditBranch("tmp-kai-new", INTEGRATION_BRANCH, "diagrams");
     writeFileSync(join(root, "diagrams", "brand-new.txt"), DIAGRAM);
 
     const sha = await repo.commitPaths({
@@ -96,7 +100,7 @@ describe("the full edit -> checkpoint loop", () => {
   });
 
   it("NEVER disturbs unrelated staged work — the property the design rests on", async () => {
-    await repo.startEditBranch("tmp-kai-edit", "test", "diagrams");
+    await repo.startEditBranch("tmp-kai-edit", INTEGRATION_BRANCH, "diagrams");
 
     // Someone is mid-refactor with a half-staged change.
     writeFileSync(join(root, "app.js"), "console.log('half-staged refactor');\n");
@@ -116,7 +120,7 @@ describe("the full edit -> checkpoint loop", () => {
   });
 
   it("commits several diagrams as one checkpoint", async () => {
-    await repo.startEditBranch("tmp-kai-many", "test", "diagrams");
+    await repo.startEditBranch("tmp-kai-many", INTEGRATION_BRANCH, "diagrams");
     writeFileSync(join(root, "diagrams", "a.txt"), DIAGRAM.replace("Step", "One"));
     writeFileSync(join(root, "diagrams", "b.txt"), DIAGRAM);
     writeFileSync(join(root, "diagrams", "c.txt"), DIAGRAM);
@@ -138,9 +142,9 @@ describe("the full edit -> checkpoint loop", () => {
 describe("refusals that protect the user's tree", () => {
   it("refuses to start an edit branch when unrelated work is dirty", async () => {
     writeFileSync(join(root, "app.js"), "uncommitted work\n");
-    await expect(repo.startEditBranch("tmp-kai-x", "test", "diagrams")).rejects.toBeInstanceOf(
-      NotWritableError,
-    );
+    await expect(
+      repo.startEditBranch("tmp-kai-x", INTEGRATION_BRANCH, "diagrams"),
+    ).rejects.toBeInstanceOf(NotWritableError);
     // The user is still where they were; nothing was stashed or switched.
     expect(sh(["rev-parse", "--abbrev-ref", "HEAD"]).trim()).toBe("main");
     expect(readFileSync(join(root, "app.js"), "utf8")).toBe("uncommitted work\n");
@@ -164,7 +168,7 @@ describe("refusals that protect the user's tree", () => {
     sh(["checkout", "-q", "-b", "other", "main"]);
     writeFileSync(join(root, "diagrams", "a.txt"), DIAGRAM.replace("Step", "Theirs"));
     sh(["commit", "-qam", "theirs"]);
-    sh(["checkout", "-q", "test"]);
+    sh(["checkout", "-q", INTEGRATION_BRANCH]);
     writeFileSync(join(root, "diagrams", "a.txt"), DIAGRAM.replace("Step", "Ours"));
     sh(["commit", "-qam", "ours"]);
     try {
@@ -178,7 +182,7 @@ describe("refusals that protect the user's tree", () => {
   });
 
   it("refuses a gitignored diagram loudly instead of silently skipping it", async () => {
-    await repo.startEditBranch("tmp-kai-ign", "test", "diagrams");
+    await repo.startEditBranch("tmp-kai-ign", INTEGRATION_BRANCH, "diagrams");
     writeFileSync(join(root, ".gitignore"), "diagrams/secret.txt\n");
     writeFileSync(join(root, "diagrams", "secret.txt"), DIAGRAM);
     await expect(
@@ -187,7 +191,7 @@ describe("refusals that protect the user's tree", () => {
   });
 
   it("refuses when there is genuinely nothing to commit", async () => {
-    await repo.startEditBranch("tmp-kai-noop", "test", "diagrams");
+    await repo.startEditBranch("tmp-kai-noop", INTEGRATION_BRANCH, "diagrams");
     await expect(repo.commitPaths({ message: "x", paths: ["diagrams/a.txt"] })).rejects.toThrow(
       /already committed|nothing/i,
     );

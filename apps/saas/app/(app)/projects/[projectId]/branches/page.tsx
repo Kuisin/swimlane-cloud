@@ -1,8 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { branchKindOf, branchLabel } from "@/lib/branch-label";
 import { publishVersion, unpublishVersion } from "@/lib/workflow";
-import { ProjectPage, HistoryPanel, describeError, useProject } from "../_components";
+import {
+  ProjectPage,
+  HistoryPanel,
+  Modal,
+  ModalFooter,
+  describeError,
+  useProject,
+} from "../_components";
+import type { VersionState } from "@/lib/types";
 import { useT } from "@/i18n";
 
 export default function BranchesPage() {
@@ -10,6 +19,8 @@ export default function BranchesPage() {
   const { t } = useT();
   const [selected, setSelected] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmPublish, setConfirmPublish] = useState<VersionState | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const branches = state?.branches ?? [];
   const view =
@@ -35,14 +46,19 @@ export default function BranchesPage() {
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="truncate font-mono">
-                          {b.name}
+                        <span className="truncate">
+                          {branchLabel(b.name, t)}
                           {b.locked ? " 🔒" : ""}
                         </span>
                         <span className="shrink-0 font-mono text-[10px] text-neutral-400">
                           {b.sha.slice(0, 7)}
                         </span>
                       </div>
+                      {branchKindOf(b.name) !== "other" && (
+                        <div className="truncate font-mono text-[10px] text-neutral-400">
+                          {b.name}
+                        </div>
+                      )}
                       {b.message && (
                         <div className="truncate text-xs text-neutral-500">{b.message}</div>
                       )}
@@ -67,7 +83,7 @@ export default function BranchesPage() {
             </div>
             <div>
               <h2 className="mb-2 text-sm font-semibold text-neutral-700">
-                {t("branches.historyOf", { branch: view })}
+                {t("branches.historyOf", { branch: branchLabel(view, t) })}
               </h2>
               {view && (
                 <HistoryPanel
@@ -75,24 +91,46 @@ export default function BranchesPage() {
                   state={state}
                   branch={view}
                   onTogglePublish={
-                    view === "main" && isOwner
-                      ? (version) => {
-                          const msg = version.public
-                            ? t("branches.confirmUnpublish")
-                            : t("branches.confirmPublish");
-                          if (!window.confirm(msg)) return;
-                          const action = version.public
-                            ? unpublishVersion(projectId, version.id)
-                            : publishVersion(projectId, version.id, "svg_only");
-                          action.then(() => refresh()).catch((e) => setNotice(describeError(e, t)));
-                        }
-                      : undefined
+                    view === "main" && isOwner ? (version) => setConfirmPublish(version) : undefined
                   }
                 />
               )}
             </div>
           </div>
         </div>
+      )}
+
+      {confirmPublish && (
+        <Modal
+          title={confirmPublish.public ? t("branches.unshare") : t("branches.share")}
+          onClose={() => setConfirmPublish(null)}
+          maxW="max-w-sm"
+          footer={
+            <ModalFooter
+              onCancel={() => setConfirmPublish(null)}
+              onConfirm={() => {
+                const version = confirmPublish;
+                const action = version.public
+                  ? unpublishVersion(projectId, version.id)
+                  : publishVersion(projectId, version.id, "svg_only");
+                setBusy(true);
+                action
+                  .then(() => refresh())
+                  .catch((e) => setNotice(describeError(e, t)))
+                  .finally(() => {
+                    setBusy(false);
+                    setConfirmPublish(null);
+                  });
+              }}
+              confirmLabel={confirmPublish.public ? t("branches.unshare") : t("branches.share")}
+              busy={busy}
+            />
+          }
+        >
+          <p className="text-sm text-neutral-600">
+            {confirmPublish.public ? t("branches.confirmUnshare") : t("branches.confirmShare")}
+          </p>
+        </Modal>
       )}
     </ProjectPage>
   );

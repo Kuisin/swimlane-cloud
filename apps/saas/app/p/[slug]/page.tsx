@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { extractTitle, render } from "@/lib/render";
+import { resolveLinkPath } from "@swimlane-cloud/diagram-converter";
+import { extractTitle, render, versionDiagramSettings } from "@/lib/render";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { ShareClient, type SharedFile } from "./share-client";
 
@@ -27,18 +28,28 @@ async function loadPublic(slug: string): Promise<PublicVersion | null> {
   const supabase = getServiceSupabase();
   const { data } = await supabase
     .from("versions")
-    .select("name, note, share_mode, version_files(filepath, dsl_text, sort_order)")
+    .select("name, note, share_mode, settings_json, version_files(filepath, dsl_text, sort_order)")
     .eq("public_slug", slug)
     .eq("public", true)
     .maybeSingle();
   if (!data) return null;
   const shareMode = (data.share_mode as PublicVersion["shareMode"] | null) ?? "svg_only";
+  const diagramSettings = versionDiagramSettings(data);
   const rows = (
     (data as { version_files?: { filepath: string; dsl_text: string; sort_order: number }[] })
       .version_files ?? []
   )
     .slice()
     .sort((a, b) => a.sort_order - b.sort_order || a.filepath.localeCompare(b.filepath));
+  const paths = new Set(rows.map((f) => f.filepath));
+  /** A step's link becomes a real link when it points at a file in this version. */
+  const extrasFor = (filepath: string) => ({
+    documentInfo: { path: filepath },
+    linkHref: (link: string) => {
+      const target = resolveLinkPath(link, filepath);
+      return target && paths.has(target) ? `?file=${encodeURIComponent(target)}` : null;
+    },
+  });
   return {
     name: data.name as string,
     note: (data.note as string | null) ?? null,
@@ -46,7 +57,7 @@ async function loadPublic(slug: string): Promise<PublicVersion | null> {
     files: rows.map((f) => ({
       path: f.filepath,
       title: extractTitle(f.dsl_text),
-      svg: render(f.dsl_text, "basic").svg,
+      svg: render(f.dsl_text, "basic", diagramSettings, extrasFor(f.filepath)).svg,
       dsl: shareMode === "svg_and_dsl" ? f.dsl_text : null,
     })),
   };

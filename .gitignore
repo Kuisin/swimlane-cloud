@@ -31,3 +31,10 @@ coverage/
 # Supabase CLI local state
 supabase/.temp/
 **/supabase/.temp/
+
+# Personal Claude Code settings (not shared with the team)
+.claude/settings.local.json
+
+# Playwright
+test-results/
+playwright-report/

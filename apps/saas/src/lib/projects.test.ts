@@ -12,25 +12,32 @@ describe("roleFromPermissions", () => {
 
 describe("branchLockReason", () => {
   const none = new Set<string>();
+  const edit = "kai/20260905-120000/abc123";
 
   it("never allows editing main, whoever asks", () => {
     expect(branchLockReason("main", "owner", none)).toBe("main");
   });
 
-  it("reserves test for owners", () => {
-    expect(branchLockReason("test", "owner", none)).toBeNull();
-    expect(branchLockReason("test", "editor", none)).toBe("testOwnerOnly");
+  it("never allows editing preview either — it only changes through a pull request", () => {
+    expect(branchLockReason("preview", "owner", none)).toBe("preview");
+    expect(branchLockReason("preview", "editor", none)).toBe("preview");
+    expect(branchLockReason("preview", "viewer", none)).toBe("preview");
   });
 
-  it("opens tmp-* to owners and editors, never viewers", () => {
+  it("opens an edit branch to owners and editors, never viewers", () => {
+    expect(branchLockReason(edit, "editor", none)).toBeNull();
+    expect(branchLockReason(edit, "owner", none)).toBeNull();
+    expect(branchLockReason(edit, "viewer", none)).toBe("viewer");
+  });
+
+  it("freezes an edit branch while it has an open pull request", () => {
+    expect(branchLockReason(edit, "owner", new Set([edit]))).toBe("locked");
+    expect(branchLockReason(edit, "owner", [edit])).toBe("locked");
+  });
+
+  it("still recognises a legacy tmp-* branch as editable", () => {
     expect(branchLockReason("tmp-u-e", "editor", none)).toBeNull();
-    expect(branchLockReason("tmp-u-e", "owner", none)).toBeNull();
     expect(branchLockReason("tmp-u-e", "viewer", none)).toBe("viewer");
-  });
-
-  it("freezes a tmp-* branch while it has an open pull request", () => {
-    expect(branchLockReason("tmp-u-e", "owner", new Set(["tmp-u-e"]))).toBe("locked");
-    expect(branchLockReason("tmp-u-e", "owner", ["tmp-u-e"])).toBe("locked");
   });
 
   it("refuses branches outside the model", () => {
@@ -40,9 +47,10 @@ describe("branchLockReason", () => {
 
 describe("assertBranchWritable", () => {
   it("throws 409 {locked:true} for a locked branch and 403 otherwise", () => {
+    const edit = "kai/20260905-120000/abc123";
     const locked = (() => {
       try {
-        assertBranchWritable("tmp-u-e", "editor", ["tmp-u-e"]);
+        assertBranchWritable(edit, "editor", [edit]);
       } catch (e) {
         return e as ApiError;
       }
@@ -59,5 +67,15 @@ describe("assertBranchWritable", () => {
     })()!;
     expect(main.status).toBe(403);
     expect(main.extra).toMatchObject({ lockReason: "main" });
+
+    const preview = (() => {
+      try {
+        assertBranchWritable("preview", "owner", []);
+      } catch (e) {
+        return e as ApiError;
+      }
+    })()!;
+    expect(preview.status).toBe(403);
+    expect(preview.extra).toMatchObject({ lockReason: "preview" });
   });
 });

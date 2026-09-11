@@ -18,9 +18,9 @@ desc: Organize them with folders however you like.;
 remark: Links are unguessable without the secret.;
 if (Share what?) is (One file) than #blue
   [you: Send the /d/ link]
-else
+else-if () than
   [you: Send the /f/ folder link]
-endif
+end-if
 [share: Anyone with the link views it]
 remark: Diagram or mobile view — switch any time.;
 @end

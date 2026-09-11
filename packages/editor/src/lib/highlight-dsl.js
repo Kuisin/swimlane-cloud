@@ -9,28 +9,30 @@
  *   comment | meta | section | keyword | key | ref | anchor | punct | plain
  */
 
-// Control-flow keywords. Longer forms first so e.g. "section-start" wins over
-// "section". Matched at a word boundary, case-insensitive.
+// Control-flow keywords (dsl-rule.md's closed keyword table). Longer forms
+// first so e.g. "end-section" wins over "section" and "else-if" over "if".
+// Matched at a word boundary, case-insensitive.
+//
+// `is` and `than` are the two halves of an `if`'s fused first clause
+// (`if (q) is (a) than`); `else-if … than` spells every later clause. `case`
+// is now a fork's non-first path only — it means nothing for an `if` any
+// more — and the old `and` path spelling is gone entirely.
 const KEYWORDS = [
-  "section-start",
-  "start-point",
   "end-section",
-  "end-point",
   "end-branch",
-  "elseif",
-  "endfork",
-  "endif",
+  "end-phase",
+  "end-fork",
+  "else-if",
+  "end-if",
   "section",
   "branch",
+  "phase",
   "fork",
   "loop",
-  "skip",
-  "merge",
-  "else",
+  "case",
   "than",
-  "and",
-  "is",
   "if",
+  "is",
 ];
 const KW_RE = new RegExp(`^(?:${KEYWORDS.join("|")})\\b`, "i");
 const SECTION_RE = /^\/(?:page|title|role|option|block|prop|line)\/\s*$/i;
@@ -60,20 +62,38 @@ export function tokenizeDslLine(line) {
     return tokens;
   }
 
-  // Control-flow lines start with a keyword; only then do we colour inline
-  // keywords like `is` / `than` (avoids highlighting them inside step text).
+  // Control-flow lines start with a keyword; only then do we colour an inline
+  // keyword like `than` (avoids highlighting it inside step text, e.g.
+  // "review and approve"). Even on a control line, text inside `(…)` is the
+  // author's own condition or case label — `if (Is the form signed?) is (yes)
+  // than` must not light up the `Is` the user typed — so keyword matching is
+  // suppressed while the paren depth is non-zero. `readText` in the parser
+  // nests parens the same way.
   const inControl = KW_RE.test(body);
   let atStart = true;
+  let parens = 0;
   let pos = 0;
   while (pos < body.length) {
     const rest = body.slice(pos);
+    const inText = parens > 0;
     let m;
     if ((m = /^<[^>]*>/.exec(rest))) tokens.push({ t: "ref", s: m[0] });
     else if ((m = /^#[A-Za-z0-9_-]+/.exec(rest))) tokens.push({ t: "anchor", s: m[0] });
-    else if ((m = /^\[[A-Za-z][A-Za-z-]*\]/.exec(rest))) tokens.push({ t: "keyword", s: m[0] });
-    else if (atStart && (m = /^[A-Za-z][A-Za-z0-9_-]*(?=\s*:)/.exec(rest)))
+    // The bare spacer statement — a step-shaped line with nothing in it.
+    else if ((m = /^\[\]/.exec(rest))) tokens.push({ t: "keyword", s: m[0] });
+    // `[goto: id]` is a jump statement, not a step whose role is "goto" — so
+    // colour the word as control flow even though `goto` is no longer a
+    // keyword anywhere else (there is no bare `goto` line any more).
+    else if (atStart && (m = /^(\[\s*)(goto)(?=\s*:)/i.exec(rest))) {
+      tokens.push({ t: "plain", s: m[1] });
+      tokens.push({ t: "keyword", s: m[2] });
+    } else if (
+      atStart &&
+      (m = /^[A-Za-z][A-Za-z0-9_-]*(?=\s*[:;])/.exec(rest)) &&
+      !KEYWORDS.includes(m[0].toLowerCase())
+    )
       tokens.push({ t: "key", s: m[0] });
-    else if ((atStart || inControl) && (m = KW_RE.exec(rest)))
+    else if (!inText && (atStart || inControl) && (m = KW_RE.exec(rest)))
       tokens.push({ t: "keyword", s: m[0] });
     else if ((m = /^[;:(){}]/.exec(rest))) tokens.push({ t: "punct", s: m[0] });
     else if ((m = /^\s+/.exec(rest))) tokens.push({ t: "plain", s: m[0] });
@@ -81,6 +101,13 @@ export function tokenizeDslLine(line) {
       // Plain run up to the next significant char (never drop a character).
       m = /^[^\s<>#;:(){}[\]]+/.exec(rest) || [rest[0]];
       tokens.push({ t: "plain", s: m[0] });
+    }
+    // Track paren depth across whatever this token swallowed — a fullwidth
+    // `（` can arrive inside a plain run, so counting characters is safer
+    // than relying on the punct branch alone.
+    for (const ch of m[0]) {
+      if (ch === "(" || ch === "（") parens++;
+      else if (ch === ")" || ch === "）") parens = Math.max(0, parens - 1);
     }
     pos += m[0].length;
     atStart = false;

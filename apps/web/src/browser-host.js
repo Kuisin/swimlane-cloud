@@ -94,10 +94,9 @@ side: right;
 
 /line/
 
-[role_applicant: 領収書を添付して申請] <block_apply>
+[role_applicant: 領収書を添付して申請] <block_apply> +REQ_DOC
 label: 申請入力;
 desc: 入力内容を確認して送信する;
-props: REQ_DOC;
 
 [role_system: 申請を受け付ける] <block_system>
 
@@ -172,25 +171,81 @@ label: スクリーニング;
 
 if (合格) is (はい) than
   [role_recruiter: 面接を設定]
-elseif (いいえ) than
+else-if (いいえ) than
   [role_recruiter: お見送り連絡]
-endif
+end-if
 
 @end
 `;
+
+// A sample that uses the newer flow features — a named jump target, numbering
+// levels, a link to another flow — so the demo (and the end-to-end tests
+// that drive it) exercise them without typing them in first.
+const SAMPLE_LINKED = `@kai-swimlane
+
+/title/
+Order to cash
+
+/role/
+
+<sales>
+label: Sales;
+
+<ops>
+label: Ops;
+
+/line/
+
+[sales: Take order]
+
+[sales: Check stock]
+
+[ops: Warehouse A]
+level: 2;
+
+[ops: Warehouse B]
+level: 2;
+
+if (In stock?) is (yes) than
+  [ops: Pick and pack] => ../hr/hiring.txt
+  [goto: invoice]
+else-if (no) than
+  [sales: Back-order]
+end-if
+
+[sales: Confirm]
+
+[sales: Invoice]
+id: invoice;
+
+@end
+`;
+
+export const DEMO_FILES = {
+  "ops/onboarding/flow.txt": SAMPLE_ONBOARDING,
+  "ops/expenses/approval.txt": SAMPLE_EXPENSE,
+  "hr/hiring.txt": SAMPLE_HIRING,
+  "demo/order-to-cash.txt": SAMPLE_LINKED,
+};
 
 function seedIfEmpty() {
   const files = readFiles();
   const dirs = readDirs();
   if (Object.keys(files).length > 0 || dirs.length > 0) return;
+  resetDemo();
+}
 
+/**
+ * Demo mode: throw away whatever the browser holds and start from the
+ * samples again. `?demo=reset` on the URL calls this before the editor
+ * mounts, which is what the end-to-end tests use for a known starting point.
+ */
+export function resetDemo() {
   const now = Date.now();
-  const seeded = {
-    "ops/onboarding/flow.txt": { content: SAMPLE_ONBOARDING, mtime: now },
-    "ops/expenses/approval.txt": { content: SAMPLE_EXPENSE, mtime: now },
-    "hr/hiring.txt": { content: SAMPLE_HIRING, mtime: now },
-  };
+  const seeded = {};
+  for (const [id, content] of Object.entries(DEMO_FILES)) seeded[id] = { content, mtime: now };
   writeFiles(seeded);
+  writeDirs([]);
 }
 
 // --- cross-tab watch ----------------------------------------------------------

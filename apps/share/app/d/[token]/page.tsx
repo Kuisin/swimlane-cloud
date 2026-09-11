@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { textToSvg } from "@swimlane-cloud/diagram-converter";
 import { DiagramViewer } from "@/components/diagram-viewer";
-import { fileName, readDiagram, resolveFileToken } from "@/lib/content";
+import { fileName, readDiagram, readDocumentInfo, resolveFileToken } from "@/lib/content";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ export default async function SharedFilePage({ params }: { params: Promise<{ tok
 
   let svg: string | null = null;
   try {
-    svg = textToSvg(dsl, { themeKey: "basic" }).svg;
+    svg = textToSvg(dsl, { themeKey: "basic", documentInfo: readDocumentInfo(rel) }).svg;
   } catch {
     svg = null;
   }

@@ -35,3 +35,21 @@ describe("TextEditor parse-error highlighting", () => {
     expect(html).not.toContain("sw-code-error-layer");
   });
 });
+
+describe("TextEditor overlay alignment", () => {
+  const highlightText = (html) =>
+    html
+      .match(/<div class="sw-code-shift">(.*?)<\/div>/s)[1]
+      .replace(/<[^>]+>/g, "")
+      .replace(/&#10;|&#x0?A;/gi, "\n");
+
+  // A textarea shows an empty last line after a trailing newline; a <pre>
+  // does not, so its scroll range came up one line short and the caret sat
+  // a line away from its colours at the end of the file.
+  it("renders one line break per textarea line, including the empty last one", () => {
+    for (const value of ["a\nb", "a\nb\n", "a\n\n"]) {
+      const breaks = highlightText(render({ value })).split("\n").length - 1;
+      expect(breaks, JSON.stringify(value)).toBe(value.split("\n").length);
+    }
+  });
+});

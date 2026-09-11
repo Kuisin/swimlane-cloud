@@ -1,17 +1,30 @@
 import { INTEGRATION_BRANCH } from "@swimlane-cloud/github-client";
 import { withApi, json } from "@/lib/api";
-import { assertRef, isSha } from "@/lib/guard";
+import { assertRef } from "@/lib/guard";
+import { ensureFileIds } from "@/lib/file-ids";
 import { requireProjectRole } from "@/lib/projects";
-import { isDraftablePath, listDiagramFiles, loadDraftState, resolveSha } from "@/lib/repo-files";
+import {
+  draftsApplyTo,
+  isDraftablePath,
+  isFolderMarker,
+  folderOfMarker,
+  listDiagramFiles,
+  loadDraftState,
+  resolveSha,
+} from "@/lib/repo-files";
 import type { TreeResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * GET /api/projects/[projectId]/tree?ref= — every diagram at the ref, plus
- * draft-only paths (files created here but not yet checkpointed) when the
- * ref is a branch, so a new file stays visible until its first commit.
+ * GET /api/projects/[projectId]/tree?ref= — every diagram at the ref. On an
+ * edit branch, draft-only paths (files created here but not yet
+ * checkpointed) are added and pending deletions removed, so the listing is
+ * what the editor should show rather than what git alone has. `drafts` names
+ * which listed paths read from a draft and when that draft was last saved:
+ * with `sha` it pins the exact version of every file, which is what lets the
+ * browser reuse cached text safely.
  */
 export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
@@ -21,27 +34,58 @@ export const GET = withApi(async (req, ctx: { params: Promise<{ projectId: strin
 
   const project = await requireProjectRole(projectId, "viewer");
   const sha = await resolveSha(project, ref);
-  const { files, truncated, config } = await listDiagramFiles(project, sha);
+  const {
+    files,
+    folders: committedFolders,
+    truncated,
+    config,
+  } = await listDiagramFiles(project, sha);
 
   const known = new Set(files);
   let ids = [...files];
-  if (!isSha(ref)) {
-    const { writes, deletions } = await loadDraftState(projectId, ref);
+  // Directories that exist without holding a listed file. A folder created in
+  // the editor is a `.gitkeep` draft long before it is a commit, so drafts
+  // count here too — otherwise "New folder" appears to do nothing until push.
+  const folderSet = new Set(committedFolders);
+  const drafts: Record<string, string> = {};
+  if (draftsApplyTo(ref)) {
+    const { writes, deletions, updatedAt } = await loadDraftState(projectId, ref);
     for (const p of Object.keys(writes)) {
-      if (!known.has(p) && isDraftablePath(p) && p.endsWith(".txt")) ids.push(p);
+      if (!isDraftablePath(p)) continue;
+      // The marker itself is not a file anybody edits; it only tells us the
+      // folder is there.
+      if (isFolderMarker(p)) {
+        if (p.includes("/")) folderSet.add(folderOfMarker(p));
+        continue;
+      }
+      if (!known.has(p)) ids.push(p);
+      if (updatedAt[p]) drafts[p] = updatedAt[p];
     }
     // A file deleted in the editor is gone from the tree straight away, even
     // though it only leaves git at the next checkpoint.
     if (deletions.length) {
       const gone = new Set(deletions);
       ids = ids.filter((p) => !gone.has(p));
+      for (const p of gone) delete drafts[p];
+      for (const p of gone) {
+        if (isFolderMarker(p) && p.includes("/")) folderSet.delete(folderOfMarker(p));
+      }
     }
   }
+
+  const sortedIds = ids.sort();
+  const fidByPath = await ensureFileIds(projectId, sortedIds);
 
   const body: TreeResponse = {
     ref,
     sha,
-    files: ids.sort().map((id) => ({ id, name: id.split("/").pop() ?? id })),
+    files: sortedIds.map((id) => ({
+      id,
+      name: id.split("/").pop() ?? id,
+      fid: fidByPath[id],
+    })),
+    drafts,
+    folders: [...folderSet].sort(),
     truncated,
     diagramsRoot: config.diagramsRoot,
   };

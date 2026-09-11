@@ -1,0 +1,4 @@
+<sales>
+  label: 営業 | Sales;
+  background-color: #e6f2ff;
+  icon: #user;

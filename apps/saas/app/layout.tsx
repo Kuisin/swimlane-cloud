@@ -1,10 +1,19 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
   title: "Swimlane Cloud",
   description: "Git-backed DSL diagram management SaaS.",
+};
+
+// Without this, mobile browsers render at a virtual desktop width (~980px)
+// and scale the whole page down to fit — every responsive class in the app
+// (flex-wrap, overflow-x-auto, sm: breakpoints) is neutralized by that, since
+// the browser never thinks it's on a narrow screen in the first place.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

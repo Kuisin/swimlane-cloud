@@ -1,5 +1,5 @@
 import { GitHubNotAccessibleError } from "@swimlane-cloud/github-client";
-import { withApi, json } from "@/lib/api";
+import { withApi, json, ApiError } from "@/lib/api";
 import { compareDiagrams } from "@/lib/compare";
 import { parsePullNumber } from "@/lib/guard";
 import { requireProjectRole } from "@/lib/projects";
@@ -15,6 +15,12 @@ export const GET = withApi(
     const { projectId, number } = await ctx.params;
     const n = parsePullNumber(number);
     const project = await requireProjectRole(projectId, "viewer");
+    if (project.project.provider !== "github") {
+      throw new ApiError(
+        400,
+        "Pull request review is only available for GitHub-backed projects in this release.",
+      );
+    }
 
     const [pull, comments] = await Promise.all([
       project.pulls.getPullRequest(n),

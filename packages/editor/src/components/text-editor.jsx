@@ -15,12 +15,19 @@ import { PartsPreviewTooltip } from "./parts-preview-tooltip.jsx";
  * soft-wrap made the textarea (which reserves a scrollbar) wrap a few px earlier
  * than the overlay, drifting the colours on wrapped lines — and keeps one line
  * number per logical line.
+ *
+ * The overlay, gutter and error stripes follow the textarea's scroll by a
+ * `transform`, not by scrolling themselves. Their own scroll range is shorter
+ * than the textarea's — a trailing newline gives the textarea one more line
+ * than a `<pre>` shows, and the textarea's scrollbars shrink its viewport —
+ * so `scrollTop = ta.scrollTop` clamps near the end and the caret sits a line
+ * away from the colours it belongs to.
  */
 export function TextEditor({ value, onChange, readOnly, gotoLine, theme, errors }) {
   const ref = useRef(null);
-  const preRef = useRef(null);
-  const gutterRef = useRef(null);
-  const errorLayerRef = useRef(null);
+  const highlightShiftRef = useRef(null);
+  const gutterShiftRef = useRef(null);
+  const errorShiftRef = useRef(null);
   const [hoverPreview, setHoverPreview] = useState(null);
   // While the mouse button is down, make ref spans click-through so a drag
   // selection passes cleanly through them to the textarea below.
@@ -69,16 +76,16 @@ export function TextEditor({ value, onChange, readOnly, gotoLine, theme, errors 
     return set;
   }, [errors, lineCount]);
 
-  // Keep the (top) <pre> and the gutter scrolled in lockstep with the textarea.
+  // Keep the highlight layer, gutter and error stripes in lockstep with the
+  // textarea by translating their content by exactly its scroll offset.
   const syncScroll = useCallback(() => {
     const ta = ref.current;
     if (!ta) return;
-    if (preRef.current) {
-      preRef.current.scrollTop = ta.scrollTop;
-      preRef.current.scrollLeft = ta.scrollLeft;
-    }
-    if (gutterRef.current) gutterRef.current.scrollTop = ta.scrollTop;
-    if (errorLayerRef.current) errorLayerRef.current.scrollTop = ta.scrollTop;
+    const both = `translate(${-ta.scrollLeft}px, ${-ta.scrollTop}px)`;
+    const vertical = `translateY(${-ta.scrollTop}px)`;
+    if (highlightShiftRef.current) highlightShiftRef.current.style.transform = both;
+    if (gutterShiftRef.current) gutterShiftRef.current.style.transform = vertical;
+    if (errorShiftRef.current) errorShiftRef.current.style.transform = vertical;
   }, []);
 
   // The error layer mounts/unmounts with the first/last error, so re-sync its
@@ -148,13 +155,19 @@ export function TextEditor({ value, onChange, readOnly, gotoLine, theme, errors 
 
   return (
     <div className="sw-code">
-      <div className="sw-code-gutter" ref={gutterRef} aria-hidden>
-        <div className="sw-code-gutter-inner">{lineNumbers}</div>
+      <div className="sw-code-gutter" aria-hidden>
+        <div className="sw-code-gutter-inner" ref={gutterShiftRef}>
+          {lineNumbers}
+        </div>
       </div>
       <div className="sw-code-area">
         {errorLines.size > 0 && (
-          <div className="sw-code-layer sw-code-error-layer" ref={errorLayerRef} aria-hidden>
-            <div className="sw-code-error-layer-inner" style={{ height: `${lineCount * 1.6}em` }}>
+          <div className="sw-code-layer sw-code-error-layer" aria-hidden>
+            <div
+              className="sw-code-error-layer-inner"
+              ref={errorShiftRef}
+              style={{ height: `${lineCount * 1.6}em` }}
+            >
               {[...errorLines].map((line) => (
                 <div
                   key={line}
@@ -165,13 +178,18 @@ export function TextEditor({ value, onChange, readOnly, gotoLine, theme, errors 
             </div>
           </div>
         )}
-        <pre
+        <div
           className={`sw-code-layer sw-code-highlight${selecting ? " sw-code-selecting" : ""}`}
-          ref={preRef}
           aria-hidden
         >
-          {highlighted}
-        </pre>
+          {/* The trailing "\n" makes a value that ends in a newline render its
+              final empty line, as the textarea does; a lone trailing newline
+              adds no line of its own. */}
+          <div className="sw-code-shift" ref={highlightShiftRef}>
+            {highlighted}
+            {"\n"}
+          </div>
+        </div>
         <textarea
           ref={ref}
           className="sw-code-layer sw-code-input"

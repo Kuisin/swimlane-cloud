@@ -1,0 +1,150 @@
+/*
+ * Styles for the Milkdown (ProseMirror) surface.
+ *
+ * Plain CSS, scoped under `.sw-md`, in the same spirit as
+ * `packages/editor/src/styles.css`. Tailwind's Preflight is active app-wide and
+ * deliberately flattens exactly what a WYSIWYG has to show — it zeroes heading
+ * sizes and weights, strips list markers, and removes margins — so every one of
+ * those is re-asserted here rather than turning Preflight off, which would
+ * disturb every other page in the app.
+ */
+
+.sw-md .ProseMirror {
+  outline: none;
+  min-height: 100%;
+  padding: 1.5rem 1.25rem 4rem;
+  color: #0a0a0a;
+  font-size: 15px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.sw-md .ProseMirror > * + * {
+  margin-top: 0.75em;
+}
+
+.sw-md .ProseMirror h1,
+.sw-md .ProseMirror h2,
+.sw-md .ProseMirror h3,
+.sw-md .ProseMirror h4 {
+  font-weight: 650;
+  line-height: 1.3;
+  margin-top: 1.6em;
+}
+.sw-md .ProseMirror h1 {
+  font-size: 1.7em;
+}
+.sw-md .ProseMirror h2 {
+  font-size: 1.35em;
+}
+.sw-md .ProseMirror h3 {
+  font-size: 1.15em;
+}
+.sw-md .ProseMirror h4 {
+  font-size: 1em;
+}
+
+.sw-md .ProseMirror ul,
+.sw-md .ProseMirror ol {
+  padding-left: 1.5em;
+}
+.sw-md .ProseMirror ul {
+  list-style: disc;
+}
+.sw-md .ProseMirror ol {
+  list-style: decimal;
+}
+.sw-md .ProseMirror li::marker {
+  color: #737373;
+}
+.sw-md .ProseMirror li > * + * {
+  margin-top: 0.4em;
+}
+
+.sw-md .ProseMirror a {
+  color: #4f46e5;
+  text-decoration: underline;
+}
+
+.sw-md .ProseMirror strong {
+  font-weight: 650;
+}
+.sw-md .ProseMirror em {
+  font-style: italic;
+}
+.sw-md .ProseMirror del {
+  text-decoration: line-through;
+  color: #737373;
+}
+
+.sw-md .ProseMirror blockquote {
+  border-left: 3px solid #e5e5e5;
+  padding-left: 0.9em;
+  color: #525252;
+}
+
+.sw-md .ProseMirror code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: #f5f5f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+.sw-md .ProseMirror pre {
+  background: #f8f8f8;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 0.85em 1em;
+  overflow-x: auto;
+}
+.sw-md .ProseMirror pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 0.875em;
+}
+
+.sw-md .ProseMirror hr {
+  border: 0;
+  border-top: 1px solid #e5e5e5;
+  margin: 1.6em 0;
+}
+
+.sw-md .ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.sw-md .ProseMirror th,
+.sw-md .ProseMirror td {
+  border: 1px solid #e5e5e5;
+  padding: 0.4em 0.6em;
+  text-align: left;
+}
+.sw-md .ProseMirror th {
+  background: #fafafa;
+  font-weight: 600;
+}
+
+.sw-md .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+/*
+ * The diagram's placeholder. It stands in for the fence while the prose is
+ * edited (see `markdown-prose.ts`); showing it as a card rather than an
+ * invisible HTML comment is what stops someone deleting it by accident.
+ */
+.sw-md .ProseMirror .html {
+  display: block;
+  border: 1px dashed #c7d2fe;
+  background: #eef2ff;
+  color: #4338ca;
+  border-radius: 8px;
+  padding: 0.7em 0.9em;
+  font-size: 13px;
+  font-family: inherit;
+}

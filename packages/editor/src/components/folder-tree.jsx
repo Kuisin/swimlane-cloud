@@ -7,11 +7,14 @@ import {
   FolderOpen,
   FolderPlus,
   FilePlus,
+  Loader2,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Trash2,
 } from "lucide-react";
 import { buildFolderTree } from "../lib/folder-tree.js";
+import { StarterGallery } from "./gui/starter-gallery.jsx";
 import { useT } from "../i18n.jsx";
 
 /**
@@ -22,6 +25,7 @@ import { useT } from "../i18n.jsx";
  */
 export function FolderTree({
   files,
+  folders,
   width,
   activeId,
   dirtyIds,
@@ -30,10 +34,13 @@ export function FolderTree({
   onSelectDir,
   onOpenFile,
   onNewFile,
+  onNewFileFromStarter,
   onNewFolder,
   onDeleteFile,
   onDeleteFolder,
   onMoveFile,
+  onRenameFile,
+  openingFileId,
   canCreate,
   canMkdir,
   canDelete,
@@ -41,8 +48,9 @@ export function FolderTree({
   onToggleCollapse,
 }) {
   const { t } = useT();
-  const tree = useMemo(() => buildFolderTree(files), [files]);
+  const tree = useMemo(() => buildFolderTree(files, folders), [files, folders]);
   const [rootDragOver, setRootDragOver] = useState(false);
+  const [showStarters, setShowStarters] = useState(false);
   const rootDragCount = useRef(0);
 
   if (collapsed) {
@@ -143,11 +151,43 @@ export function FolderTree({
           onDeleteFile={onDeleteFile}
           onDeleteFolder={onDeleteFolder}
           onMoveFile={onMoveFile}
+          onRenameFile={onRenameFile}
+          openingFileId={openingFileId}
           canDelete={canDelete}
           canMove={canMove}
           isRoot
         />
-        {files.length === 0 && <div className="sw-tree-empty">{t("tree.noFiles")}</div>}
+        {files.length === 0 &&
+          (showStarters && onNewFileFromStarter ? (
+            <StarterGallery
+              title={t("starter.title")}
+              hint={t("starter.hint")}
+              onSelect={(dsl) => {
+                setShowStarters(false);
+                onNewFileFromStarter(selectedDir, dsl);
+              }}
+              onSkip={() => {
+                setShowStarters(false);
+                onNewFile(selectedDir);
+              }}
+              skipLabel={t("starter.startBlank")}
+            />
+          ) : (
+            <div className="sw-tree-empty">
+              <p>{t("tree.noFiles")}</p>
+              {canCreate && (
+                <button
+                  type="button"
+                  className="sw-btn sw-btn-sm"
+                  onClick={() =>
+                    onNewFileFromStarter ? setShowStarters(true) : onNewFile(selectedDir)
+                  }
+                >
+                  {t("tree.createFirst")}
+                </button>
+              )}
+            </div>
+          ))}
       </div>
     </div>
   );
@@ -164,6 +204,8 @@ function TreeNode({
   onDeleteFile,
   onDeleteFolder,
   onMoveFile,
+  onRenameFile,
+  openingFileId,
   canDelete,
   canMove,
   isRoot,
@@ -269,6 +311,8 @@ function TreeNode({
               onDeleteFile={onDeleteFile}
               onDeleteFolder={onDeleteFolder}
               onMoveFile={onMoveFile}
+              onRenameFile={onRenameFile}
+              openingFileId={openingFileId}
               canDelete={canDelete}
               canMove={canMove}
             />
@@ -293,7 +337,24 @@ function TreeNode({
             >
               <FileIcon size={13} />
               <span className="sw-tree-label">{file.name}</span>
-              {dirtyIds?.has(file.id) && <span className="sw-dot" aria-label="unsaved" />}
+              {openingFileId === file.id ? (
+                <Loader2 size={11} className="sw-spin" aria-label={t("tree.opening")} />
+              ) : (
+                dirtyIds?.has(file.id) && <span className="sw-dot" aria-label="unsaved" />
+              )}
+              {canMove && onRenameFile && (
+                <button
+                  type="button"
+                  className="sw-tree-item-del"
+                  title={t("tree.renameFile")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRenameFile(file.id);
+                  }}
+                >
+                  <Pencil size={11} />
+                </button>
+              )}
               {canDelete && (
                 <button
                   type="button"

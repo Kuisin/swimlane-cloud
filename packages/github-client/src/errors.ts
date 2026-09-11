@@ -85,5 +85,23 @@ export class GitHubSsoError extends GitHubError {
 /** Optimistic-concurrency failure: the ref moved under us. */
 export class GitHubConflictError extends GitHubError {}
 
+/**
+ * The two branches genuinely diverged and git cannot reconcile them.
+ *
+ * A subclass, so every existing `instanceof GitHubConflictError` check
+ * still catches it, but callers that can offer something better than
+ * "reload and try again" — reloading never clears this one — can tell the
+ * two apart.
+ */
+export class GitHubMergeConflictError extends GitHubConflictError {
+  constructor(
+    message: string,
+    readonly head: string,
+    readonly base: string,
+  ) {
+    super(message);
+  }
+}
+
 /** Malformed response — truncated pkt-line, unparseable JSON, wrong content type. */
 export class GitHubProtocolError extends GitHubError {}

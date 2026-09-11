@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Eye, ListOrdered, Trash2 } from "lucide-react";
-import { ARROW_LINE_TYPES } from "@swimlane-cloud/diagram-converter";
+import {
+  ARROW_LINE_TYPES,
+  relativeLinkPath,
+  resolveLinkPath,
+} from "@swimlane-cloud/diagram-converter";
 import { useT } from "../../i18n.jsx";
+import { usePersistentState } from "../../hooks/use-persistent-state.js";
 import { PartsPreviewPopup } from "./parts-preview-popup.jsx";
 import { PartsPreviewTooltip } from "../parts-preview-tooltip.jsx";
 
@@ -16,7 +21,7 @@ const ARROW_LABEL_KEY = {
 
 /**
  * Inspector for a single step row. Edits role / text / label / desc / remark /
- * block ref / props / merge id / arrow style, plus move up/down and delete.
+ * block ref / props / arrow style, plus move up/down and delete.
  * All edits go through `onPatch` which mutates the parsed model row. The block
  * and prop pickers each gain an eye button that opens a design preview popup
  * (the dropdown / chips stay the primary way to pick).
@@ -29,21 +34,32 @@ export function StepInspector({
   src,
   theme,
   reorder,
+  locked,
   onPatch,
   onMove,
   onOpenMove,
   onDelete,
   readOnly,
+  linkTargets,
+  currentFileId,
 }) {
   const { t } = useT();
   const [preview, setPreview] = useState(null); // "block" | "prop" | null
   const [hoverPreview, setHoverPreview] = useState(null);
+  const [advancedOpen, setAdvancedOpen] = usePersistentState(
+    "sw-editor:step-advanced-open",
+    false,
+    { parse: (v) => v === "true" },
+  );
 
   if (!row || row.kind !== "step" || row.empty) {
     return <div className="sw-gui-empty">{t("gui.selectStep")}</div>;
   }
   const set = (key) => (value) => onPatch({ [key]: value });
-  const fieldDisabled = readOnly;
+  // A row with a syntax error is still viewable (fields show its current
+  // values) but not editable from here — fixing a broken line has to happen
+  // where the actual text is, in Text mode.
+  const fieldDisabled = readOnly || locked;
 
   const ARROW_OPTIONS = ARROW_LINE_TYPES.map((value) => ({
     value,
@@ -109,6 +125,8 @@ export function StepInspector({
         </div>
       </div>
 
+      {locked && <p className="sw-inspector-locked-notice">{t("errors.rowLockedNotice")}</p>}
+
       <label className="sw-field">
         <span className="sw-field-label">{t("step.role")}</span>
         <select
@@ -137,137 +155,187 @@ export function StepInspector({
         />
       </label>
 
-      <label className="sw-field">
-        <span className="sw-field-label">{t("step.label")}</span>
-        <input
-          type="text"
-          className="sw-input"
-          value={row.name || ""}
-          disabled={fieldDisabled}
-          onChange={(e) => set("name")(e.target.value || "")}
-        />
-      </label>
+      <details
+        className="sw-inspector-advanced"
+        open={advancedOpen}
+        onToggle={(e) => setAdvancedOpen(e.target.open)}
+      >
+        <summary>{t("step.moreOptions")}</summary>
 
-      <label className="sw-field">
-        <span className="sw-field-label">{t("step.description")}</span>
-        <textarea
-          className="sw-input sw-textarea-sm"
-          rows={2}
-          value={row.description || ""}
-          disabled={fieldDisabled}
-          onChange={(e) => set("description")(e.target.value || "")}
-        />
-      </label>
+        <label className="sw-field">
+          <span className="sw-field-label">{t("step.label")}</span>
+          <input
+            type="text"
+            className="sw-input"
+            value={row.name || ""}
+            disabled={fieldDisabled}
+            onChange={(e) => set("name")(e.target.value || "")}
+          />
+        </label>
 
-      <label className="sw-field">
-        <span className="sw-field-label">{t("step.remark")}</span>
-        <textarea
-          className="sw-input sw-textarea-sm"
-          rows={2}
-          value={row.remark || ""}
-          disabled={fieldDisabled}
-          onChange={(e) => set("remark")(e.target.value || "")}
-        />
-      </label>
+        <label className="sw-field">
+          <span className="sw-field-label">{t("step.description")}</span>
+          <textarea
+            className="sw-input sw-textarea-sm"
+            rows={2}
+            value={row.description || ""}
+            disabled={fieldDisabled}
+            onChange={(e) => set("description")(e.target.value || "")}
+          />
+        </label>
 
-      <div className="sw-field-row">
-        <div className="sw-field">
-          <span className="sw-field-label">{t("step.block")}</span>
-          <div className="sw-field-with-action">
+        <label className="sw-field">
+          <span className="sw-field-label">{t("step.remark")}</span>
+          <textarea
+            className="sw-input sw-textarea-sm"
+            rows={2}
+            value={row.remark || ""}
+            disabled={fieldDisabled}
+            onChange={(e) => set("remark")(e.target.value || "")}
+          />
+        </label>
+
+        <div className="sw-field-row">
+          <div className="sw-field">
+            <span className="sw-field-label">{t("step.block")}</span>
+            <div className="sw-field-with-action">
+              <select
+                className="sw-input"
+                value={row.blockRef || ""}
+                disabled={fieldDisabled}
+                onChange={(e) => set("blockRef")(e.target.value || null)}
+              >
+                <option value="">{t("step.none")}</option>
+                {Object.values(blocks || {}).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label || b.id}
+                  </option>
+                ))}
+              </select>
+              {row.blockRef ? (
+                <code
+                  className="sw-ref-badge"
+                  onMouseEnter={(e) => showHoverPreview("block", row.blockRef, e)}
+                  onMouseMove={(e) => showHoverPreview("block", row.blockRef, e)}
+                  onMouseLeave={() => setHoverPreview(null)}
+                >
+                  &lt;{row.blockRef}&gt;
+                </code>
+              ) : null}
+              <button
+                type="button"
+                className="sw-icon-btn"
+                disabled={!hasBlocks}
+                title={t("step.viewDesign")}
+                onClick={() => setPreview("block")}
+              >
+                <Eye size={14} />
+              </button>
+            </div>
+          </div>
+          <label className="sw-field">
+            <span className="sw-field-label">{t("step.arrow")}</span>
             <select
               className="sw-input"
-              value={row.blockRef || ""}
+              value={row.arrowLine || "solid"}
               disabled={fieldDisabled}
-              onChange={(e) => set("blockRef")(e.target.value || null)}
+              onChange={(e) => set("arrowLine")(e.target.value)}
             >
-              <option value="">{t("step.none")}</option>
-              {Object.values(blocks || {}).map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.label || b.id}
+              {ARROW_OPTIONS.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
                 </option>
               ))}
             </select>
-            {row.blockRef ? (
-              <code
-                className="sw-ref-badge"
-                onMouseEnter={(e) => showHoverPreview("block", row.blockRef, e)}
-                onMouseMove={(e) => showHoverPreview("block", row.blockRef, e)}
-                onMouseLeave={() => setHoverPreview(null)}
-              >
-                &lt;{row.blockRef}&gt;
-              </code>
-            ) : null}
-            <button
-              type="button"
-              className="sw-icon-btn"
-              disabled={!hasBlocks}
-              title={t("step.viewDesign")}
-              onClick={() => setPreview("block")}
-            >
-              <Eye size={14} />
-            </button>
-          </div>
+          </label>
         </div>
+
+        {/* No field for a step's `id:`. An id exists only so a `[goto: …]`
+            has something to name, and it is assigned (and taken away again)
+            by the jump's own destination picker — see BranchInspector and
+            gui-mode's pickMergeTarget. Asking an author to invent one, or
+            showing them the `step-3` the tool invented, would be exposing
+            plumbing they have no reason to think about. */}
+
         <label className="sw-field">
-          <span className="sw-field-label">{t("step.arrow")}</span>
+          <span className="sw-field-label">{t("step.link")}</span>
           <select
             className="sw-input"
-            value={row.arrowLine || "solid"}
+            value={row.link || ""}
             disabled={fieldDisabled}
-            onChange={(e) => set("arrowLine")(e.target.value)}
+            onChange={(e) => {
+              const id = e.target.value;
+              set("link")(id ? relativeLinkPath(id, currentFileId) || undefined : undefined);
+            }}
           >
-            {ARROW_OPTIONS.map((a) => (
-              <option key={a.value} value={a.value}>
-                {a.label}
+            <option value="">{t("step.linkNone")}</option>
+            {(linkTargets || []).map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
               </option>
             ))}
           </select>
+          <p className="sw-field-hint">{t("step.linkHint")}</p>
+          {row.link &&
+            !(linkTargets || []).some((f) => f.id === resolveLinkPath(row.link, currentFileId)) && (
+              <p className="sw-field-hint">{t("step.linkMissing", { path: row.link })}</p>
+            )}
         </label>
-      </div>
 
-      <label className="sw-field">
-        <span className="sw-field-label">{t("step.mergeId")}</span>
-        <input
-          type="text"
-          className="sw-input"
-          value={row.mergeId || ""}
-          disabled={fieldDisabled}
-          onChange={(e) => set("mergeId")(e.target.value || "")}
-        />
-      </label>
-
-      {propList.length > 0 && (
-        <div className="sw-field">
-          <span className="sw-field-label sw-field-label-row">
-            {t("step.props")}
-            <button
-              type="button"
-              className="sw-icon-btn sw-icon-btn-xs"
-              title={t("step.viewDesign")}
-              onClick={() => setPreview("prop")}
-            >
-              <Eye size={13} />
-            </button>
-          </span>
-          <div className="sw-prop-chips">
-            {propList.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                disabled={fieldDisabled}
-                className={`sw-chip ${selectedProps.has(p.id) ? "sw-chip-on" : ""}`}
-                onClick={() => toggleProp(p.id)}
-                onMouseEnter={(e) => showHoverPreview("prop", p.id, e)}
-                onMouseMove={(e) => showHoverPreview("prop", p.id, e)}
-                onMouseLeave={() => setHoverPreview(null)}
-                title={`<${p.id}>`}
-              >
-                &lt;{p.label || p.id}&gt;
-              </button>
+        <label className="sw-field">
+          <span className="sw-field-label">{t("step.level")}</span>
+          <select
+            className="sw-input"
+            value={row.level || 1}
+            disabled={fieldDisabled}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              // Absent means level 1 — never write it explicitly.
+              set("level")(n === 1 ? undefined : n);
+            }}
+          >
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
             ))}
+          </select>
+          <p className="sw-field-hint">{t("step.levelHint")}</p>
+        </label>
+
+        {propList.length > 0 && (
+          <div className="sw-field">
+            <span className="sw-field-label sw-field-label-row">
+              {t("step.props")}
+              <button
+                type="button"
+                className="sw-icon-btn sw-icon-btn-xs"
+                title={t("step.viewDesign")}
+                onClick={() => setPreview("prop")}
+              >
+                <Eye size={13} />
+              </button>
+            </span>
+            <div className="sw-prop-chips">
+              {propList.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={fieldDisabled}
+                  className={`sw-chip ${selectedProps.has(p.id) ? "sw-chip-on" : ""}`}
+                  onClick={() => toggleProp(p.id)}
+                  onMouseEnter={(e) => showHoverPreview("prop", p.id, e)}
+                  onMouseMove={(e) => showHoverPreview("prop", p.id, e)}
+                  onMouseLeave={() => setHoverPreview(null)}
+                  title={`<${p.id}>`}
+                >
+                  &lt;{p.label || p.id}&gt;
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </details>
 
       <PartsPreviewPopup
         open={preview === "block"}

@@ -27,3 +27,61 @@ body {
     Arial,
     sans-serif;
 }
+
+/*
+ * Touch targets in the page headers.
+ *
+ * Every page's header carries the same handful of small controls — the
+ * language toggle, sign out, the back link, the project tabs. Sized for a
+ * mouse they come out between 16px and 26px tall, well under the ~44px a
+ * fingertip needs, and they sit close enough together that the wrong one is
+ * easy to hit.
+ *
+ * Scoped to `pointer: coarse` so a mouse keeps the compact header, and to
+ * `header` so it cannot reach the editor, which styles its own controls.
+ * `inline-flex` is what makes `min-height` mean anything on a link: an inline
+ * box ignores height entirely.
+ */
+@media (pointer: coarse) {
+  header a,
+  header button,
+  header select {
+    min-height: 36px;
+  }
+  header a,
+  header button {
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+/*
+ * The same problem away from the headers. Measured against the sample
+ * repository's real contents, 37 distinct controls came out under 32px tall —
+ * a 13px checkbox on the settings page, 16px buttons for "Unshare" and
+ * "Discard edit", both of which do something a reader would rather not do by
+ * accident.
+ *
+ * Only real controls are given a floor. A link inside a sentence — a commit
+ * sha, a share URL — is deliberately left alone: WCAG 2.5.8 exempts inline
+ * targets, and giving one a height would push the line it sits in around
+ * instead of making it easier to hit.
+ *
+ * `min-height` rather than `height`, and no `display` change, so a control
+ * that is already tall enough is untouched and nothing reflows. `pointer:
+ * coarse` keeps all of it away from a mouse.
+ */
+@media (pointer: coarse) {
+  button,
+  select,
+  textarea,
+  input:not([type="checkbox"]):not([type="radio"]) {
+    min-height: 32px;
+  }
+  /* A default checkbox is 13px square; WCAG 2.5.8 (AA) asks for 24. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 24px;
+    height: 24px;
+  }
+}

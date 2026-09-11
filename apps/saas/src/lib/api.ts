@@ -1,16 +1,24 @@
 import { NextResponse } from "next/server";
 import {
   GitHubConflictError,
+  GitHubMergeConflictError,
   GitHubNotAccessibleError,
   GitHubRateLimitError,
   GitHubSsoError,
   MergeTargetError,
 } from "@swimlane-cloud/github-client";
+import {
+  GitLabConflictError,
+  GitLabNotAccessibleError,
+  GitLabNotImplementedError,
+  GitLabRateLimitError,
+} from "@swimlane-cloud/gitlab-client";
 
 /**
  * Typed HTTP error that route handlers may throw; mapped to a JSON response.
  * `extra` is merged into the body so the client can branch on flags such as
- * `needsAuth`, `conflict`, `locked`, `dirty` or `upgrade` without parsing text.
+ * `needsAuth`, `conflict`, `mergeConflict`, `locked`, `dirty` or `upgrade` without
+ * parsing text.
  */
 export class ApiError extends Error {
   status: number;
@@ -43,19 +51,30 @@ export function errorResponse(err: unknown): NextResponse {
       { status: 403 },
     );
   }
-  if (err instanceof GitHubConflictError) {
+  // Before the generic case: a real merge conflict is also a GitHubConflictError,
+  // but "reload and try again" is the wrong advice for it.
+  if (err instanceof GitHubMergeConflictError) {
+    return NextResponse.json(
+      { error: err.message, conflict: true, mergeConflict: true, head: err.head, base: err.base },
+      { status: 409 },
+    );
+  }
+  if (err instanceof GitHubConflictError || err instanceof GitLabConflictError) {
     return NextResponse.json({ error: err.message, conflict: true }, { status: 409 });
   }
-  if (err instanceof GitHubRateLimitError) {
+  if (err instanceof GitHubRateLimitError || err instanceof GitLabRateLimitError) {
     const res = NextResponse.json({ error: err.message, rateLimited: true }, { status: 503 });
     if (err.retryAfterSeconds) res.headers.set("Retry-After", String(err.retryAfterSeconds));
     return res;
   }
-  if (err instanceof GitHubNotAccessibleError) {
-    // A 401 from GitHub means the stored token is dead (revoked, or the OAuth
-    // app was removed); the fix is to sign in again, so say so.
+  if (err instanceof GitHubNotAccessibleError || err instanceof GitLabNotAccessibleError) {
+    // A 401 means the stored token is dead (revoked, or the OAuth app/token
+    // was removed); the fix is to sign in (or reconnect) again, so say so.
     const status = err.status === 401 ? 401 : 404;
     return NextResponse.json({ error: err.message, needsAuth: err.authWouldHelp }, { status });
+  }
+  if (err instanceof GitLabNotImplementedError) {
+    return NextResponse.json({ error: err.message }, { status: 400 });
   }
   const message = err instanceof Error ? err.message : "Internal error";
   // Surface config errors (missing env) as 500 with a useful message.

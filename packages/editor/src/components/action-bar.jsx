@@ -5,17 +5,20 @@ import {
   GitBranch,
   HelpCircle,
   LayoutTemplate,
+  Redo2,
   Save,
   SaveAll,
   Tag,
+  Undo2,
   Wand2,
 } from "lucide-react";
 import { useT } from "../i18n.jsx";
 
 /**
- * Top action bar. Save / Save all / New file / New folder / Export / Templates
- * / Help are always shown when the host supports them; Checkpoint / Flag new
- * version are gated on host capability + method presence.
+ * Top action bar. New file / New folder / Export / Templates / Help are
+ * always shown when the host supports them. Save / Save all / Checkpoint /
+ * Flag new version are gated on host capability + method presence, and are
+ * hidden entirely under `autosave` — the small status text takes their place.
  *
  * `onExport(format)` is called with "txt", "svg", "png", or "png-hd"
  * (PNG at a higher pixel scale for print/zoom).
@@ -28,15 +31,21 @@ export function ActionBar({
   hasUnsavedChanges,
   hasAnyUnsavedChanges,
   readOnly,
+  autosave,
+  autosaveStatus,
   canCreate,
   canMkdir,
   canFormat,
   canCheckpoint,
   canVersion,
+  canUndo,
+  canRedo,
   hasSvg,
   shortcuts,
   onSave,
   onSaveAll,
+  onUndo,
+  onRedo,
   onNewFile,
   onNewFolder,
   onExport,
@@ -81,6 +90,28 @@ export function ActionBar({
         <button type="button" className="sw-btn" onClick={onOpenTemplates}>
           <LayoutTemplate size={14} /> {t("action.templates")}
         </button>
+        {!readOnly && (
+          <>
+            <button
+              type="button"
+              className="sw-icon-btn"
+              disabled={!canUndo}
+              onClick={onUndo}
+              title={withShortcut(t("action.undo"), sc.undo)}
+            >
+              <Undo2 size={15} />
+            </button>
+            <button
+              type="button"
+              className="sw-icon-btn"
+              disabled={!canRedo}
+              onClick={onRedo}
+              title={withShortcut(t("action.redo"), sc.redo)}
+            >
+              <Redo2 size={15} />
+            </button>
+          </>
+        )}
         {mode === "text" && canFormat && (
           <button
             type="button"
@@ -165,50 +196,62 @@ export function ActionBar({
         >
           <HelpCircle size={16} />
         </button>
-        {canVersion && (
-          <button
-            type="button"
-            className="sw-btn"
-            onClick={onFlagVersion}
-            title={t("action.versionTitle")}
-          >
-            <Tag size={14} /> {t("action.version")}
-          </button>
-        )}
-        {canCheckpoint && (
-          <button
-            type="button"
-            className="sw-btn"
-            onClick={onCheckpoint}
-            disabled={!hasAnyUnsavedChanges}
-            title={t("action.checkpoint")}
-          >
-            <GitBranch size={14} /> {t("action.checkpoint")}
-          </button>
-        )}
-        {!readOnly && (
+        {autosave ? (
+          <span className={`sw-autosave sw-autosave-${autosaveStatus?.state ?? "saved"}`}>
+            {autosaveStatus?.state === "saving"
+              ? t("autosave.saving")
+              : autosaveStatus?.state === "error"
+                ? t("autosave.error")
+                : t("autosave.saved")}
+          </span>
+        ) : (
           <>
-            <button
-              type="button"
-              className="sw-btn"
-              onClick={onSaveAll}
-              disabled={!hasAnyUnsavedChanges}
-              title={withShortcut(t("action.saveAll"), sc.saveAll)}
-            >
-              <SaveAll size={14} /> {t("action.saveAll")}
-            </button>
-            <button
-              type="button"
-              className={`sw-btn ${hasUnsavedChanges ? "sw-btn-accent" : ""}`}
-              onClick={onSave}
-              disabled={!hasUnsavedChanges}
-              title={withShortcut(
-                hasUnsavedChanges ? t("action.saveDirty") : t("action.save"),
-                sc.save,
-              )}
-            >
-              <Save size={14} /> {hasUnsavedChanges ? t("action.saveDirty") : t("action.save")}
-            </button>
+            {canVersion && (
+              <button
+                type="button"
+                className="sw-btn"
+                onClick={onFlagVersion}
+                title={t("action.versionTitle")}
+              >
+                <Tag size={14} /> {t("action.version")}
+              </button>
+            )}
+            {canCheckpoint && (
+              <button
+                type="button"
+                className="sw-btn"
+                onClick={onCheckpoint}
+                disabled={!hasAnyUnsavedChanges}
+                title={t("action.checkpoint")}
+              >
+                <GitBranch size={14} /> {t("action.checkpoint")}
+              </button>
+            )}
+            {!readOnly && (
+              <>
+                <button
+                  type="button"
+                  className="sw-btn"
+                  onClick={onSaveAll}
+                  disabled={!hasAnyUnsavedChanges}
+                  title={withShortcut(t("action.saveAll"), sc.saveAll)}
+                >
+                  <SaveAll size={14} /> {t("action.saveAll")}
+                </button>
+                <button
+                  type="button"
+                  className={`sw-btn ${hasUnsavedChanges ? "sw-btn-accent" : ""}`}
+                  onClick={onSave}
+                  disabled={!hasUnsavedChanges}
+                  title={withShortcut(
+                    hasUnsavedChanges ? t("action.saveDirty") : t("action.save"),
+                    sc.save,
+                  )}
+                >
+                  <Save size={14} /> {hasUnsavedChanges ? t("action.saveDirty") : t("action.save")}
+                </button>
+              </>
+            )}
           </>
         )}
       </div>

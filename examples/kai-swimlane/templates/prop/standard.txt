@@ -1,0 +1,3 @@
+<PO>
+  label: 注文書 | Purchase order;
+  side: right;

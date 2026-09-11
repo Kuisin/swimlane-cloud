@@ -1,12 +1,28 @@
 /**
  * The SaaS `EditorHost`: the shared editor's storage contract, implemented
  * over the project API. The editor never sees GitHub or Supabase; it sees a
- * folder of `.txt` files it can read, save, create and checkpoint.
+ * folder of DSL documents it can read, save, create and checkpoint.
  *
- * Drafts (Save / Save all / New file) go to Postgres; Checkpoint turns every
- * draft on the branch into one commit. `expectedHeadSha` is the head we last
- * listed, so two people checkpointing the same branch cannot clobber each
- * other — the second gets a 409 and a "branch moved" banner.
+ * A diagram is stored as `.txt` (raw DSL) or `.md` (frontmatter + prose + the
+ * DSL in a fence). Unwrapping happens here, on the way in and out, so the
+ * editor only ever handles DSL and `packages/editor` needs to know nothing
+ * about markdown at all.
+ *
+ * Every writable branch is `autosave: true`, so the editor debounce-saves
+ * drafts to Postgres itself; the page's own "Push to GitHub" turns every
+ * draft on the branch into one commit via `checkpoint`. `expectedHeadSha` is
+ * the head we last listed, so two people pushing the same branch cannot
+ * clobber each other — the second gets a 409 and a "branch moved" banner.
+ *
+ * Navigation is made instant by the local cache (`local-cache.ts`), under
+ * one rule: nothing stale is ever shown as current.
+ *  - `list()` answers from the last listing at once and reconciles when the
+ *    fresh one arrives, telling the editor about files added or removed since
+ *    through the same `watch` events a filesystem host would send.
+ *  - `read()` waits for a fresh listing, which names the exact version of
+ *    every file (commit sha, or a draft's timestamp), and serves cached text
+ *    only under that version. A cached text is therefore either exactly
+ *    current or not used.
  */
 import type {
   EditorHost,
@@ -14,13 +30,19 @@ import type {
   SectionTemplate,
   TemplatePolicy,
   TemplateSection,
+  WatchEvent,
 } from "@swimlane-cloud/editor";
+import { splitFrontmatter, type MetaRecord } from "@swimlane-cloud/diagram-converter/markdown-doc";
 import { api } from "./client";
+import { dslOf, isMarkdownFile, storedFrom } from "./diagram-file";
+import { fileVersionIn } from "./file-version";
+import { CACHE_KEY, localCache } from "./local-cache";
+import type { TreeResponse } from "./types";
 import {
   checkpoint as checkpointRequest,
   deleteFile,
-  flagVersion,
   getFile,
+  getImport,
   getTree,
   removeFolder,
   renameFile,
@@ -32,42 +54,237 @@ export interface SaasHostOptions {
   branch: string;
   /** Whether the caller may write to this branch (from ProjectState). */
   editable: boolean;
-  /** Owners on `test` may flag a version straight from the editor. */
-  versioning: boolean;
   /** Fired when the branch tip differs from the last one seen. */
   onHeadChange?: (sha: string) => void;
   /** Fired after any draft write, so the page can show "unsaved" without a round trip. */
   onDraftSaved?: () => void;
   /** Fired after a successful checkpoint. */
   onCheckpoint?: (commitSha: string) => void;
+  /** The open file's path, so `@use` targets resolve relative to it. */
+  activeDocumentId?: () => string;
+  /**
+   * Fired with the raw tree listing every time `list()` resolves, so the page
+   * can keep a path -> fid map for writing `?fid=` into the URL (the editor's
+   * own `FileRef` doesn't carry `fid` — that's a SaaS-only concept).
+   */
+  onFileList?: (files: { id: string; name: string; fid: string }[]) => void;
 }
 
-export function createSaasHost(opts: SaasHostOptions): EditorHost {
+export interface SaasEditorHost extends EditorHost {
+  /**
+   * Record a branch tip the page moved by itself (its own push), so the next
+   * listing is not reported as "moved by someone else", and so the next read
+   * validates against the new commit rather than the one before it.
+   */
+  noteHead(sha: string): void;
+
+  /**
+   * The file exactly as stored, rather than the DSL `read` unwraps out of it.
+   * The Document view edits the prose and frontmatter *around* the diagram, so
+   * it needs the half `read` deliberately throws away.
+   */
+  readStored(id: string): Promise<string>;
+
+  /** Save a whole stored document, already in its final on-disk form. */
+  writeStored(id: string, stored: string): Promise<void>;
+
+  /**
+   * A `.md` file's frontmatter, for the preview's document panel; null
+   * otherwise. Values are the structured model — a list or a nested map, not
+   * only a string — which the panel flattens for display.
+   */
+  metaOf(id: string): MetaRecord | null;
+}
+
+/** How long a fresh listing is reused before being fetched again. */
+const FRESH_LISTING_MS = 3000;
+
+export function createSaasHost(opts: SaasHostOptions): SaasEditorHost {
   const { projectId, branch } = opts;
   const base = `/api/projects/${encodeURIComponent(projectId)}`;
+  const treeKey = CACHE_KEY.tree(projectId, branch);
   let knownHeadSha: string | null = null;
+  // The importing file, so `./` and `../` resolve the way the parser does.
+  const activeId = () => opts.activeDocumentId?.() ?? "";
 
-  async function write(files: { id: string; dsl: string }[]) {
-    await saveDrafts(projectId, branch, files);
-    opts.onDraftSaved?.();
+  const watchers = new Set<(e: WatchEvent) => void>();
+  const emit = (e: WatchEvent) => {
+    for (const w of watchers) w(e);
+  };
+
+  // The most recent listing straight from the server, reused briefly so a
+  // read right after a listing does not fetch the tree a second time.
+  let fresh: { tree: TreeResponse; at: number } | null = null;
+  let inflight: Promise<TreeResponse> | null = null;
+
+  function fetchTree(): Promise<TreeResponse> {
+    if (inflight) return inflight;
+    const p = getTree(projectId, branch)
+      .then((tree) => {
+        fresh = { tree, at: Date.now() };
+        localCache.set(treeKey, tree);
+        if (knownHeadSha && tree.sha !== knownHeadSha) opts.onHeadChange?.(tree.sha);
+        knownHeadSha = tree.sha;
+        opts.onFileList?.(tree.files);
+        return tree;
+      })
+      .finally(() => {
+        if (inflight === p) inflight = null;
+      });
+    inflight = p;
+    return p;
   }
 
-  const host: EditorHost = {
-    capabilities: { readOnly: !opts.editable, versioning: opts.versioning },
+  /** A listing known to be current: fetched moments ago and nothing written since, else a new one. */
+  function currentTree(): Promise<TreeResponse> {
+    if (fresh && Date.now() - fresh.at < FRESH_LISTING_MS) return Promise.resolve(fresh.tree);
+    return fetchTree();
+  }
+
+  /** Anything that changes what a listing would say. */
+  function invalidateListing() {
+    fresh = null;
+  }
+
+  /** Tell the editor which files appeared or disappeared between two listings. */
+  function reconcile(before: FileRef[], after: FileRef[]) {
+    const was = new Set(before.map((f) => f.id));
+    const now = new Set(after.map((f) => f.id));
+    for (const id of now) if (!was.has(id)) emit({ id, type: "add", dsl: null });
+    for (const id of was) if (!now.has(id)) emit({ id, type: "unlink", dsl: null });
+  }
+
+  /**
+   * The raw markdown of every `.md` read this session, so a save can put the
+   * DSL back inside its fence without disturbing the frontmatter or the prose
+   * around it.
+   */
+  const markdownSource = new Map<string, string>();
+
+  /**
+   * What the editor sees. A `.md` diagram is unwrapped to its DSL — the editor
+   * never needs to know the file is markdown, which is why none of this lives
+   * in `packages/editor`. A `.md` holding only prose has no DSL to unwrap and
+   * is handed over as-is.
+   */
+  function toEditorText(id: string, stored: string): string {
+    if (!isMarkdownFile(id)) return stored;
+    markdownSource.set(id, stored);
+    return dslOf(id, stored) ?? stored;
+  }
+
+  /** The inverse: what actually gets stored for `id`. */
+  function toStoredText(id: string, text: string): string {
+    if (!isMarkdownFile(id)) return text;
+    const next = storedFrom(id, text, markdownSource.get(id));
+    markdownSource.set(id, next);
+    return next;
+  }
+
+  /** Save documents that are already in their stored form. */
+  async function commitStored(files: { id: string; dsl: string }[]) {
+    const res = await saveDrafts(projectId, branch, files);
+    invalidateListing();
+    opts.onDraftSaved?.();
+    return res;
+  }
+
+  async function write(files: { id: string; dsl: string }[]) {
+    return commitStored(files.map((f) => ({ id: f.id, dsl: toStoredText(f.id, f.dsl) })));
+  }
+
+  /** The stored bytes for `id`, from the cache when the tree says it is current. */
+  async function readRaw(id: string) {
+    const tree = await currentTree();
+    const version = fileVersionIn(tree, id);
+    if (version) {
+      const hit = localCache.get<string>(CACHE_KEY.file(projectId, id, version));
+      if (hit) return hit.value;
+    }
+    const res = await getFile(projectId, branch, id);
+    localCache.set(CACHE_KEY.file(projectId, id, res.version), res.dsl);
+    return res.dsl;
+  }
+
+  const host: SaasEditorHost = {
+    capabilities: { readOnly: !opts.editable, autosave: opts.editable },
 
     async root() {
       return `${branch}`;
     },
 
     async list(): Promise<FileRef[]> {
-      const tree = await getTree(projectId, branch);
-      if (knownHeadSha && tree.sha !== knownHeadSha) opts.onHeadChange?.(tree.sha);
-      knownHeadSha = tree.sha;
-      return tree.files;
+      if (fresh && Date.now() - fresh.at < FRESH_LISTING_MS) return fresh.tree.files;
+      const next = fetchTree();
+      const cached = localCache.get<TreeResponse>(treeKey);
+      if (cached) {
+        // Paint the last listing now; when the real one lands, any difference
+        // reaches the editor as add/unlink events and it re-lists itself.
+        void next.then((tree) => reconcile(cached.value.files, tree.files)).catch(() => {});
+        return cached.value.files;
+      }
+      return (await next).files;
     },
 
+    /**
+     * Directories with nothing listed in them. Git cannot store an empty
+     * directory, so these come from the `.gitkeep` markers `mkdir` writes —
+     * without them a folder you just created would vanish from the tree until
+     * you put a file in it.
+     */
+    async listFolders(): Promise<string[]> {
+      if (fresh && Date.now() - fresh.at < FRESH_LISTING_MS) return fresh.tree.folders ?? [];
+      const cached = localCache.get<TreeResponse>(treeKey);
+      if (cached) return cached.value.folders ?? [];
+      return (await fetchTree()).folders ?? [];
+    },
+
+    // The cache holds what is stored, not what the editor sees, so either path
+    // still records the markdown a later save has to merge back into.
     async read(id) {
-      return (await getFile(projectId, branch, id)).dsl;
+      return toEditorText(id, await readRaw(id));
+    },
+
+    async readStored(id) {
+      const stored = await readRaw(id);
+      if (isMarkdownFile(id)) markdownSource.set(id, stored);
+      return stored;
+    },
+
+    async writeStored(id, stored) {
+      // Already stored form, so it must not go through `toStoredText` — that
+      // would read it as DSL and wrap it in a second fence.
+      if (isMarkdownFile(id)) markdownSource.set(id, stored);
+      await commitStored([{ id, dsl: stored }]);
+    },
+
+    // The frontmatter `read` strips along with the prose, for the preview's
+    // document panel. Synchronous, from the markdown this session has read.
+    // Structured values are handed over as they are — the renderer's info
+    // panel flattens a list or a nested map itself (`metaValueText`).
+    metaOf(id) {
+      const stored = markdownSource.get(id);
+      if (!stored || !isMarkdownFile(id)) return null;
+      return splitFrontmatter(stored).meta;
+    },
+
+    // `@use` targets. The editor reads them here because parsing is
+    // synchronous; a failure is null, so a diagram renders without its
+    // imports rather than not at all.
+    async readImport(path) {
+      try {
+        return (await getImport(projectId, branch, activeId(), path)).text ?? null;
+      } catch {
+        return null;
+      }
+    },
+
+    async readAsset(path) {
+      try {
+        return (await getImport(projectId, branch, activeId(), path)).dataUri ?? null;
+      } catch {
+        return null;
+      }
     },
 
     async writeDraft(id, dsl) {
@@ -78,8 +295,20 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
       await write(updates);
     },
 
+    /**
+     * Returns the path the file was actually created at. The editor suggests a
+     * bare name when no folder is selected, and the server moves it inside the
+     * diagram root; handing that path back lets the editor open the real file
+     * rather than an in-memory one the tree will never list.
+     */
     async create(id, dsl) {
-      await write([{ id, dsl }]);
+      // New diagrams are markdown. The editor always suggests `.txt` (it
+      // appends the extension itself, so a typed `notes.md` arrives as
+      // `notes.md.txt`); rewriting here is what makes `.md` the default
+      // without changing `packages/editor`.
+      const target = id.toLowerCase().endsWith(".txt") ? `${id.slice(0, -4)}.md` : id;
+      const res = await write([{ id: target, dsl }]);
+      return res.paths[0] ?? target;
     },
 
     /** A folder exists once something is in it; the marker is committed with the next checkpoint. */
@@ -91,16 +320,19 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
     // tree immediately, and leaves git at the next checkpoint.
     async delete(id) {
       await deleteFile(projectId, branch, id);
+      invalidateListing();
       opts.onDraftSaved?.();
     },
 
     async rmdir(dirPath) {
       await removeFolder(projectId, branch, dirPath.replace(/\/+$/, ""));
+      invalidateListing();
       opts.onDraftSaved?.();
     },
 
     async rename(fromId, toId) {
       await renameFile(projectId, branch, fromId, toId);
+      invalidateListing();
       opts.onDraftSaved?.();
     },
 
@@ -112,8 +344,20 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
         files,
         knownHeadSha ?? undefined,
       );
-      knownHeadSha = res.commitSha;
+      host.noteHead(res.commitSha);
       opts.onCheckpoint?.(res.commitSha);
+    },
+
+    watch(cb) {
+      watchers.add(cb);
+      return () => {
+        watchers.delete(cb);
+      };
+    },
+
+    noteHead(sha) {
+      knownHeadSha = sha;
+      invalidateListing();
     },
 
     async listSectionTemplates(section: TemplateSection): Promise<SectionTemplate[]> {
@@ -135,12 +379,6 @@ export function createSaasHost(opts: SaasHostOptions): EditorHost {
       return res.policies;
     },
   };
-
-  if (opts.versioning) {
-    host.flagNewVersion = async (_commitSha, { name, note }) => {
-      await flagVersion(projectId, name, note);
-    };
-  }
 
   return host;
 }

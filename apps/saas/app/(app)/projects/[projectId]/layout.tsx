@@ -23,6 +23,11 @@ export default async function ProjectLayout({
     if (err instanceof ApiError && err.status === 401) {
       redirect(`/login?next=${encodeURIComponent(`/projects/${projectId}`)}&error=needsAuth`);
     }
+    // Everything else becomes a 404 on purpose, so the URL never confirms that
+    // a repository exists. That deliberately hides genuine faults too — a
+    // broken query looks exactly like "no such project" — so log the cause
+    // before swallowing it, or the next outage is invisible in the logs.
+    console.error(`[project:${projectId}] access check failed`, err);
     notFound();
   }
   return <>{children}</>;

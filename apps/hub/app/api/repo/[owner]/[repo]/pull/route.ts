@@ -15,7 +15,7 @@ interface Body {
 
 /**
  * Open a review for an edit branch. The base defaults to the integration
- * branch and `assertMergeTarget` inside the client refuses `tmp-* -> main`
+ * branch and `assertMergeTarget` inside the client refuses an edit branch -> main
  * regardless of what the caller asks for.
  */
 export async function POST(

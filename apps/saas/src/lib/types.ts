@@ -3,9 +3,21 @@
  * a server module, so `workflow.ts` and the pages can use these directly.
  */
 
+import type { MetaRecord, ProjectSettings } from "./metadata-schema";
+
+export type { ProjectSettings };
+
 export type Role = "owner" | "editor" | "viewer";
-export type BranchKind = "main" | "test" | "tmp" | "release" | "other";
-export type LockReason = "main" | "locked" | "testOwnerOnly" | "viewer" | "other";
+export type ChangeStatus = "added" | "changed" | "removed";
+
+/** One uncommitted file, classified against the branch's current tree. */
+export interface PendingChange {
+  path: string;
+  status: ChangeStatus;
+}
+
+export type BranchKind = "main" | "preview" | "edit" | "release" | "other";
+export type LockReason = "main" | "preview" | "locked" | "viewer" | "other";
 export type ShareMode = "svg_only" | "svg_and_dsl";
 
 export interface BranchState {
@@ -15,7 +27,7 @@ export interface BranchState {
   message: string;
   author: string | null;
   date: string;
-  /** A tmp-* branch with an open pull request is frozen. */
+  /** An edit branch with an open pull request is frozen. */
   locked: boolean;
   openPrNumber: number | null;
   /** Uncommitted drafts exist for this branch. */
@@ -75,6 +87,8 @@ export interface ProjectState {
   versions: VersionState[];
   activeEdit: { id: string; branch: string; createdAt: string } | null;
   plan: "free" | "team" | "enterprise";
+  /** `swimlane-settings.json` on `main`, defaults filled in. */
+  settings: ProjectSettings;
   fetchedAt: string;
 }
 
@@ -91,14 +105,56 @@ export interface CommitInfo {
 export interface TreeResponse {
   ref: string;
   sha: string;
-  files: { id: string; name: string }[];
+  // `id` is the editor's document id (the POSIX path) — see @swimlane-cloud/editor.
+  // `fid` is this project's stable file identity for that path (file_identities),
+  // used to build a URL that keeps opening the same file after it moves.
+  files: { id: string; name: string; fid: string }[];
+  /**
+   * Paths whose content on this branch comes from an uncommitted draft rather
+   * than the commit at `sha`, mapped to the draft's `updated_at`. Together with
+   * `sha` this names the exact version of every file in the listing, which is
+   * what lets the browser cache file text safely (see `file-version.ts`).
+   */
+  drafts: Record<string, string>;
+  /**
+   * Directories that exist but hold no listed file — git cannot store an
+   * empty directory, so these come from `.gitkeep` markers. The markers
+   * themselves are deliberately absent from `files`.
+   */
+  folders: string[];
   truncated: boolean;
   diagramsRoot: string;
+}
+
+/** One file's text plus the token naming exactly which version it is. */
+export interface FileResponse {
+  dsl: string;
+  source: "draft" | "git";
+  /** `git:<commit sha>` or `draft:<updated_at>` — see `file-version.ts`. */
+  version: string;
 }
 
 export interface SnapshotResponse {
   sha: string;
   files: Record<string, string>;
+}
+
+/** One document as the metadata search sees it. */
+export interface MetadataDocumentEntry {
+  path: string;
+  meta: MetaRecord;
+  /** Keys the engine can only carry verbatim — listed, but not filterable by value. */
+  carried: string[];
+  /** Declared keys this document gets wrong, in `validateMetadata`'s shape. */
+  problems: { key: string; code: string; expected?: string }[];
+}
+
+export interface MetadataResponse {
+  ref: string;
+  sha: string;
+  documents: MetadataDocumentEntry[];
+  /** True when the ref holds more diagrams than one snapshot may read. */
+  truncated: boolean;
 }
 
 export interface CompareFile {

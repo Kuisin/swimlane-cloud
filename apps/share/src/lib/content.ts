@@ -1,11 +1,24 @@
 import { createHmac } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import {
+  dslFromMarkdown,
+  isMarkdownDiagram,
+  splitFrontmatter,
+} from "@swimlane-cloud/diagram-converter/markdown-doc";
 
 /**
- * Content registry. Diagrams are plain kai-swimlane .txt files dropped into
- * apps/share/content/ (organize freely with subfolders). Every file and every
- * folder gets a stable, unguessable share token:
+ * A frontmatter value. `.md` frontmatter is structured — a value may be a
+ * sequence or a nested map, not only a scalar — and the document info panel
+ * flattens each shape for display.
+ */
+type MetaValue = string | string[] | { [key: string]: MetaValue };
+
+/**
+ * Content registry. Diagrams are kai-swimlane files dropped into
+ * apps/share/content/ (organize freely with subfolders) — raw DSL in a `.txt`,
+ * or DSL inside a ```` ```kai-swimlane ```` fence in a `.md`. Every file and
+ * every folder gets a stable, unguessable share token:
  *
  *   token = base64url(HMAC-SHA256(SHARE_TOKEN_SECRET, "<kind>:<relative path>"))
  *
@@ -39,6 +52,21 @@ export function isLinksKey(key: string | undefined): boolean {
   return hasRealSecret() ? key === SECRET : key === "dev";
 }
 
+/**
+ * A `.md` earns a share token only if it actually holds a diagram — otherwise
+ * `/links` would advertise a link to someone's prose that renders as nothing.
+ * The content directory ships with the app, so reading it here is cheap.
+ */
+function isShareable(fullPath: string, name: string): boolean {
+  if (name.endsWith(".txt")) return true;
+  if (!name.endsWith(".md")) return false;
+  try {
+    return isMarkdownDiagram(fs.readFileSync(fullPath, "utf8"));
+  } catch {
+    return false;
+  }
+}
+
 function walk(dir: string, base: string, files: string[], folders: Set<string>) {
   let entries: fs.Dirent[];
   try {
@@ -52,7 +80,7 @@ function walk(dir: string, base: string, files: string[], folders: Set<string>) 
     if (e.isDirectory()) {
       folders.add(rel);
       walk(path.join(dir, e.name), rel, files, folders);
-    } else if (e.isFile() && e.name.endsWith(".txt")) {
+    } else if (e.isFile() && isShareable(path.join(dir, e.name), e.name)) {
       files.push(rel);
     }
   }
@@ -69,10 +97,10 @@ function scan(): { files: string[]; folders: string[] } {
   return { files, folders: withContent };
 }
 
-/** All shareable .txt files, as content/-relative paths. */
+/** All shareable diagram files, as content/-relative paths. */
 export const listFiles = (): string[] => scan().files;
 
-/** All shareable folders (those containing at least one .txt), content/-relative. */
+/** All shareable folders (those containing at least one diagram), content/-relative. */
 export const listFolders = (): string[] => scan().folders;
 
 export function resolveFileToken(token: string): string | null {
@@ -91,14 +119,35 @@ export function filesInFolder(folderRel: string): string[] {
     .map((p) => p.slice(prefix.length));
 }
 
+/** The DSL a shared path holds, unwrapped from its markdown when it is a `.md`. */
 export function readDiagram(relPath: string): string | null {
   // Tokens only ever resolve to scanned paths, so this cannot traverse out of
   // CONTENT_DIR — the join is for the filesystem read, not access control.
   try {
-    return fs.readFileSync(path.join(CONTENT_DIR, relPath), "utf8");
+    const text = fs.readFileSync(path.join(CONTENT_DIR, relPath), "utf8");
+    return relPath.endsWith(".md") ? dslFromMarkdown(text) : text;
   } catch {
     return null;
   }
+}
+
+/**
+ * What a printed image should say about the file: its shared path and, for
+ * a `.md`, the frontmatter — which `readDiagram` strips along with the prose.
+ */
+export function readDocumentInfo(relPath: string): {
+  path: string;
+  meta: Record<string, MetaValue>;
+} {
+  let meta: Record<string, MetaValue> = {};
+  if (relPath.endsWith(".md")) {
+    try {
+      meta = splitFrontmatter(fs.readFileSync(path.join(CONTENT_DIR, relPath), "utf8")).meta;
+    } catch {
+      meta = {};
+    }
+  }
+  return { path: relPath, meta };
 }
 
 export function folderName(folderRel: string): string {
@@ -106,7 +155,7 @@ export function folderName(folderRel: string): string {
 }
 
 export function fileName(relPath: string): string {
-  return (relPath.split("/").pop() || relPath).replace(/\.txt$/, "");
+  return (relPath.split("/").pop() || relPath).replace(/\.(txt|md)$/, "");
 }
 
 /** Extract the title from the /title/ section of a kai-swimlane DSL string. */

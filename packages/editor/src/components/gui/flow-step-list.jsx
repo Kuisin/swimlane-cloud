@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   rowBadgeLabel,
   rowBadgeKind,
   rowLaneInfo,
   rowSummaryText,
   rowStepMeta,
-  rowListIndentDepth,
+  computeRowListIndents,
   branchCaseBadgeStyle,
   isStepRow,
 } from "../../lib/flow-rows.js";
@@ -30,12 +30,15 @@ export function FlowStepList({
   const { t } = useT();
   const [dragIndex, setDragIndex] = useState(-1);
   const [overIndex, setOverIndex] = useState(-1);
+  // One walk of the whole list, not one per row: the indent of any row depends
+  // on every branch and group still open above it.
+  const indents = useMemo(() => computeRowListIndents(rows || []), [rows]);
 
   if (!rows?.length) {
     return <div className="sw-gui-empty">{t("gui.noRows")}</div>;
   }
 
-  const draggable = (i) => Boolean(canReorder) && isStepRow(rows[i]);
+  const draggable = (i) => Boolean(canReorder) && isStepRow(rows[i]) && !lockedRows?.has(i);
   // Any other row is a candidate drop point (insert before it). The host move
   // validates the result, so cross-group drags that would break stay no-ops.
   const validTarget = (i) => dragIndex >= 0 && i !== dragIndex;
@@ -61,9 +64,10 @@ export function FlowStepList({
             } ${locked ? "sw-flow-row-locked" : ""} ${isDragging ? "sw-flow-row-dragging" : ""} ${
               isOver ? "sw-flow-row-over" : ""
             }`}
-            style={{ paddingLeft: 10 + rowListIndentDepth(rows, index) * 16 }}
-            onClick={() => !locked && onSelect(index)}
-            title={locked ? t("errors.title") : undefined}
+            style={{ paddingLeft: 10 + (indents[index] ?? 0) * 16 }}
+            data-indent={indents[index] ?? 0}
+            onClick={() => onSelect(index)}
+            title={locked ? t("errors.rowLocked") : undefined}
             draggable={draggable(index)}
             onDragStart={(e) => {
               if (!draggable(index)) return;
@@ -91,7 +95,7 @@ export function FlowStepList({
               className={`sw-flow-badge sw-badge-${rowBadgeKind(row)}`}
               style={branchCaseBadgeStyle(row)}
             >
-              {rowBadgeLabel(row, t)}
+              {rowBadgeLabel(row, t, rows, index)}
             </span>
             {lane && (
               <span
@@ -102,7 +106,9 @@ export function FlowStepList({
                 {lane.label}
               </span>
             )}
-            <span className="sw-flow-summary">{rowSummaryText(row, lanes, t)}</span>
+            {/* `rows` so a jump reads "goto → Send invoice", by the
+                destination step's own label, not by the id the tool gave it. */}
+            <span className="sw-flow-summary">{rowSummaryText(row, lanes, t, rows)}</span>
             {meta && <span className="sw-flow-meta">{meta}</span>}
           </li>
         );

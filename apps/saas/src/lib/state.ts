@@ -3,9 +3,18 @@
  * (branches, tips, pull requests) and Postgres (drafts, edit sessions,
  * versions) in parallel; the shape is `ProjectState` in types.ts.
  */
-import { isIntegrationBranch, isProdBranch, isTmpBranch } from "@swimlane-cloud/github-client";
+import {
+  INTEGRATION_BRANCH,
+  isEditBranch,
+  isIntegrationBranch,
+  isProdBranch,
+  parseRepoSettings,
+  PROD_BRANCH,
+  REPO_SETTINGS_PATH,
+} from "@swimlane-cloud/github-client";
 import { branchLockReason, type ProjectCtx } from "./projects";
-import { mapLimit, readConfigAt } from "./repo-files";
+import { parseProjectSettings } from "./metadata-schema";
+import { mapLimit, readConfigAt, readTextAt } from "./repo-files";
 import { getServiceSupabase } from "./supabase/server";
 import type { BranchKind, BranchState, ProjectState, PullState, VersionState } from "./types";
 
@@ -14,41 +23,66 @@ const PULL_CAP = 50;
 
 function kindOf(name: string): BranchKind {
   if (isProdBranch(name)) return "main";
-  if (isIntegrationBranch(name)) return "test";
-  if (isTmpBranch(name)) return "tmp";
+  if (isIntegrationBranch(name)) return "preview";
+  if (isEditBranch(name)) return "edit";
   if (name.startsWith("release-")) return "release";
   return "other";
 }
 
-const KIND_ORDER: Record<BranchKind, number> = { main: 0, test: 1, tmp: 2, release: 3, other: 4 };
+const KIND_ORDER: Record<BranchKind, number> = {
+  main: 0,
+  preview: 1,
+  edit: 2,
+  release: 3,
+  other: 4,
+};
 
 export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> {
   const supabase = getServiceSupabase();
   const projectId = ctx.project.id;
 
-  const [branches, pulls, config, draftRows, sessionRows, versionRows, mrRows] = await Promise.all([
-    ctx.repos.listBranches(ctx.repo.owner, ctx.repo.repo),
-    ctx.pulls.listPullRequests({ state: "all" }),
-    readConfigAt(ctx, ctx.repoInfo.defaultBranch),
-    supabase.from("drafts").select("branch").eq("project_id", projectId),
-    supabase
-      .from("edit_sessions")
-      .select("id, branch_name, created_by_login, created_at")
-      .eq("project_id", projectId)
-      .eq("status", "active"),
-    supabase
-      .from("versions")
-      .select(
-        "id, name, note, commit_sha, tag_name, promoted_to_main, promoted_sha, public, share_mode, public_slug, created_at, created_by_login, version_files(filepath, sort_order)",
-      )
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("merge_requests")
-      .select("pr_number, version_id")
-      .eq("project_id", projectId)
-      .not("version_id", "is", null),
-  ]);
+  let branchList = await ctx.repos.listBranches();
+  // Self-heal: a project reached without going through /api/projects/open (a
+  // stale bookmark, a repo marked before this rename) may still be missing
+  // `preview`. Create it from `main` once, best-effort, rather than leaving
+  // every tab reporting a two-branch repository forever.
+  if (
+    ctx.role !== "viewer" &&
+    !branchList.some((b) => b.name === INTEGRATION_BRANCH) &&
+    branchList.some((b) => b.name === PROD_BRANCH)
+  ) {
+    try {
+      await ctx.write.ensureBranch(INTEGRATION_BRANCH, PROD_BRANCH);
+      branchList = await ctx.repos.listBranches();
+    } catch {
+      /* best-effort; the branch simply stays absent until it succeeds */
+    }
+  }
+
+  const [pulls, config, settingsText, draftRows, sessionRows, versionRows, mrRows] =
+    await Promise.all([
+      ctx.pulls.listPullRequests({ state: "all" }),
+      readConfigAt(ctx, ctx.repoInfo.defaultBranch),
+      readTextAt(ctx, REPO_SETTINGS_PATH, PROD_BRANCH).catch(() => null),
+      supabase.from("drafts").select("branch").eq("project_id", projectId),
+      supabase
+        .from("edit_sessions")
+        .select("id, branch_name, created_by_login, created_at")
+        .eq("project_id", projectId)
+        .eq("status", "active"),
+      supabase
+        .from("versions")
+        .select(
+          "id, name, note, commit_sha, tag_name, promoted_to_main, promoted_sha, public, share_mode, public_slug, created_at, created_by_login, version_files(filepath, sort_order)",
+        )
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("merge_requests")
+        .select("pr_number, version_id")
+        .eq("project_id", projectId)
+        .not("version_id", "is", null),
+    ]);
 
   const dirtyBranches = new Set((draftRows.data ?? []).map((r) => r.branch as string));
   const sessions = new Map(
@@ -67,9 +101,9 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
 
   const openPrByHead = new Map<string, number>();
   for (const p of pulls) if (p.state === "open") openPrByHead.set(p.head, p.number);
-  const locked = new Set([...openPrByHead.keys()].filter(isTmpBranch));
+  const locked = new Set([...openPrByHead.keys()].filter(isEditBranch));
 
-  const listed = branches.slice(0, BRANCH_CAP);
+  const listed = branchList.slice(0, BRANCH_CAP);
   const tips = await mapLimit(listed, 8, async (b) => {
     try {
       const [c] = await ctx.commits.listCommits(b.sha, { perPage: 1 });
@@ -143,6 +177,24 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
   });
 
   const branchNames = new Set(branchStates.map((b) => b.name));
+
+  // An edit session whose branch no longer exists (deleted on GitHub by hand,
+  // or merged outside the app) would stay `active` forever and keep showing
+  // as somebody's edit. Close it here — only when the branch list is
+  // complete, so a branch beyond BRANCH_CAP is not mistaken for a deleted one.
+  if (branchList.length < BRANCH_CAP) {
+    const gone = (sessionRows.data ?? [])
+      .filter((s) => !branchNames.has(s.branch_name as string))
+      .map((s) => s.id as string);
+    if (gone.length > 0) {
+      const { error } = await supabase
+        .from("edit_sessions")
+        .update({ status: "abandoned", closed_at: new Date().toISOString() })
+        .in("id", gone);
+      if (error) console.warn(`[state] could not close stale edit sessions: ${error.message}`);
+    }
+  }
+
   const mine = (sessionRows.data ?? [])
     .filter((s) => s.created_by_login === ctx.login && branchNames.has(s.branch_name as string))
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
@@ -151,8 +203,8 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
     project: {
       id: projectId,
       name: config.title ?? ctx.project.name,
-      owner: ctx.repo.owner,
-      repo: ctx.repo.repo,
+      owner: ctx.repoInfo.owner,
+      repo: ctx.repoInfo.name,
       htmlUrl: ctx.repoInfo.htmlUrl,
       diagramsRoot: config.diagramsRoot,
     },
@@ -168,6 +220,10 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
         }
       : null,
     plan: ctx.project.plan,
+    // The declared metadata schema rides along with the rest of the settings
+    // file, so every tab that already has `state` can drive a form from it
+    // without a second request.
+    settings: parseProjectSettings(settingsText),
     fetchedAt: new Date().toISOString(),
   };
 }

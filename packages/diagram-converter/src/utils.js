@@ -77,6 +77,54 @@ export function stringDisplayColumnWidth(s) {
 }
 
 /**
+ * Character-level diff between two strings (Unicode code points, so
+ * surrogate-pair emoji and CJK stay whole) — an LCS alignment, same
+ * technique as a text-line diff but one code point at a time, since CJK text
+ * has no whitespace to split into words. Returns a run-length-encoded list
+ * of `{ type: "equal" | "insert" | "delete", text }` segments that
+ * reconstruct `oldText` by concatenating equal+delete and `newText` by
+ * concatenating equal+insert, for a "track changes"-style inline render.
+ */
+export function diffChars(oldText, newText) {
+  const a = Array.from(oldText ?? "");
+  const b = Array.from(newText ?? "");
+  const n = a.length;
+  const m = b.length;
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const raw = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      raw.push({ type: "equal", ch: a[i] });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      raw.push({ type: "delete", ch: a[i] });
+      i++;
+    } else {
+      raw.push({ type: "insert", ch: b[j] });
+      j++;
+    }
+  }
+  while (i < n) raw.push({ type: "delete", ch: a[i++] });
+  while (j < m) raw.push({ type: "insert", ch: b[j++] });
+
+  const segments = [];
+  for (const { type, ch } of raw) {
+    const last = segments[segments.length - 1];
+    if (last && last.type === type) last.text += ch;
+    else segments.push({ type, text: ch });
+  }
+  return segments;
+}
+
+/**
  * Wrap plain text so each line fits within `maxCols` East Asian "full-width" columns.
  * Respects existing newlines as paragraph breaks.
  */

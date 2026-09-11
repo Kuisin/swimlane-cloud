@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Kai Corp.">
+  <circle cx="12" cy="12" r="11" fill="#1d4ed8" />
+  <path d="M8 5.5v13" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" />
+  <path d="M16.5 5.5 9.2 12l7.3 6.5" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+</svg>

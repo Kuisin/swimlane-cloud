@@ -25,6 +25,54 @@ export { createRestClient, nextPageUrl } from "./rest.ts";
 export type { RestClient, RestClientOptions, RestRequestOptions } from "./rest.ts";
 export { createWriteApi } from "./write.ts";
 export type { CommitFilesOptions, CommitResult, FileWrite, WriteApi } from "./write.ts";
+export {
+  isCurrentMainGuard,
+  MAIN_GUARD_WORKFLOW,
+  MAIN_GUARD_WORKFLOW_PATH,
+  MANAGED_PATHS,
+} from "./main-guard.ts";
+export { isCurrentRepoRules, REPO_RULES, REPO_RULES_PATH } from "./repo-rules.ts";
+export {
+  BLOCK_MARGIN_MAX,
+  BLOCK_TEXT_MODES,
+  DEFAULT_DIAGRAM_SETTINGS,
+  DEFAULT_SETTINGS,
+  isCurrentRepoSettings,
+  normalizeRepoSettingsText,
+  parseDiagramSettings,
+  parseRepoSettings,
+  parseTemplateModes,
+  repoSettingsJson,
+  REPO_SETTINGS_PATH,
+  TEMPLATE_MODES,
+  TEMPLATE_SECTIONS,
+} from "./repo-settings.ts";
+export type {
+  BlockTextMode,
+  DiagramSettings,
+  SwimlaneSettings,
+  TemplateMode,
+  TemplateSection,
+} from "./repo-settings.ts";
+export {
+  DEFAULT_METADATA_SCHEMA,
+  METADATA_FIELD_TYPES,
+  METADATA_PROBLEM_CODES,
+  isMetadataKey,
+  metadataDefaults,
+  parseMetadataSchema,
+  validateMetadata,
+} from "./metadata-schema.ts";
+export type {
+  MetadataField,
+  MetadataFieldType,
+  MetadataProblem,
+  MetadataProblemCode,
+  MetadataSchema,
+  MetadataValue,
+} from "./metadata-schema.ts";
+export { createProtectionApi } from "./protection.ts";
+export type { ProtectionApi, ProtectionOutcome } from "./protection.ts";
 export { createPullsApi } from "./pulls.ts";
 export type { IssueComment, MergeMethod, PullRequest, PullsApi } from "./pulls.ts";
 export { createReposApi } from "./repos.ts";

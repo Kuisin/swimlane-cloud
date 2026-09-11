@@ -54,12 +54,17 @@ export function renderBlockPreviewSvg(block, theme) {
   const iconX = cx - BOX_W / 2;
   const iconY = cy;
 
+  // A `viewBox` matching the drawing coordinates is what lets a caller resize
+  // this SVG with CSS (`height: 28px`, say) and have the shape scale down with
+  // it. Without one, the browser keeps painting at these absolute coordinates
+  // regardless of the element's box, so a caller's shrink has no visible
+  // effect on the drawing and it spills into whatever sits next to it.
   return el(
     "svg",
     {
       width: BOX_W + 16,
       height: BOX_H + 16,
-      style: { overflow: "visible" },
+      viewBox: `0 0 ${BOX_W + 16} ${BOX_H + 16}`,
     },
     [
       renderStepShape({ shape, cx, cy, w: BOX_W, h: BOX_H, fill, stroke }),
@@ -76,12 +81,14 @@ export function renderBlockPreviewSvg(block, theme) {
 }
 
 export function renderPropPreviewSvg(prop, theme) {
+  // Same reasoning as `renderBlockPreviewSvg`: a `viewBox` is what makes a
+  // CSS-driven resize actually scale the drawing instead of just the box.
   return el(
     "svg",
     {
       width: DOC_W + 8,
       height: DOC_H + 8,
-      style: { overflow: "visible" },
+      viewBox: `0 0 ${DOC_W + 8} ${DOC_H + 8}`,
     },
     renderPropDocChipSvg(prop, 4, 4, theme),
   );

@@ -24,6 +24,17 @@ export function mergeSectionTemplate(src, section, body) {
     case "role": {
       const wrapped = `@kai-swimlane\n/role/\n${body}\n/line/\n@end\n`;
       const parsed = parseDSL(wrapped);
+      // The serializer writes `/role/` from `roles` + `localDefIds.role`;
+      // `lanes` is the derived view the GUI reads. Keep all three in step.
+      model.roles = { ...(model.roles || {}) };
+      model.localDefIds = {
+        ...(model.localDefIds || {}),
+        role: [...(model.localDefIds?.role || [])],
+      };
+      for (const [id, role] of Object.entries(parsed.roles || {})) {
+        model.roles[id] = { ...(model.roles[id] || {}), ...role };
+        if (!model.localDefIds.role.includes(id)) model.localDefIds.role.push(id);
+      }
       const lanes = [...(model.lanes || [])];
       for (const lane of parsed.lanes || []) {
         const idx = lanes.findIndex((l) => l.id === lane.id);

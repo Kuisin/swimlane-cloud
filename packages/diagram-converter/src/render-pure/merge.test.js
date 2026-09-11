@@ -19,17 +19,17 @@ label: B;
 [a: 開始]
 if (キャンセル?) is (あり) than #red
 [a: キャンセル受付]
-merge: done;
-else
+[goto: done]
+else-if () than
 [b: 通常処理]
-endif
+end-if
 [a: 取引完了]
-id: done;
 label: 完了;
+id: done;
 @end`;
 
 describe("mid-flow merge", () => {
-  it("parses merge into a branchMerge row pointing at the step id", () => {
+  it("parses [goto: id] into a branchMerge row pointing at the step id", () => {
     const model = parseDSL(MERGE);
     expect(model.errors).toEqual([]);
     const merge = model.rows.find((r) => r.kind === "branchMerge");
@@ -43,12 +43,12 @@ describe("mid-flow merge", () => {
   });
 
   it("renders dashed merge when the preceding step sets arrow: dashed", () => {
-    const dashed = MERGE.replace("[a: キャンセル受付]", "[a: キャンセル受付]\narrow: dashed;");
+    const dashed = MERGE.replace("[a: キャンセル受付]", "[a: キャンセル受付] ~>");
     const svg = render(dashed);
     expect((svg.match(/stroke-dasharray="6 3"/g) || []).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("errors when the merge target id does not exist", () => {
+  it("errors when the goto target id does not exist", () => {
     const model = parseDSL(`@kai-swimlane
 /role/
 <a>
@@ -56,10 +56,10 @@ label: A;
 /line/
 if (x) is (y) than
 [a: step]
-merge: nowhere;
-endif
+[goto: nowhere]
+end-if
 @end`);
-    expect(model.errors.map((e) => e.msg)).toContain('merge: no step with id "nowhere"');
+    expect(model.errors.map((e) => e.msg)).toContain('no node with id "nowhere"');
   });
 
   it("errors when step id is duplicated in the file", () => {
@@ -73,24 +73,10 @@ id: dup;
 [a: two]
 id: dup;
 @end`);
-    expect(model.errors.filter((e) => e.msg.includes('duplicate step id "dup"')).length).toBe(2);
+    expect(model.errors.filter((e) => e.msg.includes('duplicate node id "dup"')).length).toBe(1);
   });
 
-  it("errors on legacy merge <id>; without colon", () => {
-    const model = parseDSL(`@kai-swimlane
-/role/
-<a>
-label: A;
-/line/
-if (x) is (y) than
-[a: step]
-merge legacy;
-endif
-@end`);
-    expect(model.errors.map((e) => e.msg)).toContain("use merge: <id>; instead of merge <id>;");
-  });
-
-  it("errors when merge is used outside an if", () => {
+  it("errors on a goto outside any if", () => {
     const model = parseDSL(`@kai-swimlane
 /role/
 <a>
@@ -98,8 +84,25 @@ label: A;
 /line/
 [a: step]
 id: home;
-merge: home;
+[goto: home]
 @end`);
-    expect(model.errors.map((e) => e.msg)).toContain("merge outside if");
+    expect(model.errors.map((e) => e.msg)).toContain(
+      "goto outside if is not supported by this renderer",
+    );
+  });
+
+  // There is no landing-marker row any more: a jump always names a real
+  // step's own `id:`, so a bare `merge` is just an unrecognized statement.
+  it("errors on a bare `merge` — there is no marker any more", () => {
+    const model = parseDSL(`@kai-swimlane
+/role/
+<a>
+label: A;
+/line/
+[a: step]
+merge
+@end`);
+    expect(model.errors.length).toBeGreaterThan(0);
+    expect(model.rows.some((r) => r.kind === "mergeMarker")).toBe(false);
   });
 });

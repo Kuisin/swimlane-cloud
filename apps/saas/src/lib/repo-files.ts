@@ -7,27 +7,43 @@
  * base64-JSON limit.
  */
 import {
-  GitHubNotAccessibleError,
+  isEditBranch,
   isWithinRoot,
   parseRepoConfig,
   REPO_CONFIG_PATH,
+  REPO_SETTINGS_PATH,
   type RepoConfig,
 } from "@swimlane-cloud/github-client";
 import { ApiError } from "./api";
-import type { RepoApis } from "./github";
+import { isDiagramFile } from "./diagram-file";
 import { isSha } from "./guard";
+import { isRepoNotAccessible } from "./repo-errors";
+import type { RepoApis } from "./repo-apis";
 import { getServiceSupabase } from "./supabase/server";
 
 const TEMPLATES_PREFIX = "templates/";
 
-export function encodePath(path: string): string {
-  return path.split("/").map(encodeURIComponent).join("/");
-}
-
 /** Paths the editor may keep drafts for: diagrams and folder markers. */
 export function isDraftablePath(path: string): boolean {
   if (path.startsWith(TEMPLATES_PREFIX)) return false;
-  return path.endsWith(".txt") || path.endsWith("/.gitkeep") || path === ".gitkeep";
+  return isDiagramFile(path) || path.endsWith("/.gitkeep") || path === ".gitkeep";
+}
+
+/**
+ * The repository-wide settings file.
+ *
+ * Deliberately kept out of `isDraftablePath`, which also gates
+ * `files/route.ts` (delete / rmdir / rename): every reader resolves the
+ * settings by that exact path, so it must not be renameable or removable from
+ * the file tree. Only the draft write path opts it in.
+ */
+export function isSettingsPath(path: string): boolean {
+  return path === REPO_SETTINGS_PATH;
+}
+
+/** A folder marker, which `isDraftablePath` admits but nothing renders. */
+export function isFolderMarker(path: string): boolean {
+  return path.endsWith("/.gitkeep") || path === ".gitkeep";
 }
 
 /**
@@ -44,21 +60,24 @@ export function withinDiagramsRoot(path: string, config: RepoConfig): string {
 }
 
 export function isDiagramPath(path: string, config: RepoConfig): boolean {
-  return path.endsWith(".txt") && !path.startsWith(TEMPLATES_PREFIX) && isWithinRoot(config, path);
+  return isDiagramFile(path) && !path.startsWith(TEMPLATES_PREFIX) && isWithinRoot(config, path);
+}
+
+/**
+ * Whether drafts overlay the committed text when reading `ref`.
+ *
+ * Only an edit branch is ever written, so only an edit branch has drafts
+ * worth showing. `main` and `preview` are read exactly as git has them — a
+ * reviewer opening preview must see what was approved, not a draft that
+ * happens to be parked there — and a commit sha has no drafts at all.
+ */
+export function draftsApplyTo(ref: string): boolean {
+  return !isSha(ref) && isEditBranch(ref);
 }
 
 /** Text of a file at a ref, or null when it does not exist there. */
 export async function readTextAt(ctx: RepoApis, path: string, ref: string): Promise<string | null> {
-  const base = `/repos/${ctx.repo.owner}/${ctx.repo.repo}`;
-  try {
-    return await ctx.rest.requestText(
-      `${base}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
-      { accept: "application/vnd.github.raw", immutable: isSha(ref) },
-    );
-  } catch (err) {
-    if (err instanceof GitHubNotAccessibleError && err.status === 404) return null;
-    throw err;
-  }
+  return ctx.write.readFile(path, ref);
 }
 
 export async function readConfigAt(ctx: RepoApis, ref: string): Promise<RepoConfig> {
@@ -71,26 +90,49 @@ export async function resolveSha(ctx: RepoApis, ref: string): Promise<string> {
   try {
     return await ctx.write.refSha(ref);
   } catch (err) {
-    if (err instanceof GitHubNotAccessibleError) {
+    if (isRepoNotAccessible(err)) {
       throw new ApiError(404, `Branch "${ref}" does not exist.`);
     }
     throw err;
   }
 }
 
-/** Diagram paths at a commit, honouring `.swimlane.json`. */
+/** The directory a folder marker stands for. */
+export function folderOfMarker(path: string): string {
+  return path.slice(0, -"/.gitkeep".length);
+}
+
+/**
+ * Diagram paths at a commit, honouring `.swimlane.json`, plus the directories
+ * that exist without holding one.
+ *
+ * Git has no way to store an empty directory, so the editor marks one with a
+ * `.gitkeep`. The marker is not a file anybody edits, so it stays out of
+ * `files` — but the folder it stands for still has to be listed, or creating a
+ * folder appears to do nothing.
+ */
 export async function listDiagramFiles(
   ctx: RepoApis,
   sha: string,
   config?: RepoConfig,
-): Promise<{ files: string[]; truncated: boolean; config: RepoConfig }> {
+): Promise<{ files: string[]; folders: string[]; truncated: boolean; config: RepoConfig }> {
   const cfg = config ?? (await readConfigAt(ctx, sha));
   const { entries, truncated } = await ctx.write.listTree(sha, true);
-  const files = entries
-    .filter((e) => e.type === "blob" && isDiagramPath(e.path, cfg))
+  const blobs = entries.filter((e) => e.type === "blob");
+  const files = blobs
+    .filter((e) => isDiagramPath(e.path, cfg))
     .map((e) => e.path)
     .sort();
-  return { files, truncated, config: cfg };
+  const folders = blobs
+    .filter(
+      (e) =>
+        e.path.endsWith("/.gitkeep") &&
+        !e.path.startsWith(TEMPLATES_PREFIX) &&
+        isWithinRoot(cfg, e.path),
+    )
+    .map((e) => folderOfMarker(e.path))
+    .sort();
+  return { files, folders, truncated, config: cfg };
 }
 
 /** Run `fn` over `items` with at most `concurrency` in flight. */
@@ -136,6 +178,14 @@ export interface DraftState {
   writes: Record<string, string>;
   /** Paths pending removal at the next checkpoint. */
   deletions: string[];
+  /** `updated_at` per pending edit — the version token the browser caches file text under. */
+  updatedAt: Record<string, string>;
+  /**
+   * The newest `updated_at` across every row loaded (edits and tombstones),
+   * or null when there were none. A checkpoint deletes only rows up to this
+   * moment, so a draft saved while the commit was in flight survives it.
+   */
+  latestUpdatedAt: string | null;
 }
 
 /** Everything uncommitted on a branch: edits and pending deletions. */
@@ -143,17 +193,25 @@ export async function loadDraftState(projectId: string, branch: string): Promise
   const supabase = getServiceSupabase();
   const { data, error } = await supabase
     .from("drafts")
-    .select("filepath, dsl_text, deleted")
+    .select("filepath, dsl_text, deleted, updated_at")
     .eq("project_id", projectId)
     .eq("branch", branch);
   if (error) throw new ApiError(500, `draft load failed: ${error.message}`);
   const writes: Record<string, string> = {};
   const deletions: string[] = [];
+  const updatedAt: Record<string, string> = {};
+  let latestUpdatedAt: string | null = null;
   for (const row of data ?? []) {
-    if (row.deleted) deletions.push(row.filepath as string);
-    else writes[row.filepath as string] = row.dsl_text as string;
+    const path = row.filepath as string;
+    const at = row.updated_at as string;
+    if (row.deleted) deletions.push(path);
+    else {
+      writes[path] = row.dsl_text as string;
+      updatedAt[path] = at;
+    }
+    if (at && (!latestUpdatedAt || at > latestUpdatedAt)) latestUpdatedAt = at;
   }
-  return { writes, deletions };
+  return { writes, deletions, updatedAt, latestUpdatedAt };
 }
 
 /** Pending edits only, path → text. Deleted paths are excluded. */

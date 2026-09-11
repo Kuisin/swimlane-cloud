@@ -62,13 +62,21 @@ describe("assertRef", () => {
 });
 
 describe("assertDiagramPath", () => {
-  it("returns the joined path for a .txt file", () => {
+  it("returns the joined path for a diagram file", () => {
     expect(assertDiagramPath(["ops", "onboarding", "flow.txt"])).toBe("ops/onboarding/flow.txt");
+    expect(assertDiagramPath(["ops", "flow.md"])).toBe("ops/flow.md");
   });
 
-  it("serves only .txt — the app is not a general-purpose GitHub proxy", () => {
-    expect(() => assertDiagramPath(["README.md"])).toThrow(/Only \.txt/);
-    expect(() => assertDiagramPath(["secrets.env"])).toThrow(/Only \.txt/);
+  it("serves only diagram sources — the app is not a general-purpose GitHub proxy", () => {
+    expect(() => assertDiagramPath(["secrets.env"])).toThrow(/Only \.txt and \.md/);
+    expect(() => assertDiagramPath(["Dockerfile"])).toThrow(/Only \.txt and \.md/);
+  });
+
+  // `.md` is now an extension the guard lets through, so the promise that this
+  // app cannot serve arbitrary repository content rests on the reader: a
+  // markdown file with no diagram fence in it reads as missing. See `repo.ts`.
+  it("lets .md through for the reader to accept or reject on content", () => {
+    expect(assertDiagramPath(["README.md"])).toBe("README.md");
   });
 
   it("rejects traversal", () => {

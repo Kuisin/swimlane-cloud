@@ -3,7 +3,12 @@
  * templates every project row is seeded with. Kept in one place so the
  * repository seed and the database seed cannot drift apart.
  */
-import { REPO_CONFIG_PATH, type FileWrite } from "@swimlane-cloud/github-client";
+import {
+  INTEGRATION_BRANCH,
+  REPO_CONFIG_PATH,
+  type FileWrite,
+} from "@swimlane-cloud/github-client";
+import { storedFrom } from "./diagram-file";
 import { getServiceSupabase } from "./supabase/server";
 import { TEMPLATE_SECTIONS, templateRepoPath, type TemplateSection } from "./templates";
 
@@ -40,7 +45,8 @@ export const SEED_TEMPLATES: Record<TemplateSection, { name: string; slug: strin
     },
   };
 
-export const SEED_DIAGRAM_PATH = `${DIAGRAMS_ROOT}/sample.txt`;
+/** Diagrams are stored as Markdown: frontmatter, prose, and the DSL in a fence. */
+export const SEED_DIAGRAM_PATH = `${DIAGRAMS_ROOT}/sample.md`;
 
 export const SEED_DIAGRAM = `@kai-swimlane
 /title/
@@ -61,7 +67,7 @@ background-color: #e6f2ff;
 /** `.swimlane.json` for a repository this app created. */
 export function repoConfigJson(title: string, diagramsRoot = DIAGRAMS_ROOT): string {
   return `${JSON.stringify(
-    { diagramsRoot, title, themeKey: "basic", integrationBranch: "test" },
+    { diagramsRoot, title, themeKey: "basic", integrationBranch: INTEGRATION_BRANCH },
     null,
     2,
   )}\n`;
@@ -73,9 +79,9 @@ export function seedRepoFiles(title: string): FileWrite[] {
     { path: REPO_CONFIG_PATH, text: repoConfigJson(title) },
     {
       path: `${DIAGRAMS_ROOT}/README.md`,
-      text: "# Diagrams\n\nkai-swimlane `.txt` files live here. Open this repository in Swimlane Cloud to edit them with a live preview.\n",
+      text: "# Diagrams\n\nkai-swimlane diagrams live here as `.md` files: metadata in the frontmatter, the diagram itself in a `kai-swimlane` fence, and any notes you like around it. Open this repository in Swimlane Cloud to edit them with a live preview.\n",
     },
-    { path: SEED_DIAGRAM_PATH, text: SEED_DIAGRAM },
+    { path: SEED_DIAGRAM_PATH, text: storedFrom(SEED_DIAGRAM_PATH, SEED_DIAGRAM) },
   ];
   for (const section of TEMPLATE_SECTIONS) {
     const tpl = SEED_TEMPLATES[section];
@@ -93,7 +99,10 @@ export async function seedProjectTemplates(projectId: string, userId: string): P
     .eq("project_id", projectId);
   if (count && count > 0) return;
 
-  await supabase.from("project_section_templates").insert(
+  // `ignoreDuplicates`: two people opening the same repository at once both
+  // pass the count check above; the unique (project_id, section, slug) index
+  // decides, and the loser must not turn into an error.
+  const { error: templatesError } = await supabase.from("project_section_templates").upsert(
     TEMPLATE_SECTIONS.map((section) => ({
       project_id: projectId,
       section,
@@ -103,14 +112,21 @@ export async function seedProjectTemplates(projectId: string, userId: string): P
       is_default: true,
       created_by: userId,
     })),
+    { onConflict: "project_id,section,slug", ignoreDuplicates: true },
   );
-  await supabase.from("project_template_policies").upsert(
+  if (templatesError) {
+    throw new Error(`template seed failed: ${templatesError.message}`);
+  }
+  const { error: policiesError } = await supabase.from("project_template_policies").upsert(
     TEMPLATE_SECTIONS.map((section) => ({
       project_id: projectId,
       section,
       mode: "optional",
       updated_by: userId,
     })),
-    { onConflict: "project_id,section" },
+    { onConflict: "project_id,section", ignoreDuplicates: true },
   );
+  if (policiesError) {
+    throw new Error(`template policy seed failed: ${policiesError.message}`);
+  }
 }

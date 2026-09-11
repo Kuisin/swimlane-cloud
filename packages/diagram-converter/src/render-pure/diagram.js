@@ -1,4 +1,5 @@
 import {
+  diffChars,
   stringDisplayColumnWidth,
   truncate,
   truncateToColumns,
@@ -6,6 +7,7 @@ import {
   wrapTextToDisplayColumns,
 } from "../utils.js";
 import { buildStepRowDisplayInfo } from "../parser.js";
+import { metaText } from "../markdown-doc.js";
 import { findNextFlowStepAfterBranchEnd, findNextSiblingBranchStart } from "../branch-rows.js";
 import { arrowLineStrokeProps, stepOutgoingArrowLine } from "../arrow-line.js";
 import { StepShape } from "./step-shape.js";
@@ -23,11 +25,84 @@ import {
 import {
   BRANCH_COLOR_STYLES,
   DIAGRAM_LAYOUT,
+  DIFF_STYLES,
   FORK_GATEWAY_RADIUS,
   blockMaxTextCols,
-  decisionDiamondWidth,
   gutterTextCols,
+  resolveLayout,
 } from "./diagram-layout.js";
+/**
+ * A "changed" step's caption as inline tracked-changes text — Google Docs'
+ * suggestion-mode convention: inserted text underlined in green, deleted
+ * text struck through in red, spliced inline at the point of the edit,
+ * rather than only marking the whole box as "something in here changed".
+ * `text-anchor: middle` on the parent centers the whole run as one chunk
+ * as long as no child tspan sets its own `x`, so per-segment styling here
+ * doesn't disturb the box-centered layout every other step caption uses.
+ */
+function DiffStepText({ x, y, oldText, newText, maxCols, fill, fontWeight }) {
+  const segments = diffChars(oldText, newText);
+  const budget = Math.max(maxCols * 1.6, stringDisplayColumnWidth(newText));
+  let used = 0;
+  let truncated = false;
+  const shown = [];
+  for (const seg of segments) {
+    if (truncated) break;
+    const w = stringDisplayColumnWidth(seg.text);
+    if (used + w > budget) {
+      const keep = [];
+      for (const ch of seg.text) {
+        if (used + stringDisplayColumnWidth(ch) > budget) break;
+        keep.push(ch);
+        used += stringDisplayColumnWidth(ch);
+      }
+      if (keep.length) shown.push({ ...seg, text: keep.join("") });
+      truncated = true;
+      break;
+    }
+    used += w;
+    shown.push(seg);
+  }
+  return /* @__PURE__ */ h(
+    "text",
+    {
+      x,
+      y,
+      textAnchor: "middle",
+      fontFamily: "'Noto Sans JP',sans-serif",
+      fontSize: "13",
+      fontWeight,
+    },
+    ...shown.map((seg, idx) => {
+      if (seg.type === "delete") {
+        // Hidden entirely when highlights are off — deleted text has no
+        // place in the accepted (new) version, unlike an inserted word,
+        // which stays but sheds its styling. See the .diff-hidden rules
+        // in <defs>.
+        return /* @__PURE__ */ h(
+          "tspan",
+          {
+            key: idx,
+            className: "sw-diff-highlight",
+            fill: "#b91c1c",
+            textDecoration: "line-through",
+          },
+          seg.text,
+        );
+      }
+      if (seg.type === "insert") {
+        return /* @__PURE__ */ h(
+          "tspan",
+          { key: idx, className: "sw-diff-insert", fill: "#15803d", textDecoration: "underline" },
+          seg.text,
+        );
+      }
+      return /* @__PURE__ */ h("tspan", { key: idx, fill }, seg.text);
+    }),
+    truncated && /* @__PURE__ */ h("tspan", { fill }, "…"),
+  );
+}
+
 /**
  * Wrapped multi-line gutter body text (step description / remark): one tspan
  * per visual line, with nested tspans for bold/italic/strike style runs.
@@ -255,6 +330,52 @@ function PrintLayer({
       }),
   );
 }
+/**
+ * The lines of the document info panel: the path, then `key: value` for each
+ * metadata entry, each cut to the panel's column budget. Nothing when there
+ * is nothing to say.
+ *
+ * A `.md` document's frontmatter is a structured model, so a value may be a
+ * list or a nested map rather than a string — `metaText` is what turns one into
+ * a line. It lives in `markdown-doc.js` beside the model it flattens, so that a
+ * host which has to flatten at its own boundary (`saas-host`'s `metaOf`, whose
+ * contract is strings) renders a document the same way this panel does.
+ */
+function documentInfoLines(documentInfo, L) {
+  if (!documentInfo) return [];
+  const lines = [];
+  const path = String(documentInfo.path ?? "").trim();
+  if (path) lines.push(truncateToColumns(path, L.infoMaxCols));
+  for (const [key, value] of Object.entries(documentInfo.meta ?? {})) {
+    const v = metaText(value).replace(/\s+/g, " ").trim();
+    if (!key || !v) continue;
+    lines.push(truncateToColumns(`${key}: ${v}`, L.infoMaxCols));
+    if (lines.length >= L.infoMaxLines) break;
+  }
+  return lines;
+}
+function DocumentInfoPanel({ lines, x, y, theme, L }) {
+  if (!lines.length) return null;
+  return /* @__PURE__ */ h(
+    "text",
+    {
+      "data-document-info": "",
+      x,
+      y,
+      textAnchor: "end",
+      fill: theme.laneText || theme.title,
+      fontFamily: DIAGRAM_LAYOUT.fontFamily,
+      fontSize: String(L.infoFontSize),
+    },
+    lines.map((line, i) =>
+      /* @__PURE__ */ h(
+        "tspan",
+        { key: i, x, dy: i === 0 ? 0 : L.infoLineH, fontWeight: i === 0 ? "600" : "400" },
+        line,
+      ),
+    ),
+  );
+}
 function renderDiagramSvg({
   model,
   theme,
@@ -266,11 +387,26 @@ function renderDiagramSvg({
   showFooter = true,
   showDescription = true,
   branchColorArrows = true,
+  showGatewayIcons = true,
+  blockMargin = 0,
+  blockText = "truncate",
+  // `{ path, meta }` of the document, drawn top-right for a printed image.
+  documentInfo = null,
+  // `(link, row) => href | null`: when it names a URL, a linked step's glyph
+  // becomes an <a>; otherwise the glyph only carries `data-link`.
+  linkHref = null,
   interactive = false,
   selectedRowIndex = null,
   onRowSelect,
+  // Row-level visual-diff overlay (spike): rowIndex -> "added" | "changed".
+  diffRows = null,
+  // Repository-wide DIAGRAM_LAYOUT overrides (swimlane-settings.json).
+  layout,
 }) {
-  const { title, page = {}, lanes, rows, blocks = {}, props = {} } = model;
+  const { title, page = {}, lanes: allLanes, rows, blocks = {}, props = {} } = model;
+  // A role no step references is defined but not drawn (dsl-rule.md: a lane
+  // appears only when a step uses it); the model still lists it for the GUI.
+  const lanes = (allLanes || []).filter((lane) => lane.used !== false);
   const pageDescription = (showDescription ? page.description || "" : "").trim();
   const hasPageHeader = Boolean(
     showHeader &&
@@ -280,7 +416,7 @@ function renderDiagramSvg({
     showFooter &&
     (page.footerLeft?.trim() || page.footerCenter?.trim() || page.footerRight?.trim()),
   );
-  const L = DIAGRAM_LAYOUT;
+  const L = resolveLayout(layout);
   const {
     xPad,
     leftGutterWidth,
@@ -308,7 +444,11 @@ function renderDiagramSvg({
     decisionYOffset,
     branchCaseBendYOffset,
     stepBoxH,
+    stepTextLineH,
     loopDropPad,
+    jumpRailMargin,
+    jumpRailPitch,
+    jumpArrivalPitch,
     pageDescLineHeight,
     pageDescWrapCols,
     laneContentPad,
@@ -321,6 +461,7 @@ function renderDiagramSvg({
     mergeNodeW,
     mergeNodeH,
     sectionInset,
+    sectionMinH,
     outerLanePad,
     sectionEdgeInset,
     sectionNestStep,
@@ -332,6 +473,7 @@ function renderDiagramSvg({
     caseLabelHeight,
     caseLabelPadX,
     caseLabelPadY,
+    caseLabelGapBelow,
     caseLabelCharWidth,
     caseLaneSafeInset,
     branchConnectorElbowThreshold,
@@ -358,18 +500,22 @@ function renderDiagramSvg({
     gutterInnerPad,
     nodeW,
   } = L;
+  // Hidden gateway icons collapse to a point, so every rail that aimed at a
+  // circle's edge or a diamond's tip meets its neighbours there instead.
+  const gatewayR = showGatewayIcons ? FORK_GATEWAY_RADIUS : 0;
+  const mergeNodeWEff = showGatewayIcons ? mergeNodeW : 0;
+  const mergeNodeHEff = showGatewayIcons ? mergeNodeH : 0;
   const leftGutter = showLeftGutter ? leftGutterWidth : 0;
   const hasRemarks = (rows || []).some((r) => r.kind === "step" && (r.remark || "").trim());
   const rightGutterVisible = showRightGutter && hasRemarks;
   const rightGutter = rightGutterVisible ? rightGutterWidth : 0;
-  const descWrapCols = gutterTextCols(leftGutterWidth, L.gutterBodyFontSize);
+  const descWrapCols = gutterTextCols(leftGutterWidth, L.gutterBodyFontSize, L.gutterInnerPad);
   const remarkWrapCols = Math.max(
     remarkWrapColsMin,
-    gutterTextCols(rightGutterWidth, L.gutterBodyFontSize),
+    gutterTextCols(rightGutterWidth, L.gutterBodyFontSize, L.gutterInnerPad),
   );
   const propExtraWPerProps = docGapX;
   const propRowExtraHPerProps = docGapY;
-  const loopRouteMargin = caseClearance;
   const pageDescLines = pageDescription
     ? wrapTextToDisplayColumns(pageDescription, pageDescWrapCols)
     : [];
@@ -403,6 +549,15 @@ function renderDiagramSvg({
       title || pageDescLines.length > 0 ? L.topPadMinWithTitle : L.topPadMinDefault,
     );
   }
+  // The document info panel sits in the title band, top-right; make room
+  // when it is taller than whatever else the band holds.
+  const infoLines = documentInfoLines(documentInfo, L);
+  if (infoLines.length) {
+    topPad = Math.max(
+      topPad,
+      L.printLayoutStartY + infoLines.length * L.infoLineH + L.topPadTrailing,
+    );
+  }
   const rowMeta = [];
   let y = topPad + headerH + L.rowStartBelowHeader;
   const frames = [];
@@ -417,6 +572,10 @@ function renderDiagramSvg({
   }
   function branchDecisionCy(f) {
     return f.yDecision + diamondH / 2 + (f.parallel ? 0 : decisionYOffset);
+  }
+  /** The bottom edge of a frame's join node — where its outgoing edge leaves. */
+  function joinBottomY(f) {
+    return f.yMerge + mergeH / 2 + (f.parallel ? gatewayR : mergeNodeHEff) / 2;
   }
   function stepPropCounts(row) {
     const acc = { left: 0, right: 0 };
@@ -446,6 +605,84 @@ function renderDiagramSvg({
     }
     return extra;
   }
+  /**
+   * The "opens another flow" mark at a linked step's top-right corner: a
+   * small ↗ tile. It carries `data-link` so a host's preview can open the
+   * target, and becomes an <a> when the host can name a URL for it.
+   */
+  function linkGlyph(r, cx, cy, boxW, boxH) {
+    const size = 13;
+    const x = cx + boxW / 2 - size - 3;
+    const y = cy - boxH / 2 + 3;
+    const href = typeof linkHref === "function" ? linkHref(r.link, r) : null;
+    const tile = /* @__PURE__ */ h(
+      "g",
+      { "data-link": r.link, style: "cursor:pointer" },
+      /* @__PURE__ */ h("title", null, r.link),
+      /* @__PURE__ */ h("rect", {
+        x,
+        y,
+        width: size,
+        height: size,
+        rx: 2.5,
+        fill: theme.branchBg,
+        stroke: theme.branch,
+        strokeWidth: "0.9",
+      }),
+      /* @__PURE__ */ h("path", {
+        d: `M ${x + 4} ${y + 9} L ${x + 9} ${y + 4} M ${x + 5.5} ${y + 4} L ${x + 9} ${y + 4} L ${x + 9} ${y + 7.5}`,
+        fill: "none",
+        stroke: theme.branch,
+        strokeWidth: "1.3",
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+      }),
+    );
+    return href ? /* @__PURE__ */ h("a", { href }, tile) : tile;
+  }
+  /** The step's box text as drawn: one truncated line, or wrapped lines. */
+  function stepTextLines(row) {
+    const text = (row?.text || "").trim();
+    const block = row?.blockRef ? blocks[row.blockRef] : null;
+    const shape = (block && block.shape) || (row?.link ? "subroutine" : "rounded");
+    const cols = blockMaxTextCols(shape, Boolean(block && block.icon));
+    if (blockText !== "wrap") return [truncateToColumns(text, cols)];
+    const lines = wrapWordsToColumns(text, cols);
+    return lines.length ? lines : [""];
+  }
+  /**
+   * Wrap at spaces where there are any; a run with no spaces (a CJK title,
+   * one over-long token) breaks by display column instead.
+   */
+  function wrapWordsToColumns(text, cols) {
+    const out = [];
+    for (const segment of text.split(/\r?\n/)) {
+      let line = "";
+      for (const word of segment.split(/\s+/).filter(Boolean)) {
+        const candidate = line ? `${line} ${word}` : word;
+        if (stringDisplayColumnWidth(candidate) <= cols) {
+          line = candidate;
+          continue;
+        }
+        if (line) out.push(line);
+        if (stringDisplayColumnWidth(word) <= cols) {
+          line = word;
+        } else {
+          const parts = wrapTextToDisplayColumns(word, cols);
+          out.push(...parts.slice(0, -1));
+          line = parts[parts.length - 1] || "";
+        }
+      }
+      out.push(line);
+    }
+    return out;
+  }
+  function stepBoxExtraH(row) {
+    return (stepTextLines(row).length - 1) * stepTextLineH;
+  }
+  function stepBoxHeight(row) {
+    return stepBoxH + stepBoxExtraH(row);
+  }
   function stepRowHeight(row, rowIndex) {
     if (!row || row.kind !== "step" || row.empty) return rowH;
     const counts = stepPropCounts(row);
@@ -453,7 +690,7 @@ function renderDiagramSvg({
     const propExtra =
       (maxPropsPerSide > 0 && propRowExtraHBase) +
       Math.max(0, maxPropsPerSide - 1) * propRowExtraHPerProps;
-    const heightWithProps = rowH + propExtra;
+    const heightWithProps = rowH + propExtra + stepBoxExtraH(row) + blockMargin;
     const titleText = (row.name || row.text || "").trim();
     const descExtra = showLeftGutter
       ? gutterTextExtraHeight(
@@ -483,7 +720,7 @@ function renderDiagramSvg({
     const row = rows[rowIndex];
     if (row?.kind === "step") {
       const yRow = rowMeta[rowIndex]?.y ?? 0;
-      return yRow + rowH / 2;
+      return yRow + (rowH + (row.empty ? 0 : stepBoxExtraH(row) + blockMargin)) / 2;
     }
     return rowCenterY(rowIndex);
   }
@@ -493,7 +730,7 @@ function renderDiagramSvg({
       const yRow = rowMeta[rowIndex]?.y ?? 0;
       return yRow + (stepRowHeightByIndex.get(rowIndex) || rowH);
     }
-    return stepBlockCenterY(rowIndex) + stepBoxH / 2;
+    return stepBlockCenterY(rowIndex) + stepBoxHeight(row) / 2;
   }
   function estimateTextWidth(text, base = estimateTextWidthBase) {
     if (!text) return base;
@@ -510,6 +747,15 @@ function renderDiagramSvg({
   }
   rows.forEach((r, i) => {
     if (r.kind === "branchStart") {
+      // v2 DSL emits an explicit `branchCase` row for a fork's own first path
+      // (e.g. `fork (label)`), right after the `branchStart` row. v1 never
+      // does — a v1 fork's first path has no row of its own, so the implicit
+      // case below is still needed there. Synthesizing it unconditionally
+      // (regardless of DSL version) double-counts the v2 fork's first path,
+      // producing an extra, unlabeled, step-less rail in the rendered fork.
+      const nextRow = rows[i + 1];
+      const firstPathHasOwnRow =
+        Boolean(r.parallel) && nextRow?.kind === "branchCase" && nextRow.id === r.id;
       const f = {
         id: r.id,
         depth: r.depth,
@@ -518,26 +764,29 @@ function renderDiagramSvg({
         yDecision: y,
         decisionColor: r.branchColor || null,
         // A fork's first concurrent path opens at the `fork` line itself (no
-        // condition/firstCase), mirroring how an `if` opens its first case.
-        cases: r.parallel
-          ? [
-              {
-                label: "",
-                color: r.branchColor || null,
-                rowIndices: [],
-                startRow: i,
-              },
-            ]
-          : r.firstCase && String(r.firstCase).trim()
+        // condition/firstCase), mirroring how an `if` opens its first case —
+        // unless the model already supplied that row (v2's labeled fork).
+        cases: firstPathHasOwnRow
+          ? []
+          : r.parallel
             ? [
                 {
-                  label: r.firstCase.trim(),
+                  label: "",
                   color: r.branchColor || null,
                   rowIndices: [],
                   startRow: i,
                 },
               ]
-            : [],
+            : r.firstCase && String(r.firstCase).trim()
+              ? [
+                  {
+                    label: r.firstCase.trim(),
+                    color: r.branchColor || null,
+                    rowIndices: [],
+                    startRow: i,
+                  },
+                ]
+              : [],
         parentCase: null,
         anchorX: null,
       };
@@ -663,6 +912,29 @@ function renderDiagramSvg({
       showArrow: true,
     };
   }
+  /**
+   * Position + width for a branch/fork case label chip, shared by the drawn
+   * chip and its click target so the two can never drift apart. `dH` (the
+   * gateway's half-height) is parallel-aware: a fork's gateway is a
+   * gatewayR*2 circle, shorter than an `if`'s decisionDiamondH
+   * diamond, so treating both the same left a fork's label almost touching
+   * the block below it. The result is also clamped upward (never pushed
+   * down) so the label's drawn bottom edge keeps at least caseLabelGapBelow
+   * clearance from whatever it points at.
+   */
+  function caseLabelPosition(f, c) {
+    const { targetX, labelClampY, bendY } = caseFanOutTarget(f, c);
+    let labelY = bendY + caseLabelOffsetY;
+    if (labelClampY != null) {
+      const labelBottomOffset = caseLabelHeight - caseLabelPadY;
+      labelY = Math.min(labelY, labelClampY - caseLabelGapBelow - labelBottomOffset);
+    }
+    return {
+      labelX: targetX,
+      labelY,
+      labelW: (stringDisplayColumnWidth(c.label || "") + 2) * caseLabelCharWidth,
+    };
+  }
   function caseStepLineSource(stepIdx, caseHint) {
     const row = rows[stepIdx];
     if (!row || row.kind !== "step") return null;
@@ -696,7 +968,7 @@ function renderDiagramSvg({
       }
       return {
         fromX: mergeAnchorX(childFrame),
-        fromY: childFrame.yMerge + mergeH / 2 - 14,
+        fromY: childFrame.yMerge + mergeH / 2 - mergeNodeHEff / 2,
       };
     }
     const lastDirectStepIdx = lastMainFlowStepIdx(c);
@@ -904,26 +1176,149 @@ function renderDiagramSvg({
         max: Math.max(cur.max, right),
       });
   });
-  const loopRailAllowance = caseClearance;
-  rows.forEach((row, i) => {
-    if (row.kind !== "branchLoop") return;
-    let srcLane = -1;
-    for (let j = i - 1; j >= 0; j--) {
+  // ---------------------------------------------------------------------
+  // Jump routing plan (`goto`, `goto @id`, `loop`, `loop @id`)
+  //
+  // Every jump is one edge: it leaves the last block of its case, runs down
+  // (or up) a vertical rail clear of every block it passes, and arrives on
+  // the side of its target that the rail is on. The plan is built here —
+  // before the lane widths are fixed — because it decides which side of the
+  // diagram each rail uses, and therefore how much blank column the outer
+  // lanes have to reserve for them. It needs only row positions and lane
+  // *indices*, both of which are already known; the x coordinates it feeds
+  // are computed later, from the widths this pass sizes.
+  // ---------------------------------------------------------------------
+  /**
+   * Where a jump's edge leaves from — the end of its own case's body:
+   * `{ stepIdx }` for a block, `{ frameId }` for the join of a nested `if` or
+   * `fork` the case ends with, or neither when the jump is the whole body.
+   */
+  function jumpSource(jumpIdx) {
+    const row = rows[jumpIdx];
+    const frameId = row.kind === "branchLoop" ? row.loopBranchId : row.mergeBranchId;
+    // A jump written inside a `branch` group leaves from a block of that
+    // group; one written outside never leaves from a block inside one.
+    const ownGroup = findEnclosingBranchGroupStart(rows, jumpIdx);
+    for (let j = jumpIdx - 1; j >= 0; j--) {
       const r = rows[j];
-      if (r.kind === "step" && !r.empty && r.role) {
-        srcLane = laneIndexById.get(r.role) ?? -1;
-        break;
-      }
-      if (r.kind === "branchStart" && r.id === row.loopBranchId) break;
+      if (
+        r.kind === "step" &&
+        !r.empty &&
+        r.role &&
+        findEnclosingBranchGroupStart(rows, j) === ownGroup
+      )
+        return { stepIdx: j, frameId: null };
+      // A complete nested block just before the jump: the edge leaves its
+      // join, not the last block inside one of its cases.
+      if (r.kind === "branchEnd" && r.id !== frameId) return { stepIdx: -1, frameId: r.id };
+      // Stop at the case head (or the `if` itself): a jump never leaves from a
+      // block belonging to a sibling case.
+      if (r.kind === "branchCase" && r.id === frameId) break;
+      if (r.kind === "branchStart") break;
     }
-    if (srcLane < 0) srcLane = 0;
-    const routesLeft = srcLane <= (lanes.length - 1) / 2;
-    const laneId = routesLeft ? lanes[0]?.id : lanes[lanes.length - 1]?.id;
-    const edge = laneId != null ? stepEdgesByLane.get(laneId) : null;
-    if (!edge) return;
-    if (routesLeft) edge.min -= loopRailAllowance;
-    else edge.max += loopRailAllowance;
-  });
+    return { stepIdx: -1, frameId: null };
+  }
+  /** The row a jump lands on: `-1` when nothing resolves (drawn as no jump). */
+  function jumpTargetStepIdx(jumpIdx) {
+    const row = rows[jumpIdx];
+    if (row.kind === "branchMerge") return resolveMergeTargetIdx(jumpIdx);
+    const name = (row.loopTarget || "").trim();
+    if (!name) return -1; // bare `loop` — the target is the `if`'s gateway
+    return resolveNamedTargetIdx(name);
+  }
+  const laneIdxOfRow = (idx) => {
+    const r = rows[idx];
+    return r?.kind === "step" && !r.empty && r.role ? (laneIndexById.get(r.role) ?? -1) : -1;
+  };
+  /** The lane an `if`/`fork` gateway is drawn in (what `frameAnchorX` picks). */
+  function frameGatewayLaneIdx(frameId) {
+    const startIdx = rows.findIndex((r) => r.kind === "branchStart" && r.id === frameId);
+    for (let j = startIdx - 1; j >= 0; j--) {
+      const li = laneIdxOfRow(j);
+      if (li >= 0 && !isInsideBranchGroup(rows, j)) return li;
+    }
+    return 0;
+  }
+  /**
+   * Which side of the lane grid a rail runs down. The target's lane decides:
+   * the rail has to come back in to the target, so keeping it on the target's
+   * own side of the page keeps that final approach short.
+   */
+  const railSideForLane = (laneIdx) =>
+    lanes.length > 1 && laneIdx > (lanes.length - 1) / 2 ? 1 : -1;
+  const jumpPlans = /* @__PURE__ */ new Map();
+  {
+    const pending = [];
+    rows.forEach((row, i) => {
+      if (row.kind !== "branchLoop" && row.kind !== "branchMerge") return;
+      const isLoop = row.kind === "branchLoop";
+      const frameId = isLoop ? row.loopBranchId : row.mergeBranchId;
+      const { stepIdx: sourceIdx, frameId: sourceFrameId } = jumpSource(i);
+      const targetIdx = jumpTargetStepIdx(i);
+      if (!isLoop && targetIdx < 0) return; // unresolved `goto`: no arrow to plan
+      const targetLane = targetIdx >= 0 ? laneIdxOfRow(targetIdx) : frameGatewayLaneIdx(frameId);
+      const frame = frames.find((f) => f.id === frameId);
+      const sourceFrame = sourceFrameId ? frames.find((f) => f.id === sourceFrameId) : null;
+      const sourceY =
+        sourceIdx >= 0
+          ? stepBlockBottomY(sourceIdx)
+          : sourceFrame?.yMerge != null
+            ? joinBottomY(sourceFrame)
+            : (rowMeta[i]?.y ?? frame?.yDecision ?? 0) + (isLoop ? branchLoopH : branchMergeH);
+      const targetY =
+        targetIdx >= 0 ? stepBlockCenterY(targetIdx) : frame ? branchDecisionCy(frame) : sourceY;
+      pending.push({
+        rowIdx: i,
+        kind: isLoop ? "loop" : "goto",
+        frameId,
+        sourceIdx,
+        sourceFrameId: sourceFrame?.yMerge != null ? sourceFrameId : null,
+        targetIdx,
+        side: railSideForLane(targetLane < 0 ? 0 : targetLane),
+        top: Math.min(sourceY, targetY),
+        bottom: Math.max(sourceY, targetY),
+      });
+    });
+    // Greedy interval colouring per side: two rails share a column only when
+    // their vertical spans do not overlap, so no two jump arrows coincide.
+    const trackEnds = { "-1": [], 1: [] };
+    for (const p of [...pending].sort((a, b) => a.top - b.top || a.rowIdx - b.rowIdx)) {
+      const ends = trackEnds[String(p.side)];
+      let track = ends.findIndex((end) => end <= p.top);
+      if (track < 0) track = ends.length;
+      ends[track] = p.bottom;
+      p.track = track;
+    }
+    // Several jumps landing on one block share its edge; fan the arrowheads
+    // out over the edge so they stay countable.
+    const arrivals = new Map();
+    for (const p of pending) {
+      const key = `${p.targetIdx}|${p.frameId}|${p.side}`;
+      const list = arrivals.get(key) || [];
+      list.push(p);
+      arrivals.set(key, list);
+    }
+    for (const list of arrivals.values()) {
+      list.forEach((p, k) => {
+        p.arrivalRank = k;
+        p.arrivalCount = list.length;
+      });
+    }
+    for (const p of pending) jumpPlans.set(p.rowIdx, p);
+    // Reserve the blank column each side's rails need, so the outermost rail
+    // still lands inside the lane grid instead of being clamped back over a
+    // block (which is what drew a jump straight through its own target).
+    for (const side of [-1, 1]) {
+      const tracks = trackEnds[String(side)].length;
+      if (tracks === 0) continue;
+      const laneId = side < 0 ? lanes[0]?.id : lanes[lanes.length - 1]?.id;
+      const edge = laneId != null ? stepEdgesByLane.get(laneId) : null;
+      if (!edge) continue;
+      const allowance = jumpRailMargin + tracks * jumpRailPitch;
+      if (side < 0) edge.min -= allowance;
+      else edge.max += allowance;
+    }
+  }
   const laneWidths = lanes.map((lane) => {
     const headerWidth = estimateTextWidth(
       lane.label || lane.id,
@@ -1013,10 +1408,25 @@ function renderDiagramSvg({
     }
     return null;
   }
+  /**
+   * Where a case whose whole body is one jump turns away: clear of its own
+   * label chip, and nowhere near the jump row's position in the document.
+   */
+  function caseStubOriginY(bendY) {
+    return bendY + caseLabelOffsetY + caseLabelHeight;
+  }
+  /** The `goto` / `loop` a case ends with, if it has one that resolves. */
+  function jumpAnchorInCase(c, branchId) {
+    return mergeAnchorInCase(c.rowIndices, branchId) ?? loopAnchorInCase(c.rowIndices, branchId);
+  }
+  /** A case with no body at all: a bare rail from the decision to the join. */
   function isStubCase(c, branchId) {
-    if (loopAnchorInCase(c.rowIndices, branchId)) return false;
-    if (c.childFrame) return false;
-    return firstStepIdxInCase(c) == null;
+    if (jumpAnchorInCase(c, branchId)) return false;
+    return needsOwnRailX(c) && firstStepIdxInCase(c) == null;
+  }
+  /** A case with no column of its own, so its rail has to be placed by hand. */
+  function needsOwnRailX(c) {
+    return firstDirectStepIdx(c) == null && !c.childFrame;
   }
   function forkFirstBlockX(f) {
     const startIdx = rows.findIndex((r) => r.kind === "branchStart" && r.id === f.id);
@@ -1085,40 +1495,73 @@ function renderDiagramSvg({
         c.x = width / 2;
       }
     });
-    const usedX = {};
-    f.cases.forEach((c, idx) => {
-      const key = Math.round(c.x);
-      if (usedX[key] != null) {
-        c.x = c.x + (idx - f.cases.length / 2) * caseCollisionShift;
+    // A case with no column of its own — no direct step and no nested block,
+    // so an empty case or one whose whole body is a `goto` / `loop` — has
+    // nothing to aim at. Hang its rail straight under the decision, or beside
+    // it when that x is taken, rather than at the canvas centre, which lands
+    // wherever the page happens to be wide (for a jump-only case that put the
+    // rail out in the left gutter).
+    const anchorX = frameAnchorX(f);
+    const taken = new Set(f.cases.filter((c) => !needsOwnRailX(c)).map((c) => Math.round(c.x)));
+    let slot = 0;
+    f.cases.forEach((c) => {
+      if (!needsOwnRailX(c)) return;
+      // A case whose whole body is a jump has to turn away again, so it never
+      // takes the decision's own column: a rail straight down and straight
+      // back up into the same gateway is a stub, not an edge.
+      const mustClearAnchor = Boolean(jumpAnchorInCase(c, f.id));
+      let x;
+      for (;;) {
+        const step = Math.ceil(slot / 2) * caseCollisionShift;
+        x = slot % 2 ? anchorX - step : anchorX + step;
+        slot++;
+        if (taken.has(Math.round(x))) continue;
+        if (mustClearAnchor && step === 0) continue;
+        break;
       }
-      usedX[key] = idx;
+      taken.add(Math.round(x));
+      c.x = x;
+    });
+    const usedX = {};
+    f.cases.forEach((c) => {
+      const key = Math.round(c.x);
+      const seen = usedX[key] ?? 0;
+      if (seen) c.x += seen * caseCollisionShift;
+      usedX[key] = seen + 1;
     });
   });
-  function buildCaseFanOutEdgeD(f, c) {
-    const dCx = frameAnchorX(f);
+  /**
+   * Where a case's fan-out line ends. Shared by the drawn edge and the case
+   * label, so the label always sits on its own rail. A case that opens with a
+   * nested if/fork runs to that gateway and stops at its edge — a fork's
+   * circle is shorter than an if's diamond. `labelClampY` is what the label
+   * must clear: for a blank case that is the join below, not the bend it
+   * hangs from.
+   */
+  function caseFanOutTarget(f, c) {
     const dCy = branchDecisionCy(f);
-    const dH = f.parallel ? FORK_GATEWAY_RADIUS * 2 : decisionDiamondH;
-    const mCy = f.yMerge + mergeH / 2;
-    const mH = f.parallel ? FORK_GATEWAY_RADIUS * 2 : mergeNodeH;
+    const dH = f.parallel ? gatewayR * 2 : decisionDiamondH;
+    const bendY = dCy + dH / 2 + branchCaseBendYOffset;
+    const mH = f.parallel ? gatewayR * 2 : mergeNodeHEff;
+    const mergeTopY =
+      f.yMerge != null ? f.yMerge + mergeH / 2 - mH / 2 - mergeArrowClearance : null;
     const child = c.childFrame;
     const firstMainStep = firstMainFlowStepIdx(c);
     const firstStepIdx = firstMainStep ?? firstStepIdxInCase(c);
     const childStartIdx =
       child != null ? rows.findIndex((r) => r.kind === "branchStart" && r.id === child.id) : -1;
-    const stubCase = isStubCase(c, f.id);
     const targetsNestedDecision =
       child != null &&
       (firstMainStep == null || (childStartIdx >= 0 && childStartIdx < firstMainStep));
-    const startX = dCx;
-    const startY = dCy + dH / 2;
-    const bendY = startY + branchCaseBendYOffset;
-    let targetY;
     let targetX = caseAnchorX(c);
+    let targetY = null;
+    let labelClampY = null;
     let caseLaneWidth = nodeW + laneContentPad * 2;
     let showArrow = false;
     if (targetsNestedDecision) {
       targetX = frameAnchorX(child);
-      targetY = branchDecisionCy(child) - 22;
+      targetY = branchDecisionCy(child) - (child.parallel ? gatewayR : decisionDiamondH / 2);
+      labelClampY = targetY;
       const li = laneIndexForX(targetX);
       if (li >= 0) caseLaneWidth = laneWidth(li);
     } else if (firstStepIdx != null) {
@@ -1132,12 +1575,29 @@ function renderDiagramSvg({
       } else {
         targetY = bendY;
       }
-    } else if (stubCase) {
-      targetX = caseAnchorX(c);
+      labelClampY = stepTarget ? stepTarget.y : stepBlockCenterY(firstStepIdx) - 22;
+    } else if (jumpAnchorInCase(c, f.id)) {
+      // A case whose whole body is one `goto` or `loop`: the jump row is laid
+      // out in document order, after every row of the cases before it, so
+      // aiming there drew a rail down the whole diagram for a path that does
+      // nothing but leave. It turns away just under its label instead.
+      targetY = caseStubOriginY(bendY);
+      labelClampY = mergeTopY;
+    } else if (isStubCase(c, f.id)) {
       targetY = bendY;
+      labelClampY = mergeTopY;
     } else {
-      targetY = mCy - mH / 2 - mergeArrowClearance;
+      targetY = mergeTopY;
+      labelClampY = mergeTopY;
     }
+    return { targetX, targetY, showArrow, caseLaneWidth, bendY, labelClampY };
+  }
+  function buildCaseFanOutEdgeD(f, c) {
+    const startX = frameAnchorX(f);
+    const dCy = branchDecisionCy(f);
+    const dH = f.parallel ? gatewayR * 2 : decisionDiamondH;
+    const startY = dCy + dH / 2;
+    const { targetX, targetY, showArrow, caseLaneWidth, bendY } = caseFanOutTarget(f, c);
     const sideOffset = c.offset || 0;
     const sideX = targetX;
     const laneSafeMin = targetX - caseLaneWidth / 2 + caseLaneSafeInset;
@@ -1169,71 +1629,125 @@ function renderDiagramSvg({
       .reverse()
       .find((idx) => rows[idx]?.kind === "branchLoop" && rows[idx].loopBranchId === branchId);
     if (loopIdx == null) return null;
-    const prevStepIdx = [...rowIndices]
-      .filter((idx) => idx < loopIdx)
-      .reverse()
-      .find((idx) => rows[idx]?.kind === "step" && !rows[idx].empty && rows[idx].role);
-    return { loopIdx, prevStepIdx: prevStepIdx ?? null };
+    const plan = jumpPlans.get(loopIdx);
+    if (!plan) return null;
+    return { loopIdx, prevStepIdx: plan.sourceIdx >= 0 ? plan.sourceIdx : null, plan };
   }
-  function findStepIndexByMergeId(mergeId) {
+  /** A named jump target: the step carrying that `id:`. */
+  function resolveNamedTargetIdx(name) {
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      if (r.kind === "step" && !r.empty && r.role && r.mergeId === mergeId) return i;
+      if (r.kind === "step" && !r.empty && r.role && r.mergeId === name) return i;
     }
     return -1;
+  }
+  /** The step a `[goto: id]` lands on. There is no bare, unnamed form. */
+  function resolveMergeTargetIdx(mergeIdx) {
+    return resolveNamedTargetIdx((rows[mergeIdx].mergeTarget || "").trim());
   }
   function mergeAnchorInCase(rowIndices, branchId) {
     const mergeIdx = [...rowIndices]
       .reverse()
       .find((idx) => rows[idx]?.kind === "branchMerge" && rows[idx].mergeBranchId === branchId);
     if (mergeIdx == null) return null;
-    let prevStepIdx = null;
-    for (const idx of rowIndices) {
-      if (idx < mergeIdx && rows[idx]?.kind === "step" && !rows[idx].empty && rows[idx].role)
-        prevStepIdx = idx;
-    }
-    const targetIdx = findStepIndexByMergeId(rows[mergeIdx].mergeTarget);
-    if (targetIdx < 0) return null;
-    return { mergeIdx, prevStepIdx, targetIdx };
+    const plan = jumpPlans.get(mergeIdx);
+    if (!plan || plan.targetIdx < 0) return null;
+    return { mergeIdx, prevStepIdx: plan.sourceIdx >= 0 ? plan.sourceIdx : null, plan };
   }
-  function buildMergeForwardPath({ fromX, fromBottomY, targetIdx }) {
-    const targetCenterX = nodeCenterX(targetIdx, rows[targetIdx].role);
-    const targetCenterY = stepBlockCenterY(targetIdx);
-    const dropY = fromBottomY + loopDropPad;
-    const obstacles = [];
+  const lastLaneIdx = lanes.length - 1;
+  const laneGridLeft = () => laneX(0);
+  const laneGridRight = () =>
+    lastLaneIdx >= 0 ? laneX(lastLaneIdx) + laneWidth(lastLaneIdx) : width - xPad;
+  /** Every block a jump has to clear between its two ends. */
+  function jumpObstacles(spanTop, spanBottom) {
+    const out = [];
     rows.forEach((row, idx) => {
-      if (idx === targetIdx) return;
       if (row?.kind !== "step" || row.empty || !row.role) return;
       const b = stepObstacleBounds(idx);
-      if (b.bottom >= dropY && b.top <= targetCenterY) obstacles.push(b);
+      if (b.bottom >= spanTop && b.top <= spanBottom) out.push(b);
     });
-    let sideSign;
-    if (obstacles.length > 0) {
-      const minLeft = Math.min(...obstacles.map((o) => o.left));
-      const maxRight = Math.max(...obstacles.map((o) => o.right));
-      const spaceLeft = fromX - minLeft;
-      const spaceRight = maxRight - fromX;
-      sideSign = spaceRight >= spaceLeft ? 1 : -1;
-    } else {
-      sideSign = targetCenterX >= fromX ? 1 : -1;
+    return out;
+  }
+  /**
+   * The one place a jump's polyline is built, for every form the grammar has
+   * (`goto`, `goto @id`, `loop`, `loop @id`) and in both directions.
+   *
+   * It leaves the source block's bottom edge, turns sideways one `loopDropPad`
+   * below it, runs the whole way in a rail that clears *every* block between
+   * the two ends — the target included, which is what stops a jump ending
+   * inside the box it points at — and comes back in horizontally to the edge
+   * of the target on the rail's own side, where the arrowhead sits.
+   *
+   * `plan.side` and `plan.track` come from the pass that reserved the blank
+   * column this rail runs in, so the rail is never clamped back over a block.
+   */
+  function buildJumpPath({ plan, fromX, fromBottomY, target, leaveSideways = false }) {
+    const side = plan?.side ?? 1;
+    const track = plan?.track ?? 0;
+    const rank = plan?.arrivalRank ?? 0;
+    const count = plan?.arrivalCount ?? 1;
+    // Several arrows landing on one edge fan out over it rather than stacking
+    // their arrowheads on one pixel.
+    const spread = Math.min(
+      jumpArrivalPitch,
+      Math.max(0, target.bottom - target.top) / (count + 1),
+    );
+    const toY = (target.top + target.bottom) / 2 + (rank - (count - 1) / 2) * spread;
+    // The line turns sideways one `loopDropPad` below the source, unless the
+    // band it would cross on the way to the rail is occupied — then it drops
+    // past whatever is in the way first. A jump that continues its case's own
+    // rail turns at once: that rail ends in the case-label band, with the
+    // first block of every sibling case below it, so there is nothing to clear
+    // and dropping would cut straight through one of them.
+    let dropY = fromBottomY;
+    if (!leaveSideways) {
+      dropY += loopDropPad;
+      for (let pass = 0; pass < 4; pass++) {
+        const blocked = jumpObstacles(dropY, dropY).filter(
+          (o) => o.top > fromBottomY && (side < 0 ? o.left < fromX : o.right > fromX),
+        );
+        if (blocked.length === 0) break;
+        dropY = Math.max(...blocked.map((o) => o.bottom)) + loopDropPad;
+      }
     }
-    let routeX;
-    if (sideSign < 0) {
-      routeX = Math.min(fromX, targetCenterX, ...obstacles.map((o) => o.left)) - loopRouteMargin;
-    } else {
-      routeX = Math.max(fromX, targetCenterX, ...obstacles.map((o) => o.right)) + loopRouteMargin;
-    }
-    const lastLaneIdx = lanes.length - 1;
-    const laneGridLeft = laneX(0);
-    const laneGridRight =
-      lastLaneIdx >= 0 ? laneX(lastLaneIdx) + laneWidth(lastLaneIdx) : width - xPad;
-    routeX = Math.max(laneGridLeft, Math.min(laneGridRight, routeX));
-    const toSideX = sideSign < 0 ? targetCenterX - nodeW / 2 : targetCenterX + nodeW / 2;
-    const toY = targetCenterY;
+    const spanTop = Math.min(dropY, toY, target.top);
+    const spanBottom = Math.max(dropY, toY, target.bottom);
+    const obstacles = jumpObstacles(spanTop, spanBottom);
+    const edges = obstacles.map((o) => (side < 0 ? o.left : o.right));
+    const outermost = side < 0 ? Math.min(target.left, ...edges) : Math.max(target.right, ...edges);
+    const railX = outermost + side * (jumpRailMargin + track * jumpRailPitch);
+    // When the source column is already outside everything the jump passes,
+    // run straight down it instead of jogging sideways for no reason.
+    const routeX = Math.max(
+      laneGridLeft(),
+      Math.min(laneGridRight(), side < 0 ? Math.min(fromX, railX) : Math.max(fromX, railX)),
+    );
+    const toSideX = side < 0 ? target.left : target.right;
+    const parts = [`M ${fromX} ${fromBottomY}`];
     if (Math.abs(fromX - routeX) < branchConnectorElbowThreshold) {
-      return `M ${fromX} ${fromBottomY} L ${fromX} ${dropY} L ${routeX} ${toY} L ${toSideX} ${toY}`;
+      parts.push(`L ${routeX} ${toY}`);
+    } else {
+      if (Math.abs(dropY - fromBottomY) >= branchConnectorElbowThreshold) {
+        parts.push(`L ${fromX} ${dropY}`);
+      }
+      parts.push(`L ${routeX} ${dropY}`, `L ${routeX} ${toY}`);
     }
-    return `M ${fromX} ${fromBottomY} L ${fromX} ${dropY} L ${routeX} ${dropY} L ${routeX} ${toY} L ${toSideX} ${toY}`;
+    if (Math.abs(routeX - toSideX) >= branchConnectorElbowThreshold)
+      parts.push(`L ${toSideX} ${toY}`);
+    return parts.join(" ");
+  }
+  /** The bounding box a jump aims at, for a step target. */
+  function stepTargetBox(targetIdx) {
+    const row = rows[targetIdx];
+    const cx = nodeCenterX(targetIdx, row.role);
+    const cy = stepBlockCenterY(targetIdx);
+    const boxH = stepBoxHeight(row);
+    return {
+      left: cx - nodeW / 2,
+      right: cx + nodeW / 2,
+      top: cy - boxH / 2,
+      bottom: cy + boxH / 2,
+    };
   }
   function applyCaseOffsetsForFrame(frame, inheritedByLane = null) {
     const inherited = inheritedByLane || Object.fromEntries(lanes.map((lane) => [lane.id, 0]));
@@ -1283,14 +1797,15 @@ function renderDiagramSvg({
     const cx = row?.role && laneIndex(row.role) >= 0 ? nodeCenterX(rowIndex, row.role) : width / 2;
     let left = cx - nodeW / 2;
     let right = cx + nodeW / 2;
-    let top = stepBlockCenterY(rowIndex) - stepBoxH / 2;
+    const boxH = row?.kind === "step" ? stepBoxHeight(row) : stepBoxH;
+    let top = stepBlockCenterY(rowIndex) - boxH / 2;
     let bottom = stepBlockBottomY(rowIndex);
     if (!row || row.kind !== "step") {
       return { left, right, top, bottom };
     }
     const cy = stepBlockCenterY(rowIndex);
     const { left: leftProps, right: rightProps } = splitPropsBySide(row.props);
-    const docY = cy + stepBoxH / 2 - stepDocIconOffsetY;
+    const docY = cy + boxH / 2 - stepDocIconOffsetY;
     leftProps.forEach((prop, docIdx) => {
       const x = cx - nodeW / 2 + 55 - docW + docIdx * docGapX;
       left = Math.min(left, x);
@@ -1305,68 +1820,17 @@ function renderDiagramSvg({
     });
     return { left, right, top, bottom };
   }
-  function collectLoopObstacles(frame, sourceStepIdx, routeBottomY) {
-    const yMin = frame.yDecision;
-    const yMax = routeBottomY;
-    const overlaps = (top, bottom) => bottom >= yMin && top <= yMax;
-    const rects = [];
-    rows.forEach((row, idx) => {
-      if (row?.kind !== "step" || row.empty || !row.role) return;
-      const b = stepObstacleBounds(idx);
-      if (overlaps(b.top, b.bottom)) rects.push(b);
-    });
-    return rects;
-  }
-  function buildLoopBackPath({
-    fromX,
-    fromBottomY,
-    dCx,
-    dCy,
-    dW,
-    frame,
-    sourceStepIdx,
-    caseOffset,
-  }) {
-    const startY = fromBottomY;
-    const sourceBounds = sourceStepIdx != null ? stepObstacleBounds(sourceStepIdx) : null;
-    const dropY = (sourceBounds?.bottom ?? startY) + loopDropPad;
-    const obstacles = collectLoopObstacles(frame, sourceStepIdx, dropY);
-    let sideSign;
-    if (caseOffset !== 0) {
-      sideSign = Math.sign(caseOffset);
-    } else if (obstacles.length > 0) {
-      const minLeft = Math.min(...obstacles.map((o) => o.left));
-      const maxRight = Math.max(...obstacles.map((o) => o.right));
-      const spaceLeft = fromX - minLeft;
-      const spaceRight = maxRight - fromX;
-      sideSign = spaceRight >= spaceLeft ? 1 : -1;
-    } else {
-      sideSign = fromX <= dCx ? -1 : 1;
-    }
-    const extentLeft = obstacles.length
-      ? Math.min(...obstacles.map((o) => o.left))
-      : (sourceBounds?.left ?? fromX - nodeW / 2);
-    const extentRight = obstacles.length
-      ? Math.max(...obstacles.map((o) => o.right))
-      : (sourceBounds?.right ?? fromX + nodeW / 2);
-    let routeX;
-    if (sideSign < 0) {
-      routeX = Math.min(extentLeft, fromX, dCx - dW / 2) - loopRouteMargin;
-    } else {
-      routeX = Math.max(extentRight, fromX, dCx + dW / 2) + loopRouteMargin;
-    }
-    const lastLaneIdx = lanes.length - 1;
-    const laneGridLeft = laneX(0);
-    const laneGridRight =
-      lastLaneIdx >= 0 ? laneX(lastLaneIdx) + laneWidth(lastLaneIdx) : width - xPad;
-    routeX = Math.max(laneGridLeft, Math.min(laneGridRight, routeX));
-    const enterFromLeft = routeX < dCx;
-    const toX = enterFromLeft ? dCx - dW / 2 : dCx + dW / 2;
-    const toY = dCy;
-    if (Math.abs(fromX - routeX) < branchConnectorElbowThreshold) {
-      return `M ${fromX} ${startY} L ${fromX} ${dropY} L ${routeX} ${toY} L ${toX} ${toY}`;
-    }
-    return `M ${fromX} ${startY} L ${fromX} ${dropY} L ${routeX} ${dropY} L ${routeX} ${toY} L ${toX} ${toY}`;
+  /**
+   * The box a `loop` aims at: `loop @id` names a block, a bare `loop` goes
+   * back to the question of its enclosing `if` (or a fork's gateway circle).
+   */
+  function loopTargetBox(plan, frame) {
+    if (plan?.targetIdx >= 0) return stepTargetBox(plan.targetIdx);
+    const dCx = frameAnchorX(frame);
+    const dCy = branchDecisionCy(frame);
+    const dW = frame.parallel ? gatewayR * 2 : DIAGRAM_LAYOUT.decisionDiamondW;
+    const dH = frame.parallel ? gatewayR * 2 : decisionDiamondH;
+    return { left: dCx - dW / 2, right: dCx + dW / 2, top: dCy - dH / 2, bottom: dCy + dH / 2 };
   }
   function splitPropsBySide(propIds) {
     const left = [];
@@ -1460,6 +1924,10 @@ function renderDiagramSvg({
       lineType: stepOutgoingArrowLine(prev.r),
       bendY,
       caseColor: curCase ? (curCase.frame.cases[curCase.caseIdx]?.color ?? null) : null,
+      // Either end of this edge is a removed ghost: the edge is part of the
+      // path that used to flow through it, so it gets the same red overlay.
+      diffRemoved:
+        diffRows?.get(prev.i)?.status === "removed" || diffRows?.get(cur.i)?.status === "removed",
     });
   }
   const mainFlowSteps = stepRows.filter((x) => !isInsideBranchGroup(rows, x.i));
@@ -1495,7 +1963,7 @@ function renderDiagramSvg({
       const frame = frames.find((f) => f.id === branchRow.id);
       if (!frame) return;
       toX = frameAnchorX(frame);
-      toY = branchDecisionCy(frame) - (frame.parallel ? FORK_GATEWAY_RADIUS : 25);
+      toY = branchDecisionCy(frame) - (frame.parallel ? gatewayR : 25);
     }
     const innerLastIdx = lastStepInsideGroup(startIdx, endIdx);
     if (innerLastIdx < 0) return;
@@ -1546,7 +2014,7 @@ function renderDiagramSvg({
         if (!frame) continue;
         return {
           x: frameAnchorX(frame),
-          targetY: branchDecisionCy(frame) - (frame.parallel ? FORK_GATEWAY_RADIUS : 25),
+          targetY: branchDecisionCy(frame) - (frame.parallel ? gatewayR : 25),
         };
       }
     }
@@ -1569,7 +2037,7 @@ function renderDiagramSvg({
         const startIdx = rows.findIndex((r) => r.kind === "branchStart" && r.id === row.id);
         const lastInBranch = startIdx >= 0 ? lastStepInBranchSpan(startIdx, i) : -1;
         const mergeCenterX = mergeAnchorX(frame);
-        const mergeBottomY = frame.yMerge + mergeH / 2 + 14;
+        const mergeBottomY = frame.yMerge + mergeH / 2 + mergeNodeHEff / 2;
         return {
           x: mergeCenterX,
           sourceY: mergeBottomY,
@@ -1673,6 +2141,19 @@ function renderDiagramSvg({
       /* @__PURE__ */ h(
         "defs",
         null,
+        // A host toggles one class (.diff-hidden) on the <svg> (or any
+        // ancestor) to hide every diff annotation at once — self-contained,
+        // so it doesn't need to know which elements carry which class.
+        // Google Docs' Suggesting/Viewing split is the model: hiding must
+        // fully revert an inserted word to plain text, not just undecorate
+        // it, since a <tspan> can't "un-exist" via CSS the way a <g> can.
+        diffRows?.size > 0 &&
+          /* @__PURE__ */ h(
+            "style",
+            null,
+            ".diff-hidden .sw-diff-highlight{display:none}" +
+              ".diff-hidden .sw-diff-insert{fill:inherit;text-decoration:none}",
+          ),
         /* @__PURE__ */ h(
           "marker",
           {
@@ -1752,7 +2233,7 @@ function renderDiagramSvg({
               },
               truncateToColumns(
                 page.leftTitle.trim(),
-                gutterTextCols(leftGutterWidth, L.gutterHeaderTitleFontSize),
+                gutterTextCols(leftGutterWidth, L.gutterHeaderTitleFontSize, L.gutterInnerPad),
               ),
             ),
           page.leftSubtitle?.trim() &&
@@ -1768,7 +2249,7 @@ function renderDiagramSvg({
               },
               truncateToColumns(
                 page.leftSubtitle.trim(),
-                gutterTextCols(leftGutterWidth, L.gutterHeaderSubtitleFontSize),
+                gutterTextCols(leftGutterWidth, L.gutterHeaderSubtitleFontSize, L.gutterInnerPad),
               ),
             ),
           /* @__PURE__ */ h("line", {
@@ -1801,7 +2282,7 @@ function renderDiagramSvg({
             const prefix = hasNum ? `${d.displayIndex}. ` : "";
             if (!titleText && !r.description) return null;
             const titleCols =
-              gutterTextCols(leftGutterWidth, L.gutterStepTitleFontSize) -
+              gutterTextCols(leftGutterWidth, L.gutterStepTitleFontSize, L.gutterInnerPad) -
               stringDisplayColumnWidth(prefix);
             return /* @__PURE__ */ h(
               "g",
@@ -1857,7 +2338,7 @@ function renderDiagramSvg({
               },
               truncateToColumns(
                 page.rightTitle.trim(),
-                gutterTextCols(rightGutterWidth, L.gutterHeaderTitleFontSize),
+                gutterTextCols(rightGutterWidth, L.gutterHeaderTitleFontSize, L.gutterInnerPad),
               ),
             ),
           page.rightSubtitle?.trim() &&
@@ -1873,7 +2354,7 @@ function renderDiagramSvg({
               },
               truncateToColumns(
                 page.rightSubtitle.trim(),
-                gutterTextCols(rightGutterWidth, L.gutterHeaderSubtitleFontSize),
+                gutterTextCols(rightGutterWidth, L.gutterHeaderSubtitleFontSize, L.gutterInnerPad),
               ),
             ),
           /* @__PURE__ */ h("line", {
@@ -1941,7 +2422,7 @@ function renderDiagramSvg({
             fill: bg,
             opacity: "0.9",
           }),
-          lane.icon &&
+          (lane.icon || lane.iconAsset) &&
             /* @__PURE__ */ h(
               "g",
               null,
@@ -1955,6 +2436,7 @@ function renderDiagramSvg({
               }),
               /* @__PURE__ */ h(BlockIcon, {
                 icon: lane.icon,
+                iconAsset: lane.iconAsset,
                 x: x + gutterInnerPad,
                 y: topPad + headerH / 2,
                 size: 22,
@@ -2032,28 +2514,29 @@ function renderDiagramSvg({
         const isParallel = f.parallel;
         const dCx = frameAnchorX(f);
         const dCy = branchDecisionCy(f);
-        const dW = isParallel ? 0 : decisionDiamondWidth(f.cond.length);
+        const dW = isParallel ? 0 : DIAGRAM_LAYOUT.decisionDiamondW;
         const dH = decisionDiamondH;
         const decisionStyle = resolveBranchStyle(f.decisionColor);
         const parallelGatewayStyle = resolveBranchStyle(f.decisionColor || "purple");
         const mCx = mergeAnchorX(f);
         const mCy = f.yMerge + mergeH / 2;
-        const mW = mergeNodeW;
-        const mH = mergeNodeH;
+        const mW = mergeNodeWEff;
+        const mH = mergeNodeHEff;
         const diamondPath = (cx, cy, w, h2) =>
           `M ${cx} ${cy - h2 / 2} L ${cx + w / 2} ${cy} L ${cx} ${cy + h2 / 2} L ${cx - w / 2} ${cy} Z`;
         return /* @__PURE__ */ h(
           "g",
           { key: `branch-${f.id}` },
           isParallel
-            ? /* @__PURE__ */ h("circle", {
-                cx: dCx,
-                cy: dCy,
-                r: FORK_GATEWAY_RADIUS,
-                fill: parallelGatewayStyle.bg,
-                stroke: parallelGatewayStyle.stroke,
-                strokeWidth: "1.6",
-              })
+            ? showGatewayIcons &&
+                /* @__PURE__ */ h("circle", {
+                  cx: dCx,
+                  cy: dCy,
+                  r: gatewayR,
+                  fill: parallelGatewayStyle.bg,
+                  stroke: parallelGatewayStyle.stroke,
+                  strokeWidth: "1.6",
+                })
             : /* @__PURE__ */ h(
                 Fragment,
                 null,
@@ -2106,75 +2589,69 @@ function renderDiagramSvg({
               branchColorArrows && c.color ? resolveBranchStyle(c.color).stroke : theme.stroke;
             const cMarker =
               branchColorArrows && c.color ? `url(#arrowhead-${c.color})` : "url(#arrowhead)";
-            const mergeJump = mergeAnchorInCase(c.rowIndices, f.id);
-            if (mergeJump) {
+            // A `goto` / `loop` in this case replaces the edge to the join:
+            // the jump is the case's single outgoing edge.
+            const jumpAnchor =
+              mergeAnchorInCase(c.rowIndices, f.id) ?? loopAnchorInCase(c.rowIndices, f.id);
+            if (jumpAnchor) {
+              const { plan } = jumpAnchor;
+              const jumpIdx = jumpAnchor.mergeIdx ?? jumpAnchor.loopIdx;
+              const sourceStepIdx = jumpAnchor.prevStepIdx;
+              const sourceFrame = plan.sourceFrameId
+                ? frames.find((fr) => fr.id === plan.sourceFrameId)
+                : null;
               let fromX2;
               let fromBottomY;
-              if (mergeJump.prevStepIdx != null) {
-                const r = rows[mergeJump.prevStepIdx];
+              let fromStub = false;
+              if (sourceStepIdx != null) {
+                const r = rows[sourceStepIdx];
                 const li = laneIndex(r.role);
-                fromX2 = li >= 0 ? nodeCenterX(mergeJump.prevStepIdx, r.role) : c.x;
-                fromBottomY = stepBlockBottomY(mergeJump.prevStepIdx);
+                fromX2 = li >= 0 ? nodeCenterX(sourceStepIdx, r.role) : c.x;
+                fromBottomY = stepBlockBottomY(sourceStepIdx);
+              } else if (sourceFrame) {
+                // The case ends with a complete nested `if` / `fork`: the jump
+                // is that block's outgoing edge, so it leaves its join.
+                fromX2 = mergeAnchorX(sourceFrame);
+                fromBottomY = joinBottomY(sourceFrame);
               } else {
+                // Nothing but the jump in this case: the rail from the decision
+                // ends just under the case label (see caseFanOutTarget), so the
+                // jump continues from there rather than from the jump row's
+                // position in the document — which is below every row of every
+                // case before it, and drew a line down the whole diagram.
                 fromX2 = caseAnchorX(c);
-                const mIdxY = rowMeta[mergeJump.mergeIdx]?.y ?? f.yDecision;
-                fromBottomY = mIdxY + branchMergeH;
+                fromBottomY = caseStubOriginY(caseRailY);
+                fromStub = true;
               }
-              const d2 = buildMergeForwardPath({
+              const target =
+                plan.kind === "loop" ? loopTargetBox(plan, f) : stepTargetBox(plan.targetIdx);
+              const d2 = buildJumpPath({
+                plan,
                 fromX: fromX2,
                 fromBottomY,
-                targetIdx: mergeJump.targetIdx,
+                target,
+                leaveSideways: fromStub,
               });
-              const mergeLineType =
-                mergeJump.prevStepIdx != null
-                  ? stepOutgoingArrowLine(rows[mergeJump.prevStepIdx])
-                  : "solid";
-              return /* @__PURE__ */ h("path", {
-                key: `merge-${f.id}-${ci}`,
-                d: d2,
-                fill: "none",
-                stroke: cStroke,
-                strokeWidth: "1.6",
-                markerEnd: cMarker,
-                ...arrowLineStrokeProps(mergeLineType),
-              });
-            }
-            const anchor = loopAnchorInCase(c.rowIndices, f.id);
-            if (anchor) {
-              let fromX2;
-              let fromBottomY;
-              let sourceStepIdx = null;
-              if (anchor.prevStepIdx != null) {
-                sourceStepIdx = anchor.prevStepIdx;
-                const r = rows[anchor.prevStepIdx];
-                const li = laneIndex(r.role);
-                fromX2 = li >= 0 ? nodeCenterX(anchor.prevStepIdx, r.role) : c.x;
-                fromBottomY = stepBlockBottomY(anchor.prevStepIdx);
-              } else {
-                fromX2 = c.x;
-                const loopY = rowMeta[anchor.loopIdx]?.y ?? f.yDecision;
-                fromBottomY = loopY + (stepRowHeightByIndex.get(anchor.loopIdx) || branchLoopH);
-              }
-              const d2 = buildLoopBackPath({
-                fromX: fromX2,
-                fromBottomY,
-                dCx,
-                dCy,
-                dW,
-                frame: f,
-                sourceStepIdx,
-                caseOffset: c.offset || 0,
-              });
-              const loopLineType =
+              const jumpLineType =
                 sourceStepIdx != null ? stepOutgoingArrowLine(rows[sourceStepIdx]) : "solid";
               return /* @__PURE__ */ h("path", {
-                key: `loop-${f.id}-${ci}`,
+                key: `jump-${f.id}-${ci}`,
+                className: "jump-arrow",
+                "data-jump": plan.kind,
+                "data-jump-row": String(jumpIdx),
+                "data-jump-from":
+                  sourceStepIdx != null
+                    ? String(sourceStepIdx)
+                    : sourceFrame
+                      ? `join:${sourceFrame.id}`
+                      : "",
+                "data-jump-to": plan.targetIdx >= 0 ? String(plan.targetIdx) : `gateway:${f.id}`,
                 d: d2,
                 fill: "none",
                 stroke: cStroke,
                 strokeWidth: "1.6",
                 markerEnd: cMarker,
-                ...arrowLineStrokeProps(loopLineType),
+                ...arrowLineStrokeProps(jumpLineType),
               });
             }
             const mergeFrom = caseMergeAnchor(c);
@@ -2198,7 +2675,7 @@ function renderDiagramSvg({
               }
             }
             const toX = mCx;
-            const toY = mCy - (isParallel ? FORK_GATEWAY_RADIUS : mH / 2);
+            const toY = mCy - (isParallel ? gatewayR : mH / 2);
             const bendY2 = toY - 14;
             const sideOffset = c.offset || 0;
             const needsMergeElbow = Math.abs(fromX - toX) > 0.5 || sideOffset !== 0 || stubCase;
@@ -2224,7 +2701,7 @@ function renderDiagramSvg({
             const stepTarget = caseStepLineTarget(afterIdx, c);
             if (!stepTarget) return null;
             const fromX = mergeAnchorX(child);
-            const fromY = child.yMerge + mergeH / 2 + 14;
+            const fromY = child.yMerge + mergeH / 2 + mergeNodeHEff / 2;
             const toX = stepTarget.x;
             const toY = stepTarget.y;
             const mid = (fromY + toY) / 2;
@@ -2245,21 +2722,23 @@ function renderDiagramSvg({
               markerEnd: cMarker2,
             });
           }),
-          isParallel
-            ? /* @__PURE__ */ h("circle", {
-                cx: mCx,
-                cy: mCy,
-                r: FORK_GATEWAY_RADIUS,
-                fill: parallelGatewayStyle.bg,
-                stroke: parallelGatewayStyle.stroke,
-                strokeWidth: "1.6",
-              })
-            : /* @__PURE__ */ h("path", {
-                d: diamondPath(mCx, mCy, mW, mH),
-                fill: theme.branchBg,
-                stroke: theme.branch,
-                strokeWidth: "1.6",
-              }),
+          !showGatewayIcons
+            ? null
+            : isParallel
+              ? /* @__PURE__ */ h("circle", {
+                  cx: mCx,
+                  cy: mCy,
+                  r: gatewayR,
+                  fill: parallelGatewayStyle.bg,
+                  stroke: parallelGatewayStyle.stroke,
+                  strokeWidth: "1.6",
+                })
+              : /* @__PURE__ */ h("path", {
+                  d: diamondPath(mCx, mCy, mW, mH),
+                  fill: theme.branchBg,
+                  stroke: theme.branch,
+                  strokeWidth: "1.6",
+                }),
         );
       }),
       rows.map((row, i) => {
@@ -2299,7 +2778,7 @@ function renderDiagramSvg({
             x: boxX,
             y: yTop + sectionInset,
             width: boxW,
-            height: Math.max(0, yEnd - yTop - sectionInset * 2),
+            height: Math.max(sectionMinH, yEnd - yTop - sectionInset * 2),
             rx: "8",
             fill: style.bg,
             fillOpacity: "0.2",
@@ -2327,33 +2806,61 @@ function renderDiagramSvg({
           branchColorArrows && c.caseColor ? resolveBranchStyle(c.caseColor).stroke : theme.stroke;
         const cMarker =
           branchColorArrows && c.caseColor ? `url(#arrowhead-${c.caseColor})` : "url(#arrowhead)";
-        if (Math.abs(c.fromX - c.toX) < 0.5) {
-          const x = c.fromX;
-          return /* @__PURE__ */ h("line", {
-            key: c.key,
-            x1: x,
-            y1: c.y1,
-            x2: x,
-            y2: c.y2,
-            stroke: cStroke,
-            strokeWidth: "1.6",
-            markerEnd: cMarker,
-            ...dash,
-          });
-        }
-        const x1 = c.fromX;
-        const x2 = c.toX;
-        const mid = c.bendY ?? (c.y1 + c.y2) / 2;
-        const d = `M ${x1} ${c.y1} L ${x1} ${mid} L ${x2} ${mid} L ${x2} ${c.y2}`;
-        return /* @__PURE__ */ h("path", {
-          key: c.key,
-          d,
-          fill: "none",
-          stroke: cStroke,
-          strokeWidth: "1.6",
-          markerEnd: cMarker,
-          ...dash,
-        });
+        // A removed-touching edge gets a red overlay drawn on top of the
+        // normal connector — same "sw-diff-highlight" class as the step
+        // boxes, so one toggle hides both and the underlying edge (its real
+        // color/shape) is unaffected either way.
+        const straight = Math.abs(c.fromX - c.toX) < 0.5;
+        const d = straight
+          ? null
+          : `M ${c.fromX} ${c.y1} L ${c.fromX} ${c.bendY ?? (c.y1 + c.y2) / 2} L ${c.toX} ${c.bendY ?? (c.y1 + c.y2) / 2} L ${c.toX} ${c.y2}`;
+        const base = straight
+          ? /* @__PURE__ */ h("line", {
+              key: c.key,
+              x1: c.fromX,
+              y1: c.y1,
+              x2: c.fromX,
+              y2: c.y2,
+              stroke: cStroke,
+              strokeWidth: "1.6",
+              markerEnd: cMarker,
+              ...dash,
+            })
+          : /* @__PURE__ */ h("path", {
+              key: c.key,
+              d,
+              fill: "none",
+              stroke: cStroke,
+              strokeWidth: "1.6",
+              markerEnd: cMarker,
+              ...dash,
+            });
+        if (!c.diffRemoved) return base;
+        const highlight = straight
+          ? /* @__PURE__ */ h("line", {
+              x1: c.fromX,
+              y1: c.y1,
+              x2: c.fromX,
+              y2: c.y2,
+              stroke: DIFF_STYLES.removed.stroke,
+              strokeWidth: "5",
+              strokeOpacity: "0.45",
+              strokeDasharray: "5,3",
+            })
+          : /* @__PURE__ */ h("path", {
+              d,
+              fill: "none",
+              stroke: DIFF_STYLES.removed.stroke,
+              strokeWidth: "5",
+              strokeOpacity: "0.45",
+              strokeDasharray: "5,3",
+            });
+        return /* @__PURE__ */ h(
+          Fragment,
+          { key: c.key },
+          base,
+          /* @__PURE__ */ h("g", { className: "sw-diff-highlight" }, highlight),
+        );
       }),
       startTerminal &&
         /* @__PURE__ */ h(
@@ -2418,47 +2925,127 @@ function renderDiagramSvg({
         const cx = nodeCenterX(i, r.role);
         const cy = stepBlockCenterY(i);
         const boxW = nodeW;
-        const boxH = 44;
+        const boxH = stepBoxHeight(r);
         const fill = (block && block.bg) || lane.bg || theme.boxBg;
         const txtColor = (block && block.textColor) || lane.textColor || theme.boxText;
         const stroke = (block && block.borderColor) || theme.stroke;
-        const shape = (block && block.shape) || "rounded";
+        const shape = (block && block.shape) || (r.link ? "subroutine" : "rounded");
         const blockIcon = block && block.icon;
+        const blockIconAsset = block && block.iconAsset;
         const { left: leftProps, right: rightProps } = splitPropsBySide(r.props);
         const docY = cy + boxH / 2 - 8;
+        const diffEntry = diffRows?.get(i);
+        const diffStatus = diffEntry?.status;
+        const diffStyle = diffStatus && DIFF_STYLES[diffStatus];
         return /* @__PURE__ */ h(
           "g",
-          { key: `step-${i}` },
-          /* @__PURE__ */ h(StepShape, {
-            shape,
-            cx,
-            cy,
-            w: boxW,
-            h: boxH,
-            fill,
-            stroke,
-          }),
-          blockIcon &&
-            /* @__PURE__ */ h(BlockIcon, {
-              icon: blockIcon,
-              x: cx - boxW / 2,
-              y: cy,
-              size: 16,
-              color: txtColor,
-              shape,
-            }),
+          {
+            key: `step-${i}`,
+            // A "removed" row is a ghost with no real presence in this
+            // model — hiding diff annotations must hide the whole thing,
+            // not just its outline, or "hidden" would still show a step
+            // that doesn't exist in the new diagram.
+            className: diffStatus === "removed" ? "sw-diff-highlight" : undefined,
+          },
+          // Grouped under one class so a host page can hide/show every
+          // diff annotation at once (e.g. a "highlight changes" toggle)
+          // without needing to know which rows have one.
+          diffStyle &&
+            /* @__PURE__ */ h(
+              "g",
+              { className: "sw-diff-highlight" },
+              /* @__PURE__ */ h("rect", {
+                x: cx - boxW / 2 - 6,
+                y: cy - boxH / 2 - 6,
+                width: boxW + 12,
+                height: boxH + 12,
+                rx: 8,
+                fill: diffStyle.bg,
+                fillOpacity: "0.5",
+                stroke: diffStyle.stroke,
+                strokeWidth: "2.5",
+                strokeDasharray: "5,3",
+              }),
+              /* @__PURE__ */ h("circle", {
+                cx: cx - boxW / 2 - 6,
+                cy: cy - boxH / 2 - 6,
+                r: 10,
+                fill: diffStyle.stroke,
+              }),
+              /* @__PURE__ */ h(
+                "text",
+                {
+                  x: cx - boxW / 2 - 6,
+                  y: cy - boxH / 2 - 2,
+                  textAnchor: "middle",
+                  fill: "#fff",
+                  fontFamily: "'Noto Sans JP',sans-serif",
+                  fontSize: "13",
+                  fontWeight: "700",
+                },
+                diffStyle.badge,
+              ),
+            ),
           /* @__PURE__ */ h(
-            "text",
-            {
-              x: blockIcon ? cx + 8 : cx,
-              y: cy + 5,
-              textAnchor: "middle",
-              fill: txtColor,
-              fontFamily: "'Noto Sans JP',sans-serif",
-              fontSize: "13",
-              fontWeight: "500",
-            },
-            truncateToColumns(r.text, blockMaxTextCols(shape, Boolean(blockIcon))),
+            "g",
+            // A removed row is a ghost: it no longer exists in the new
+            // model, so its own shape/icon/text fade out while the red
+            // "removed" outline (outside this group, full-strength) stays
+            // legible — the outline is the part actually claiming something.
+            diffStatus === "removed" ? { opacity: "0.5" } : null,
+            /* @__PURE__ */ h(StepShape, {
+              shape,
+              cx,
+              cy,
+              w: boxW,
+              h: boxH,
+              fill,
+              stroke,
+            }),
+            (blockIcon || blockIconAsset) &&
+              /* @__PURE__ */ h(BlockIcon, {
+                icon: blockIcon,
+                iconAsset: blockIconAsset,
+                x: cx - boxW / 2,
+                y: cy,
+                size: 16,
+                color: txtColor,
+                shape,
+              }),
+            diffStatus === "changed" && diffEntry?.oldText != null
+              ? /* @__PURE__ */ h(DiffStepText, {
+                  x: blockIcon ? cx + 8 : cx,
+                  y: cy + 5,
+                  oldText: diffEntry.oldText,
+                  newText: r.text,
+                  maxCols: blockMaxTextCols(shape, Boolean(blockIcon)),
+                  fill: txtColor,
+                  fontWeight: "500",
+                })
+              : /* @__PURE__ */ h(
+                  "text",
+                  {
+                    x: blockIcon ? cx + 8 : cx,
+                    y: cy + 5,
+                    textAnchor: "middle",
+                    fill: txtColor,
+                    fontFamily: "'Noto Sans JP',sans-serif",
+                    fontSize: "13",
+                    fontWeight: "500",
+                    textDecoration: diffStatus === "removed" ? "line-through" : undefined,
+                  },
+                  stepTextLines(r).map((line, k, all) =>
+                    /* @__PURE__ */ h(
+                      "tspan",
+                      {
+                        key: k,
+                        x: blockIcon ? cx + 8 : cx,
+                        dy: k === 0 ? -((all.length - 1) * stepTextLineH) / 2 : stepTextLineH,
+                      },
+                      line,
+                    ),
+                  ),
+                ),
           ),
           showStepBlockCaptions &&
             r.blockRef &&
@@ -2512,41 +3099,22 @@ function renderDiagramSvg({
       }),
       frames.map((f) => {
         if (f.yMerge == null) return null;
-        const dCy = branchDecisionCy(f);
-        const dH = decisionDiamondH;
         return f.cases.map((c, ci) => {
           if (!(c.label || "").trim()) return null;
+          // v1's `else` keyword still sets a literal "else" label (parser.js);
+          // v2 dropped `else` in favor of a blank `case ()`, already caught by
+          // the empty-label check above.
           if (/^else$/i.test((c.label || "").trim())) return null;
-          const firstStepIdx = firstStepIdxInCase(c);
-          let targetY;
-          let targetX = c.x;
-          if (firstStepIdx != null) {
-            const stepTarget = caseStepLineTarget(firstStepIdx, c);
-            if (stepTarget) {
-              targetX = stepTarget.x;
-              targetY = stepTarget.y;
-            } else {
-              targetY = stepBlockCenterY(firstStepIdx) - 22;
-            }
-          } else {
-            const mCy = f.yMerge + mergeH / 2;
-            const mH = mergeNodeH;
-            targetY = mCy - mH / 2 - mergeArrowClearance;
-          }
-          const startY = dCy + dH / 2;
-          const bendY = startY + branchCaseBendYOffset;
-          const labelX = targetX;
-          const labelY = bendY + caseLabelOffsetY;
-          const labelW = (c.label.length + 2) * caseLabelCharWidth;
+          const { labelX, labelY, labelW } = caseLabelPosition(f, c);
           const caseStyle = resolveBranchStyle(c.color);
           return /* @__PURE__ */ h(
             "g",
             { key: `case-label-overlay-${f.id}-${ci}` },
             /* @__PURE__ */ h("rect", {
               x: labelX - labelW / 2,
-              y: labelY - 11,
+              y: labelY - caseLabelPadY,
               width: labelW,
-              height: 20,
+              height: caseLabelHeight,
               rx: "3",
               fill: caseStyle.bg,
               fillOpacity: "0.8",
@@ -2593,9 +3161,9 @@ function renderDiagramSvg({
         const nextBranchStartIdx = findNextSiblingBranchStart(rows, startIdx, endIdx);
         const dCx = frameAnchorX(f);
         const dCy = branchDecisionCy(f);
-        const dTopY = dCy - (f.parallel ? FORK_GATEWAY_RADIUS : 25);
+        const dTopY = dCy - (f.parallel ? gatewayR : 25);
         const mCx = mergeAnchorX(f);
-        const mBotY = f.yMerge + mergeH / 2 + (f.parallel ? FORK_GATEWAY_RADIUS : 14);
+        const mBotY = f.yMerge + mergeH / 2 + (f.parallel ? gatewayR : mergeNodeHEff / 2);
         const edges = [];
         const branchLastStep = lastStepInBranchSpan(startIdx, endIdx);
         if (prevStepIdx >= 0) {
@@ -2657,8 +3225,7 @@ function renderDiagramSvg({
           const nextRowY = rowMeta[nextBranchStartIdx]?.y;
           if (nextFrame && nextRowY != null) {
             const nextCx = frameAnchorX(nextFrame);
-            const nextTopY =
-              branchDecisionCy(nextFrame) - (nextFrame.parallel ? FORK_GATEWAY_RADIUS : 25);
+            const nextTopY = branchDecisionCy(nextFrame) - (nextFrame.parallel ? gatewayR : 25);
             const bend = (mBotY + nextTopY) / 2;
             const d =
               Math.abs(nextCx - mCx) < 0.5
@@ -2719,7 +3286,7 @@ function renderDiagramSvg({
             const dCy = branchDecisionCy(f);
             if (f.parallel) {
               const pad = hitTargetPad;
-              const r0 = FORK_GATEWAY_RADIUS;
+              const r0 = gatewayR;
               return /* @__PURE__ */ h(RowHitTarget, {
                 key: `hit-${i}`,
                 rowIndex: i,
@@ -2731,7 +3298,7 @@ function renderDiagramSvg({
                 onSelect: onRowSelect,
               });
             }
-            const dW = decisionDiamondWidth(f.cond.length);
+            const dW = DIAGRAM_LAYOUT.decisionDiamondW;
             const dH = decisionDiamondH;
             return /* @__PURE__ */ h(RowHitTarget, {
               key: `hit-${i}`,
@@ -2748,18 +3315,7 @@ function renderDiagramSvg({
             const f = frames.find((fr) => fr.cases.some((c2) => c2.startRow === i));
             const c = f?.cases.find((ca) => ca.startRow === i);
             if (!f || !c) return null;
-            const labelW = ((c.label || "").length + 2) * caseLabelCharWidth;
-            const dCy = branchDecisionCy(f);
-            const dH = decisionDiamondH;
-            const startY = dCy + dH / 2;
-            const bendY = startY + branchCaseBendYOffset;
-            const labelY = bendY + caseLabelOffsetY;
-            let targetX = c.x;
-            const firstStepIdx = firstStepIdxInCase(c);
-            if (firstStepIdx != null) {
-              const stepTarget = caseStepLineTarget(firstStepIdx, c);
-              if (stepTarget) targetX = stepTarget.x;
-            }
+            const { labelX, labelY, labelW } = caseLabelPosition(f, c);
             const edgeD = buildCaseFanOutEdgeD(f, c);
             return /* @__PURE__ */ h(
               "g",
@@ -2771,7 +3327,7 @@ function renderDiagramSvg({
               }),
               /* @__PURE__ */ h(RowHitTarget, {
                 rowIndex: i,
-                x: targetX - labelW / 2 - caseLabelPadX,
+                x: labelX - labelW / 2 - caseLabelPadX,
                 y: labelY - caseLabelPadY,
                 w: labelW + caseLabelPadX * 2,
                 h: caseLabelHeight,
@@ -2787,7 +3343,7 @@ function renderDiagramSvg({
             const mCy = f.yMerge + mergeH / 2;
             if (f.parallel) {
               const pad = hitTargetPad;
-              const r0 = FORK_GATEWAY_RADIUS;
+              const r0 = gatewayR;
               return /* @__PURE__ */ h(RowHitTarget, {
                 key: `hit-${i}`,
                 rowIndex: i,
@@ -2799,8 +3355,8 @@ function renderDiagramSvg({
                 onSelect: onRowSelect,
               });
             }
-            const mW = mergeNodeW;
-            const mH = mergeNodeH;
+            const mW = mergeNodeWEff;
+            const mH = mergeNodeHEff;
             return /* @__PURE__ */ h(RowHitTarget, {
               key: `hit-${i}`,
               rowIndex: i,
@@ -2827,6 +3383,24 @@ function renderDiagramSvg({
           }
           return null;
         }),
+      // Link tiles last, above the interactive hit targets: a rect that
+      // covers the whole row would otherwise take the click meant for the ↗.
+      rows.map((r, i) => {
+        if (r.kind !== "step" || r.empty || !r.role || !r.link) return null;
+        if (laneIndex(r.role) < 0) return null;
+        return /* @__PURE__ */ h(
+          "g",
+          { key: `link-${i}` },
+          linkGlyph(r, nodeCenterX(i, r.role), stepBlockCenterY(i), nodeW, stepBoxHeight(r)),
+        );
+      }),
+      /* @__PURE__ */ h(DocumentInfoPanel, {
+        lines: infoLines,
+        x: width - xPad,
+        y: L.printLayoutStartY + L.infoLineH,
+        theme,
+        L,
+      }),
       /* @__PURE__ */ h(PrintLayer, {
         theme,
         page,

@@ -3,17 +3,23 @@ import { dslToMobile, toColor } from "./mobile-model.js";
 
 const DSL = `@kai-swimlane
 /title/
-Demo
+Demo;
 /role/
-<a: Alice> #blue
-<b: Bob> #green
+<a>
+label: Alice;
+background-color: #2563eb;
+
+<b>
+label: Bob;
+background-color: #16a34a;
+
 /line/
 [a: Start]
 if (ok?) is (yes) than
 [b: Approve]
-else
+else-if () than
 [a: Reject]
-endif
+end-if
 [a: Done]
 @end
 `;
@@ -33,8 +39,8 @@ describe("buildMobileTree", () => {
     // first case = "yes" with Bob's Approve step
     expect(branch.cases[0].label).toBe("yes");
     expect(branch.cases[0].children[0]).toMatchObject({ type: "step", role: "b", text: "Approve" });
-    // else case
-    expect(branch.cases[1].label).toBe("else");
+    // the blank else-if () than is the catch-all — no "else" spelling any more
+    expect(branch.cases[1].label).toBe("");
     expect(branch.cases[1].children[0]).toMatchObject({ role: "a", text: "Reject" });
   });
 
@@ -47,23 +53,25 @@ describe("buildMobileTree", () => {
 
 const MERGE_DSL = `@kai-swimlane
 /title/
-M
+M;
 /role/
-<a: Alice> #blue
+<a>
+label: Alice;
+
 /line/
 [a: Start]
 if (cancel?) is (yes) than
 [a: Stop]
-merge: fin;
-else
+[goto: fin]
+else-if () than
 [a: Continue]
-endif
+end-if
 [a: Finish]
 id: fin;
 @end
 `;
 
-describe("mid-flow merge", () => {
+describe("mid-flow jump", () => {
   const { tree } = dslToMobile(MERGE_DSL);
 
   it("renders a merge node pointing at the target id", () => {
@@ -85,9 +93,11 @@ describe("mid-flow merge", () => {
 
 const GROUP_DSL = `@kai-swimlane
 /title/
-G
+G;
 /role/
-<a: Alice> #blue
+<a>
+label: Alice;
+
 /line/
 [a: Start]
 section (枠グループ)
@@ -116,7 +126,9 @@ describe("row-index annotations (drag drop targets)", () => {
   // rows: 0 step S1, 1 step S2, 2 groupStart, 3 step G1, 4 groupEnd, 5 step S3
   const DSL2 = `@kai-swimlane
 /role/
-<a: Alice>
+<a>
+label: Alice;
+
 /line/
 [a: S1]
 [a: S2]
@@ -140,6 +152,88 @@ end-section
   it("exposes container end rows for the trailing drop gap", () => {
     expect(tree.rootEndRow).toBe(6); // past the last flow row
     expect(tree.nodes[2].endRow).toBe(4); // before the group's end marker
+  });
+});
+
+const V2 = (body) => `@kai-swimlane\n/line/\n${body}\n@end\n`;
+
+describe("case nodes carry what a host needs to edit them", () => {
+  it("gives a fork exactly one case per real path, with no phantom leading one", () => {
+    const { tree } = dslToMobile(
+      V2("fork (Shipping)\n  [a: ship]\ncase (Billing)\n  [a: bill]\nend-fork"),
+    );
+    const fork = tree.nodes.find((n) => n.type === "branch");
+    // The reader emits a real branchCase row for a fork's first path, so the
+    // tree must not also synthesize one from the branchStart.
+    expect(fork.cases.map((c) => c.label)).toEqual(["Shipping", "Billing"]);
+    expect(fork.cases.every((c) => c.children.length === 1)).toBe(true);
+  });
+
+  it("points a fork's cases at their own branchCase rows", () => {
+    const { tree } = dslToMobile(
+      V2("fork (Shipping)\n  [a: ship]\ncase (Billing)\n  [a: bill]\nend-fork"),
+    );
+    const fork = tree.nodes.find((n) => n.type === "branch");
+    expect(fork.cases[0]).toMatchObject({ rowIndex: 1, branchRow: 0, isFirst: false });
+    expect(fork.cases[1]).toMatchObject({ rowIndex: 3, branchRow: 0, isFirst: false });
+  });
+
+  it("marks an if's first case as living on the branchStart row", () => {
+    const { tree } = dslToMobile(
+      V2("if (q) is (Yes) than\n  [a: y]\nelse-if (No) than\n  [a: n]\nend-if"),
+    );
+    const branch = tree.nodes.find((n) => n.type === "branch");
+    expect(branch.cases.map((c) => c.label)).toEqual(["Yes", "No"]);
+    // first case has no row of its own — it's `firstCase` on the branchStart
+    expect(branch.cases[0]).toMatchObject({ rowIndex: null, branchRow: 0, isFirst: true });
+    expect(branch.cases[1]).toMatchObject({ rowIndex: 2, branchRow: 0, isFirst: false });
+  });
+});
+
+const JUMP_DSL = `@kai-swimlane
+/title/
+L;
+/role/
+<a>
+label: Alice;
+
+/line/
+[a: Start]
+if (cancel?) is (yes) than
+[a: Stop]
+[goto: done]
+else-if () than
+[a: Continue]
+end-if
+[a: End]
+id: done;
+@end
+`;
+
+/**
+ * There is no landing-marker row kind any more, so a jump's destination is an
+ * ordinary step that named itself with `id:` — nothing extra appears in the
+ * flow at the landing point, and `mergeTargets` is just a step-label lookup.
+ */
+describe("a jump lands on a real step, not a marker row", () => {
+  const { tree } = dslToMobile(JUMP_DSL);
+
+  it("parses cleanly and adds no node of its own at the destination", () => {
+    expect(tree.errors).toEqual([]);
+    expect(tree.nodes.some((n) => n.type === "landing")).toBe(false);
+    // The destination is just the step, in its normal place in the flow.
+    expect(tree.nodes.filter((n) => n.type === "step").at(-1).text).toBe("End");
+  });
+
+  it("labels the target with the destination step's own text", () => {
+    expect(tree.mergeTargets.done).toBe("End");
+  });
+
+  it("always names a target — there is no bare jump to leave it empty", () => {
+    const branch = tree.nodes.find((n) => n.type === "branch");
+    const merge = branch.cases[0].children.find((n) => n.type === "merge");
+    expect(merge).toBeTruthy();
+    expect(merge.target).toBe("done");
   });
 });
 

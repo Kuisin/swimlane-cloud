@@ -14,15 +14,13 @@ import {
   createReposApi,
   createRestClient,
   createWriteApi,
-  type CommitsApi,
   type FetchImpl,
-  type PullsApi,
   type RepoRef,
-  type ReposApi,
+  type ReposApi as UnboundReposApi,
   type RestClient,
-  type WriteApi,
 } from "@swimlane-cloud/github-client";
 import { ApiError } from "./api";
+import type { ReposApi, RepoApis as SharedRepoApis } from "./repo-apis";
 import { getServiceSupabase } from "./supabase/server";
 import { openToken } from "./token-crypto";
 
@@ -32,17 +30,32 @@ export interface GitHubConnection {
   token: string;
 }
 
+/**
+ * Before a project (and so a bound repo ref) exists — discovering or
+ * creating a repository. `repos` here is github-client's raw, unbound
+ * `ReposApi` (`(owner, repo)` on every call); it stays GitHub-specific since
+ * discovery has its own separate GitLab flow (`gitlab-discovery.ts`).
+ */
 export interface GitHubApis {
   rest: RestClient;
-  repos: ReposApi;
+  repos: UnboundReposApi;
   login: string;
 }
 
-export interface RepoApis extends GitHubApis {
-  write: WriteApi;
-  pulls: PullsApi;
-  commits: CommitsApi;
+/** Once a project exists: `repos` here is bound to it, matching `./repo-apis`'s shared shape. */
+export interface RepoApis extends SharedRepoApis {
+  rest: RestClient;
   repo: RepoRef;
+}
+
+/** Curries github-client's unbound `(owner, repo)` methods to one project. */
+function boundReposApi(repos: UnboundReposApi, repo: RepoRef): ReposApi {
+  return {
+    getRepo: () => repos.getRepo(repo.owner, repo.repo),
+    listBranches: () => repos.listBranches(repo.owner, repo.repo),
+    addTopic: (topic: string) => repos.addTopic(repo.owner, repo.repo, topic),
+    deleteBranch: (name: string) => repos.deleteBranch(repo.owner, repo.repo, name),
+  };
 }
 
 /**
@@ -93,9 +106,14 @@ export function withRepo(apis: GitHubApis, repo: RepoRef): RepoApis {
   return {
     ...apis,
     repo,
+    repos: boundReposApi(apis.repos, repo),
     write: createWriteApi(apis.rest, repo),
     pulls: createPullsApi(apis.rest, repo),
     commits: createCommitsApi(apis.rest, repo),
+    // GitHub has no universal per-account email; this synthetic address is
+    // the same one `git`'s own GitHub integration uses for a token-only
+    // commit, and always resolves to the right account for attribution.
+    commitAuthorEmail: `${apis.login}@users.noreply.github.com`,
   };
 }
 

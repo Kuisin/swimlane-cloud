@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
+import { branchLabel } from "@/lib/branch-label";
+import { localCache } from "@/lib/local-cache";
 import { ProjectPage, Empty, describeError, useProject } from "../_components";
 import { useT } from "@/i18n";
 
@@ -22,8 +24,15 @@ export default function ActivityPage() {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    // The last list this browser saw paints at once; the real one replaces it.
+    const key = `activity:${projectId}`;
+    const cached = localCache.get<Entry[]>(key);
+    if (cached) setEntries(cached.value);
     api<{ entries: Entry[] }>(`/api/projects/${projectId}/activity?limit=100`)
-      .then((r) => setEntries(r.entries))
+      .then((r) => {
+        localCache.set(key, r.entries);
+        setEntries(r.entries);
+      })
       .catch((e) => setNotice(describeError(e, t)));
   }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -50,7 +59,7 @@ export default function ActivityPage() {
                       <span className="text-neutral-600">{t(`activity.action.${e.action}`)}</span>
                       {e.entityId && (
                         <span className="ml-1 font-mono text-xs text-neutral-500">
-                          {e.entityId}
+                          {e.entityType === "branch" ? branchLabel(e.entityId, t) : e.entityId}
                         </span>
                       )}
                       {e.commitSha && (

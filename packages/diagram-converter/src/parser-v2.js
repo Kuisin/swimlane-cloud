@@ -1,0 +1,1692 @@
+/**
+ * Reader for the kai-swimlane DSL specified in dsl-rule.md.
+ *
+ * Version 2 is whitespace-insensitive: `;` terminates properties, directives and
+ * the `/title/` payload, and every other statement self-delimits, so a file can
+ * be squashed to one line and still parse. This module scans statements rather
+ * than lines and produces the same model `parseDSL` returns, so the renderer,
+ * the mobile view and the editor need no change.
+ *
+ * What it does not do yet: `@use` is recorded and reported, never fetched — the
+ * host resolves imports and passes them in via `options.resolveImport`.
+ *
+ * Every translatable field (dsl-rule.md's closed list) resolves to one active
+ * language for rendering, same as always, but also keeps a `<field>$langs`
+ * sibling array — index-aligned to the returned `languages` — of every
+ * language's value the source actually gave, so a host that wants to edit and
+ * re-save the document (the GUI editor) can do so without discarding every
+ * language it isn't currently displaying. A field with no `$langs` companion
+ * simply has the same value in every language, exactly as before.
+ */
+import { BLOCK_SHAPE_WIDTH_FACTOR, BRANCH_COLOR_STYLES } from "./render-pure/diagram-layout.js";
+import { normalizeArrowLine } from "./arrow-line.js";
+import { getLucideIconNode } from "./render-pure/icon-paths.js";
+import {
+  DIAGRAM_OPTION_DSL_MAP,
+  DIAGRAM_OPTION_VALUE_MAP,
+  OPTION_COLUMN_TITLE_DSL_MAP,
+  DEFAULT_COLUMN_TITLES,
+  emptyDiagramOptions,
+} from "./diagram-options.js";
+
+/**
+ * The one header. There are no versions any more: a file that still says
+ * `@kai-swimlane-v2` or `@kai-swimlane 2` is refused with a pointer to the
+ * migration rather than read as something else.
+ */
+export const V2_HEADER_RE = /^\uFEFF?[ \t]*@kai-swimlane(?![\w-])/;
+// Any probe line that starts with the marker but is not exactly it: a
+// version suffix, a stray character — malformed, never "no header".
+const VERSIONED_HEADER_RE = /^\uFEFF?[ \t]*@kai-swimlane(?:[\w-]|[ \t]+\d)/;
+
+/** The header version of `src`, or null when it carries no header at all. */
+export function dslVersion(src) {
+  const probe = String(src ?? "")
+    .split(/\r?\n/)
+    .find((l) => l.trim() !== "");
+  if (probe === undefined) return null;
+  // Kept for callers that still ask: the grammar is one, so a header is
+  // simply present (2, the current grammar) or absent.
+  return V2_HEADER_RE.test(probe) ? 2 : null;
+}
+
+const SECTIONS = ["meta", "title", "page", "option", "role", "block", "prop", "line", "i18n"];
+const GLYPHS = [
+  ["-->", "long-dash"],
+  ["-.>", "dash-dot"],
+  ["..>", "dotted"],
+  ["~>", "dashed"],
+  ["->", "solid"],
+];
+const OPENERS = ["if", "fork", "section", "branch", "phase"];
+const CLOSERS = {
+  "end-if": "if",
+  "end-fork": "fork",
+  "end-section": "section",
+  "end-branch": "branch",
+  "end-phase": "phase",
+};
+const BOOLS = { true: true, false: false };
+/** The internal marker `readRun` inserts for an unescaped `|`/`｜` separator. */
+const SEG_SEP = String.fromCharCode(0);
+
+/**
+ * `@use` imports an image instead of merging sections when the path ends in
+ * one of these. Raster and vector alike are embedded as a `data:` URI in an
+ * `<image>` element, never as inline SVG markup, so a script inside an
+ * imported drawing cannot run in the page that displays the diagram.
+ */
+export const ASSET_EXTENSIONS = {
+  svg: "image/svg+xml",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+};
+
+/** Per-asset and per-diagram ceilings, counted over the decoded data URI. */
+export const ASSET_MAX_BYTES = 2 * 1024 * 1024;
+export const ASSET_TOTAL_MAX_BYTES = 8 * 1024 * 1024;
+
+/** The extension of `path`, lowercased, or "". */
+function extensionOf(path) {
+  const last = path.slice(path.lastIndexOf("/") + 1);
+  const dot = last.lastIndexOf(".");
+  return dot <= 0 ? "" : last.slice(dot + 1).toLowerCase();
+}
+
+/** An id from a file name: the stem, with every run outside the id set as "-". */
+function slugOf(path) {
+  const last = path.slice(path.lastIndexOf("/") + 1);
+  const dot = last.lastIndexOf(".");
+  const stem = dot <= 0 ? last : last.slice(0, dot);
+  const out = stem
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}_]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return out || "asset";
+}
+
+/**
+ * The seven ordered checks every import path passes before any I/O. The first
+ * failure is the only diagnostic, and each message quotes the path and nothing
+ * else, so a mis-aimed import cannot leak file content through an error.
+ *
+ * `./` and `../` resolve against the directory of the importing file, so
+ * `fromDir` is that file's repository-relative directory; without it the
+ * importing file is taken to sit at the repository root. Resolution is
+ * lexical, never through a file system, so the answer does not depend on the
+ * host. A host that can follow links re-checks containment after resolving.
+ */
+export function checkImportPath(path, fromDir = "") {
+  if (!path) return "an import path must not be empty";
+  if (path.includes(":")) return `a path must not contain ":": "${path}"`;
+  if (path.includes("\\")) return `path separators are "/": "${path}"`;
+  if (path.startsWith("/")) return `a path is relative to the repository root: "${path}"`;
+  const relative = path.startsWith("./") || path.startsWith("../");
+  const segments = relative ? `${fromDir}/${path}`.split("/") : path.split("/");
+  const parts = [];
+  for (const seg of segments) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      if (!parts.length) return `"${path}" is outside the repository`;
+      parts.pop();
+      continue;
+    }
+    parts.push(seg);
+  }
+  if (!parts.length) return `"${path}" is outside the repository`;
+  if (parts[0] === ".git" || parts[0] === ".github") return `"${path}" is not importable`;
+  if (!extensionOf(path)) return `a path must include a file extension: "${path}"`;
+  return null;
+}
+
+/** The directory part of a repository-relative file path. */
+export function dirOf(filename) {
+  const cut = String(filename ?? "").lastIndexOf("/");
+  return cut < 0 ? "" : filename.slice(0, cut);
+}
+
+const PAGE_MAP = {
+  description: "description",
+  "left-title": "leftTitle",
+  "left-subtitle": "leftSubtitle",
+  "right-title": "rightTitle",
+  "right-subtitle": "rightSubtitle",
+  "header-left": "headerLeft",
+  "header-center": "headerCenter",
+  "header-right": "headerRight",
+  "footer-left": "footerLeft",
+  "footer-center": "footerCenter",
+  "footer-right": "footerRight",
+};
+const ROLE_MAP = {
+  label: "label",
+  "text-color": "textColor",
+  "background-color": "bg",
+  icon: "icon",
+};
+const BLOCK_MAP = {
+  "background-color": "bg",
+  "text-color": "textColor",
+  "border-color": "borderColor",
+  shape: "shape",
+  icon: "icon",
+  label: "label",
+};
+const PROP_MAP = {
+  label: "label",
+  side: "side",
+  "background-color": "bg",
+  "border-color": "borderColor",
+  "text-color": "textColor",
+  title: "title",
+  hint: "title",
+  "max-chars": "maxChars",
+};
+
+/** Structural whitespace: the six code points the spec names. */
+function isWs(c) {
+  return c === " " || c === "\t" || c === "\n" || c === "\r" || c === "\u00a0" || c === "\u3000";
+}
+function isIdChar(c) {
+  if (!c) return false;
+  return /[\p{L}\p{N}_]/u.test(c);
+}
+
+/**
+ * A scanner over the diagram body. Statement-oriented: `line` is derived from
+ * the offset only so diagnostics can point somewhere in an expanded file.
+ */
+class Scanner {
+  constructor(src, offset) {
+    this.s = src;
+    this.i = 0;
+    this.base = offset;
+  }
+  get eof() {
+    return this.i >= this.s.length;
+  }
+  lineAt(pos) {
+    let n = 1 + this.base;
+    for (let k = 0; k < pos && k < this.s.length; k++) if (this.s[k] === "\n") n++;
+    return n;
+  }
+  /** Skip whitespace; returns true when it crossed a newline. */
+  skipWs() {
+    let nl = false;
+    while (!this.eof && isWs(this.s[this.i])) {
+      if (this.s[this.i] === "\n") nl = true;
+      this.i++;
+    }
+    return nl;
+  }
+  atLineStart() {
+    for (let k = this.i - 1; k >= 0; k--) {
+      if (this.s[k] === "\n") return true;
+      if (!isWs(this.s[k])) return false;
+    }
+    return true;
+  }
+  /** A comment at the cursor, or null. `//` only opens one at a line start. */
+  comment() {
+    if (this.s.startsWith("//", this.i) && this.atLineStart()) {
+      const end = this.s.indexOf("\n", this.i);
+      const text = this.s.slice(this.i + 2, end < 0 ? this.s.length : end).trim();
+      this.i = end < 0 ? this.s.length : end;
+      return text;
+    }
+    if (this.s.startsWith("/*", this.i)) {
+      const end = this.s.indexOf("*/", this.i + 2);
+      const text = this.s.slice(this.i + 2, end < 0 ? this.s.length : end).trim();
+      this.i = end < 0 ? this.s.length : end + 2;
+      return text;
+    }
+    return null;
+  }
+  /** The maximal word at the cursor (id characters and interior hyphens). */
+  word() {
+    const start = this.i;
+    while (!this.eof) {
+      const c = this.s[this.i];
+      if (isIdChar(c)) this.i++;
+      else if (c === "-" && isIdChar(this.s[this.i + 1])) this.i++;
+      else break;
+    }
+    return this.s.slice(start, this.i);
+  }
+  peek(str) {
+    return this.s.startsWith(str, this.i);
+  }
+  /** A section marker at the cursor (`/line/`), or null. */
+  marker() {
+    if (this.s[this.i] !== "/") return null;
+    const m = /^\/([a-z0-9-]+)\//.exec(this.s.slice(this.i));
+    if (!m) return null;
+    this.i += m[0].length;
+    return m[1];
+  }
+}
+
+/**
+ * Read one run: a quoted string, or bare text to the first unescaped member of
+ * `stops`. Depth is counted for the bracket pair `depth` names, so
+ * `[sales: 予算[確定] を承認]` needs no escape.
+ */
+function readRun(sc, stops, depth, splitBars = false) {
+  sc.skipWs();
+  const out = [];
+  if (sc.s[sc.i] === '"') {
+    const save = sc.i;
+    sc.i++;
+    let ok = false;
+    while (!sc.eof) {
+      const c = sc.s[sc.i];
+      if (c === "\\") {
+        out.push(unescapeChar(sc.s[sc.i + 1], sc.s[sc.i]));
+        sc.i += 2;
+        continue;
+      }
+      if (c === "\n" || c === "\r") break;
+      if (c === '"') {
+        sc.i++;
+        ok = true;
+        break;
+      }
+      out.push(c);
+      sc.i++;
+    }
+    if (ok) {
+      const after = sc.i;
+      sc.skipWs();
+      if (sc.eof || stops.includes(sc.s[sc.i])) return out.join("");
+      sc.i = after;
+      return out.join("");
+    }
+    sc.i = save;
+    out.length = 0;
+  }
+  let level = 0;
+  const open = depth?.[0];
+  const close = depth?.[1];
+  while (!sc.eof) {
+    const c = sc.s[sc.i];
+    if (c === "\\") {
+      out.push(unescapeChar(sc.s[sc.i + 1], c));
+      sc.i += 2;
+      continue;
+    }
+    if (splitBars && level === 0 && (c === "|" || c === "｜")) {
+      out.push("\u0000");
+      sc.i++;
+      continue;
+    }
+    if (open && c === open) level++;
+    if (close && c === close && level > 0) level--;
+    else if (stops.includes(c) && level === 0) break;
+    out.push(c);
+    sc.i++;
+  }
+  return out.join("").trim();
+}
+
+const ESCAPES = { n: "\n", t: "\t" };
+function unescapeChar(next, backslash) {
+  if (next === undefined) return backslash;
+  if (ESCAPES[next]) return ESCAPES[next];
+  if ('\\";|｜][)(（）/'.includes(next)) return next;
+  return backslash + next;
+}
+
+/** Split a translatable run on unescaped bars and pick the render language. */
+function pickSegment(raw, langIndex) {
+  if (!raw.includes("\u0000")) return raw;
+  const parts = raw.split("\u0000");
+  return (parts[langIndex] || "").trim() || parts[0].trim();
+}
+
+/** Read a run, marking unescaped separators so `pickSegment` can split later. */
+function readText(sc, stops, depth) {
+  return readRun(sc, stops, depth, true);
+}
+
+/**
+ * Parse a document into the model `parseDSL` returns.
+ *
+ * @param {string} src
+ * @param {{ resolveImport?: (path: string) => string | null, lang?: string }} [options]
+ */
+export function parseDSLv2(src, options = {}) {
+  const errors = [];
+  const warnings = [];
+  let sawEnd = false;
+  const raw = String(src ?? "");
+  const lines = raw.split(/\r?\n/);
+  const headerLine = lines.findIndex((l) => V2_HEADER_RE.test(l));
+  const m = headerLine < 0 ? null : V2_HEADER_RE.exec(lines[headerLine]);
+  if (!m || VERSIONED_HEADER_RE.test(lines[headerLine])) {
+    const versioned = lines.findIndex((l) => VERSIONED_HEADER_RE.test(l));
+    if (versioned >= 0) {
+      return emptyModel([
+        {
+          line: versioned + 1,
+          text: lines[versioned],
+          msg: "the header is @kai-swimlane — there are no versions any more; run Update DSL",
+        },
+      ]);
+    }
+    return emptyModel([{ line: 1, text: "", msg: "@kai-swimlane marker not found" }]);
+  }
+  const headerStart = raw.indexOf(m[0]);
+  const body = raw.slice(headerStart + m[0].length);
+  const sc = new Scanner(body, headerLine);
+
+  const page = emptyPage();
+  const options_ = emptyDiagramOptions();
+  // `/option/ lane-order:` names roles, and a role may be declared or first
+  // used after the option is read, so its names are checked at end-of-parse.
+  // This is where that check reports from.
+  let laneOrderPos = -1;
+  const providedColumnTitles = new Set();
+  const providedPageKeys = new Set();
+  const roles = {};
+  const assets = {};
+  const blocks = {};
+  const props = {};
+  const meta = {};
+  const catalog = {};
+  const uses = [];
+  const rows = [];
+  const localDefIds = { role: new Set(), block: new Set(), prop: new Set() };
+  let title = "";
+  let title$langs = null;
+  let langs = Array.isArray(options.languages) ? [...options.languages] : [];
+  let langIndex =
+    langs.length && options.lang && langs.includes(options.lang) ? langs.indexOf(options.lang) : 0;
+
+  const stack = [];
+  const groupStack = [];
+  let branchCounter = 0;
+  let groupCounter = 0;
+  let lastStep = -1;
+  let lastStatement = -1;
+  let pendingComments = [];
+  const stepIds = new Map();
+  const jumps = [];
+
+  // Branches and groups live on two stacks; the body depth follows whichever
+  // frame was opened last, so a section inside a case and an if inside a
+  // section both nest one level deeper than their container.
+  let frameSeq = 0;
+  const innermostFrame = () => {
+    const b = stack.length ? stack[stack.length - 1] : null;
+    const g = groupStack.length ? groupStack[groupStack.length - 1] : null;
+    if (!b || !g) return b || g;
+    return b.seq > g.seq ? b : g;
+  };
+  const bodyDepth = () => {
+    const f = innermostFrame();
+    return f ? f.depth + 1 : 0;
+  };
+  const branchMarkerDepth = bodyDepth;
+  const branchControlDepth = () => (stack.length ? stack[stack.length - 1].depth : 0);
+  const branchBodyDepth = bodyDepth;
+  const groupMarkerDepth = bodyDepth;
+  const stepDepth = bodyDepth;
+
+  const err = (pos, msg, text = "") => errors.push({ line: sc.lineAt(pos), text, msg });
+  // A warning is reported but blocks nothing: the value is kept (or omitted)
+  // and the document still renders and still opens in the GUI.
+  const warn = (pos, msg, text = "") =>
+    warnings.push({ line: sc.lineAt(pos), text, msg, severity: "warning" });
+  // One error per stray line: resume at the next line, never one character on.
+  const skipLine = () => {
+    while (!sc.eof && sc.s[sc.i] !== "\n") sc.i++;
+  };
+  const push = (fields, pos) => {
+    const row = { ...fields, dslLines: [sc.lineAt(pos)] };
+    if (pendingComments.length) {
+      row.leadingComments = pendingComments;
+      pendingComments = [];
+    }
+    rows.push(row);
+    lastStatement = rows.length - 1;
+    return lastStatement;
+  };
+  const seg = (t) => pickSegment(t, langIndex);
+  const checkColor = (token, pos) => {
+    if (token && !BRANCH_COLOR_STYLES[token] && !/^[0-9a-f]{3,8}$/i.test(token)) {
+      err(
+        pos,
+        `unknown color "#${token}" — use one of ${Object.keys(BRANCH_COLOR_STYLES).join(", ")}`,
+      );
+    }
+  };
+
+  /** `#color` / `@id` after a control keyword, in either order. */
+  function readOpenerSuffixes(pos) {
+    const out = { color: null, id: null };
+    for (;;) {
+      sc.skipWs();
+      if (sc.peek("#")) {
+        sc.i++;
+        const token = sc.word().toLowerCase();
+        checkColor(token, pos);
+        out.color = token;
+        continue;
+      }
+      if (sc.peek("@")) {
+        const save = sc.i;
+        sc.i++;
+        const w = sc.word();
+        if (["end", "use", "lang", "kai-swimlane"].includes(w)) {
+          sc.i = save;
+          break;
+        }
+        out.id = w;
+        continue;
+      }
+      break;
+    }
+    return out;
+  }
+
+  /**
+   * A `key: value;`, `key;` flag or `unset: a, b;` at the cursor, or null.
+   *
+   * `splitBars` is dsl-rule.md's translatable/non-translatable divide. In a
+   * translatable position an unescaped `|`/`｜` separates languages and is
+   * marked for `pickSegment`; in `/meta/` — which the spec's translatable set
+   * excludes outright, `tags` included — a bar is ordinary content, so the
+   * marker must never be inserted there. It is a NUL byte: left in, it reaches
+   * `meta` as part of the value, and the next save writes a *different* value
+   * back out.
+   */
+  function readProperty({ splitBars = true } = {}) {
+    const save = sc.i;
+    sc.skipWs();
+    const pos = sc.i;
+    let key;
+    if (sc.s[sc.i] === '"') {
+      sc.i++;
+      key = '"' + readRun(sc, ['"'], null) + '"';
+      if (sc.s[sc.i] === '"') sc.i++;
+    } else {
+      key = sc.word();
+      // A structured /i18n/ key addresses a node field: `quote.remark.en`.
+      while (sc.s[sc.i] === "." && isIdChar(sc.s[sc.i + 1])) {
+        const mark = sc.i;
+        sc.i++;
+        const part = sc.word();
+        let ahead = sc.i;
+        while (ahead < sc.s.length && isWs(sc.s[ahead])) ahead++;
+        if (sc.s[ahead] === "." || sc.s[ahead] === ":" || sc.s[ahead] === "：") {
+          if (sc.s[ahead] === ".") {
+            key += "." + part;
+            continue;
+          }
+          sc.i = mark;
+          break;
+        }
+        sc.i = mark;
+        break;
+      }
+    }
+    if (!key) {
+      sc.i = save;
+      return null;
+    }
+    sc.skipWs();
+    let tag = null;
+    if (sc.s[sc.i] === ".") {
+      sc.i++;
+      tag = sc.word();
+      sc.skipWs();
+    }
+    if (sc.s[sc.i] === ";") {
+      sc.i++;
+      return { key, tag, value: "true", flag: true, pos };
+    }
+    if (sc.s[sc.i] !== ":" && sc.s[sc.i] !== "：") {
+      sc.i = save;
+      return null;
+    }
+    sc.i++;
+    sc.skipWs();
+    let value;
+    if (sc.peek("```")) {
+      sc.i += 3;
+      const end = sc.s.indexOf("```", sc.i);
+      const bodyText = sc.s.slice(sc.i, end < 0 ? sc.s.length : end);
+      sc.i = end < 0 ? sc.s.length : end + 3;
+      sc.skipWs();
+      if (sc.s[sc.i] === ";") sc.i++;
+      value = dedent(bodyText);
+    } else {
+      value = readRun(sc, [";"], null, splitBars);
+      if (sc.s[sc.i] === ";") sc.i++;
+      else err(pos, `"${key}" must end with ';'`);
+    }
+    return { key, tag, value, pos };
+  }
+
+  function dedent(text) {
+    const lines = text
+      .replace(/^\r?\n/, "")
+      .replace(/\r?\n[ \t]*$/, "")
+      .split(/\r?\n/);
+    const indents = lines.filter((l) => l.trim()).map((l) => l.match(/^[ \t]*/)[0].length);
+    const cut = indents.length ? Math.min(...indents) : 0;
+    return lines.map((l) => l.slice(cut)).join("\n");
+  }
+
+  /**
+   * The positional per-language breakdown of a raw bar-joined run, or `null`
+   * when it carries no bar at all — meaning every language shares one value,
+   * already fully captured by the plain (non-`$langs`) field.
+   */
+  function langsOf(raw) {
+    if (raw == null || !raw.includes(SEG_SEP)) return null;
+    const n = Math.max(langs.length, 1);
+    const parts = raw.split(SEG_SEP);
+    const arr = new Array(n).fill(undefined);
+    for (let i = 0; i < n && i < parts.length; i++) arr[i] = parts[i].trim();
+    return arr;
+  }
+
+  /**
+   * Record one language's value for `target[field]` into `target[field+"$langs"]`
+   * — from a bar-joined run (`tag` is falsy, split positionally) or from a
+   * `field.tag:` property (`tag` is the declared language). `append` merges into
+   * whatever is already there instead of replacing it (`remark-desc`'s job).
+   * A no-op when there is nothing to distinguish between languages yet, so a
+   * plain single-language document never grows this field at all.
+   */
+  function recordLangs(target, field, value, tag, append) {
+    const key = `${field}$langs`;
+    const existing = target[key];
+    const hasBar = value.includes(SEG_SEP);
+    if (!tag && !hasBar && !existing) return;
+    const n = Math.max(langs.length, 1);
+    const arr = existing || new Array(n).fill(undefined);
+    const put = (idx, v) => {
+      arr[idx] = append && arr[idx] ? `${arr[idx]}\n\n${v}` : v;
+    };
+    if (tag) {
+      const idx = langs.indexOf(tag);
+      if (idx >= 0) put(idx, value);
+    } else if (hasBar) {
+      const parts = value.split(SEG_SEP);
+      for (let i = 0; i < n && i < parts.length; i++) put(i, parts[i].trim());
+    } else {
+      for (let i = 0; i < n; i++) put(i, value.trim());
+    }
+    target[key] = arr;
+  }
+
+  /** Apply `key`/`key.tag` to a target, honouring the declared language order. */
+  function applyLocalized(target, field, prop) {
+    recordLangs(target, field, prop.value, prop.tag);
+    if (!prop.tag) {
+      target[field] = seg(prop.value);
+      return;
+    }
+    const idx = langs.indexOf(prop.tag);
+    if (idx < 0) {
+      err(prop.pos, `unknown language "${prop.tag}" — not declared in @lang`);
+      return;
+    }
+    if (idx === langIndex) target[field] = prop.value;
+  }
+
+  // ---------------------------------------------------------------- prologue
+  for (;;) {
+    sc.skipWs();
+    const c = sc.comment();
+    if (c !== null) continue;
+    if (!sc.peek("@")) break;
+    const pos = sc.i;
+    sc.i++;
+    const name = sc.word();
+    if (name === "lang") {
+      const list = readRun(sc, [";"], null);
+      if (sc.s[sc.i] === ";") sc.i++;
+      else err(pos, "@lang must end with ';'");
+      langs = list
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const want = options.lang;
+      langIndex = want && langs.includes(want) ? langs.indexOf(want) : 0;
+      continue;
+    }
+    if (name === "use") {
+      const operand = readRun(sc, [";"], null);
+      if (sc.s[sc.i] === ";") sc.i++;
+      else err(pos, "@use must end with ';'");
+      // `@use <path> as <id>;` names an imported image; without it the id is
+      // the file's stem, which collides when two folders hold one name.
+      const as = /^(.*\S)\s+as\s+([^\s]+)$/u.exec(operand);
+      const path = as ? as[1] : operand;
+      const alias = as ? as[2] : null;
+      const bad = checkImportPath(path, dirOf(options.filename));
+      if (bad) {
+        err(pos, bad);
+        continue;
+      }
+      uses.push({ path, alias, pos });
+      continue;
+    }
+    if (name === "end") {
+      sawEnd = true;
+      break;
+    }
+    err(pos, `unknown directive "@${name}"`);
+  }
+
+  // Imports merge first so a local definition overrides them key by key.
+  let assetBytes = 0;
+  for (const use of uses) {
+    const mime = ASSET_EXTENSIONS[extensionOf(use.path)];
+    if (mime) {
+      registerAsset(use, mime);
+      continue;
+    }
+    if (use.alias) err(use.pos, "as names an image import, not a fragment");
+    const text = options.resolveImport ? options.resolveImport(use.path) : null;
+    if (text == null) {
+      errors.push({
+        line: sc.lineAt(use.pos),
+        text: `@use ${use.path};`,
+        msg: `cannot resolve "${use.path}" — definitions fall back to theme defaults`,
+        severity: "warning",
+      });
+      continue;
+    }
+    const frag = parseFragmentV2(text, { ...options, languages: langs, lang: langs[langIndex] });
+    for (const field of frag.providedPageKeys ?? []) {
+      page[field] = frag.page[field];
+      providedPageKeys.add(field);
+    }
+    Object.assign(options_, frag.options);
+    for (const k of frag.providedColumnTitles ?? []) providedColumnTitles.add(k);
+    mergeDefs(roles, frag.roles);
+    mergeDefs(blocks, frag.blocks);
+    mergeDefs(props, frag.props);
+    Object.assign(catalog, frag.catalog);
+  }
+
+  // ---------------------------------------------------------------- sections
+  let section = null;
+  let activeDef = null;
+  while (!sc.eof) {
+    sc.skipWs();
+    if (sc.eof) break;
+    const c = sc.comment();
+    if (c !== null) {
+      if (section === "line") pendingComments.push(`// ${c}`);
+      continue;
+    }
+    const pos = sc.i;
+    if (sc.peek("@")) {
+      sc.i++;
+      const name = sc.word();
+      if (name === "end") {
+        sawEnd = true;
+        break;
+      }
+      if (name === "use" || name === "lang") {
+        readRun(sc, [";"], null);
+        if (sc.s[sc.i] === ";") sc.i++;
+        err(pos, `@${name} must come before the first section`);
+        continue;
+      }
+      err(pos, `unknown directive "@${name}"`);
+      continue;
+    }
+    const marker = sc.marker();
+    if (marker !== null) {
+      if (!SECTIONS.includes(marker)) {
+        err(pos, `unknown section "/${marker}/"`);
+        section = null;
+      } else {
+        section = marker;
+      }
+      activeDef = null;
+      continue;
+    }
+
+    if (section === "title") {
+      // One line; a trailing `;` is accepted but not required. Reading on to
+      // the next `;` swallowed whatever sections followed into the title.
+      const t = readText(sc, [";", "\n"], null);
+      if (sc.s[sc.i] === ";") sc.i++;
+      title = seg(t);
+      title$langs = langsOf(t);
+      continue;
+    }
+
+    if (section === "role" || section === "block" || section === "prop") {
+      if (sc.s[sc.i] === "<") {
+        sc.i++;
+        const id = readRun(sc, [">"], null).trim();
+        if (sc.s[sc.i] === ">") sc.i++;
+        if (!id) {
+          err(pos, `empty <id> in /${section}/ — name the ${section} between < and >`);
+          activeDef = null;
+          continue;
+        }
+        if (section === "role" && id === "goto") {
+          err(pos, `role id "goto" is reserved for the [goto: id] statement`);
+          activeDef = null;
+          continue;
+        }
+        activeDef = id;
+        const bag = section === "role" ? roles : section === "block" ? blocks : props;
+        if (localDefIds[section].has(id)) err(pos, `duplicate ${section} definition <${id}>`);
+        localDefIds[section].add(id);
+        if (!bag[id]) {
+          bag[id] = section === "prop" ? { id, label: id, side: "right" } : { id };
+        }
+        continue;
+      }
+      const prop = readProperty();
+      if (!prop) {
+        err(pos, `unrecognized /${section}/ statement`);
+        skipLine();
+        continue;
+      }
+      if (!activeDef) {
+        err(prop.pos, "property must follow a <id> definition");
+        continue;
+      }
+      applyDefProp(section, activeDef, prop);
+      continue;
+    }
+
+    if (section === "page" || section === "option" || section === "meta" || section === "i18n") {
+      // `/meta/` is outside the translatable set, so its bars are content.
+      const prop = readProperty({ splitBars: section !== "meta" });
+      if (!prop) {
+        err(pos, `unrecognized /${section}/ statement`);
+        skipLine();
+        continue;
+      }
+      if (section === "meta") {
+        meta[prop.key] = prop.value;
+      } else if (section === "i18n") {
+        catalog[`${prop.key}${prop.tag ? "." + prop.tag : ""}`] = prop.value;
+      } else if (section === "page") {
+        const field = PAGE_MAP[prop.key];
+        if (!field) err(prop.pos, `unknown /page/ key: ${prop.key}`);
+        else {
+          applyLocalized(page, field, prop);
+          providedPageKeys.add(field);
+          if (OPTION_COLUMN_TITLE_DSL_MAP[prop.key]) providedColumnTitles.add(field);
+        }
+      } else {
+        applyOption(prop);
+      }
+      continue;
+    }
+
+    if (section === "line") {
+      readFlowStatement(pos);
+      continue;
+    }
+
+    // Content before any section marker.
+    err(pos, "statement outside a section");
+    skipLine();
+  }
+
+  // ---------------------------------------------------------------- closing
+  if (!sawEnd) errors.push({ line: lines.length, text: "", msg: "missing @end marker" });
+  for (const open of groupStack) {
+    errors.push({
+      line: 0,
+      text: "",
+      msg: `unclosed ${open.groupMode} (missing end-${open.groupMode})`,
+    });
+  }
+  for (const open of stack) {
+    errors.push({
+      line: 0,
+      text: "",
+      msg:
+        open.type === "fork" ? "unclosed fork (missing end-fork)" : "unclosed if (missing end-if)",
+    });
+  }
+  for (const j of jumps) {
+    if (!stepIds.has(j.target)) {
+      errors.push({ line: sc.lineAt(j.pos), text: "", msg: `no node with id "${j.target}"` });
+    }
+  }
+
+  const seen = new Set();
+  const ordered = [];
+  for (const id of Object.keys(roles)) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      ordered.push(id);
+    }
+  }
+  for (const r of rows) {
+    if (r.kind === "step" && r.role && !seen.has(r.role)) {
+      seen.add(r.role);
+      ordered.push(r.role);
+    }
+  }
+  // `/option/ lane-order:` overrides that implicit order: the roles it names
+  // come first, in the order written, and every other role keeps its implicit
+  // order behind them. A name that is no role at all is `laneOrderUnknown` —
+  // a warning, dropped from the order, never a lane invented out of nothing.
+  const laneOrder = Array.isArray(options_.laneOrder) ? options_.laneOrder : null;
+  const namedLanes = new Set();
+  if (laneOrder) {
+    const known = new Set(ordered);
+    const front = [];
+    for (const id of laneOrder) {
+      if (!known.has(id)) {
+        warn(laneOrderPos, `lane-order names "${id}", which is not a role`);
+        continue;
+      }
+      namedLanes.add(id);
+      front.push(id);
+    }
+    ordered.splice(0, ordered.length, ...front, ...ordered.filter((id) => !namedLanes.has(id)));
+  }
+
+  // Every role the document knows, in definition order, so the GUI can offer a
+  // role that no step uses yet. `used` is what the renderer draws a lane for —
+  // a role a step references, or one `lane-order` names, which is how a column
+  // can be reserved for a lane the flow has not reached yet.
+  const usedLanes = new Set(rows.filter((r) => r.kind === "step" && r.role).map((r) => r.role));
+  const lanes = ordered.map((id) => ({
+    id,
+    label: (roles[id] && roles[id].label) || id,
+    textColor: (roles[id] && roles[id].textColor) || null,
+    bg: (roles[id] && roles[id].bg) || null,
+    icon: (roles[id] && roles[id].icon) || null,
+    iconAsset: (roles[id] && roles[id].iconAsset) || null,
+    unknown: (roles[id] && roles[id].unknown) || undefined,
+    used: usedLanes.has(id) || namedLanes.has(id),
+  }));
+
+  return {
+    title,
+    title$langs,
+    page,
+    options: options_,
+    providedColumnTitles: [...providedColumnTitles],
+    lanes,
+    rows,
+    blocks,
+    props,
+    errors,
+    warnings,
+    trailingLineComments: pendingComments,
+    providedPageKeys: [...providedPageKeys],
+    assets,
+    roles,
+    meta,
+    languages: langs,
+    lang: langs[langIndex] ?? null,
+    dslVersion: 2,
+    uses: uses.map(({ path, alias }) => ({ path, alias })),
+    localDefIds: {
+      role: [...localDefIds.role],
+      block: [...localDefIds.block],
+      prop: [...localDefIds.prop],
+    },
+    catalog,
+  };
+
+  // ------------------------------------------------------------- statements
+
+  /** Bind one imported image to an id and record its data URI. */
+  function registerAsset(use, mime) {
+    const id = use.alias || slugOf(use.path);
+    if (assets[id]) {
+      err(use.pos, `duplicate asset id "${id}" — name one of them with "as"`);
+      return;
+    }
+    const dataUri = options.resolveAsset ? options.resolveAsset(use.path) : null;
+    if (dataUri == null) {
+      errors.push({
+        line: sc.lineAt(use.pos),
+        text: `@use ${use.path};`,
+        msg: `cannot resolve "${use.path}" — the image is omitted`,
+        severity: "warning",
+      });
+      assets[id] = { id, path: use.path, mime, dataUri: null };
+      return;
+    }
+    if (typeof dataUri !== "string" || !/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUri)) {
+      err(use.pos, `"${use.path}" did not resolve to a base64 image data URI`);
+      return;
+    }
+    const bytes = Math.floor(((dataUri.length - dataUri.indexOf(",") - 1) * 3) / 4);
+    if (bytes > ASSET_MAX_BYTES) {
+      err(use.pos, `"${use.path}" is larger than the ${ASSET_MAX_BYTES / 1024 / 1024} MiB limit`);
+      return;
+    }
+    assetBytes += bytes;
+    if (assetBytes > ASSET_TOTAL_MAX_BYTES) {
+      err(use.pos, "the imported images exceed the total size limit for one diagram");
+      return;
+    }
+    assets[id] = { id, path: use.path, mime, dataUri };
+  }
+
+  function applyDefProp(kind, id, prop) {
+    const bag = kind === "role" ? roles : kind === "block" ? blocks : props;
+    const map = kind === "role" ? ROLE_MAP : kind === "block" ? BLOCK_MAP : PROP_MAP;
+    if (prop.key === "unset") {
+      for (const name of prop.value
+        .split(",")
+        .map((k) => k.trim())
+        .filter(Boolean)) {
+        const target = map[name];
+        if (!target) err(prop.pos, `unset: unknown /${kind}/ key: ${name}`);
+        else delete bag[id][target];
+      }
+      return;
+    }
+    const field = map[prop.key];
+    if (!field) {
+      // A typo is not a broken file: keep the line so a save re-emits it.
+      warn(prop.pos, `unknown /${kind}/ key: ${prop.key} — kept, not rendered`);
+      bag[id].unknown = { ...(bag[id].unknown || {}), [prop.key]: prop.value };
+      return;
+    }
+    if (prop.value === "none") {
+      delete bag[id][field];
+      return;
+    }
+    if (
+      kind === "block" &&
+      prop.key === "shape" &&
+      !BLOCK_SHAPE_WIDTH_FACTOR[prop.value.toLowerCase()]
+    ) {
+      warn(prop.pos, `unknown shape "${prop.value}" — kept, drawn as rect`);
+      bag[id].shape = prop.value;
+      return;
+    }
+    if (field === "icon" && prop.value.startsWith("#")) {
+      // `#name` is a Lucide icon; an unknown name is omitted, not fatal.
+      if (!getLucideIconNode(prop.value.slice(1))) {
+        warn(prop.pos, `unknown icon "${prop.value}" — omitted`);
+        delete bag[id].icon;
+        delete bag[id].iconAsset;
+        return;
+      }
+    }
+    if (kind === "prop" && field === "side") {
+      const side = prop.value.toLowerCase();
+      if (side !== "left" && side !== "right") {
+        err(prop.pos, `side: must be left or right (got "${prop.value}")`);
+        return;
+      }
+      bag[id].side = side;
+      return;
+    }
+    if (field === "icon" && prop.value.startsWith("@")) {
+      const assetId = prop.value.slice(1);
+      const asset = assets[assetId];
+      if (!asset) {
+        errors.push({
+          line: sc.lineAt(prop.pos),
+          text: prop.value,
+          msg: `no imported image named "${assetId}"`,
+          severity: "warning",
+        });
+      }
+      bag[id].icon = prop.value;
+      if (asset?.dataUri) bag[id].iconAsset = { id: assetId, dataUri: asset.dataUri };
+      else delete bag[id].iconAsset;
+      return;
+    }
+    if (kind === "prop" && field === "maxChars") {
+      const n = parseInt(prop.value, 10);
+      if (!/^\d+$/.test(prop.value.trim()) || n <= 0) {
+        err(prop.pos, `max-chars: must be a positive integer (got "${prop.value}")`);
+        return;
+      }
+      bag[id].maxChars = n;
+      return;
+    }
+    applyLocalized(bag[id], field, prop);
+  }
+
+  function applyOption(prop) {
+    const key = prop.key;
+    if (DIAGRAM_OPTION_DSL_MAP[key]) {
+      const v = BOOLS[prop.value.toLowerCase()];
+      if (v === undefined) err(prop.pos, `"${key}": expected true or false`);
+      else options_[DIAGRAM_OPTION_DSL_MAP[key]] = v;
+      return;
+    }
+    if (DIAGRAM_OPTION_VALUE_MAP[key]) {
+      const { field, parse, expected } = DIAGRAM_OPTION_VALUE_MAP[key];
+      const v = parse(prop.value);
+      if (v === null) err(prop.pos, `"${key}": expected ${expected}`);
+      else {
+        options_[field] = v;
+        if (key === "lane-order") laneOrderPos = prop.pos;
+      }
+      return;
+    }
+    if (OPTION_COLUMN_TITLE_DSL_MAP[key]) {
+      const field = OPTION_COLUMN_TITLE_DSL_MAP[key];
+      applyLocalized(page, field, prop);
+      providedPageKeys.add(field);
+      providedColumnTitles.add(field);
+      return;
+    }
+    if (
+      [
+        "lang",
+        "i18n-strict",
+        "i18n-uniform-layout",
+        "i18n-storage",
+        "show-notes",
+        "auto-define",
+      ].includes(key)
+    )
+      return;
+    err(prop.pos, `unknown /option/ key: ${key}`);
+  }
+
+  function readFlowStatement(pos) {
+    // `[goto: id]` is a standalone statement, not a step — checked before
+    // readStep gets a chance to read "goto" as a role id.
+    if (sc.s[sc.i] === "[") {
+      if (/^\[\s*goto\s*:/.test(sc.s.slice(sc.i))) {
+        readGoto(pos);
+        return;
+      }
+      readStep(pos);
+      return;
+    }
+    const save = sc.i;
+    const w = sc.word();
+    if (CLOSERS[w]) {
+      closeFrame(w, pos);
+      return;
+    }
+    if (w === "else-if") {
+      readElseIf(pos);
+      return;
+    }
+    if (w === "case") {
+      readForkCase(pos);
+      return;
+    }
+    if (w === "loop") {
+      readLoop(pos);
+      return;
+    }
+    if (OPENERS.includes(w)) {
+      openFrame(w, pos);
+      return;
+    }
+    // A property row attaches to the preceding statement.
+    sc.i = save;
+    const prop = readProperty();
+    if (prop) {
+      applyStepProp(prop);
+      return;
+    }
+    err(pos, `unknown statement "${w || sc.s[sc.i]}"`);
+    // One error per line: resuming a character later re-read the same line
+    // as "lse", "se", "e", … — a dozen errors for one stray `else`.
+    sc.i = Math.max(sc.i, pos);
+    while (!sc.eof && sc.s[sc.i] !== "\n") sc.i++;
+  }
+
+  function readStep(pos) {
+    sc.i++;
+    if (sc.s[sc.i] === "]") {
+      sc.i++;
+      lastStep = push(
+        { kind: "step", role: null, text: "", depth: stepDepth(), empty: true, stepId: null },
+        pos,
+      );
+      return;
+    }
+    const role = readRun(sc, [":", "：", "]"], null);
+    if (sc.s[sc.i] === ":" || sc.s[sc.i] === "：") sc.i++;
+    else {
+      err(pos, "step lines must use [roleId: text]");
+      return;
+    }
+    const text = readText(sc, ["]"], ["[", "]"]);
+    if (sc.s[sc.i] === "]") sc.i++;
+    else err(pos, "unclosed [ — the run must end with ]");
+
+    let blockRef = null;
+    let arrowLine = null;
+    let link = null;
+    const stepProps = [];
+    // Suffixes stay on the step's own line; each may appear once.
+    const once = (what, already, at) => {
+      if (already) err(at, `${what} given twice on one step`);
+    };
+    for (;;) {
+      const mark = sc.i;
+      while (sc.s[sc.i] === " " || sc.s[sc.i] === "\t") sc.i++;
+      const at = sc.i;
+      if (sc.s[sc.i] === "<") {
+        sc.i++;
+        once("<block>", blockRef != null, at);
+        blockRef = readRun(sc, [">"], null).trim();
+        if (sc.s[sc.i] === ">") sc.i++;
+        continue;
+      }
+      if (sc.s[sc.i] === "+") {
+        sc.i++;
+        const id = sc.word();
+        if (!id) err(at, "+ needs a prop id");
+        else if (stepProps.includes(id)) err(at, `+${id} given twice on one step`);
+        else stepProps.push(id);
+        continue;
+      }
+      if (sc.peek("=>")) {
+        sc.i += 2;
+        once("=>", link != null, at);
+        while (sc.s[sc.i] === " " || sc.s[sc.i] === "\t") sc.i++;
+        let path;
+        if (sc.s[sc.i] === '"') {
+          sc.i++;
+          path = readRun(sc, ['"'], null);
+          if (sc.s[sc.i] === '"') sc.i++;
+        } else {
+          const start = sc.i;
+          while (!sc.eof && !isWs(sc.s[sc.i]) && sc.s[sc.i] !== ";") sc.i++;
+          path = sc.s.slice(start, sc.i);
+        }
+        if (!path) err(at, "=> needs a path to another flow");
+        else link = path;
+        continue;
+      }
+      const glyph = GLYPHS.find(([g]) => sc.peek(g));
+      if (glyph) {
+        sc.i += glyph[0].length;
+        once("arrow glyph", arrowLine != null, at);
+        arrowLine = normalizeArrowLine(glyph[1]);
+        continue;
+      }
+      sc.i = mark;
+      break;
+    }
+
+    if (!roles[role]) roles[role] = { id: role };
+    for (const id of stepProps) if (!props[id]) props[id] = { id, label: id, side: "right" };
+
+    const fields = {
+      kind: "step",
+      role,
+      text: seg(text),
+      text$langs: langsOf(text),
+      depth: stepDepth(),
+      blockRef,
+      // A destination name comes from a following `id: …;` line (applyStepProp),
+      // not from anything on this line — the auto id below is internal only.
+      stepId: `step-${rows.length + 1}`,
+    };
+    if (stepProps.length) fields.props = stepProps;
+    if (arrowLine) fields.arrowLine = arrowLine;
+    if (link) fields.link = link;
+    lastStep = push(fields, pos);
+  }
+
+  function applyStepProp(prop) {
+    const target = lastStatement >= 0 ? rows[lastStatement] : null;
+    if (!target) {
+      err(prop.pos, `"${prop.key}" has no preceding statement`);
+      return;
+    }
+    const isStep = target.kind === "step";
+    switch (prop.key) {
+      case "label":
+        if (!isStep) {
+          applyLocalized(target, "label", prop);
+          return;
+        }
+        applyLocalized(target, "name", prop);
+        return;
+      case "desc":
+        if (!isStep) return;
+        applyLocalized(target, "description", prop);
+        return;
+      case "remark":
+        if (!isStep) return;
+        applyLocalized(target, "remark", prop);
+        return;
+      case "remark-desc": {
+        const prev = target.remark || "";
+        const next = seg(prop.value);
+        recordLangs(target, "remark", prop.value, prop.tag, true);
+        if (!prop.tag || langs.indexOf(prop.tag) === langIndex) {
+          target.remark = prev ? `${prev}\n\n${next}` : next;
+        }
+        return;
+      }
+      case "skip":
+        target.skipIndex = true;
+        return;
+      case "id": {
+        if (!isStep) return;
+        const id = String(prop.value).trim();
+        if (!id) {
+          err(prop.pos, "id: needs a value");
+          return;
+        }
+        if (target.mergeId != null) {
+          err(prop.pos, "id given twice on one step");
+          return;
+        }
+        if (stepIds.has(id)) err(prop.pos, `duplicate node id "${id}"`);
+        stepIds.set(id, lastStatement);
+        target.mergeId = id;
+        target.stepId = id;
+        return;
+      }
+      case "level": {
+        if (!isStep) return;
+        const level = Number(String(prop.value).trim());
+        if (!Number.isInteger(level) || level < 1 || level > 9) {
+          err(prop.pos, "level must be a whole number from 1 to 9");
+          return;
+        }
+        if (level > 1) target.level = level;
+        return;
+      }
+      case "note":
+      case "note-side":
+      case "question":
+        return;
+      default:
+        err(prop.pos, `"${prop.key}" is not a property of this statement`);
+    }
+  }
+
+  function openFrame(kw, pos) {
+    sc.skipWs();
+    // `if [sales] (q) …` used to name the lane the diamond is drawn in. It was
+    // never drawn from, so it is gone from the grammar: the bracket is
+    // consumed here and named in the error, rather than left behind to be
+    // misread as a step. Only a lane-shaped run is taken — one bare id, no
+    // colon — so the step and the spacer that may legally follow an opener on
+    // the next line (whitespace is not structural) are untouched.
+    const laneRun = /^\[[ \t]*[^\s\]:：]+[ \t]*\]/.exec(sc.s.slice(sc.i));
+    if (laneRun) {
+      err(
+        sc.i,
+        kw === "if" || kw === "fork"
+          ? `${kw} takes no [lane] — the gateway is drawn in the lane of the step before it`
+          : `${kw} takes no [lane] — a ${kw} spans every lane`,
+      );
+      sc.i += laneRun[0].length;
+    }
+    let text = null;
+    sc.skipWs();
+    if (sc.s[sc.i] === "(" || sc.s[sc.i] === "（") {
+      sc.i++;
+      text = readText(sc, [")", "）"], ["(", ")"]);
+      if (sc.s[sc.i] === ")" || sc.s[sc.i] === "）") sc.i++;
+    }
+    // `if`'s first case is fused onto its own line: `if (q) is (a) than`.
+    // There is no bare `if (q)` — every if names its first case here, the
+    // same way a bare `else` no longer exists (see readElseIf).
+    let firstCaseText = null;
+    if (kw === "if") {
+      sc.skipWs();
+      const mark = sc.i;
+      if (sc.word() === "is") {
+        sc.skipWs();
+        if (sc.s[sc.i] === "(" || sc.s[sc.i] === "（") {
+          sc.i++;
+          firstCaseText = readText(sc, [")", "）"], ["(", ")"]);
+          if (sc.s[sc.i] === ")" || sc.s[sc.i] === "）") sc.i++;
+        } else {
+          firstCaseText = "";
+        }
+        sc.skipWs();
+        if (sc.word() !== "than") err(pos, 'if\'s is (...) clause must end with "than"');
+      } else {
+        sc.i = mark;
+        err(pos, "if requires is (...) than");
+      }
+    }
+    const { color, id } = readOpenerSuffixes(pos);
+
+    if (kw === "if" || kw === "fork") {
+      if (kw === "if" && text === null) err(pos, "if requires a question");
+      branchCounter++;
+      const branchId = branchCounter;
+      const depth = branchMarkerDepth();
+      stack.push({ id: branchId, depth, type: kw, seq: ++frameSeq });
+      const idx = push(
+        {
+          kind: "branchStart",
+          ...(kw === "fork" ? { parallel: true } : {}),
+          cond: kw === "if" ? seg(text ?? "") : null,
+          cond$langs: kw === "if" ? langsOf(text ?? "") : null,
+          firstCase: kw === "if" ? seg(firstCaseText ?? "") : null,
+          firstCase$langs: kw === "if" ? langsOf(firstCaseText ?? "") : null,
+          branchColor: color,
+          id: branchId,
+          openerId: id || null,
+          depth,
+        },
+        pos,
+      );
+      if (id) stepIds.set(id, idx);
+      if (kw === "fork") {
+        // `fork (label)` names path one; the model carries paths as cases.
+        push(
+          {
+            kind: "branchCase",
+            parallel: true,
+            label: text ? seg(text) : "",
+            label$langs: text ? langsOf(text) : null,
+            branchColor: color,
+            id: branchId,
+            depth: branchControlDepth(),
+          },
+          pos,
+        );
+      }
+      return;
+    }
+
+    const groupMode = kw === "branch" ? "branch" : "section";
+    groupCounter++;
+    const gid = groupCounter;
+    const depth = groupMarkerDepth();
+    groupStack.push({ id: gid, depth, groupMode, kw, seq: ++frameSeq });
+    const idx = push(
+      {
+        kind: "groupStart",
+        id: gid,
+        depth,
+        groupMode,
+        // `phase` renders and behaves exactly like `section` today (both
+        // collapse to groupMode "section") but is a distinct keyword in the
+        // source — kept here only so a serializer can tell which one to
+        // write back; nothing else should switch on it.
+        openerKeyword: kw,
+        sectionName: text ? seg(text) : kw === "branch" ? "Branch" : "Section",
+        sectionName$langs: text ? langsOf(text) : null,
+        sectionColor: color,
+        openerId: id || null,
+      },
+      pos,
+    );
+    if (id) stepIds.set(id, idx);
+  }
+
+  function closeFrame(closer, pos) {
+    const kw = CLOSERS[closer];
+    if (kw === "if" || kw === "fork") {
+      const top = stack[stack.length - 1];
+      if (!top || top.type !== kw) {
+        err(pos, `${closer} closes ${top ? top.type : "nothing"}`);
+        return;
+      }
+      stack.pop();
+      push(
+        {
+          kind: "branchEnd",
+          ...(kw === "fork" ? { parallel: true } : {}),
+          id: top.id,
+          depth: top.depth,
+        },
+        pos,
+      );
+      return;
+    }
+    const top = groupStack[groupStack.length - 1];
+    if (!top || top.kw !== kw) {
+      err(pos, `${closer} closes ${top ? top.kw : "nothing"}`);
+      return;
+    }
+    groupStack.pop();
+    push(
+      {
+        kind: "groupEnd",
+        id: top.id,
+        depth: top.depth,
+        groupMode: top.groupMode,
+        openerKeyword: top.kw,
+      },
+      pos,
+    );
+  }
+
+  // `else-if () than` (a blank clause) is the catch-all: valid, but its chip
+  // is left unlabeled by the renderer, which suppresses any branchCase row
+  // with an empty label — the same way an unlabeled fork `case` already
+  // renders. There is no bare `else` — every clause after the first is
+  // `else-if (...) than`, empty parens standing in for "otherwise".
+  function readElseIf(pos) {
+    let text = "";
+    sc.skipWs();
+    if (sc.s[sc.i] === "(" || sc.s[sc.i] === "（") {
+      sc.i++;
+      text = readText(sc, [")", "）"], ["(", ")"]);
+      if (sc.s[sc.i] === ")" || sc.s[sc.i] === "）") sc.i++;
+    }
+    sc.skipWs();
+    if (sc.word() !== "than") err(pos, 'else-if must end with "than"');
+    const { color } = readOpenerSuffixes(pos);
+    const top = stack[stack.length - 1];
+    if (!top || top.type !== "if") {
+      err(pos, "else-if outside if");
+      return;
+    }
+    push(
+      {
+        kind: "branchCase",
+        label: seg(text),
+        label$langs: langsOf(text),
+        branchColor: color,
+        id: top.id,
+        depth: branchControlDepth(),
+      },
+      pos,
+    );
+  }
+
+  /** `case (label)` — a fork path after the first, which `fork (label)` names. */
+  function readForkCase(pos) {
+    let text = "";
+    sc.skipWs();
+    if (sc.s[sc.i] === "(" || sc.s[sc.i] === "（") {
+      sc.i++;
+      text = readText(sc, [")", "）"], ["(", ")"]);
+      if (sc.s[sc.i] === ")" || sc.s[sc.i] === "）") sc.i++;
+    }
+    const { color } = readOpenerSuffixes(pos);
+    const top = stack[stack.length - 1];
+    if (!top || top.type !== "fork") {
+      err(pos, "case outside fork");
+      return;
+    }
+    push(
+      {
+        kind: "branchCase",
+        parallel: true,
+        label: text ? seg(text) : "",
+        label$langs: text ? langsOf(text) : null,
+        branchColor: color,
+        id: top.id,
+        depth: branchControlDepth(),
+      },
+      pos,
+    );
+  }
+
+  /**
+   * An optional `@id` on the same line as `goto` / `loop` / `merge`. Never
+   * crosses a newline and never takes a directive (`@end`, `@use`, `@lang`),
+   * so a bare marker at the end of the flow leaves `@end` alone.
+   */
+  function readInlineTarget() {
+    const mark = sc.i;
+    while (sc.s[sc.i] === " " || sc.s[sc.i] === "\t") sc.i++;
+    if (sc.s[sc.i] !== "@") {
+      sc.i = mark;
+      return null;
+    }
+    sc.i++;
+    const w = sc.word();
+    if (!w || ["end", "use", "lang", "kai-swimlane"].includes(w)) {
+      sc.i = mark;
+      return null;
+    }
+    return w;
+  }
+
+  /** `loop` / `loop @id` — back to the enclosing `if`, or to a named step. */
+  function readLoop(pos) {
+    const target = readInlineTarget();
+    const top = stack[stack.length - 1];
+    if (!top || top.type !== "if") {
+      err(pos, "loop outside if");
+      return;
+    }
+    if (target) jumps.push({ target, pos });
+    push(
+      {
+        kind: "branchLoop",
+        loopBranchId: top.id,
+        loopTarget: target || null,
+        depth: branchBodyDepth(),
+      },
+      pos,
+    );
+  }
+
+  /**
+   * `[goto: id]` — jumps forward or backward, inside a case, to the step
+   * named by its own `id: id;` line. There is no separate landing marker;
+   * every jump targets a real step.
+   */
+  function readGoto(pos) {
+    sc.i++; // "["
+    sc.word(); // "goto"
+    sc.skipWs();
+    if (sc.s[sc.i] === ":") sc.i++;
+    sc.skipWs();
+    const target = readRun(sc, ["]"], null).trim();
+    if (sc.s[sc.i] === "]") sc.i++;
+    else err(pos, "unclosed [ — the run must end with ]");
+    const top = stack[stack.length - 1];
+    if (!top || top.type !== "if") {
+      err(pos, "goto outside if is not supported by this renderer");
+      return;
+    }
+    if (!target) {
+      err(pos, "[goto: id] needs an id");
+      return;
+    }
+    jumps.push({ target, pos });
+    push(
+      { kind: "branchMerge", mergeTarget: target, mergeBranchId: top.id, depth: branchBodyDepth() },
+      pos,
+    );
+  }
+}
+
+function stripEmpty(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) if (v !== "" && v != null) out[k] = v;
+  return out;
+}
+function mergeDefs(into, from) {
+  for (const [id, def] of Object.entries(from ?? {})) {
+    into[id] = { ...(into[id] ?? {}), ...def };
+  }
+}
+function emptyPage() {
+  return {
+    description: "",
+    ...DEFAULT_COLUMN_TITLES,
+    headerLeft: "",
+    headerCenter: "",
+    headerRight: "",
+    footerLeft: "",
+    footerCenter: "",
+    footerRight: "",
+  };
+}
+function emptyModel(errors) {
+  return {
+    title: "",
+    page: emptyPage(),
+    options: emptyDiagramOptions(),
+    providedColumnTitles: [],
+    lanes: [],
+    rows: [],
+    blocks: {},
+    props: {},
+    errors,
+    warnings: [],
+    trailingLineComments: [],
+    dslVersion: 2,
+  };
+}
+
+/**
+ * Every `@use` target in `src`, without parsing it.
+ *
+ * Resolving an import is asynchronous — a host reads it from a repository or a
+ * disk — while parsing is synchronous, so a host prefetches with this and then
+ * hands the results to `parseDSL` through `resolveImport` and `resolveAsset`.
+ *
+ * @param {string} src
+ * @param {string} [filename] the diagram's repository-relative path, so that
+ *   `./` and `../` targets resolve the way the parser resolves them
+ * @returns {{ path: string, alias: string | null, kind: "fragment" | "asset" }[]}
+ */
+export function scanImports(src, filename = "") {
+  const out = [];
+  // Deliberately loose: the parser is authoritative, so over-fetching one path
+  // costs a read while missing one leaves an image blank.
+  const re = /@use[ \t]+([^;\n]+);/gu;
+  const fromDir = dirOf(filename);
+  for (const m of String(src ?? "").matchAll(re)) {
+    const operand = m[1].trim();
+    const as = /^(.*\S)\s+as\s+([^\s]+)$/u.exec(operand);
+    const path = as ? as[1] : operand;
+    if (checkImportPath(path, fromDir)) continue;
+    out.push({
+      path,
+      alias: as ? as[2] : null,
+      kind: ASSET_EXTENSIONS[extensionOf(path)] ? "asset" : "fragment",
+    });
+  }
+  return out;
+}
+
+/** A header-less fragment: definitions and catalog entries only. */
+export function parseFragmentV2(text, options = {}) {
+  const model = parseDSLv2(`@kai-swimlane\n${text}`, options);
+  return {
+    page: model.page,
+    options: model.options,
+    providedColumnTitles: model.providedColumnTitles,
+    providedPageKeys: model.providedPageKeys ?? [],
+    roles: model.roles ?? {},
+    blocks: model.blocks,
+    props: model.props,
+    catalog: model.catalog ?? {},
+    errors: model.errors,
+  };
+}

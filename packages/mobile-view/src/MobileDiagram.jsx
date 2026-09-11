@@ -35,8 +35,12 @@ const MESSAGES = {
     collapse: "Collapse",
     empty: "Nothing to show yet.",
     addStep: "Add step",
+    addBlock: "Add branch or group",
     insertStep: "Insert step",
     editStep: "Edit step",
+    edit: "Edit",
+    editCase: "Edit case",
+    editMerge: "Edit merge",
     deleteStep: "Delete step",
     noText: "(no text)",
     emptyBlock: "(empty)",
@@ -48,21 +52,27 @@ const MESSAGES = {
     subBranch: "sub-branch",
     case: "case",
     cases: "cases",
-    mergeTo: "merges to",
-    mergeTarget: "merge point",
+    mergeTo: "jumps to",
+    mergeNext: "(no target)",
+    mergeTarget: "step id",
     mergeBack: "rejoins main flow",
     dragStep: "drag to reorder",
     parseIssues: (n) => `${n} parse issue${n === 1 ? "" : "s"} — showing what parsed.`,
+    parseWarnings: (n) =>
+      `${n} note${n === 1 ? "" : "s"} — the diagram is fine; unknown values were kept.`,
     path: (n) => `path ${n}`,
-    caseN: (n) => `case ${n}`,
   },
   ja: {
     expand: "展開",
     collapse: "折りたたむ",
     empty: "表示する内容がありません。",
     addStep: "ステップを追加",
+    addBlock: "分岐・グループを追加",
     insertStep: "ステップを挿入",
     editStep: "ステップを編集",
+    edit: "編集",
+    editCase: "ケースを編集",
+    editMerge: "合流先を編集",
     deleteStep: "ステップを削除",
     noText: "（テキストなし）",
     emptyBlock: "（空）",
@@ -74,13 +84,15 @@ const MESSAGES = {
     subBranch: "サブ分岐",
     case: "ケース",
     cases: "ケース",
-    mergeTo: "合流先",
-    mergeTarget: "合流ポイント",
+    mergeTo: "ジャンプ先",
+    mergeNext: "（未設定）",
+    mergeTarget: "ステップID",
     mergeBack: "本流へ合流",
     dragStep: "ドラッグして並べ替え",
     parseIssues: (n) => `${n} 件の解析エラー — 解析できた範囲を表示しています。`,
+    parseWarnings: (n) =>
+      `${n} 件の注意 — 図に問題はありません。認識できない値はそのまま保持しました。`,
     path: (n) => `経路 ${n}`,
-    caseN: (n) => `ケース ${n}`,
   },
 };
 
@@ -223,11 +235,25 @@ const CHEVRON_CLS = "size-3.5 shrink-0 text-slate-400";
 const COUNT_CLS = "ms-auto text-[11px] font-medium text-slate-400";
 const EMPTY_SM_CLS = "p-2 text-center text-[12px] text-slate-400";
 const HEAD_BASE = `flex w-full cursor-pointer items-center gap-2 text-start ${TAP}`;
+// Shared by StepCard/BranchCard/GroupCard: the non-interactive "content" part
+// of a row header, kept as a plain <button> sibling of the edit/delete/drag
+// buttons rather than a wrapping one — a <button> cannot contain another
+// <button>, so the header's outer element is a <div> (onClick to toggle
+// open/closed) and this is just the leading label/icon cluster inside it.
+const CONTENT_CLS = "flex min-w-0 flex-1 items-center gap-2 bg-transparent text-start text-inherit";
 
 /**
  * Mobile-friendly, vertical, card-based render of a kai-swimlane diagram.
  * Blocks collapse by default (tap to expand). `editable` + `onEditStep` show a
- * per-step edit button; the host owns the edit modal + DSL write-back.
+ * per-step edit button; `onEditBranch`/`onEditGroup` do the same for a
+ * fork/if row and a section/sub-branch row respectively, `onEditCase` for one
+ * clause of a branch, and `onEditMerge` for a `goto` marker (all passed the
+ * raw `model.rows` index — `node.startRow`/`rowIndex` — since these nodes
+ * aren't indexed by `stepIndex` the way steps are). A branch's first case has
+ * no row of its own, so `onEditCase` receives `{ rowIndex, branchRow,
+ * isFirst }` and the host patches `firstCase` on the branchStart instead.
+ * `onAddBlock` offers structure (branch/group) next to plain "add step" — the
+ * host owns that picker, every edit modal, and all DSL write-back.
  */
 export function MobileDiagram({
   dsl,
@@ -239,6 +265,11 @@ export function MobileDiagram({
   onInsertStep,
   onMoveStep,
   onAddStep,
+  onAddBlock,
+  onEditBranch,
+  onEditGroup,
+  onEditCase,
+  onEditMerge,
   insertStepLabel,
   addStepLabel,
 }) {
@@ -264,11 +295,18 @@ export function MobileDiagram({
     onDeleteStep,
     onInsertStep,
     onMoveStep,
+    onEditBranch,
+    onEditGroup,
+    onEditCase,
+    onEditMerge,
     drag,
     insertStepLabel: insertLabel,
     signal,
   };
   const hasError = tree.errors?.length > 0;
+  // Warnings block nothing (dsl-rule.md `impact: none`), so they read as a
+  // note rather than a failure — and never when there are real errors to fix.
+  const warnCount = tree.warnings?.length ?? 0;
 
   return (
     <div className="min-h-full w-full bg-slate-50">
@@ -303,24 +341,30 @@ export function MobileDiagram({
             {t("parseIssues", tree.errors.length)}
           </div>
         )}
+        {!hasError && warnCount > 0 && (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[12px] text-amber-800">
+            {t("parseWarnings", warnCount)}
+          </div>
+        )}
         {tree.nodes.length === 0 ? (
           <div className="p-4 text-center">
             <div className="mb-3 text-[13px] text-slate-400">{t("empty")}</div>
-            {editable && onAddStep && (
-              <button type="button" className={ADD_CLS} onClick={onAddStep}>
-                <Plus size={16} /> {addLabel}
-              </button>
+            {editable && (onAddStep || onAddBlock) && (
+              <AddActions onAddStep={onAddStep} onAddBlock={onAddBlock} addLabel={addLabel} t={t} />
             )}
           </div>
         ) : (
           <>
             <NodeList nodes={tree.nodes} ctx={ctx} endRow={tree.rootEndRow} />
-            {editable && onAddStep && (
+            {editable && (onAddStep || onAddBlock) && (
               <>
-                {tree.nodes.length > 0 && <FlowConnector />}
-                <button type="button" className={ADD_CLS} onClick={onAddStep}>
-                  <Plus size={16} /> {addLabel}
-                </button>
+                <FlowConnector />
+                <AddActions
+                  onAddStep={onAddStep}
+                  onAddBlock={onAddBlock}
+                  addLabel={addLabel}
+                  t={t}
+                />
               </>
             )}
           </>
@@ -328,6 +372,24 @@ export function MobileDiagram({
       </div>
       <DropIndicator drag={drag} />
       <DragPreview drag={drag} />
+    </div>
+  );
+}
+
+/** Tail actions: add a plain step, and (optionally) add structure. */
+function AddActions({ onAddStep, onAddBlock, addLabel, t }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {onAddStep && (
+        <button type="button" className={ADD_CLS} onClick={onAddStep}>
+          <Plus size={16} /> {addLabel}
+        </button>
+      )}
+      {onAddBlock && (
+        <button type="button" className={ADD_CLS} onClick={onAddBlock}>
+          <GitBranch size={15} /> {t("addBlock")}
+        </button>
+      )}
     </div>
   );
 }
@@ -449,17 +511,34 @@ function Node({ node, ctx, hasNext = false }) {
         </>
       );
     case "merge": {
-      const targetLabel = ctx.tree.mergeTargets?.[node.target];
+      // `[goto: id]` always names a real step, so a target is the norm; the
+      // fallback only shows for a document the reader already flagged.
+      const hasTarget = Boolean(node.target);
+      const targetLabel = hasTarget ? ctx.tree.mergeTargets?.[node.target] : null;
       return (
         <>
-          <span
-            className="inline-flex max-w-full items-center gap-1.5 self-center rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-[12px] text-teal-700"
-            title={node.target}
-          >
-            <GitMerge size={13} className="shrink-0" />
-            <span className="shrink-0">{ctx.t("mergeTo")}</span>
-            <span className="truncate font-semibold">{targetLabel || node.target || "?"}</span>
-          </span>
+          <div className="flex max-w-full items-center gap-1 self-center">
+            <span
+              className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-[12px] text-teal-700"
+              title={node.target || undefined}
+            >
+              <GitMerge size={13} className="shrink-0" />
+              <span className="shrink-0">{ctx.t("mergeTo")}</span>
+              <span className="truncate font-semibold">
+                {hasTarget ? targetLabel || node.target : ctx.t("mergeNext")}
+              </span>
+            </span>
+            {ctx.editable && ctx.onEditMerge && (
+              <button
+                type="button"
+                className={EDIT_CLS}
+                title={ctx.t("editMerge")}
+                onClick={() => ctx.onEditMerge(node.rowIndex)}
+              >
+                <Pencil size={14} />
+              </button>
+            )}
+          </div>
           {hasNext && <FlowConnector />}
         </>
       );
@@ -505,10 +584,7 @@ function StepCard({ node, ctx, hasNext = false }) {
         aria-expanded={open}
       >
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 bg-transparent text-start text-inherit"
-          >
+          <button type="button" className={CONTENT_CLS}>
             {hasDetail ? <Chevron open={open} /> : <span className={CHEVRON_CLS} />}
             {lane && (
               <span
@@ -629,28 +705,63 @@ function BranchCard({ node, ctx }) {
   const [open, setOpen] = useSignalOpen(ctx);
   return (
     <div className="overflow-hidden rounded-xl border border-blue-200 bg-[#f8fbff]">
-      <button
-        type="button"
+      <div
         className={`${HEAD_BASE} bg-blue-50 px-3 py-[11px] text-[13px] font-bold text-blue-700`}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        <Chevron open={open} />
-        {node.parallel ? <GitFork size={14} /> : <Diamond size={14} />}
-        <span>{node.parallel ? ctx.t("parallel") : ctx.t("if")}</span>
-        {!node.parallel && node.cond && (
-          <span className="font-medium text-blue-800">{node.cond}</span>
-        )}
+        <button type="button" className={CONTENT_CLS}>
+          <Chevron open={open} />
+          {node.parallel ? <GitFork size={14} /> : <Diamond size={14} />}
+          <span>{node.parallel ? ctx.t("parallel") : ctx.t("if")}</span>
+          {!node.parallel && node.cond && (
+            <span className="font-medium text-blue-800">{node.cond}</span>
+          )}
+        </button>
         <span className={COUNT_CLS}>
           {node.cases.length} {ctx.t(node.cases.length === 1 ? "case" : "cases")}
         </span>
-      </button>
+        {ctx.editable && ctx.onEditBranch && (
+          <button
+            type="button"
+            className={EDIT_CLS}
+            title={ctx.t("edit")}
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx.onEditBranch(node.startRow);
+            }}
+          >
+            <Pencil size={15} />
+          </button>
+        )}
+      </div>
       {open && (
         <div className="flex flex-col gap-2.5 p-2.5">
           {node.cases.map((c, i) => (
             <div key={i} className="border-s-2 border-dashed border-blue-200 ps-2.5">
-              <div className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.03em] text-blue-600">
-                {caseLabel(node, c, i, ctx.t)}
+              <div className="mb-1.5 flex items-center gap-1">
+                <span className="min-w-0 truncate text-[11px] font-bold uppercase tracking-[0.03em] text-blue-600">
+                  {caseLabel(node, c, i, ctx.t)}
+                </span>
+                {/* An implicit case (a step before any `case` marker) has no
+                    row and no branchStart slot to write back to, so it gets
+                    no edit affordance. */}
+                {ctx.editable && ctx.onEditCase && c.branchRow != null && (
+                  <button
+                    type="button"
+                    className={EDIT_CLS}
+                    title={ctx.t("editCase")}
+                    onClick={() =>
+                      ctx.onEditCase({
+                        rowIndex: c.rowIndex,
+                        branchRow: c.branchRow,
+                        isFirst: Boolean(c.isFirst),
+                      })
+                    }
+                  >
+                    <Pencil size={13} />
+                  </button>
+                )}
               </div>
               {c.children.length > 0 ? (
                 <NodeList nodes={c.children} ctx={ctx} endRow={c.endRow} />
@@ -667,8 +778,10 @@ function BranchCard({ node, ctx }) {
 
 function caseLabel(branch, c, i, t) {
   if (branch.parallel) return c.label || t("path", i + 1);
-  if (/^else$/i.test(c.label)) return t("otherwise");
-  return c.label || (i === 0 ? t("case") : t("caseN", i + 1));
+  // An unlabelled clause after the first is the catch-all — `else-if () than`.
+  // There is no `else` spelling to match on any more.
+  if (!c.label) return i === 0 ? t("case") : t("otherwise");
+  return c.label;
 }
 
 function GroupCard({ node, ctx }) {
@@ -685,18 +798,28 @@ function GroupCard({ node, ctx }) {
   }`;
   return (
     <div className={wrapCls}>
-      <button
-        type="button"
-        className={headCls}
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
-        <Chevron open={open} />
-        {isSection ? <Square size={13} /> : <GitBranch size={13} />}
-        <span>{isSection ? ctx.t("section") : ctx.t("subBranch")}</span>
-        {node.name && <span className="font-medium">{node.name}</span>}
+      <div className={headCls} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <button type="button" className={CONTENT_CLS}>
+          <Chevron open={open} />
+          {isSection ? <Square size={13} /> : <GitBranch size={13} />}
+          <span>{isSection ? ctx.t("section") : ctx.t("subBranch")}</span>
+          {node.name && <span className="font-medium">{node.name}</span>}
+        </button>
         <span className={COUNT_CLS}>{node.children.length}</span>
-      </button>
+        {ctx.editable && ctx.onEditGroup && (
+          <button
+            type="button"
+            className={EDIT_CLS}
+            title={ctx.t("edit")}
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx.onEditGroup(node.startRow);
+            }}
+          >
+            <Pencil size={15} />
+          </button>
+        )}
+      </div>
       {open &&
         (node.children.length > 0 ? (
           <NodeList nodes={node.children} ctx={ctx} endRow={node.endRow} />

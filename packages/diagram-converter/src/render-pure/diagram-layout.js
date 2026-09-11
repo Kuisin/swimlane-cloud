@@ -12,6 +12,20 @@ export const BRANCH_COLOR_STYLES = {
   purple: { stroke: "#7e22ce", bg: "#f3e8ff" },
   gray: { stroke: "#374151", bg: "#f3f4f6" },
   black: { stroke: "#111827", bg: "#e5e7eb" },
+  pink: { stroke: "#be185d", bg: "#fce7f3" },
+  teal: { stroke: "#0f766e", bg: "#ccfbf1" },
+  yellow: { stroke: "#a16207", bg: "#fef9c3" },
+};
+
+/**
+ * Row-level visual-diff overlay (spike). One outline color + badge glyph per
+ * status; `removed` has no box to outline (its row no longer exists in the
+ * new model) and is listed separately instead.
+ */
+export const DIFF_STYLES = {
+  added: { stroke: "#16a34a", bg: "#dcfce7", badge: "+" },
+  changed: { stroke: "#d97706", bg: "#fef3c7", badge: "~" },
+  removed: { stroke: "#dc2626", bg: "#fee2e2", badge: "−" },
 };
 
 /** Parallel fork gateway circle radius. */
@@ -77,6 +91,16 @@ export const DIAGRAM_LAYOUT = {
   rowH: 80,
   laneContentPad: 15,
   sectionInset: 5,
+  /**
+   * Floor for a section/branch box, so an empty one is still a box.
+   *
+   * The two group markers sit `groupMarkerH` apart, which after `sectionInset`
+   * on both sides left an empty section 6px tall — a dashed sliver with its
+   * caption floating underneath, which reads as debris rather than as the
+   * thing the "add section" button just created. This is tall enough to
+   * contain that caption.
+   */
+  sectionMinH: 30,
   // Horizontal padding reserved on the outermost lanes so step/branch content
   // and the side-routed arrows don't crowd the gutter dividers or sit on top of
   // a section's left/right border.
@@ -101,6 +125,8 @@ export const DIAGRAM_LAYOUT = {
 
   // Step blocks & props
   stepBoxH: 44,
+  // Extra box height per wrapped text line (`block-text: wrap`).
+  stepTextLineH: 17,
   docW: 65,
   docH: 40,
   docGapX: 8,
@@ -121,9 +147,10 @@ export const DIAGRAM_LAYOUT = {
   caseCollisionShift: 40,
   diamondH: 90,
   decisionDiamondH: 50,
-  decisionMinWidth: 140,
-  decisionWidthCharFactor: 9,
-  decisionWidthPadding: 4,
+  // Fixed — every if diamond is the same width regardless of its condition's
+  // length; a long condition truncates (see decisionFontSize's blockMaxCols
+  // budget) instead of growing the shape.
+  decisionDiamondW: 140,
   decisionTextOffsetY: 4,
   mergeH: 60,
   mergeNodeW: 40,
@@ -135,15 +162,30 @@ export const DIAGRAM_LAYOUT = {
   decisionYOffset: -15,
   branchCaseBendYOffset: 10,
   caseLabelOffsetY: 18,
-  caseLabelHeight: 28,
+  caseLabelHeight: 20,
   caseLabelPadX: 8,
-  caseLabelPadY: 14,
+  caseLabelPadY: 11,
+  // Minimum clearance kept between a case label's drawn bottom edge and
+  // whatever it points at (the first step's arrowhead, or the join). A
+  // fork's gateway circle is shorter than an `if`'s diamond, so without this
+  // floor the label sat almost on top of the block below it.
+  caseLabelGapBelow: 12,
   caseLabelCharWidth: 8.5,
   caseLaneSafeInset: 16,
   branchConnectorElbowThreshold: 0.5,
 
-  // Loop routing
+  // Jump routing (`goto`, `goto @id`, `loop`, `loop @id`)
+  // How far below the source block a jump turns sideways.
   loopDropPad: 14,
+  // Clear space kept between the outermost block a jump has to pass and the
+  // vertical rail it runs down (or up) in.
+  jumpRailMargin: 16,
+  // Distance between two jump rails that share a side and overlap vertically,
+  // so two jumps never draw the same line.
+  jumpRailPitch: 14,
+  // Vertical spacing between the arrowheads of several jumps landing on the
+  // same edge of the same block.
+  jumpArrivalPitch: 12,
 
   // Terminals (start / end circles)
   terminalGap: 28,
@@ -159,6 +201,12 @@ export const DIAGRAM_LAYOUT = {
 
   // Page description typography
   pageDescLineHeight: 16,
+
+  // Document info panel (path + metadata, top-right, for printed images)
+  infoFontSize: 10,
+  infoLineH: 13,
+  infoMaxCols: 44,
+  infoMaxLines: 8,
 
   // Text width estimation (lane header sizing)
   estimateTextWidthBase: 28,
@@ -192,21 +240,71 @@ export const DIAGRAM_LAYOUT = {
 };
 
 /**
+ * The subset of DIAGRAM_LAYOUT a repository may override, with the bounds the
+ * settings form and the API both enforce. One definition, so the input widget,
+ * the validator and the renderer cannot drift apart.
+ *
+ * Deliberately small: these are the page-level sizes a team adapts to its own
+ * documents (a wide process, a long remark column). Everything else in the
+ * table is internal geometry that has no meaning as a user-facing setting.
+ */
+export const LAYOUT_SETTINGS = [
+  { key: "xPad", group: "margins", min: 0, max: 400 },
+  { key: "leftGutterWidth", group: "margins", min: 0, max: 800 },
+  { key: "rightGutterWidth", group: "margins", min: 0, max: 800 },
+  { key: "gutterInnerPad", group: "margins", min: 0, max: 100 },
+  { key: "baseBottomPadding", group: "margins", min: 0, max: 400 },
+  { key: "topPadDefault", group: "margins", min: 0, max: 400 },
+  { key: "nodeW", group: "grid", min: 60, max: 600 },
+  { key: "rowH", group: "grid", min: 30, max: 400 },
+  { key: "headerH", group: "grid", min: 20, max: 300 },
+  { key: "laneContentPad", group: "grid", min: 0, max: 100 },
+  { key: "outerLanePad", group: "grid", min: 0, max: 200 },
+];
+
+export const LAYOUT_SETTING_KEYS = LAYOUT_SETTINGS.map((s) => s.key);
+
+const LAYOUT_SETTING_BY_KEY = new Map(LAYOUT_SETTINGS.map((s) => [s.key, s]));
+
+/** True when `value` is a usable override for `key`: known, numeric, in range. */
+export function isLayoutOverride(key, value) {
+  const spec = LAYOUT_SETTING_BY_KEY.get(key);
+  if (!spec) return false;
+  return (
+    typeof value === "number" && Number.isFinite(value) && value >= spec.min && value <= spec.max
+  );
+}
+
+/**
+ * Engine defaults with a repository's overrides applied.
+ *
+ * Anything unknown or out of range is ignored rather than rejected: this runs
+ * on the render path, where a bad value in someone's settings file must
+ * degrade to the default, never cost a viewer their diagram.
+ */
+export function resolveLayout(overrides) {
+  if (!overrides || typeof overrides !== "object") return DIAGRAM_LAYOUT;
+  const applied = {};
+  for (const [key, value] of Object.entries(overrides)) {
+    if (isLayoutOverride(key, value)) applied[key] = value;
+  }
+  return Object.keys(applied).length === 0 ? DIAGRAM_LAYOUT : { ...DIAGRAM_LAYOUT, ...applied };
+}
+
+/**
  * Display-column budget for text inside a gutter of `gutterWidth` px: the
  * usable width after inner padding on both sides, divided by the font size
  * (one column = one full-width CJK cell = 1em at that font size).
+ *
+ * `innerPad` is a parameter rather than a constant read because it is one of
+ * the overridable values; callers inside the renderer pass their resolved
+ * layout.
  */
-export function gutterTextCols(gutterWidth, fontSize) {
-  const { gutterInnerPad } = DIAGRAM_LAYOUT;
-  return Math.max(1, Math.floor((gutterWidth - 2 * gutterInnerPad) / fontSize));
+export function gutterTextCols(gutterWidth, fontSize, innerPad = DIAGRAM_LAYOUT.gutterInnerPad) {
+  return Math.max(1, Math.floor((gutterWidth - 2 * innerPad) / fontSize));
 }
 
 export function blockMaxTextCols(shape, hasIcon) {
   const factor = BLOCK_SHAPE_WIDTH_FACTOR[shape] ?? 1;
   return Math.max(BLOCK_MIN_TEXT_COLS, Math.round(factor) - (hasIcon ? BLOCK_ICON_COLS : 0));
-}
-
-export function decisionDiamondWidth(condLength) {
-  const { decisionMinWidth, decisionWidthPadding, decisionWidthCharFactor } = DIAGRAM_LAYOUT;
-  return Math.max(decisionMinWidth, (condLength + decisionWidthPadding) * decisionWidthCharFactor);
 }

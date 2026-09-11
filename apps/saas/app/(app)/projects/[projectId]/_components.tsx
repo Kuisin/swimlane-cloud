@@ -7,40 +7,60 @@ import { useParams } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
+  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
+  Diamond,
   ExternalLink,
   Flag,
   FolderOpen,
+  GitBranch,
+  GitFork,
   Plus,
   Smartphone,
+  Square,
   Tag,
   Trash2,
   X,
 } from "lucide-react";
 import {
   textToSvg,
+  textDiffToSvg,
   renderPartsPreviewHtml,
   ARROW_LINE_TYPES,
   arrowLineDasharray,
+  BRANCH_COLOR_STYLES,
 } from "@swimlane-cloud/diagram-converter";
 import { THEMES } from "@swimlane-cloud/diagram-converter/themes";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import {
   parseGuiModel,
   applyModelEdit,
+  collectMergeTargetOptions,
   extractPartsCode,
+  fetchImports,
   findAdjacentStepIndex,
+  makeStepId,
+  missingImports,
   moveRow,
+  pruneUnreferencedStepIds,
+  resolversFrom,
   serializeDSL,
+  withEntries,
   type GuiRow,
+  type ImportCacheEntry,
 } from "@swimlane-cloud/editor";
 import { MobileDiagram } from "@swimlane-cloud/mobile-view";
 import { FileTree } from "@/components/file-tree";
+import { MobileFilePicker } from "@/components/mobile-file-picker";
 import { GitHubMark } from "@/components/github-mark";
 import { RoleBadge } from "@/components/app-header";
-import { ApiClientError, redirectToLogin } from "@/lib/client";
+import { branchLabel } from "@/lib/branch-label";
+import { ApiClientError, redirectToReconnect } from "@/lib/client";
+import { dslOf, isDiagramFile, storedFrom } from "@/lib/diagram-file";
+import { CACHE_KEY, localCache } from "@/lib/local-cache";
+import { blockRows, withExtraCase, withoutBlock, type BlockKind } from "@/lib/mobile-rows";
 import {
   addPRComment,
   compare,
@@ -53,6 +73,7 @@ import {
 import type {
   CommitInfo,
   CompareFile,
+  PendingChange,
   ProjectState,
   PullComment,
   PullState,
@@ -62,18 +83,25 @@ import { useT, LanguageToggle } from "@/i18n";
 
 export type Files = Record<string, string>;
 
-/** primary diagram = first .txt path (sorted) for thumbnails/version SVG. */
+/**
+ * Primary diagram = first diagram path (sorted) for thumbnails/version SVG.
+ * A `.md` may hold only prose, so this asks what the file *contains* rather
+ * than trusting the extension.
+ */
 export function primaryPath(files: Files): string | null {
-  const txt = Object.keys(files)
-    .filter((p) => p.endsWith(".txt"))
+  const diagrams = Object.keys(files)
+    .filter((p) => dslOf(p, files[p] ?? "") !== null)
     .sort();
-  return txt[0] ?? null;
+  return diagrams[0] ?? null;
 }
 
 /** Turn an API failure into a sentence the user can act on. */
 export function describeError(err: unknown, t: (k: string) => string): string {
   if (err instanceof ApiClientError) {
     if (err.needsAuth) return t("error.needsAuth");
+    // Checked first: a merge conflict is also flagged `conflict`, but reloading
+    // is exactly what does not clear it.
+    if (err.mergeConflict) return t("error.mergeConflict");
     if (err.conflict) return t("error.conflict");
     if (err.rateLimited) return t("error.rateLimited");
     return err.message;
@@ -84,21 +112,35 @@ export function describeError(err: unknown, t: (k: string) => string): string {
 /**
  * Shared project state hook: loads `ProjectState` from the API and re-fetches
  * when the tab regains focus (someone else may have merged or pushed).
+ *
+ * The last state this browser saw for the project is painted first, from the
+ * local cache, so switching tabs is instant; `stale` is true until the
+ * server's answer replaces it. The fetch always happens — the cached copy is
+ * a head start, never the answer — and every action re-checks on the server.
  */
 export function useProject() {
   const params = useParams();
   const projectId = String(params.projectId);
   const [state, setState] = useState<ProjectState | null>(null);
+  const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { t } = useT();
 
   const refresh = useCallback(async () => {
     try {
-      setState(await getState(projectId));
+      const fresh = await getState(projectId);
+      const key = CACHE_KEY.state(projectId);
+      // A different GitHub account than the one this cache was built for
+      // means every entry in it belongs to somebody else.
+      const previous = localCache.get<ProjectState>(key);
+      if (previous && previous.value.me.githubLogin !== fresh.me.githubLogin) localCache.clear();
+      localCache.set(key, fresh);
+      setState(fresh);
+      setStale(false);
       setError(null);
     } catch (e) {
-      if (e instanceof ApiClientError && e.needsAuth) return redirectToLogin();
+      if (e instanceof ApiClientError && e.needsAuth) return redirectToReconnect(e);
       setError(describeError(e, t));
     } finally {
       setLoading(false);
@@ -106,8 +148,15 @@ export function useProject() {
   }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    // In an effect rather than the state initialiser: the server renders no
+    // state, so reading the cache during render would mismatch on hydration.
+    const cached = localCache.get<ProjectState>(CACHE_KEY.state(projectId));
+    if (cached) {
+      setState(cached.value);
+      setStale(true);
+    }
     void refresh();
-  }, [refresh]);
+  }, [refresh, projectId]);
 
   useEffect(() => {
     const onVisible = () => {
@@ -121,6 +170,8 @@ export function useProject() {
     projectId,
     projectName: state?.project.name ?? "",
     state,
+    /** True while `state` is the cached copy and the fresh one is still on its way. */
+    stale,
     refresh,
     loading,
     error,
@@ -176,7 +227,11 @@ export function ProjectNav({
     { key: "versions", label: t("nav.versions"), href: "versions" },
     { key: "activity", label: t("nav.activity"), href: "activity" },
     ...(state?.me.role === "owner"
-      ? [{ key: "templates", label: t("nav.templates"), href: "settings/templates" }]
+      ? [
+          { key: "templates", label: t("nav.templates"), href: "settings/templates" },
+          { key: "metadata", label: t("nav.metadata"), href: "settings/metadata" },
+          { key: "settings", label: t("nav.settings"), href: "settings/diagram" },
+        ]
       : []),
   ];
   return (
@@ -203,6 +258,13 @@ export function ProjectNav({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <Link
+            href="/manual"
+            className="hidden items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 sm:flex"
+          >
+            <BookOpen size={13} />
+            {t("nav.manual")}
+          </Link>
           <LanguageToggle />
           {state ? (
             <>
@@ -212,7 +274,7 @@ export function ProjectNav({
               </span>
             </>
           ) : null}
-          <form action="/api/auth/signout" method="post">
+          <form action="/api/auth/signout" method="post" onSubmit={() => localCache.clear()}>
             <button
               type="submit"
               className="whitespace-nowrap text-xs text-neutral-400 hover:text-neutral-600"
@@ -329,6 +391,44 @@ export function Modal({
   );
 }
 
+/** Cancel + a single coloured confirm action, for every confirmation modal on this app. */
+export function ModalFooter({
+  onCancel,
+  onConfirm,
+  confirmLabel,
+  disabled,
+  busy,
+  danger,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+  confirmLabel: string;
+  disabled?: boolean;
+  busy?: boolean;
+  danger?: boolean;
+}) {
+  const { t } = useT();
+  return (
+    <div className="flex justify-end gap-2">
+      <button
+        onClick={onCancel}
+        className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+      >
+        {t("common.cancel")}
+      </button>
+      <button
+        onClick={onConfirm}
+        disabled={disabled || busy}
+        className={`rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${
+          danger ? "bg-red-600 hover:bg-red-500" : "bg-indigo-600 hover:bg-indigo-500"
+        }`}
+      >
+        {busy ? t("loading") : confirmLabel}
+      </button>
+    </div>
+  );
+}
+
 const short = (sha: string) => sha.slice(0, 7);
 
 /** Commits of one branch, newest first, with a per-commit snapshot viewer. */
@@ -351,11 +451,17 @@ export function HistoryPanel({
 
   useEffect(() => {
     let cancelled = false;
-    setCommits(null);
     setError(null);
+    // The last history this browser saw for the branch paints at once and is
+    // always replaced by the server's; commits never change, only the tip.
+    const key = `commits:${projectId}:${branch}`;
+    const cached = localCache.get<CommitInfo[]>(key);
+    setCommits(cached ? cached.value : null);
     listCommits(projectId, branch)
       .then((r) => {
-        if (!cancelled) setCommits(r.commits);
+        if (cancelled) return;
+        localCache.set(key, r.commits);
+        setCommits(r.commits);
       })
       .catch((e) => {
         if (!cancelled) setError(describeError(e, t));
@@ -424,7 +530,7 @@ export function HistoryPanel({
                   {onTogglePublish && version?.promoted && (
                     <button
                       onClick={() => onTogglePublish(version)}
-                      title={published ? t("history.unpublish") : t("history.publishHint")}
+                      title={published ? t("history.unshare") : t("history.shareHint")}
                       className={`rounded p-1.5 ${
                         published ? "text-emerald-600" : "text-neutral-300 hover:text-neutral-500"
                       }`}
@@ -462,22 +568,26 @@ type FileStatus = "added" | "removed" | "changed" | "same";
 /**
  * Every diagram at `headRef` with per-file Preview (on-device render), Diff
  * against `baseRef` (a parent commit, or a pull request's base) and raw Text.
+ * The body of `CommitDetailModal`, factored out so the Push, Request-review,
+ * Approve and Publish flows can each drop it into their own modal shell.
+ *
+ * Diff draws the change **on the diagram**: the head revision rendered with
+ * added/changed rows outlined and badged, a reworded caption shown as inline
+ * tracked changes, and a deleted step left in as a struck-through ghost
+ * (`textDiffToSvg`). The side-by-side line diff is still one click away, for
+ * an edit the picture can't show — a `/option/` change, or a `.md`'s prose.
  */
-export function CommitDetailModal({
+export function ChangeBrowser({
   projectId,
-  title,
   headRef,
   baseRef,
   preloaded,
-  onClose,
 }: {
   projectId: string;
-  title: string;
   headRef: string;
   baseRef: string | null;
   /** Already-fetched changed files (pull request review) — skips the compare call. */
   preloaded?: CompareFile[];
-  onClose: () => void;
 }) {
   const { t } = useT();
   const [files, setFiles] = useState<Files | null>(null);
@@ -485,6 +595,10 @@ export function CommitDetailModal({
   const [error, setError] = useState<string | null>(null);
   const [path, setPath] = useState("");
   const [mode, setMode] = useState<"preview" | "diff" | "text">("preview");
+  /** Within Diff: fall back to the side-by-side line diff. */
+  const [diffAsText, setDiffAsText] = useState(false);
+  /** Within Diff: `.diff-hidden` reverts the overlay to a plain "after" render. */
+  const [showMarks, setShowMarks] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -515,7 +629,7 @@ export function CommitDetailModal({
   const paths = useMemo(() => {
     const set = new Set<string>(Object.keys(files ?? {}));
     for (const c of changes ?? []) set.add(c.path);
-    return [...set].filter((p) => p.endsWith(".txt")).sort();
+    return [...set].filter((p) => isDiagramFile(p)).sort();
   }, [files, changes]);
 
   useEffect(() => {
@@ -536,14 +650,33 @@ export function CommitDetailModal({
   const status = statusOf(path);
   const changed = status !== "same";
 
+  // The DSL each side holds — a `.md` keeps its diagram in a fence, and a
+  // `.md` that is only prose holds none at all (`null`).
+  const afterDsl = useMemo(() => dslOf(path, after), [path, after]);
+  const beforeDsl = useMemo(() => dslOf(path, before), [path, before]);
+
   const svg = useMemo(() => {
-    if (mode !== "preview" || !after) return null;
+    if (mode !== "preview" || !afterDsl) return null;
     try {
-      return textToSvg(after, { themeKey: "basic" }).svg;
+      return textToSvg(afterDsl, { themeKey: "basic" }).svg;
     } catch {
       return null;
     }
-  }, [after, mode]);
+  }, [afterDsl, mode]);
+
+  /**
+   * The change drawn on the diagram itself. `null` when neither side holds a
+   * diagram (prose-only `.md`) or the head revision won't parse — the
+   * side-by-side line diff below is then the only thing to show.
+   */
+  const diffSvg = useMemo(() => {
+    if (mode !== "diff" || (!afterDsl && !beforeDsl)) return null;
+    try {
+      return textDiffToSvg(beforeDsl ?? "", afterDsl ?? "", { themeKey: "basic" }).svg;
+    } catch {
+      return null;
+    }
+  }, [beforeDsl, afterDsl, mode]);
 
   const statusBadge =
     status === "added"
@@ -554,64 +687,137 @@ export function CommitDetailModal({
           ? "bg-amber-100 text-amber-700"
           : "bg-neutral-100 text-neutral-500";
 
-  return (
-    <Modal title={title} onClose={onClose} maxW="max-w-4xl">
-      {error ? (
-        <Empty>{error}</Empty>
-      ) : !files ? (
-        <Empty>{t("loading")}</Empty>
-      ) : (
-        <div className="flex gap-4">
-          <aside className="max-h-[62vh] w-44 shrink-0 overflow-auto border-r border-neutral-200 pr-2">
-            <FileTree paths={paths} active={path} onPick={setPath} statusOf={statusOf} />
-          </aside>
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="truncate font-mono text-xs text-neutral-500">{path}</span>
-              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${statusBadge}`}>
-                {status}
-              </span>
-              <div className="ml-auto flex gap-1 text-xs">
-                {(["preview", "diff", "text"] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setMode(m)}
-                    className={`rounded px-3 py-1 ${
-                      mode === m
-                        ? "bg-neutral-800 text-white"
-                        : "text-neutral-500 hover:bg-neutral-100"
-                    }`}
-                  >
-                    {t(`commit.mode.${m}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
+  if (error) return <Empty>{error}</Empty>;
+  if (!files) return <Empty>{t("loading")}</Empty>;
 
-            {mode === "preview" &&
-              (svg ? (
-                <div
-                  className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
-                  dangerouslySetInnerHTML={{ __html: svg }}
-                />
-              ) : (
-                <Empty>{t("commit.renderError")}</Empty>
-              ))}
-            {mode === "diff" &&
-              (changed ? (
-                <Diff path={path} before={before} after={after} />
-              ) : (
-                <Empty>{t("commit.noChange")}</Empty>
-              ))}
-            {mode === "text" && (
-              <pre className="overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-3 font-mono text-xs">
-                {after || "(empty)"}
-              </pre>
-            )}
+  return (
+    <div className="flex gap-4">
+      <aside className="max-h-[62vh] w-44 shrink-0 overflow-auto border-r border-neutral-200 pr-2">
+        <FileTree paths={paths} active={path} onPick={setPath} statusOf={statusOf} />
+      </aside>
+      <div className="min-w-0 flex-1 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-mono text-xs text-neutral-500">{path}</span>
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${statusBadge}`}>
+            {status}
+          </span>
+          <div className="ml-auto flex gap-1 text-xs">
+            {(["preview", "diff", "text"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`rounded px-3 py-1 ${
+                  mode === m ? "bg-neutral-800 text-white" : "text-neutral-500 hover:bg-neutral-100"
+                }`}
+              >
+                {t(`commit.mode.${m}`)}
+              </button>
+            ))}
           </div>
         </div>
-      )}
+
+        {mode === "preview" &&
+          (svg ? (
+            <div
+              className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          ) : (
+            <Empty>{t("commit.renderError")}</Empty>
+          ))}
+        {mode === "diff" &&
+          (!changed ? (
+            <Empty>{t("commit.noChange")}</Empty>
+          ) : diffSvg && !diffAsText ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 text-xs text-neutral-500">
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={showMarks}
+                    onChange={(e) => setShowMarks(e.target.checked)}
+                  />
+                  {t("commit.diff.marks")}
+                </label>
+                <button
+                  onClick={() => setDiffAsText(true)}
+                  className="ml-auto underline hover:text-neutral-800"
+                >
+                  {t("commit.diff.asText")}
+                </button>
+              </div>
+              <div
+                className={`[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full ${
+                  showMarks ? "" : "diff-hidden"
+                }`}
+                dangerouslySetInnerHTML={{ __html: diffSvg }}
+              />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {diffSvg && (
+                <div className="flex text-xs text-neutral-500">
+                  <button
+                    onClick={() => setDiffAsText(false)}
+                    className="ml-auto underline hover:text-neutral-800"
+                  >
+                    {t("commit.diff.asDiagram")}
+                  </button>
+                </div>
+              )}
+              <Diff path={path} before={before} after={after} />
+            </div>
+          ))}
+        {mode === "text" && (
+          <pre className="overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-3 font-mono text-xs">
+            {after || "(empty)"}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function CommitDetailModal({
+  title,
+  onClose,
+  ...browserProps
+}: {
+  projectId: string;
+  title: string;
+  headRef: string;
+  baseRef: string | null;
+  preloaded?: CompareFile[];
+  onClose: () => void;
+}) {
+  return (
+    <Modal title={title} onClose={onClose} maxW="max-w-4xl">
+      <ChangeBrowser {...browserProps} />
     </Modal>
+  );
+}
+
+const CHANGE_BADGE: Record<PendingChange["status"], string> = {
+  added: "bg-green-100 text-green-700",
+  removed: "bg-red-100 text-red-700",
+  changed: "bg-amber-100 text-amber-700",
+};
+
+/** A plain colour-coded file list, for modals that only need "what changed" without a diff viewer. */
+export function ChangeList({ changes }: { changes: PendingChange[] }) {
+  const { t } = useT();
+  if (changes.length === 0) return <Empty>{t("changes.empty")}</Empty>;
+  return (
+    <ul className="max-h-64 space-y-1 overflow-auto rounded-md border border-neutral-200 p-2">
+      {changes.map((c) => (
+        <li key={c.path} className="flex items-center gap-2 text-sm">
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${CHANGE_BADGE[c.status]}`}>
+            {t(`changes.status.${c.status}`)}
+          </span>
+          <span className="truncate font-mono text-xs">{c.path}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -702,7 +908,8 @@ function PrItem({
             </a>
           </div>
           <div className="text-xs text-neutral-500">
-            {pr.head} → {pr.base} · {t("pr.openedBy", { login: pr.author })}
+            {branchLabel(pr.head, t)} → {branchLabel(pr.base, t)} ·{" "}
+            {t("pr.openedBy", { login: pr.author })}
             {pr.createdAt ? ` · ${new Date(pr.createdAt).toLocaleString()}` : ""}
           </div>
         </div>
@@ -733,7 +940,7 @@ function PrItem({
                 onClick={() => onClose(pr)}
                 className="rounded border border-neutral-300 px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-50"
               >
-                {t("pr.close")}
+                {t("pr.reject")}
               </button>
             )}
             {isOwner ? (
@@ -741,7 +948,7 @@ function PrItem({
                 onClick={() => onMerge(pr)}
                 className="rounded bg-purple-600 px-3 py-1 text-xs font-medium text-white hover:bg-purple-500"
               >
-                {t("pr.mergeTo", { base: pr.base })}
+                {t("pr.approve", { base: branchLabel(pr.base, t) })}
               </button>
             ) : (
               <span className="text-xs text-neutral-400">{t("pr.ownerMerges")}</span>
@@ -771,7 +978,7 @@ function PrItem({
       {showFiles && detail && (
         <CommitDetailModal
           projectId={projectId}
-          title={`#${pr.number} ${pr.title}  (${pr.head} → ${pr.base})`}
+          title={`#${pr.number} ${pr.title}  (${branchLabel(pr.head, t)} → ${branchLabel(pr.base, t)})`}
           headRef={pr.state === "open" ? pr.head : pr.headSha || pr.head}
           baseRef={pr.state === "open" ? pr.base : pr.baseSha || pr.base}
           preloaded={detail.files}
@@ -864,8 +1071,15 @@ function Diff({ path, before, after }: { path: string; before: string; after: st
       <div className="border-b border-neutral-200 bg-neutral-50 px-2 py-1 font-mono text-xs">
         {path}
       </div>
-      <div className="grid grid-cols-2 font-mono text-[11px] leading-relaxed">
-        <pre className="overflow-auto border-r border-neutral-200 p-1">
+      {/*
+        Side by side only where there is room for two columns of code. Below
+        that they stack: half of a phone's width is about 25 monospace
+        characters, so a split view there is two independent horizontal
+        scrollbars showing almost nothing, which is worse than reading the two
+        versions one after the other.
+      */}
+      <div className="grid grid-cols-1 font-mono text-[11px] leading-relaxed sm:grid-cols-2">
+        <pre className="overflow-auto border-b border-neutral-200 p-1 sm:border-r sm:border-b-0">
           {rows.map((row, i) => (
             <div key={i} className={row.changed ? "bg-red-50" : ""}>
               {row.l || " "}
@@ -961,7 +1175,7 @@ export function VersionPanel({
                             onClick={() => onUnpublish(v)}
                             className="text-xs text-neutral-400 hover:text-neutral-600"
                           >
-                            {t("version.unpublish")}
+                            {t("version.unshare")}
                           </button>
                         )}
                       </>
@@ -984,11 +1198,11 @@ export function VersionPanel({
                           }
                           className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
                         >
-                          {t("version.publish")}
+                          {t("version.share")}
                         </button>
                       </div>
                     ) : (
-                      <span className="text-xs text-neutral-400">{t("version.notPublished")}</span>
+                      <span className="text-xs text-neutral-400">{t("version.notShared")}</span>
                     )}
                   </>
                 )}
@@ -1028,40 +1242,99 @@ export function MobileView({
   files,
   editable = false,
   onSave,
+  onRename,
   path: pathProp,
   onPath,
+  onPathNotFound,
   editStep: editStepProp,
   onEditStep,
+  readImport,
+  readAsset,
 }: {
   files: Files;
   editable?: boolean;
   onSave?: (path: string, dsl: string) => void;
+  /** Rename `from` to `to` (same folder); rejects with a message on failure. */
+  onRename?: (from: string, to: string) => Promise<void>;
   path?: string;
   onPath?: (p: string) => void;
+  /** Fired when `path` doesn't match any loaded file, just before falling
+   * back to the first one — e.g. a URL built around a path the file has
+   * since moved away from. */
+  onPathNotFound?: (path: string) => void;
   editStep?: number | null;
   onEditStep?: (i: number | null) => void;
+  /** `@use` targets, read at the branch tip. Without these a diagram still
+   * renders; its imported definitions and images simply do not resolve. */
+  readImport?: (path: string) => Promise<string | null>;
+  readAsset?: (path: string) => Promise<string | null>;
 }) {
   const { t, lang } = useT();
   const paths = Object.keys(files)
-    .filter((p) => p.endsWith(".txt"))
+    .filter((p) => dslOf(p, files[p] ?? "") !== null)
     .sort();
   const [pathState, setPathState] = useState(primaryPath(files) ?? paths[0] ?? "");
   const path = pathProp ?? pathState;
   const setPath = (p: string) => (onPath ? onPath(p) : setPathState(p));
   const active = files[path] !== undefined ? path : (paths[0] ?? "");
+  useEffect(() => {
+    if (path && files[path] === undefined) onPathNotFound?.(path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, files]);
   const [dsl, setDsl] = useState(files[active] ?? "");
   const [stepState, setStepState] = useState<number | null>(null);
   const editStep = editStepProp !== undefined ? editStepProp : stepState;
   const setEditStep = (i: number | null) => (onEditStep ? onEditStep(i) : setStepState(i));
   const [showFiles, setShowFiles] = useState(false);
+  // The file being renamed, and the name typed for it so far.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameTo, setRenameTo] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  const [showAddBlock, setShowAddBlock] = useState(false);
+  // What non-step row the edit sheet is open on. `row` is a raw `model.rows`
+  // index — unlike steps, branch/group/case/merge nodes aren't indexed by a
+  // separate "nth" counter (see `nthStepRowIndex`); the mobile tree exposes
+  // their real row index directly. `firstCase` means the target is an `if`'s
+  // first clause, which has no row of its own: it lives as `firstCase` on the
+  // branchStart at `row`.
+  const [editGroup, setEditGroup] = useState<{ row: number; firstCase?: boolean } | null>(null);
+  const editGroupRow = editGroup?.row ?? null;
   const activeDir = active.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "";
 
+  // `dsl` is always DSL, whatever the file is stored as — a `.md` diagram is
+  // unwrapped on the way in and re-wrapped by `saveDoc` on the way out, so
+  // everything below this line works on one shape.
   useEffect(() => {
-    setDsl(files[active] ?? "");
+    setDsl(dslOf(active, files[active] ?? "") ?? "");
   }, [active, files]);
 
-  const gui = useMemo(() => parseGuiModel(dsl), [dsl]);
+  /** Persist edited DSL back in whatever form `active` is stored as. */
+  const saveDoc = (next: string) => onSave?.(active, storedFrom(active, next, files[active]));
+
+  // `@use` targets already read, keyed by importing file and path. Parsing is
+  // synchronous and reading one is not, so the diagram renders with whatever
+  // has arrived and re-renders when the rest does — same pattern as the
+  // desktop editor's FileEditorProvider.
+  const [importCache, setImportCache] = useState(() => new Map<string, ImportCacheEntry>());
+  useEffect(() => {
+    const pending = missingImports(dsl, active, importCache);
+    if (!pending.length) return undefined;
+    let cancelled = false;
+    void (async () => {
+      const entries = await fetchImports(pending, { readImport, readAsset });
+      if (cancelled || !entries.length) return;
+      setImportCache((prev) => withEntries(prev, active, entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dsl, active, importCache, readImport, readAsset]);
+  const parseOptions = useMemo(() => resolversFrom(active, importCache), [active, importCache]);
+
+  const gui = useMemo(() => parseGuiModel(dsl, parseOptions), [dsl, parseOptions]);
+  const model = useMemo(() => parseDSL(dsl, parseOptions), [dsl, parseOptions]);
   const editing =
     editStep != null
       ? (() => {
@@ -1077,8 +1350,89 @@ export function MobileView({
       if (i >= 0) draft.rows[i] = { ...draft.rows[i], ...patch };
     });
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
     setEditStep(null);
+  };
+
+  /**
+   * Edit the **raw** (unnormalized) parse and write it back.
+   *
+   * Branch/group/case/merge rows are addressed by their raw `model.rows`
+   * index — the index the mobile tree hands out as `startRow`/`rowIndex` — so
+   * these edits must not go through `applyModelEdit`, which runs
+   * `normalizeBranchRows` first: that inserts an extra `branchCase` row for
+   * every `if` whose first case has a label, shifting every later index. (It
+   * also makes `id` alone useless as a key here, since all of a branch's
+   * cases share the branch's id.) Steps are unaffected either way and keep
+   * using `applyModelEdit` + `nthStepRowIndex`, which normalization can't
+   * shift because it only ever inserts branchCase rows.
+   */
+  const applyRawEdit = (edit: (rows: GuiRow[]) => GuiRow[] | void) => {
+    const parsed = parseDSL(dsl, parseOptions) as unknown as { rows: GuiRow[] };
+    const rows = parsed.rows.map((r) => ({ ...r }));
+    const nextRows = edit(rows) ?? rows;
+    const next = serializeDSL({ ...parsed, rows: nextRows });
+    setDsl(next);
+    saveDoc(next);
+  };
+
+  const editingGroup =
+    editGroupRow != null ? ((model.rows as GuiRow[])[editGroupRow] ?? null) : null;
+
+  const applyGroupPatch = (patch: Record<string, unknown>) => {
+    if (editGroupRow == null) return;
+    applyRawEdit((rows) => {
+      if (!rows[editGroupRow]) return;
+      // A `[goto: id]` names no id directly here — the picker below only
+      // ever offers a step to point at, never a raw id (there is nowhere in
+      // this GUI to type one by hand). Release the old target's id first,
+      // sweep up anything now unreferenced, then give the new target an id
+      // if it doesn't already have one, mirroring the desktop editor's
+      // `pickMergeTarget` so a retarget never leaves an orphan `id:` line.
+      if (typeof patch.gotoStepIndex === "number") {
+        rows[editGroupRow] = { ...rows[editGroupRow], mergeTarget: "" };
+        const next = pruneUnreferencedStepIds(rows);
+        const targetIdx = patch.gotoStepIndex;
+        const target = next[targetIdx];
+        let id = (target?.mergeId || "").trim();
+        if (!id) {
+          id = makeStepId(next);
+          next[targetIdx] = { ...target, mergeId: id };
+        }
+        next[editGroupRow] = { ...next[editGroupRow], mergeTarget: id };
+        return next;
+      }
+      rows[editGroupRow] = { ...rows[editGroupRow], ...patch };
+    });
+    setEditGroup(null);
+  };
+
+  const deleteGroupRow = () => {
+    if (editGroupRow == null) return;
+    // The deleted row may itself have been a `[goto: id]` — sweep up its
+    // target's id if nothing else references it any more.
+    applyRawEdit((rows) => pruneUnreferencedStepIds(withoutBlock(rows, editGroupRow)));
+    setEditGroup(null);
+  };
+
+  /** Append a branch/group skeleton, mirroring the desktop editor's add menu. */
+  const addBlock = (kind: BlockKind) => {
+    const id = Math.random().toString(36).slice(2, 10);
+    applyRawEdit((rows) => [
+      ...rows,
+      ...blockRows(kind, id, {
+        condition: t("mobile.newCondition"),
+        firstCase: t("mobile.newCase"),
+      }),
+    ]);
+    setShowAddBlock(false);
+  };
+
+  /** Append one more case/path to the branch the edit sheet is open on. */
+  const addCaseToBranch = () => {
+    if (editGroupRow == null) return;
+    applyRawEdit((rows) => withExtraCase(rows, editGroupRow, t("mobile.newCase")));
+    setEditGroup(null);
   };
 
   const addStep = () => {
@@ -1090,7 +1444,7 @@ export function MobileView({
       });
     });
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
   };
 
   const insertStep = (afterStepIndex: number) => {
@@ -1104,7 +1458,7 @@ export function MobileView({
       });
     });
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
   };
 
   const deleteStepAt = (stepIndex: number) => {
@@ -1113,7 +1467,7 @@ export function MobileView({
       if (i >= 0) draft.rows.splice(i, 1);
     });
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
     if (editStep === stepIndex) setEditStep(null);
   };
 
@@ -1134,7 +1488,7 @@ export function MobileView({
       if (i >= 0 && adj >= 0) draft.rows = moveRow(draft.rows, i, adj).rows;
     });
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
     setEditStep(dir === "up" ? Math.max(0, editStep - 1) : editStep + 1);
   };
 
@@ -1154,27 +1508,36 @@ export function MobileView({
     const after = (parseDSL(next) as unknown as { errors?: unknown[] }).errors?.length ?? 0;
     if (after > before) return; // don't apply a move that breaks the DSL
     setDsl(next);
-    onSave?.(active, next);
+    saveDoc(next);
   };
 
   return (
     <div className="flex h-full flex-col bg-neutral-100">
       {paths.length > 0 && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 bg-white px-3 py-2">
+        <div className="flex shrink-0 items-center border-b border-neutral-200 bg-white px-3 py-2">
+          {/* Full width, one line each: the file name used to wrap inside the
+              button while the directory beside it ran off the screen. */}
           <button
             onClick={() => setShowFiles(true)}
-            className="flex items-center gap-2 rounded-md border border-neutral-300 px-2.5 py-1.5 hover:border-indigo-400"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-neutral-300 px-2.5 py-1.5 text-left hover:border-indigo-400"
           >
-            <FolderOpen size={15} className="text-neutral-500" />
-            <span className="font-mono text-xs">{active.split("/").pop() || "—"}</span>
-            <ChevronDown size={14} className="text-neutral-400" />
+            <FolderOpen size={15} className="shrink-0 text-neutral-500" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-mono text-xs">
+                {active.split("/").pop() || "—"}
+              </span>
+              {activeDir && (
+                <span className="block truncate text-[11px] text-neutral-400">{activeDir}/</span>
+              )}
+            </span>
+            <ChevronDown size={14} className="shrink-0 text-neutral-400" />
           </button>
-          {activeDir && <span className="truncate text-xs text-neutral-400">{activeDir}/</span>}
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-auto">
         <MobileDiagram
           dsl={dsl}
+          model={model}
           lang={lang}
           editable={editable}
           onEditStep={editable ? (i) => setEditStep(i) : undefined}
@@ -1182,6 +1545,23 @@ export function MobileView({
           onInsertStep={editable ? insertStep : undefined}
           onMoveStep={editable ? moveStepRows : undefined}
           onAddStep={editable ? addStep : undefined}
+          onAddBlock={editable ? () => setShowAddBlock(true) : undefined}
+          onEditBranch={editable ? (i) => setEditGroup({ row: i }) : undefined}
+          onEditGroup={editable ? (i) => setEditGroup({ row: i }) : undefined}
+          onEditMerge={editable ? (i) => setEditGroup({ row: i }) : undefined}
+          onEditCase={
+            editable
+              ? (c) => {
+                  // A first case has no row of its own: edit `firstCase` on
+                  // the branchStart instead.
+                  if (c.isFirst || c.rowIndex == null) {
+                    setEditGroup({ row: c.branchRow, firstCase: true });
+                  } else {
+                    setEditGroup({ row: c.rowIndex });
+                  }
+                }
+              : undefined
+          }
           insertStepLabel={t("mobile.insertStep")}
           addStepLabel={t("mobile.addStep")}
         />
@@ -1201,6 +1581,18 @@ export function MobileView({
           canMoveDown={canMoveDown}
         />
       )}
+      {editingGroup && (
+        <GroupEditModal
+          row={editingGroup}
+          firstCase={Boolean(editGroup?.firstCase)}
+          mergeTargets={collectMergeTargetOptions(model.rows as GuiRow[])}
+          onSave={applyGroupPatch}
+          onAddCase={addCaseToBranch}
+          onDelete={deleteGroupRow}
+          onClose={() => setEditGroup(null)}
+        />
+      )}
+      {showAddBlock && <AddBlockSheet onPick={addBlock} onClose={() => setShowAddBlock(false)} />}
       {pendingDelete != null && (
         <Modal
           title={t("stepEdit.deleteStep")}
@@ -1232,61 +1624,80 @@ export function MobileView({
       )}
       {showFiles && (
         <Modal title={t("mobile.files")} onClose={() => setShowFiles(false)}>
-          <FileList
+          <MobileFilePicker
             paths={paths}
             active={active}
             onPick={(p) => {
               setPath(p);
               setShowFiles(false);
             }}
+            onRename={
+              editable && onRename
+                ? (p) => {
+                    setRenaming(p);
+                    setRenameTo(p.split("/").pop() ?? p);
+                    setRenameError(null);
+                  }
+                : undefined
+            }
           />
         </Modal>
       )}
-    </div>
-  );
-}
-
-function FileList({
-  paths,
-  active,
-  onPick,
-}: {
-  paths: string[];
-  active: string;
-  onPick: (p: string) => void;
-}) {
-  const { t } = useT();
-  const groups: Record<string, string[]> = {};
-  for (const p of paths) {
-    const dir = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
-    (groups[dir] ||= []).push(p);
-  }
-  const dirs = Object.keys(groups).sort();
-  if (paths.length === 0) return <Empty>{t("mobile.noFiles")}</Empty>;
-  return (
-    <div className="space-y-4">
-      {dirs.map((dir) => (
-        <div key={dir || "root"}>
-          <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-neutral-400">
-            <FolderOpen size={13} /> {dir || "/"}
-          </div>
-          <ul className="space-y-1">
-            {groups[dir].map((p) => (
-              <li key={p}>
-                <button
-                  onClick={() => onPick(p)}
-                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left ${
-                    p === active ? "bg-indigo-50 text-indigo-700" : "hover:bg-neutral-100"
-                  }`}
-                >
-                  <span className="truncate font-mono text-sm">{p.split("/").pop()}</span>
-                  {p === active && <Check size={15} className="shrink-0 text-indigo-600" />}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+      {renaming != null && onRename && (
+        <Modal
+          title={t("mobile.renameFile")}
+          z="z-[60]"
+          onClose={() => setRenaming(null)}
+          footer={
+            <ModalFooter
+              onCancel={() => setRenaming(null)}
+              confirmLabel={t("mobile.renameConfirm")}
+              busy={renameBusy}
+              disabled={!renameTo.trim()}
+              onConfirm={() => {
+                const from = renaming;
+                const name = renameTo.trim().replace(/^\/+|\/+$/g, "");
+                const dir = from.includes("/") ? from.slice(0, from.lastIndexOf("/")) : "";
+                const to = dir ? `${dir}/${name}` : name;
+                if (!name) return;
+                if (name.includes("/")) {
+                  setRenameError(t("mobile.renameNoSlash"));
+                  return;
+                }
+                if (to === from) {
+                  setRenaming(null);
+                  return;
+                }
+                if (files[to] !== undefined) {
+                  setRenameError(t("mobile.renameExists"));
+                  return;
+                }
+                setRenameBusy(true);
+                setRenameError(null);
+                onRename(from, to)
+                  .then(() => {
+                    setRenaming(null);
+                    setShowFiles(false);
+                    setPath(to);
+                  })
+                  .catch((e) => setRenameError(describeError(e, t)))
+                  .finally(() => setRenameBusy(false));
+              }}
+            />
+          }
+        >
+          <label className="block text-sm text-neutral-600">
+            {t("mobile.renameFileName")}
+            <input
+              autoFocus
+              value={renameTo}
+              onChange={(e) => setRenameTo(e.target.value)}
+              className={`${FIELD_CLASS} mt-1 font-mono`}
+            />
+          </label>
+          {renameError && <p className="mt-2 text-sm text-red-600">{renameError}</p>}
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1333,8 +1744,16 @@ function StepEditModal({
   const { t } = useT();
   const [role, setRole] = useState(String(row.role ?? ""));
   const [text, setText] = useState(String(row.text ?? ""));
+  // `label` (the model's `name`) is what the flow list actually shows when a
+  // step has one, so it has to be editable here — otherwise editing "Text"
+  // looks like it did nothing.
+  const [name, setName] = useState(String(row.name ?? ""));
   const [description, setDescription] = useState(String(row.description ?? ""));
   const [remark, setRemark] = useState(String(row.remark ?? ""));
+  // No field for the step's `mergeId` (its `id:` line): a raw id is never
+  // shown or typed in the GUI. It is written and removed for you when a jump
+  // is pointed at this step or stops pointing at it. The patch below omits
+  // the key, so `applyPatch`'s spread leaves whatever the row already has.
   const [arrowLine, setArrowLine] = useState(String(row.arrowLine ?? "solid"));
   const [blockRef, setBlockRef] = useState(String(row.blockRef ?? ""));
   const [sel, setSel] = useState<Set<string>>(
@@ -1364,6 +1783,7 @@ function StepEditModal({
           onSave({
             role: role || null,
             text,
+            name,
             description,
             remark,
             arrowLine,
@@ -1419,6 +1839,9 @@ function StepEditModal({
         <Field label={t("stepEdit.text")}>
           <input value={text} onChange={(e) => setText(e.target.value)} className={FIELD_CLASS} />
         </Field>
+        <Field label={t("stepEdit.label")}>
+          <input value={name} onChange={(e) => setName(e.target.value)} className={FIELD_CLASS} />
+        </Field>
         <Field label={t("stepEdit.description")}>
           <textarea
             rows={2}
@@ -1452,11 +1875,291 @@ function StepEditModal({
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  // A plain div, not a <label> — some fields (BlockPicker, ArrowPicker,
+  // PropsPicker) nest a full picker sheet (its own Modal, with its own
+  // buttons) as `children`. A <label> ancestor auto-forwards clicks on any
+  // nested "labelable" element to the *first* one in the label — so tapping
+  // a nested sheet's X (or any option button) also silently re-triggered the
+  // picker's own trigger button in the same click, undoing the close.
   return (
-    <label className="block">
+    <div className="block">
       <span className="mb-1 block text-xs font-medium text-neutral-500">{label}</span>
       {children}
-    </label>
+    </div>
+  );
+}
+
+/**
+ * Swatch row for a branch/section highlight color. These are a fixed named
+ * enum the parser validates against `BRANCH_COLOR_STYLES` (not free hex), so
+ * this renders one button per key using the engine's own stroke/bg pair —
+ * imported, never hardcoded — plus a neutral "(default)" swatch for no color.
+ */
+function GroupColorSwatches({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  const { t } = useT();
+  const swatchCls = (selected: boolean) =>
+    `flex size-9 shrink-0 items-center justify-center rounded-full border ${
+      selected ? "border-indigo-600 ring-2 ring-indigo-200" : "border-transparent"
+    }`;
+  return (
+    <div className="flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        className={swatchCls(!value)}
+        title={t("mobile.colorDefault")}
+      >
+        <span className="size-6 rounded-full border border-dashed border-neutral-300 bg-neutral-50" />
+      </button>
+      {Object.entries(BRANCH_COLOR_STYLES).map(([key, style]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          className={swatchCls(value === key)}
+          title={key}
+        >
+          <span
+            className="size-6 rounded-full border"
+            style={{ background: style.bg, borderColor: style.stroke }}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The structure a mobile user can append, mirroring the desktop add menu. */
+function AddBlockSheet({
+  onPick,
+  onClose,
+}: {
+  onPick: (kind: "if" | "fork" | "section" | "subBranch") => void;
+  onClose: () => void;
+}) {
+  const { t } = useT();
+  const items: Array<{ kind: "if" | "fork" | "section" | "subBranch"; icon: React.ReactNode }> = [
+    { kind: "if", icon: <Diamond size={16} /> },
+    { kind: "fork", icon: <GitFork size={16} /> },
+    { kind: "section", icon: <Square size={16} /> },
+    { kind: "subBranch", icon: <GitBranch size={16} /> },
+  ];
+  return (
+    <Modal title={t("mobile.addBlock")} onClose={onClose} z="z-[60]">
+      <div className="flex flex-col gap-2">
+        {items.map((it) => (
+          <button
+            key={it.kind}
+            type="button"
+            onClick={() => onPick(it.kind)}
+            className="flex items-start gap-3 rounded-lg border border-neutral-200 px-3 py-2.5 text-left hover:border-indigo-400 hover:bg-indigo-50/40"
+          >
+            <span className="mt-0.5 text-neutral-500">{it.icon}</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">{t(`mobile.add.${it.kind}`)}</span>
+              <span className="block text-xs text-neutral-500">
+                {t(`mobile.add.${it.kind}.hint`)}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Edit modal for every non-step row the mobile flow list shows: a fork/if
+ * (`branchStart`), one clause of one (`branchCase`, or an `if`'s first clause
+ * — which lives as `firstCase` on the branchStart, hence `firstCase`), a
+ * section/sub-branch (`groupStart`), and a `[goto: id]` jump (`branchMerge`).
+ * Between them these cover the same fields the desktop `BranchInspector`
+ * does, plus add-case and delete.
+ */
+function GroupEditModal({
+  row,
+  firstCase,
+  mergeTargets,
+  onSave,
+  onAddCase,
+  onDelete,
+  onClose,
+}: {
+  row: Record<string, unknown>;
+  firstCase: boolean;
+  mergeTargets: Array<{ stepIndex: number; mergeId: string; label: string }>;
+  onSave: (patch: Record<string, unknown>) => void;
+  onAddCase: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useT();
+  const isBranch = row.kind === "branchStart" && !firstCase;
+  const isCase = row.kind === "branchCase" || firstCase;
+  const isMerge = row.kind === "branchMerge";
+  const isGroup = row.kind === "groupStart";
+  const parallel = Boolean(row.parallel);
+  const isSection = row.groupMode === "section";
+  const [cond, setCond] = useState(String(row.cond ?? ""));
+  const [name, setName] = useState(String(row.sectionName ?? ""));
+  const [label, setLabel] = useState(String((firstCase ? row.firstCase : row.label) ?? ""));
+  // The picker offers steps, never a raw id — resolve the row's current
+  // `mergeTarget` id back to the step that carries it, if any still does
+  // (a jump written in Text mode may name a step that doesn't exist).
+  const [gotoStepIndex, setGotoStepIndex] = useState(() => {
+    const current = String(row.mergeTarget ?? "");
+    return mergeTargets.find((o) => o.mergeId && o.mergeId === current)?.stepIndex ?? -1;
+  });
+  const [color, setColor] = useState<string | null>(
+    String((isGroup ? row.sectionColor : row.branchColor) ?? "") || null,
+  );
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const title = isMerge
+    ? t("mobile.editMerge")
+    : isCase
+      ? parallel
+        ? t("mobile.editPath")
+        : t("mobile.editCase")
+      : isBranch
+        ? parallel
+          ? t("mobile.editFork")
+          : t("mobile.editBranch")
+        : isSection
+          ? t("mobile.editSection")
+          : t("mobile.editSubBranch");
+
+  const patch = () => {
+    if (isMerge) return { gotoStepIndex };
+    if (firstCase) return { firstCase: label, branchColor: color };
+    if (isCase) return { label, branchColor: color };
+    if (isBranch) return { cond, branchColor: color };
+    return { sectionName: name, sectionColor: color };
+  };
+
+  return (
+    <Modal
+      title={title}
+      onClose={onClose}
+      z="z-[60]"
+      footer={
+        <div className="flex items-center gap-2">
+          {/* No delete for an `if`'s first clause: it has no row of its own
+              (it lives on the branchStart), and an `if` must have one — the
+              only thing "delete" could mean there is dropping the whole
+              branch, which is what deleting the branch itself is for.
+              Everything else deletes, asking once rather than acting on the
+              first tap, since a branch/group takes its whole block with it. */}
+          {!firstCase && (
+            <button
+              type="button"
+              onClick={() => (confirmDelete ? onDelete() : setConfirmDelete(true))}
+              className={`rounded-lg border px-3 py-2.5 text-sm ${
+                confirmDelete
+                  ? "border-red-600 bg-red-600 font-semibold text-white"
+                  : "border-red-200 text-red-600 hover:bg-red-50"
+              }`}
+            >
+              {confirmDelete ? t("mobile.confirmDelete") : <Trash2 size={16} />}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-neutral-300 py-2.5 text-sm"
+          >
+            {t("stepEdit.cancel")}
+          </button>
+          <button
+            onClick={() => onSave(patch())}
+            disabled={isMerge && gotoStepIndex < 0}
+            className="flex-1 rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t("stepEdit.save")}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        {isBranch && !parallel && (
+          <Field label={t("mobile.branchCondition")}>
+            <input value={cond} onChange={(e) => setCond(e.target.value)} className={FIELD_CLASS} />
+          </Field>
+        )}
+        {isCase && !parallel && (
+          <Field label={t("mobile.caseLabel")}>
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder={t("mobile.caseLabelHint")}
+              className={FIELD_CLASS}
+            />
+          </Field>
+        )}
+        {isCase && parallel && (
+          <Field label={t("mobile.pathLabel")}>
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              className={FIELD_CLASS}
+            />
+          </Field>
+        )}
+        {isGroup && (
+          <Field label={t("mobile.groupName")}>
+            <input value={name} onChange={(e) => setName(e.target.value)} className={FIELD_CLASS} />
+          </Field>
+        )}
+        {isMerge && (
+          <Field label={t("mobile.mergeTarget")}>
+            <select
+              value={gotoStepIndex}
+              onChange={(e) => setGotoStepIndex(Number(e.target.value))}
+              className={FIELD_CLASS}
+            >
+              {/* Every step is a valid destination — an id is never typed
+                  here, only assigned behind the scenes on save (see
+                  `applyGroupPatch`). This disabled option only renders when
+                  nothing is selected yet: the row's current target names no
+                  step at all (a dangling jump written in Text mode), so
+                  there is nothing to preselect. */}
+              {gotoStepIndex < 0 && (
+                <option value={-1} disabled>
+                  {t("mobile.mergeTargetUnset")}
+                </option>
+              )}
+              {mergeTargets.map((o) => (
+                <option key={o.stepIndex} value={o.stepIndex}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-neutral-500">
+              {t("mobile.mergeTargetHint")}
+            </span>
+          </Field>
+        )}
+        {!isMerge && (
+          <Field label={t("mobile.highlightColor")}>
+            <GroupColorSwatches value={color} onChange={setColor} />
+          </Field>
+        )}
+        {(isBranch || isCase) && (
+          <button
+            type="button"
+            onClick={onAddCase}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 py-2.5 text-sm text-neutral-600 hover:border-indigo-400 hover:text-indigo-600"
+          >
+            <Plus size={15} /> {parallel ? t("mobile.addPath") : t("mobile.addCase")}
+          </button>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -1510,11 +2213,11 @@ function PartsPreview({
     try {
       const code = extractPartsCode(dsl, section, id);
       if (!code) return "";
-      return renderPartsPreviewHtml(code, THEMES.basic);
+      return renderPartsPreviewHtml(code, THEMES.basic, { compact });
     } catch {
       return "";
     }
-  }, [dsl, section, id]);
+  }, [dsl, section, id, compact]);
   if (!html) return null;
   const cls = compact
     ? "[&_svg]:h-7 [&_svg]:w-auto [&_svg]:max-w-[140px]"

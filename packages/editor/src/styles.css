@@ -40,6 +40,7 @@
     "HackGen35 Console NF", "HackGen", "HackGen35", var(--sw-mono);
 
   display: flex;
+  position: relative;
   height: 100%;
   min-height: 0;
   width: 100%;
@@ -99,6 +100,14 @@
   border-color: var(--sw-accent);
   color: var(--sw-accent);
   background: var(--sw-accent-bg);
+}
+.sw-autosave {
+  font-size: 12px;
+  color: var(--sw-text-muted, #6b7280);
+  white-space: nowrap;
+}
+.sw-autosave-error {
+  color: #b45309;
 }
 .sw-icon-btn {
   display: inline-flex;
@@ -162,6 +171,14 @@
   color: var(--sw-text-faint);
   font-size: 12px;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.sw-tree-empty p,
+.sw-gui-empty p {
+  margin: 0;
 }
 .sw-tree-folder,
 .sw-tree-file {
@@ -207,6 +224,26 @@
   background: var(--sw-amber);
   flex-shrink: 0;
 }
+/*
+ * The "this file is being fetched" spinner, in the slot the unsaved dot
+ * otherwise occupies. `prefers-reduced-motion` drops the rotation rather than
+ * the indicator, so the state is still legible without the movement.
+ */
+.sw-spin {
+  flex-shrink: 0;
+  color: var(--sw-muted, #737373);
+  animation: sw-spin 0.9s linear infinite;
+}
+@keyframes sw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sw-spin {
+    animation: none;
+  }
+}
 .sw-tree-item-del {
   display: none;
   border: none;
@@ -222,8 +259,12 @@
   color: var(--sw-danger);
   background: var(--sw-bg-sunken);
 }
+/* Hover reveals the rename/delete actions; a touch screen has no hover, so
+   the selected and the open file always show theirs. */
 .sw-tree-folder:hover .sw-tree-item-del,
-.sw-tree-file:hover .sw-tree-item-del {
+.sw-tree-file:hover .sw-tree-item-del,
+.sw-tree-selected .sw-tree-item-del,
+.sw-tree-active .sw-tree-item-del {
   display: inline-flex;
   align-items: center;
 }
@@ -459,6 +500,17 @@
   background: transparent;
   pointer-events: none;
 }
+/* Scroll-following content: translated by the textarea's scroll offset (set in
+   JS) instead of scrolled, so it can never clamp short of where the caret is. */
+.sw-code-shift,
+.sw-code-gutter-inner,
+.sw-code-error-layer-inner {
+  will-change: transform;
+}
+.sw-code-shift {
+  width: max-content;
+  min-width: 100%;
+}
 .sw-code-input {
   z-index: 0;
   overflow: auto;
@@ -608,6 +660,80 @@
   min-height: 0;
   min-width: 0;
 }
+.sw-gui-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--sw-amber-bg);
+  color: var(--sw-amber);
+  font-size: 12px;
+  border-bottom: 1px solid var(--sw-border);
+}
+/* ---- starter gallery (beginner onboarding) ---- */
+.sw-starter-gallery {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 32px 16px;
+  text-align: center;
+  overflow: auto;
+}
+.sw-starter-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.sw-starter-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--sw-text-muted);
+  max-width: 420px;
+}
+.sw-starter-cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 620px;
+}
+.sw-starter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 180px;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid var(--sw-border-strong);
+  border-radius: 8px;
+  background: var(--sw-bg);
+  cursor: pointer;
+}
+.sw-starter-card:hover {
+  border-color: var(--sw-accent);
+  background: var(--sw-accent-bg);
+}
+.sw-starter-card-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.sw-starter-card-desc {
+  font-size: 11px;
+  color: var(--sw-text-muted);
+}
+.sw-starter-skip {
+  margin-top: 12px;
+  border: none;
+  background: transparent;
+  color: var(--sw-text-muted);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .sw-gui-list-pane {
   display: flex;
   flex-direction: column;
@@ -678,8 +804,10 @@
   border-color: #bfdbfe;
 }
 .sw-flow-row-locked {
-  opacity: 0.5;
-  cursor: not-allowed;
+  /* Still selectable (to view what's wrong) — just visually flagged as
+     not editable, not fully inert. */
+  opacity: 0.7;
+  border-left: 2px solid var(--sw-amber);
 }
 
 /* Type badge — color-coded by semantic kind for quick scanning. */
@@ -718,7 +846,7 @@
   color: #047857;
   border-color: #a7f3d0;
 }
-.sw-badge-else {
+.sw-badge-otherwise {
   background: #fff7ed;
   color: #c2410c;
   border-color: #fed7aa;
@@ -789,6 +917,14 @@
   flex-direction: column;
   gap: 10px;
 }
+.sw-inspector-locked-notice {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--sw-amber-bg);
+  color: var(--sw-amber);
+  border-radius: 6px;
+  font-size: 12px;
+}
 .sw-inspector-head {
   display: flex;
   align-items: center;
@@ -817,6 +953,11 @@
 .sw-field-label {
   font-size: 11px;
   color: var(--sw-text-muted);
+}
+.sw-field-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--sw-text-faint);
 }
 .sw-input {
   width: 100%;
@@ -854,6 +995,38 @@
   background: var(--sw-accent);
   color: #fff;
   border-color: var(--sw-accent);
+}
+.sw-branch-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sw-branch-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--sw-bg);
+  cursor: pointer;
+}
+.sw-branch-swatch-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid var(--sw-border-strong);
+  background: var(--sw-bg-sunken);
+}
+.sw-branch-swatch-on {
+  border-color: var(--sw-accent);
+  outline: 2px solid var(--sw-accent-bg);
+}
+.sw-branch-swatch:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 .sw-color-field {
   flex-wrap: nowrap;
@@ -913,6 +1086,44 @@
 .sw-modal-body {
   padding: 16px;
   overflow: auto;
+}
+.sw-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--sw-border);
+}
+/* The theme scope around the dialog: variables only, no box of its own. */
+.sw-dialog-root {
+  display: contents;
+}
+.sw-dialog {
+  max-width: 420px;
+}
+.sw-dialog-message {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}
+.sw-help-guide-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--sw-text);
+}
+.sw-help-view-toggle {
+  display: inline-block;
+  margin-bottom: 12px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--sw-accent);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
 }
 .sw-help-dl {
   margin: 0;
@@ -1639,24 +1850,161 @@
   border: 1px solid var(--sw-border-strong);
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  padding: 4px 0;
-  min-width: 160px;
+  padding: 6px 0;
+  min-width: 260px;
+  max-width: 300px;
+}
+.sw-add-block-group + .sw-add-block-group {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--sw-border);
+}
+.sw-add-block-group-heading {
+  padding: 2px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sw-text-faint);
 }
 .sw-add-block-item {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 2px;
   width: 100%;
   padding: 6px 12px;
   background: none;
   border: none;
   color: var(--sw-text);
-  font-size: 12px;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
 }
 .sw-add-block-item:hover {
   background: var(--sw-bg-sunken);
+}
+.sw-add-block-item-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+.sw-add-block-item-desc {
+  font-size: 11px;
+  color: var(--sw-text-muted);
+}
+
+/* ---- step inspector progressive disclosure ---- */
+.sw-inspector-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sw-inspector-advanced summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sw-text-muted);
+  margin-bottom: 2px;
+}
+.sw-inspector-advanced summary:hover {
+  color: var(--sw-text);
+}
+
+/* ---- onboarding tour (first-run orientation card) ---- */
+.sw-onboarding-tour {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 500;
+  width: 260px;
+  padding: 14px;
+  border: 1px solid var(--sw-border-strong);
+  border-radius: 10px;
+  background: var(--sw-bg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+.sw-onboarding-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.sw-onboarding-title {
+  margin: 0 0 8px;
+  padding-right: 20px;
+  font-size: 13px;
+}
+.sw-onboarding-list {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--sw-text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---- narrow screens: one pane at a time ---- */
+/*
+ * Phones and upright tablets. The three-column layout needs roughly 620px for
+ * the step list and inspector alone, which leaves nothing for the drawn
+ * diagram — so below this the panes stop sharing the screen and `PaneSwitcher`
+ * chooses between them. The panes themselves are not styled here: `gui-mode`
+ * simply renders one of them and drops the saved pixel widths, so each is an
+ * ordinary flex child filling the row.
+ */
+.sw-gui-narrow > *,
+.sw-split-narrow > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* The list pane's right border belongs to a column that has a neighbour. */
+.sw-gui-narrow > .sw-gui-list-pane,
+.sw-gui-narrow > .sw-gui-inspector-pane {
+  border-right: none;
+}
+.sw-split-narrow > .sw-preview-pane,
+.sw-gui-narrow > .sw-preview-pane {
+  border-left: none;
+}
+
+/*
+ * The file tree overlays the editor instead of squeezing it. At these widths a
+ * 240px column beside the content leaves too little of either to use, and the
+ * tree is something you open, pick from, and dismiss.
+ *
+ * Only the open tree is `.sw-tree`: folded, `FolderTree` returns the
+ * `.sw-tree-collapsed` rail instead, which is a different element and stays in
+ * the flow as a normal column.
+ */
+.sw-editor-narrow .sw-tree {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 30;
+  box-shadow: 2px 0 8px rgb(0 0 0 / 18%);
+  max-width: 85%;
+}
+
+/*
+ * Touch targets. The editor's buttons are sized for a mouse; a finger needs
+ * about 40px, and the panes have the room now that only one is on screen.
+ */
+@media (max-width: 768px) {
+  .sw-flow-row,
+  .sw-tree-file,
+  .sw-tree-folder {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+  .sw-mode-btn,
+  .sw-btn {
+    min-height: 32px;
+  }
+  /* A tapped field under 16px makes iOS Safari zoom the page in and stay there. */
+  .sw-gui-inspector-pane input,
+  .sw-gui-inspector-pane select,
+  .sw-gui-inspector-pane textarea {
+    font-size: 16px;
+  }
 }

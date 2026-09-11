@@ -13,6 +13,12 @@ export const POST = withApi(
     const { body } = await readJson<{ body?: string }>(req);
     if (!body?.trim()) throw new ApiError(400, "body is required");
     const project = await requireProjectRole(projectId, "viewer");
+    if (project.project.provider !== "github") {
+      throw new ApiError(
+        400,
+        "Pull request review is only available for GitHub-backed projects in this release.",
+      );
+    }
     const comment = await project.pulls.createIssueComment(n, body.trim());
     return json({ comment }, 201);
   },

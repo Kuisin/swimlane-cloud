@@ -8,14 +8,32 @@
  * apps about to encode the same rules, that drift becomes a correctness
  * problem, so this module is the single definition all new code imports.
  *
- *   main    production; releases are tagged here; never a direct edit target
- *   test    integration; the base for every tmp branch
- *   tmp-*   active edits; merges to `test`, NEVER straight to `main`
+ *   main    published (公開済み); releases are tagged here; never a direct edit target
+ *   preview approved (承認済み); the review line and the base for every edit
+ *           branch. It is NEVER a direct edit target either: the only way
+ *           content reaches it is a pull request from an edit branch, so
+ *           what a reviewer sees on preview is always something someone
+ *           approved.
+ *   <login>/<timestamp>/<key>   an edit in progress; merges to `preview`, NEVER straight to `main`
+ *
+ * `preview` was named `test` before this module existed; a handful of
+ * repositories seeded before the rename still carry a `test` branch, which is
+ * left alone rather than deleted. Edit branches were named `tmp-<user>-<edit>`
+ * before the rename; `isEditBranch` still recognises that shape so branches
+ * created by an older client (or still open as a pull request) keep working,
+ * but nothing here generates it any more.
  */
 
 export const PROD_BRANCH = "main";
-export const INTEGRATION_BRANCH = "test";
+export const INTEGRATION_BRANCH = "preview";
+/** @deprecated legacy edit-branch prefix, recognised but never generated. */
 export const TMP_PREFIX = "tmp-";
+
+/** `<login-slug>/<YYYYMMDD-HHmmss UTC>/<6 base36 chars>`. */
+export const EDIT_BRANCH_RE = /^[a-z0-9](?:[a-z0-9-]*)\/\d{8}-\d{6}\/[a-z0-9]{6}$/;
+
+const EDIT_KEY_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+export const EDIT_KEY_LENGTH = 6;
 
 /**
  * Lowercase, collapse to `-`, cap length. Deliberately identical to
@@ -31,13 +49,54 @@ export function slugify(input: string): string {
   return s || "untitled";
 }
 
-/** `tmp-<user>-<edit>` — matches the SaaS naming at edits/route.ts:25. */
-export function tmpBranchName(userSlug: string, editName: string): string {
-  return `${TMP_PREFIX}${slugify(userSlug)}-${slugify(editName)}`;
+/** Zero-padded UTC `YYYYMMDD-HHmmss`, so the string sorts chronologically. */
+export function formatEditTimestamp(d: Date = new Date()): string {
+  const pad = (n: number, len = 2) => String(n).padStart(len, "0");
+  return (
+    `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
+    `-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`
+  );
 }
 
+/** A short random key disambiguating same-second edits by the same user. */
+export function randomEditKey(len: number = EDIT_KEY_LENGTH): string {
+  const bytes = new Uint8Array(len);
+  const cryptoObj: Crypto | undefined =
+    typeof globalThis.crypto !== "undefined" ? globalThis.crypto : undefined;
+  if (cryptoObj?.getRandomValues) {
+    cryptoObj.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < len; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  let out = "";
+  for (let i = 0; i < len; i++) {
+    out += EDIT_KEY_ALPHABET[bytes[i]! % EDIT_KEY_ALPHABET.length];
+  }
+  return out;
+}
+
+/** `<login>/<timestamp>/<key>` — the only shape new edit branches are given. */
+export function editBranchName(
+  login: string,
+  now: Date = new Date(),
+  key: string = randomEditKey(),
+): string {
+  return `${slugify(login)}/${formatEditTimestamp(now)}/${key}`;
+}
+
+/** @deprecated legacy shape; matches branches created before the rename. */
 export function isTmpBranch(branch: string): boolean {
   return branch.startsWith(TMP_PREFIX) && branch.length > TMP_PREFIX.length;
+}
+
+/** A branch that is someone's edit-in-progress, current or legacy naming. */
+export function isEditBranch(branch: string): boolean {
+  return EDIT_BRANCH_RE.test(branch) || isTmpBranch(branch);
+}
+
+/** The `<login>` segment of an edit branch, or null for a legacy `tmp-*` name. */
+export function editBranchOwner(branch: string): string | null {
+  return EDIT_BRANCH_RE.test(branch) ? branch.slice(0, branch.indexOf("/")) : null;
 }
 
 export function isProdBranch(branch: string): boolean {
@@ -48,9 +107,13 @@ export function isIntegrationBranch(branch: string): boolean {
   return branch === INTEGRATION_BRANCH;
 }
 
-/** Branches the editor may write to. `main` is never one of them. */
+/**
+ * Branches the editor may write to: edit branches, and only those. Neither
+ * `main` nor `preview` is ever written directly — `preview` changes through
+ * a reviewed pull request, `main` through a promoted version.
+ */
 export function isWritableBranch(branch: string): boolean {
-  return isTmpBranch(branch) || isIntegrationBranch(branch);
+  return isEditBranch(branch);
 }
 
 export class MergeTargetError extends Error {
@@ -64,22 +127,22 @@ export class MergeTargetError extends Error {
  * Reject an illegal merge before it can be requested.
  *
  * Enforcing this at the client layer rather than in each app means neither the
- * hub nor the extension can even express `tmp-* -> main`, which is the mistake
- * the branch model exists to prevent: it would put unreviewed work straight
- * into production and into a public release URL.
+ * hub nor the extension can even express `<edit> -> main`, which is the
+ * mistake the branch model exists to prevent: it would put unreviewed work
+ * straight into production and into a public release URL.
  */
 export function assertMergeTarget(head: string, base: string): void {
   if (head === base) {
     throw new MergeTargetError(`Cannot merge ${head} into itself.`);
   }
-  if (isTmpBranch(head) && isProdBranch(base)) {
+  if (isEditBranch(head) && isProdBranch(base)) {
     throw new MergeTargetError(
       `${head} cannot merge directly into ${PROD_BRANCH}. ` +
         `Edit branches merge into ${INTEGRATION_BRANCH} first, and only released ` +
         `versions are promoted to ${PROD_BRANCH}.`,
     );
   }
-  if (isTmpBranch(head) && !isIntegrationBranch(base)) {
+  if (isEditBranch(head) && !isIntegrationBranch(base)) {
     throw new MergeTargetError(`${head} may only merge into ${INTEGRATION_BRANCH}, not ${base}.`);
   }
   if (isProdBranch(head)) {
@@ -89,9 +152,19 @@ export function assertMergeTarget(head: string, base: string): void {
   }
 }
 
-/** Checkpoints are commits; `main` never receives one directly (see checkpoint/route.ts:32-34). */
+/**
+ * Checkpoints are commits; neither `main` nor `preview` receives one
+ * directly. `preview` is read by reviewers, so a commit landing on it without
+ * a pull request would be content nobody approved.
+ */
 export function assertCheckpointTarget(branch: string): void {
   if (isProdBranch(branch)) {
     throw new MergeTargetError(`Checkpoints are not allowed directly on ${PROD_BRANCH}.`);
+  }
+  if (isIntegrationBranch(branch)) {
+    throw new MergeTargetError(
+      `Checkpoints are not allowed directly on ${INTEGRATION_BRANCH}. ` +
+        `Commit on an edit branch and open a pull request into ${INTEGRATION_BRANCH}.`,
+    );
   }
 }

@@ -8,13 +8,15 @@
  * exact same file. Absent config is normal, not an error.
  */
 
+import { INTEGRATION_BRANCH } from "./branch-model.ts";
+
 export interface RepoConfig {
   /** POSIX folder the diagram tree is rooted at. "" means the whole repo. */
   diagramsRoot: string;
   /** Display name; falls back to the repo name. */
   title: string | null;
   themeKey: string;
-  /** Overridable for teams whose staging branch is not called `test`. */
+  /** Overridable for teams whose staging branch is not called `preview`. */
   integrationBranch: string;
 }
 
@@ -22,7 +24,7 @@ export const DEFAULT_REPO_CONFIG: RepoConfig = {
   diagramsRoot: "",
   title: null,
   themeKey: "basic",
-  integrationBranch: "test",
+  integrationBranch: INTEGRATION_BRANCH,
 };
 
 export const REPO_CONFIG_PATH = ".swimlane.json";

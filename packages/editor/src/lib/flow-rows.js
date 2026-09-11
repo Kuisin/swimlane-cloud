@@ -32,11 +32,15 @@ export function normalizeBranchRows(rows) {
         next?.kind === "branchCase" &&
         next.id === row.id &&
         (next.label || "").trim() === firstCase;
-      out.push({ ...row, firstCase: "" });
+      out.push({ ...row, firstCase: "", firstCase$langs: null });
       if (!alreadySplit) {
         out.push({
           kind: "branchCase",
           label: firstCase,
+          // Carried over so a later `serializeDSL` can still write every
+          // declared language back — this row only exists as a GUI-list
+          // convenience, not a real change to the document.
+          label$langs: row.firstCase$langs ?? null,
           branchColor: row.branchColor ?? null,
           id: row.id,
           depth: (row.depth ?? 0) + 1,
@@ -89,47 +93,109 @@ export function normalizeBranchDepths(rows) {
   return out;
 }
 
-function findBranchStartForId(rows, rowIndex) {
-  const row = rows[rowIndex];
-  if (!row?.id) return -1;
-  if (row.kind === "branchStart") return rowIndex;
-  for (let j = rowIndex; j >= 0; j--) {
-    if (rows[j].kind === "branchStart" && rows[j].id === row.id) return j;
+/** A branch spends two indent steps (opener → case chip → case body). */
+const BRANCH_INDENT = 2;
+/** A group spends one: it has no chip row between its marker and its body. */
+const GROUP_INDENT = 1;
+
+/**
+ * GUI step list indent for every row, in the 16px units `FlowStepList` turns
+ * into `padding-left` — derived from how the rows actually nest, not from the
+ * `depth` a parser stamped on each one.
+ *
+ * An `if`/`fork` costs two steps: its opener, its cases and its closer share
+ * one column (2n), each case chip sits one in (2n+1) and a case body two
+ * (2n+2), so the chips read as headings over the steps they own. A
+ * `section`/`branch` group costs one, because nothing sits between its marker
+ * and its body.
+ *
+ * The important part is that branches and groups are walked on ONE stack, the
+ * same way `computeRowDepths` (row-depths.js) does it for the serializer. The
+ * previous version tracked branches only and fell back to `row.depth` outside
+ * them, which meant a group contributed nothing: a `branch (Side)` inside a
+ * case rendered flush with its own contents, and an `if` inside a `section`
+ * jumped back to column 0 as though it were top-level.
+ */
+export function computeRowListIndents(rows) {
+  const out = new Array(rows?.length ?? 0).fill(0);
+  const frames = [];
+  let body = 0;
+
+  const popTo = (kind, id) => {
+    for (let k = frames.length - 1; k >= 0; k--) {
+      if (frames[k].kind === kind && frames[k].id === id) {
+        const frame = frames[k];
+        frames.length = k;
+        return frame;
+      }
+    }
+    return null;
+  };
+  // A case closes anything its previous case left open — a group that ran off
+  // the end of one case cannot go on nesting the next one.
+  const findBranch = (id) => {
+    for (let k = frames.length - 1; k >= 0; k--) {
+      if (frames[k].kind === "branch" && frames[k].id === id) {
+        frames.length = k + 1;
+        return frames[k];
+      }
+    }
+    return null;
+  };
+
+  for (let i = 0; i < out.length; i++) {
+    const row = rows[i];
+    switch (row?.kind) {
+      case "branchStart": {
+        out[i] = body;
+        frames.push({ kind: "branch", id: row.id, base: body });
+        body += BRANCH_INDENT;
+        break;
+      }
+      case "branchCase": {
+        const frame = findBranch(row.id);
+        const base = frame ? frame.base : Math.max(0, body - BRANCH_INDENT);
+        out[i] = base + 1;
+        body = base + BRANCH_INDENT;
+        break;
+      }
+      case "branchEnd": {
+        const frame = popTo("branch", row.id);
+        const base = frame ? frame.base : Math.max(0, body - BRANCH_INDENT);
+        out[i] = base;
+        body = base;
+        break;
+      }
+      case "groupStart": {
+        out[i] = body;
+        frames.push({ kind: "group", id: row.id, base: body });
+        body += GROUP_INDENT;
+        break;
+      }
+      case "groupEnd": {
+        const frame = popTo("group", row.id);
+        const base = frame ? frame.base : Math.max(0, body - GROUP_INDENT);
+        out[i] = base;
+        body = base;
+        break;
+      }
+      // Steps, blanks, `loop` and `[goto: …]` all sit at the current body
+      // column — including the ones a stray closer would otherwise pull
+      // negative, which `Math.max` above already prevents.
+      default:
+        out[i] = body;
+    }
   }
-  return -1;
+  return out;
 }
 
 /**
- * GUI step list indent from branch nesting (not DSL export depth):
- * if/endif at 2n, cases at 2n+1, case body at 2n+2.
+ * One row's indent. `FlowStepList` renders a whole list, so it calls
+ * `computeRowListIndents` once instead; this is the convenience wrapper for
+ * callers (and tests) that only want a single row.
  */
 export function rowListIndentDepth(rows, rowIndex) {
-  const row = rows[rowIndex];
-  if (row.kind === "branchStart") {
-    return branchNestLevel(rows, rowIndex) * 2;
-  }
-  if (row.kind === "branchEnd") {
-    const startIdx = findBranchStartForId(rows, rowIndex);
-    if (startIdx < 0) return row.depth ?? 0;
-    return branchNestLevel(rows, startIdx) * 2;
-  }
-  if (row.kind === "branchCase") {
-    const startIdx = findBranchStartForId(rows, rowIndex);
-    if (startIdx < 0) return row.depth ?? 0;
-    return branchNestLevel(rows, startIdx) * 2 + 1;
-  }
-  if (
-    row.kind === "step" ||
-    row.kind === "branchLoop" ||
-    row.kind === "branchMerge" ||
-    row.kind === "groupStart" ||
-    row.kind === "groupEnd"
-  ) {
-    const enclosing = findEnclosingBranchStart(rows, rowIndex);
-    if (enclosing < 0) return row.depth ?? 0;
-    return branchNestLevel(rows, enclosing) * 2 + 2;
-  }
-  return row.depth ?? 0;
+  return computeRowListIndents(rows)[rowIndex] ?? 0;
 }
 
 /** Inclusive frame bounds for step reorder (between branch markers). */
@@ -268,6 +334,17 @@ export function stepBlockDisplayName(row, rowIndex = 0, t = defaultT) {
   return name || text || t("flow.stepN", { n: rowIndex + 1 });
 }
 
+/** The human label of the step named by `id`, or "" when nothing claims it. */
+function stepLabelForId(rows, id, t = defaultT) {
+  if (!rows || !id) return "";
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (row?.kind !== "step" || row.empty) continue;
+    if ((row.mergeId || "").trim() === id) return stepBlockDisplayName(row, i, t);
+  }
+  return "";
+}
+
 function laneLabel(lanes, roleId, t = defaultT) {
   if (!roleId) return t("flow.noRole");
   const lane = (lanes || []).find((l) => l.id === roleId);
@@ -339,8 +416,26 @@ export function rowLaneInfo(row, lanes, t = defaultT) {
   };
 }
 
-/** Localized type tag shown in the list badge. */
-export function rowBadgeLabel(row, t = defaultT) {
+/**
+ * True for the `branchCase` an `if`'s first clause was lifted into by
+ * `normalizeBranchRows` — the one whose text lives fused on the `if` line as
+ * `is (…) than` rather than on an `else-if (…) than` line of its own.
+ * Same adjacency test the serializer uses (`isExtractedFirstCase`).
+ */
+function isFusedFirstCase(rows, index) {
+  const row = rows?.[index];
+  if (!row || row.kind !== "branchCase" || row.parallel) return false;
+  const prev = rows[index - 1];
+  return !!prev && prev.kind === "branchStart" && !prev.parallel && prev.id === row.id;
+}
+
+/**
+ * Localized type tag shown in the list badge. `rows`/`rowIndex` are optional
+ * and only sharpen an if clause's badge: with them, the clause fused onto the
+ * `if` line reads `is` and every later one reads `else-if`, matching exactly
+ * what the document says.
+ */
+export function rowBadgeLabel(row, t = defaultT, rows = null, rowIndex = -1) {
   if (!row) return "";
   switch (row.kind) {
     case "step":
@@ -348,8 +443,9 @@ export function rowBadgeLabel(row, t = defaultT) {
     case "branchStart":
       return row.parallel ? t("badge.fork") : t("badge.if");
     case "branchCase":
-      if (row.parallel) return t("badge.and");
-      return /^else$/i.test((row.label || "").trim()) ? t("badge.else") : t("badge.case");
+      if (row.parallel) return t("badge.forkCase");
+      if ((row.label || "").trim() === "") return t("badge.otherwise");
+      return isFusedFirstCase(rows, rowIndex) ? t("badge.firstCase") : t("badge.case");
     case "branchEnd":
       return row.parallel ? t("badge.endfork") : t("badge.endif");
     case "branchLoop":
@@ -383,7 +479,7 @@ export function rowBadgeKind(row) {
       return row.parallel ? "fork" : "if";
     case "branchCase":
       if (row.parallel) return "fork";
-      return /^else$/i.test((row.label || "").trim()) ? "else" : "case";
+      return (row.label || "").trim() === "" ? "otherwise" : "case";
     case "branchLoop":
       return "loop";
     case "branchMerge":
@@ -402,7 +498,12 @@ export function rowLaneLabel(row, lanes, t = defaultT) {
   return laneLabel(lanes, row.role, t);
 }
 
-export function rowSummaryText(row, lanes, t = defaultT) {
+/**
+ * `rows` is optional and only used to turn a jump's target id back into the
+ * destination step's own label — an id is a machine detail the GUI assigns,
+ * never something the reader should have to decode (see `makeStepId`).
+ */
+export function rowSummaryText(row, lanes, t = defaultT, rows = null) {
   if (!row) return "";
   switch (row.kind) {
     case "step": {
@@ -413,14 +514,18 @@ export function rowSummaryText(row, lanes, t = defaultT) {
       return row.parallel ? t("flow.parallelFork") : (row.cond || "").trim() || t("flow.condition");
     case "branchCase":
       if (row.parallel) return t("flow.parallelPath");
-      if (/^else$/i.test((row.label || "").trim())) return t("flow.otherwise");
+      if ((row.label || "").trim() === "") return t("flow.otherwise");
       return (row.label || "").trim() || t("flow.case");
     case "branchEnd":
       return row.parallel ? t("flow.endParallel") : t("flow.endBranch");
     case "branchLoop":
       return t("flow.loopInBranch");
-    case "branchMerge":
-      return t("flow.mergeTo", { id: (row.mergeTarget || "").trim() || t("flow.unset") });
+    case "branchMerge": {
+      const target = (row.mergeTarget || "").trim();
+      return t("flow.mergeTo", {
+        id: (target && stepLabelForId(rows, target, t)) || target || t("flow.unset"),
+      });
+    }
     case "groupStart":
       return (row.groupMode ?? "branch") === "branch" ? t("flow.subbranch") : t("flow.sectionBox");
     case "groupEnd":
@@ -432,11 +537,15 @@ export function rowSummaryText(row, lanes, t = defaultT) {
   }
 }
 
-/** Tiny muted meta suffix for a step (merge id / non-default arrow). */
+/**
+ * Tiny muted meta suffix for a step (non-default arrow). A step's `id:` is
+ * deliberately absent: it is assigned by the tool when a jump is pointed at
+ * the step and removed again when the last jump stops pointing at it, so
+ * showing it would surface a name the user never chose and can't act on.
+ */
 export function rowStepMeta(row) {
   if (!row || row.kind !== "step" || row.empty) return "";
   const parts = [];
-  if ((row.mergeId || "").trim()) parts.push(`#${row.mergeId.trim()}`);
   if (row.arrowLine && row.arrowLine !== "solid") parts.push(row.arrowLine);
   return parts.join(" · ");
 }
@@ -453,19 +562,88 @@ export function branchCaseBadgeStyle(row) {
   };
 }
 
-export function collectMergeTargetOptions(rows) {
+/**
+ * Every step a `[goto: id]` row could land on. Since the landing-marker row
+ * kind is gone, a jump always names a real step — so the only candidates are
+ * the step rows themselves, each `{ kind: "step", stepIndex, mergeId,
+ * blockName, label }`. A step with no `id:` yet is still listed (mergeId ===
+ * "") because it is a perfectly good destination: a caller that lets the user
+ * pick it is expected to give it an id (see `makeStepId`) as part of the same
+ * edit. Callers that can only *reference* an existing id filter on `mergeId`.
+ *
+ * `label` is the step's own human label, never its id: the picker reads as a
+ * list of steps in the flow, which is what the author actually chose between.
+ */
+export function collectMergeTargetOptions(rows, t = defaultT) {
   const options = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     if (row.kind !== "step" || row.empty || !row.role) continue;
-    const mergeId = (row.mergeId || "").trim();
-    const blockName = stepBlockDisplayName(row, i);
+    const blockName = stepBlockDisplayName(row, i, t);
     options.push({
+      kind: "step",
       stepIndex: i,
-      mergeId,
+      mergeId: (row.mergeId || "").trim(),
       blockName,
-      label: mergeId ? `${blockName} (id: ${mergeId})` : blockName,
+      label: blockName,
     });
   }
   return options;
+}
+
+/** Every id some `[goto: id]` or `loop @id` in `rows` still points at. */
+function referencedStepIds(rows) {
+  const used = new Set();
+  for (const row of rows || []) {
+    if (row?.kind === "branchMerge") {
+      const id = (row.mergeTarget || "").trim();
+      if (id) used.add(id);
+    } else if (row?.kind === "branchLoop") {
+      const id = (row.loopTarget || "").trim();
+      if (id) used.add(id);
+    }
+  }
+  return used;
+}
+
+/**
+ * A fresh `id:` for the step at `index`: the first free `step-<n>`.
+ *
+ * Deliberately not derived from the step's own text. An id exists only so a
+ * `[goto: …]` line has something to name, and the GUI has no field for typing
+ * one — it is assigned when a jump is pointed at a step and removed again
+ * when the last jump stops pointing there (see `pruneUnreferencedStepIds`).
+ * A slug of the label would look like a name the user chose and would go
+ * stale the moment they reworded the step; a sequential token reads as what
+ * it is, plumbing.
+ */
+export function makeStepId(rows) {
+  const taken = new Set(
+    (rows || []).map((r) => (r?.mergeId || "").trim()).filter((id) => id.length > 0),
+  );
+  let n = 1;
+  while (taken.has(`step-${n}`)) n++;
+  return `step-${n}`;
+}
+
+/**
+ * Drop every step `id:` no `[goto: …]` / `loop @…` points at any more, so a
+ * retargeted or deleted jump doesn't leave an orphan `id:` line behind in the
+ * document. Safe precisely because the GUI never lets anyone author an id by
+ * hand: an unreferenced one is always a leftover the tool itself wrote.
+ *
+ * Returns a new array (the same one when nothing changed), so a caller can
+ * assign it straight back onto an `applyModelEdit` draft.
+ */
+export function pruneUnreferencedStepIds(rows) {
+  const used = referencedStepIds(rows);
+  let changed = false;
+  const out = (rows || []).map((row) => {
+    if (row?.kind !== "step") return row;
+    const id = (row.mergeId || "").trim();
+    if (!id || used.has(id)) return row;
+    changed = true;
+    return { ...row, mergeId: "" };
+  });
+  return changed ? out : rows;
 }

@@ -12,46 +12,83 @@ import {
   suggestNewTxtFileName,
   syncDocumentFromDisk,
 } from "../lib/dsl-document.js";
-import { hostHas, hostIsReadOnly } from "../host.js";
+import { createFlushScheduler } from "../lib/debounce-flush.js";
+import { fetchImports, missingImports, resolversFrom, withEntries } from "../lib/import-cache.js";
+import { clearMirror, readMirror, reconcileMirror, writeMirror } from "../lib/local-mirror.js";
+import {
+  createHistory,
+  pushHistory,
+  undo as undoHistory,
+  redo as redoHistory,
+  canUndo as canUndoHistory,
+  canRedo as canRedoHistory,
+  currentSrc as currentHistorySrc,
+} from "../lib/undo-stack.js";
+import { hostAutosaves, hostHas, hostIsReadOnly } from "../host.js";
+import { useDialogHost } from "../hooks/use-dialog-host.js";
+import { DialogHost } from "../components/dialog-host.jsx";
 
-// Default dialog implementations use the host window; consumers can override
-// via the `dialogs` prop for non-browser shells.
-const defaultDialogs = {
-  alert: async (msg) => {
-    if (typeof window !== "undefined" && window.alert) window.alert(msg);
-  },
-  confirm: async (msg) => {
-    if (typeof window !== "undefined" && window.confirm) return window.confirm(msg);
-    return true;
-  },
-  prompt: async (msg, def = "") => {
-    if (typeof window !== "undefined" && window.prompt) return window.prompt(msg, def);
-    return null;
-  },
-};
+const DEFAULT_AUTOSAVE_DELAY_MS = 1500;
+
+function localStorageOrNull() {
+  return typeof window !== "undefined" && window.localStorage ? window.localStorage : null;
+}
 
 /**
  * Owns the open-document set, active tab, theme, and all host-backed
  * persistence. Provides everything via EditorContext. The `host` prop is the
  * only side-effecting dependency.
+ *
+ * When `host.capabilities.autosave` is set (and the host is writable), Save /
+ * Save all disappear from the action bar in favour of a debounced background
+ * save: every edit is mirrored to localStorage immediately (so a tab closed
+ * mid-debounce loses nothing) and flushed to the host a short idle period
+ * later. Hosts that do not opt in are unaffected — this entire codepath is
+ * inert unless `capabilities.autosave` is true.
  */
 export function FileEditorProvider({ host, projectId, options, dialogs, children }) {
-  const dialog = useMemo(() => ({ ...defaultDialogs, ...(dialogs || {}) }), [dialogs]);
+  const dialogHost = useDialogHost();
+  const dialog = useMemo(
+    () => ({ ...dialogHost.dialogs, ...(dialogs || {}) }),
+    [dialogHost.dialogs, dialogs],
+  );
   const readOnly = hostIsReadOnly(host);
+  const autosave = hostAutosaves(host) && !readOnly;
+  const mirrorScope = options?.localMirrorKey ?? null;
+  const autosaveDelayMs = options?.autosaveDelayMs ?? DEFAULT_AUTOSAVE_DELAY_MS;
 
   const [files, setFiles] = useState([]); // FileRef[] from host.list()
+  // Directories that exist but hold no listed file. Git cannot store an empty
+  // directory, so a host that supports them reports them separately rather
+  // than through a path we could derive one from.
+  const [folders, setFolders] = useState([]);
   const [documents, setDocuments] = useState([]); // loaded/open docs
   const [openDocumentIds, setOpenDocumentIds] = useState([]);
+  /**
+   * The file currently being fetched, if any. Opening one that is not already
+   * in memory is a network round trip, and without this the tree looked
+   * unresponsive for its duration — nothing moved until the content arrived.
+   */
+  const [openingFileId, setOpeningFileId] = useState(null);
   const [activeDocumentId, setActiveDocumentIdState] = useState(null);
   const [themeKey, setThemeKey] = useState(options?.themeKey || "basic");
   const [policies, setPolicies] = useState(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  const [autosaveStatus, setAutosaveStatus] = useState(null);
 
   const documentsRef = useRef(documents);
   const activeDocumentIdRef = useRef(activeDocumentId);
   useEffect(() => void (documentsRef.current = documents), [documents]);
   useEffect(() => void (activeDocumentIdRef.current = activeDocumentId), [activeDocumentId]);
+
+  // Per-document undo/redo history (lib/undo-stack.js), keyed by document id.
+  // A ref, not state — mutated directly on every edit for performance;
+  // `historyTick` is bumped only when the *active* document's history changes,
+  // to force a re-render for canUndo/canRedo without re-rendering on every
+  // background document's edits.
+  const historiesRef = useRef(new Map());
+  const [historyTick, setHistoryTick] = useState(0);
 
   // Report the active file id so a host can persist it (e.g. in the URL). Kept
   // in a ref so an inline `options` object doesn't re-fire the notify effect.
@@ -63,14 +100,77 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     if (activeDocumentId) onActiveDocumentRef.current?.(activeDocumentId);
   }, [activeDocumentId]);
 
+  const onAutosaveErrorRef = useRef(options?.onAutosaveError);
+  useEffect(() => {
+    onAutosaveErrorRef.current = options?.onAutosaveError;
+  });
+  // Fired when `initialDocumentId` doesn't match anything in the file list —
+  // e.g. a URL built around a path the file has since moved away from — so a
+  // host can tell the user instead of the requested file silently opening
+  // whatever sorts first.
+  const onDocumentNotFoundRef = useRef(options?.onDocumentNotFound);
+  useEffect(() => {
+    onDocumentNotFoundRef.current = options?.onDocumentNotFound;
+  });
+  const onPendingChangeRef = useRef(options?.onPendingChange);
+  useEffect(() => {
+    onPendingChangeRef.current = options?.onPendingChange;
+  });
+
   const activeDocument = documents.find((doc) => doc.id === activeDocumentId) || null;
   const src = activeDocument?.src ?? "";
   const theme = THEMES[themeKey] ?? THEMES.basic;
-  const model = useMemo(() => parseDSL(src), [src]);
+  // `@use` targets already read, keyed by importing file and path. Parsing is
+  // synchronous and a host read is not, so the diagram renders with whatever
+  // has arrived and re-renders when the rest does.
+  const [importCache, setImportCache] = useState(() => new Map());
+  // The single resolved-imports view every parse of `src` must use — the
+  // context's own `model` and any other parse a consumer runs (the live SVG
+  // preview debounces its own) both need this, or they can disagree about
+  // whether an import resolved.
+  const parseOptions = useMemo(
+    () => resolversFrom(activeDocumentId, importCache),
+    [activeDocumentId, importCache],
+  );
+  const model = useMemo(() => parseDSL(src, parseOptions), [src, parseOptions]);
+
+  useEffect(() => {
+    if (!activeDocumentId) return undefined;
+    const pending = missingImports(src, activeDocumentId, importCache);
+    if (!pending.length) return undefined;
+    let cancelled = false;
+    void (async () => {
+      const entries = await fetchImports(pending, host);
+      if (cancelled || !entries.length) return;
+      setImportCache((prev) => withEntries(prev, activeDocumentId, entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [src, activeDocumentId, importCache, host]);
   const activeParseErrorPolicy = activeDocument?.parseErrorPolicy ?? null;
+
+  // Recomputed only when `historyTick` bumps (see updateDocumentSrc/undo/redo
+  // above) — `historiesRef` is a plain ref, so nothing else would notice it
+  // changed.
+  const canUndo = useMemo(() => {
+    const history = activeDocumentId ? historiesRef.current.get(activeDocumentId) : null;
+    return history ? canUndoHistory(history) : false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDocumentId, historyTick]);
+  const canRedo = useMemo(() => {
+    const history = activeDocumentId ? historiesRef.current.get(activeDocumentId) : null;
+    return history ? canRedoHistory(history) : false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDocumentId, historyTick]);
 
   const hasUnsavedChanges = isDocumentDirty(activeDocument);
   const hasAnyUnsavedChanges = documents.some(isDocumentDirty);
+  const pendingAutosave = autosave && hasAnyUnsavedChanges;
+
+  useEffect(() => {
+    onPendingChangeRef.current?.(pendingAutosave);
+  }, [pendingAutosave]);
 
   // Clear stale parse-error policies once the active doc parses cleanly.
   useEffect(() => {
@@ -87,11 +187,41 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     });
   }, [model.errors.length, activeDocumentId]);
 
+  // Mirror image of the effect above: a document opened clean already has
+  // `parseErrorPolicy: null` (dsl-document.js only ever sets "continue" on
+  // load), so introducing a typo *mid-session* previously left the policy
+  // unset — `canUseGuiEditing` then forced a silent bounce to text mode
+  // instead of the same locked-row "continue" experience a file opened
+  // already-broken gets. Default every new error to "continue" so both
+  // paths behave the same; "fix in text mode" stays one click away via the
+  // GUI-mode error banner rather than being the forced-only outcome.
+  useEffect(() => {
+    if (model.errors.length === 0) return;
+    setDocuments((current) => {
+      if (!current.some((doc) => doc.id === activeDocumentId && !doc.parseErrorPolicy)) {
+        return current;
+      }
+      return current.map((doc) =>
+        doc.id === activeDocumentId && !doc.parseErrorPolicy
+          ? { ...doc, parseErrorPolicy: "continue" }
+          : doc,
+      );
+    });
+  }, [model.errors.length, activeDocumentId]);
+
   // Initial hydration: list files, load template policies.
   const refreshFileList = useCallback(async () => {
     if (!hostHas(host, "list")) return;
     const list = await host.list();
     setFiles(Array.isArray(list) ? list : []);
+    if (hostHas(host, "listFolders")) {
+      try {
+        const dirs = await host.listFolders();
+        setFolders(Array.isArray(dirs) ? dirs : []);
+      } catch {
+        /* empty folders are a nicety; never fail the listing over them */
+      }
+    }
     return list;
   }, [host]);
 
@@ -112,7 +242,9 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
         // Open the host-requested file if it still exists, else the first one,
         // so the editor always has content to show.
         const wanted = options?.initialDocumentId;
-        const target = (wanted && (list || []).find((f) => f.id === wanted)) || (list || [])[0];
+        const found = wanted ? (list || []).find((f) => f.id === wanted) : null;
+        if (wanted && !found) onDocumentNotFoundRef.current?.(wanted);
+        const target = found || (list || [])[0];
         if (target && !cancelled) {
           await openFile(target.id);
         }
@@ -143,13 +275,36 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
         setFiles((cur) => cur.filter((f) => f.id !== e.id));
         return;
       }
+      // A host that only knows *that* a file changed (its listing moved) sends
+      // no content. That is not "the file is now empty" — treating it so
+      // re-initialised a freshly renamed document from a blank template. Read
+      // the file instead, and only replace what nobody has edited since.
+      if (e.dsl == null) {
+        if (documents.some((d) => d.id === e.id) && hostHas(host, "read")) {
+          host
+            .read(e.id)
+            .then((text) => {
+              if (typeof text !== "string") return;
+              setDocuments((cur) =>
+                cur.map((d) =>
+                  d.id === e.id && !isDocumentDirty(d)
+                    ? syncDocumentFromDisk(d, text, { isDirty: false, skipStaleBlank: true })
+                    : d,
+                ),
+              );
+            })
+            .catch(() => {});
+        }
+        refreshFileList();
+        return;
+      }
       setDocuments((cur) => {
         const existing = cur.find((d) => d.id === e.id);
         if (!existing) return cur; // not open; will appear on next list refresh
         const dirty = isDocumentDirty(existing);
         return cur.map((d) =>
           d.id === e.id
-            ? syncDocumentFromDisk(d, e.dsl ?? "", { isDirty: dirty, skipStaleBlank: true })
+            ? syncDocumentFromDisk(d, e.dsl, { isDirty: dirty, skipStaleBlank: true })
             : d,
         );
       });
@@ -159,18 +314,61 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [host]);
 
-  function updateDocumentSrc(documentId, nextSrc) {
-    if (readOnly) return;
+  /** Apply `nextSrc` to a document's state (mirror + revision bump), without touching undo history. */
+  function applyDocumentSrc(documentId, nextSrc) {
     setDocuments((cur) =>
-      cur.map((doc) =>
-        doc.id === documentId ? { ...doc, src: nextSrc, revision: (doc.revision ?? 0) + 1 } : doc,
-      ),
+      cur.map((doc) => {
+        if (doc.id !== documentId) return doc;
+        if (autosave && mirrorScope) {
+          writeMirror(localStorageOrNull(), mirrorScope, documentId, nextSrc, doc.savedSrc);
+        }
+        return { ...doc, src: nextSrc, revision: (doc.revision ?? 0) + 1 };
+      }),
     );
   }
 
-  function updateActiveDocumentSrc(nextSrc) {
+  /**
+   * `meta.tag` tags the push for undo coalescing (lib/undo-stack.js):
+   * `"typing"` (default — text-mode keystrokes) coalesces with adjacent
+   * typing pushes within the idle window; `"structural"` (GUI-mode row
+   * mutations) is always its own discrete undo step.
+   */
+  function updateDocumentSrc(documentId, nextSrc, meta) {
+    if (readOnly) return;
+    const prevSrc = documentsRef.current.find((d) => d.id === documentId)?.src ?? nextSrc;
+    const history = historiesRef.current.get(documentId) ?? createHistory(prevSrc);
+    historiesRef.current.set(documentId, pushHistory(history, nextSrc, meta));
+    applyDocumentSrc(documentId, nextSrc);
+    if (documentId === activeDocumentIdRef.current) setHistoryTick((t) => t + 1);
+  }
+
+  function updateActiveDocumentSrc(nextSrc, meta) {
     if (!activeDocumentId) return;
-    updateDocumentSrc(activeDocumentId, nextSrc);
+    updateDocumentSrc(activeDocumentId, nextSrc, meta);
+  }
+
+  function undo() {
+    const id = activeDocumentIdRef.current;
+    if (readOnly || !id) return;
+    const history = historiesRef.current.get(id);
+    if (!history) return;
+    const next = undoHistory(history);
+    if (next === history) return;
+    historiesRef.current.set(id, next);
+    applyDocumentSrc(id, currentHistorySrc(next));
+    setHistoryTick((t) => t + 1);
+  }
+
+  function redo() {
+    const id = activeDocumentIdRef.current;
+    if (readOnly || !id) return;
+    const history = historiesRef.current.get(id);
+    if (!history) return;
+    const next = redoHistory(history);
+    if (next === history) return;
+    historiesRef.current.set(id, next);
+    applyDocumentSrc(id, currentHistorySrc(next));
+    setHistoryTick((t) => t + 1);
   }
 
   /** Replace both src and savedSrc (used by formatter to avoid dirtying). */
@@ -200,25 +398,44 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
         return;
       }
       let content = "";
+      setOpeningFileId(id);
       try {
         content = await host.read(id);
       } catch (err) {
         await dialog.alert(err?.message || `Could not open ${id}`);
         return;
+      } finally {
+        // Cleared on the failure path too, or a file that cannot be read would
+        // leave the tree spinning for the rest of the session.
+        setOpeningFileId((cur) => (cur === id ? null : cur));
       }
       const doc = createDocument(id, content);
+      if (autosave && mirrorScope) {
+        const storage = localStorageOrNull();
+        const mirror = readMirror(storage, mirrorScope, id);
+        const reconciled = reconcileMirror(mirror, content);
+        if (reconciled.action === "restore") {
+          doc.src = reconciled.src;
+        } else {
+          clearMirror(storage, mirrorScope, id);
+        }
+      }
+      historiesRef.current.set(id, createHistory(doc.src));
       setDocuments((cur) => [...cur, doc]);
       setOpenDocumentIds((cur) => (cur.includes(id) ? cur : [...cur, id]));
       setActiveDocumentIdState(id);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [host, dialog],
+    [host, dialog, autosave, mirrorScope],
   );
 
   async function setActiveDocumentId(documentId) {
     if (documentId === activeDocumentIdRef.current) return;
     const leaving = documentsRef.current.find((d) => d.id === activeDocumentIdRef.current);
-    if (leaving && isDocumentDirty(leaving)) {
+    // Under autosave the debounce (or the pending edit itself, mirrored to
+    // localStorage) already covers a switch away from unsaved work, so there
+    // is nothing here for the user to lose and nothing to confirm.
+    if (leaving && isDocumentDirty(leaving) && !autosave) {
       const ok = await dialog.confirm(
         "This file has unsaved changes. Switch anyway? (changes will be discarded)",
       );
@@ -228,7 +445,19 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     setActiveDocumentIdState(documentId);
   }
 
-  function closeDocumentTab(documentId) {
+  async function closeDocumentTab(documentId) {
+    if (autosave) {
+      const doc = documentsRef.current.find((d) => d.id === documentId);
+      if (doc && isDocumentDirty(doc)) {
+        try {
+          await writeDirtyDocsRef.current([doc], { silent: true });
+        } catch {
+          // Best-effort: the mirror still holds the edit (writeDirtyDocs only
+          // clears it on success), so nothing is lost, just not yet pushed.
+        }
+      }
+    }
+    historiesRef.current.delete(documentId);
     setOpenDocumentIds((cur) => {
       const next = cur.filter((id) => id !== documentId);
       setActiveDocumentIdState((curId) =>
@@ -239,6 +468,56 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     setDocuments((cur) => cur.filter((d) => d.id !== documentId));
   }
 
+  /**
+   * Write every doc in `docs` to the host and mark it saved. `silent` (used
+   * by autosave and the pre-close flush) reports failure to the caller
+   * instead of showing a dialog, since a debounce retrying quietly is the
+   * whole point of autosave.
+   */
+  const writeDirtyDocs = useCallback(
+    async (docs, { silent = false } = {}) => {
+      if (docs.length === 0) return;
+      const updates = docs.map((d) => ({ id: d.id, dsl: d.src }));
+      try {
+        if (hostHas(host, "writeDraftMany")) {
+          await host.writeDraftMany(updates);
+        } else {
+          for (const u of updates) await host.writeDraft(u.id, u.dsl);
+        }
+        const ids = new Set(docs.map((d) => d.id));
+        setDocuments((cur) =>
+          cur.map((d) =>
+            ids.has(d.id)
+              ? {
+                  ...d,
+                  savedSrc: d.src,
+                  needsInitialDiskSave: false,
+                  initializedFromBlank: false,
+                  parseErrorPolicy: null,
+                }
+              : d,
+          ),
+        );
+        if (mirrorScope) {
+          const storage = localStorageOrNull();
+          for (const d of docs) clearMirror(storage, mirrorScope, d.id);
+        }
+      } catch (err) {
+        if (silent) throw err;
+        await dialog.alert(err?.message || "Could not save the file.");
+      }
+    },
+    [host, dialog, mirrorScope],
+  );
+
+  // `closeDocumentTab` is a plain function (not useCallback) but needs the
+  // latest `writeDirtyDocs` without listing it as a dependency of anything —
+  // a ref keeps that lookup current without re-creating callbacks.
+  const writeDirtyDocsRef = useRef(writeDirtyDocs);
+  useEffect(() => {
+    writeDirtyDocsRef.current = writeDirtyDocs;
+  }, [writeDirtyDocs]);
+
   const saveDocuments = useCallback(
     async (overrideSrc) => {
       if (readOnly || !hostHas(host, "writeDraft")) return;
@@ -248,60 +527,56 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
       const contentToWrite = typeof overrideSrc === "string" ? overrideSrc : doc?.src;
       if (!doc || contentToWrite == null) return;
       if (typeof overrideSrc !== "string" && !isDocumentDirty(doc)) return;
-      try {
-        await host.writeDraft(documentId, contentToWrite);
-        setDocuments((cur) =>
-          cur.map((d) =>
-            d.id === documentId
-              ? {
-                  ...d,
-                  savedSrc: contentToWrite,
-                  src: contentToWrite,
-                  needsInitialDiskSave: false,
-                  initializedFromBlank: false,
-                  parseErrorPolicy: null,
-                }
-              : d,
-          ),
-        );
-      } catch (err) {
-        await dialog.alert(err?.message || "Could not save the file.");
-      }
+      await writeDirtyDocs([{ ...doc, src: contentToWrite }]);
     },
-    [host, readOnly, dialog],
+    [host, readOnly, writeDirtyDocs],
   );
 
   const saveAllDocuments = useCallback(async () => {
     if (readOnly) return;
     const dirty = documentsRef.current.filter(isDocumentDirty);
     if (dirty.length === 0) return;
-    const updates = dirty.map((d) => ({ id: d.id, dsl: d.src }));
-    try {
-      if (hostHas(host, "writeDraftMany")) {
-        await host.writeDraftMany(updates);
-      } else {
-        for (const u of updates) await host.writeDraft(u.id, u.dsl);
-      }
-      const ids = new Set(dirty.map((d) => d.id));
-      setDocuments((cur) =>
-        cur.map((d) =>
-          ids.has(d.id)
-            ? {
-                ...d,
-                savedSrc: d.src,
-                needsInitialDiskSave: false,
-                initializedFromBlank: false,
-                parseErrorPolicy: null,
-              }
-            : d,
-        ),
-      );
-    } catch (err) {
-      await dialog.alert(err?.message || "Could not save all files.");
-    }
-  }, [host, readOnly, dialog]);
+    await writeDirtyDocs(dirty);
+  }, [readOnly, writeDirtyDocs]);
 
-  async function createNewFile(dir = "") {
+  // ── Autosave: debounce a background writeDirtyDocs while anything is dirty.
+  const autosaveFlush = useCallback(async () => {
+    const dirty = documentsRef.current.filter(isDocumentDirty);
+    if (dirty.length === 0) return;
+    setAutosaveStatus({ state: "saving" });
+    try {
+      await writeDirtyDocs(dirty, { silent: true });
+      setAutosaveStatus({ state: "saved", at: Date.now() });
+    } catch (err) {
+      const message = err?.message || "Could not save automatically.";
+      setAutosaveStatus({ state: "error", message });
+      onAutosaveErrorRef.current?.(message);
+    }
+  }, [writeDirtyDocs]);
+
+  const schedulerRef = useRef(null);
+  useEffect(() => {
+    schedulerRef.current = createFlushScheduler({ delay: autosaveDelayMs, run: autosaveFlush });
+    return () => schedulerRef.current?.cancel();
+  }, [autosaveDelayMs, autosaveFlush]);
+
+  useEffect(() => {
+    if (!autosave) return;
+    if (documents.some(isDocumentDirty)) schedulerRef.current?.schedule();
+  }, [autosave, documents]);
+
+  // Flush whatever is dirty when the editor unmounts (branch switch, tab
+  // close) rather than leaving it to the debounce that will never fire again.
+  useEffect(() => {
+    return () => {
+      if (!autosave) return;
+      const dirty = documentsRef.current.filter(isDocumentDirty);
+      if (dirty.length > 0) void writeDirtyDocsRef.current(dirty, { silent: true }).catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autosave]);
+
+  async function createNewFile(dir = "", starterDsl) {
     if (readOnly || !hostHas(host, "create")) return;
     const suggested = suggestNewTxtFileName(
       files.map((f) => f.id),
@@ -318,20 +593,27 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
       await dialog.alert("A file with that name already exists.");
       return;
     }
-    let content = dslContentFromTemplate(relPath, DEFAULT_TAB_TEMPLATE);
+    let content = dslContentFromTemplate(relPath, starterDsl || DEFAULT_TAB_TEMPLATE);
     // Apply a forced /role/ etc. on create if policies demand it.
     content = applyForcedSections(content, policies);
+    let createdAt = relPath;
     try {
-      await host.create(relPath, content);
+      // A host may relocate the file (into its diagrams folder, say) and tell
+      // us where it went. Opening the suggested path instead would leave a
+      // document open that the file list never shows and whose saves land on
+      // a different path from the one on screen.
+      const actual = await host.create(relPath, content);
+      if (typeof actual === "string" && actual) createdAt = actual;
     } catch (err) {
       await dialog.alert(err?.message || "Could not create the file.");
       return;
     }
     await refreshFileList();
-    const doc = createDocument(relPath, content);
+    const doc = createDocument(createdAt, content);
+    historiesRef.current.set(createdAt, createHistory(doc.src));
     setDocuments((cur) => [...cur, doc]);
-    setOpenDocumentIds((cur) => [...cur, relPath]);
-    setActiveDocumentIdState(relPath);
+    setOpenDocumentIds((cur) => [...cur, createdAt]);
+    setActiveDocumentIdState(createdAt);
   }
 
   async function deleteFile(fileId) {
@@ -406,6 +688,32 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     }
   }
 
+  /**
+   * Rename in place: same folder, new file name.
+   *
+   * A rename *is* a move as far as the host is concerned, so this only has to
+   * ask for the new name and hand the rest to `moveFile` — which already
+   * refuses a collision, repoints the open document and its tab, and refreshes
+   * the tree.
+   */
+  async function renameFile(fileId) {
+    if (readOnly || !hostHas(host, "rename")) return;
+    const cut = fileId.lastIndexOf("/");
+    const dir = cut < 0 ? "" : fileId.slice(0, cut);
+    const current = cut < 0 ? fileId : fileId.slice(cut + 1);
+    const entered = await dialog.prompt("New file name", current);
+    if (entered == null) return;
+    const name = entered.trim().replace(/^\/+|\/+$/g, "");
+    if (!name || name === current) return;
+    // A name, not a path — moving between folders is what dragging is for,
+    // and silently relocating a file someone meant to rename would surprise.
+    if (name.includes("/")) {
+      await dialog.alert("Enter a file name, not a path. Drag the file to move it.");
+      return;
+    }
+    await moveFile(fileId, dir ? `${dir}/${name}` : name);
+  }
+
   async function createNewFolder(parentDir = "") {
     if (readOnly || !hostHas(host, "mkdir")) return;
     const entered = await dialog.prompt(
@@ -444,12 +752,17 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     host,
     projectId,
     readOnly,
+    autosave,
+    autosaveStatus,
+    pendingAutosave,
     isHydrated,
     loadError,
     files,
+    folders,
     documents,
     openDocuments: openDocumentIds.map((id) => documents.find((d) => d.id === id)).filter(Boolean),
     openDocumentIds,
+    openingFileId,
     activeDocument,
     activeDocumentId,
     setActiveDocumentId,
@@ -461,6 +774,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     theme,
     src,
     model,
+    parseOptions,
     activeParseErrorPolicy,
     setActiveDocumentParseErrorPolicy,
     hasUnsavedChanges,
@@ -468,6 +782,10 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     updateActiveDocumentSrc,
     updateDocumentSrc,
     replaceActiveDocumentSrc,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     saveDocuments,
     saveAllDocuments,
     createNewFile,
@@ -475,12 +793,32 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     deleteFile,
     deleteFolder,
     moveFile,
+    renameFile,
     checkpoint,
     policies,
     dialog,
   };
 
-  return <EditorContext.Provider value={editorValue}>{children}</EditorContext.Provider>;
+  return (
+    <EditorContext.Provider value={editorValue}>
+      {children}
+      {/* Only ever activates for the alert/confirm/prompt methods a host's
+          `dialogs` override (if any) didn't replace — a fully-overriding host
+          (e.g. the VS Code webview) never triggers a request here.
+
+          Wrapped in `.sw-editor` because the dialog sits *beside* the editor's
+          root, not inside it, and every colour it uses is a CSS variable that
+          root defines — without this the modal drew with no background at
+          all. `display: contents` keeps the wrapper from laying anything out. */}
+      <div className="sw-editor sw-dialog-root">
+        <DialogHost
+          request={dialogHost.request}
+          onOk={dialogHost.handleOk}
+          onCancel={dialogHost.handleCancel}
+        />
+      </div>
+    </EditorContext.Provider>
+  );
 }
 
 /** Prepend forced section bodies into freshly created file content. */

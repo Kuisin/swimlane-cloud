@@ -20,9 +20,13 @@ export interface RenderResult {
  * mobile view still available, not to a 500 — the source may well be a
  * half-finished diagram on a branch someone is actively editing.
  */
-function renderUncached(dsl: string, themeKey: string): RenderResult {
+function renderUncached(
+  dsl: string,
+  themeKey: string,
+  documentInfo?: { path?: string; meta?: Record<string, string> },
+): RenderResult {
   try {
-    const { svg, errors } = textToSvg(dsl, { themeKey });
+    const { svg, errors } = textToSvg(dsl, { themeKey, documentInfo });
     return { svg, errors: errors ?? [] };
   } catch (err) {
     return { svg: null, errors: [{ msg: err instanceof Error ? err.message : String(err) }] };

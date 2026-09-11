@@ -32,6 +32,10 @@ loop   {}
 merge  { target }
 ```
 
+`mergeId` is the step's own `id: <id>;` line — the name a `[goto: <id>]`
+jump uses to land on it. A `merge` node is that jump, and its `target` always
+names a real step: there is no landing-marker node, and no bare jump.
+
 ## Styling
 
 The presentation (`MobileDiagram.jsx`) is styled with **Tailwind** utility classes

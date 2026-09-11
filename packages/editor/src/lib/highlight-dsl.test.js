@@ -17,14 +17,19 @@ describe("tokenizeDslLine", () => {
       "   ",
       "  arrow: dashed;",
       "if (status) is (ok) than #Done",
+      "else-if () than",
+      "case (ok)",
       "// a comment",
-      "*** another comment",
+      "/* another comment */",
       "@meta directive",
       "/role/",
       "<lane>: Do the thing and wait;",
-      "section-start (Intake) #S1",
-      "merge: target;",
-      "[loop];",
+      "section (Intake) #S1",
+      "loop @target",
+      "[goto: done]",
+      "  id: done;",
+      "[]",
+      "level: 2;",
       "résumé: 日本語のテキスト;",
     ];
     for (const line of lines) expect(concat(line)).toBe(line);
@@ -35,15 +40,103 @@ describe("tokenizeDslLine", () => {
     expect(types("// hi")).toEqual(["comment:// hi"]);
     expect(types("/role/")).toEqual(["section:/role/"]);
     expect(types("@x")).toEqual(["meta:@x"]);
-    expect(types("endif")).toEqual(["keyword:endif"]);
+    expect(types("end-if")).toEqual(["keyword:end-if"]);
+    expect(types("end-phase")).toEqual(["keyword:end-phase"]);
     expect(types("<ref>")).toEqual(["ref:<ref>"]);
+  });
+
+  it("colours the bare spacer statement", () => {
+    expect(types("[]")).toEqual(["keyword:[]"]);
+  });
+
+  it("colours loop, bare and with an @id", () => {
+    expect(types("loop")).toEqual(["keyword:loop"]);
+    expect(types("loop @done")).toEqual(["keyword:loop", "plain:@done"]);
+  });
+
+  // `[goto: id]` looks exactly like a step at a glance, so `goto` has to read
+  // as control flow rather than as a role called "goto".
+  it("colours the goto in a `[goto: id]` jump as a keyword", () => {
+    expect(types("[goto: done]")).toEqual([
+      "plain:[",
+      "keyword:goto",
+      "punct::",
+      "plain:done",
+      "plain:]",
+    ]);
+    expect(types("  [goto: done]")).toContain("keyword:goto");
+  });
+
+  // ...but only there: a real role may not be named `goto`, yet a step whose
+  // text merely mentions it must not light up.
+  it("leaves the word goto alone outside the jump statement", () => {
+    expect(types("<lane>: goto the desk;")).not.toContain("keyword:goto");
+    expect(types("[a: goto the desk]")).not.toContain("keyword:goto");
+  });
+
+  it("recognises `level` and `skip` as property keys, like `id`", () => {
+    expect(types("level: 2;")).toEqual(["key:level", "punct::", "plain:2", "punct:;"]);
+    expect(types("skip;")).toEqual(["key:skip", "punct:;"]);
   });
 
   it("colours inline keywords only on control-flow lines", () => {
     // `is` / `than` highlight inside an `if` line...
-    expect(types("if (a) is (b) than #X")).toContain("keyword:is");
-    expect(types("if (a) is (b) than #X")).toContain("anchor:#X");
-    // ...but a bare "and" inside step text stays plain.
-    expect(types("<lane>: review and approve;")).not.toContain("keyword:and");
+    expect(types("if (q?) is (yes) than")).toEqual([
+      "keyword:if",
+      "punct:(",
+      "plain:q?",
+      "punct:)",
+      "keyword:is",
+      "punct:(",
+      "plain:yes",
+      "punct:)",
+      "keyword:than",
+    ]);
+    // ...but the same words inside step text stay plain.
+    expect(types("<lane>: is this better than that;")).not.toContain("keyword:is");
+    expect(types("<lane>: is this better than that;")).not.toContain("keyword:than");
+  });
+
+  // `is`/`than`/`if` are ordinary English words, so a condition or a case
+  // label that happens to contain one must not light up mid-sentence.
+  it("never colours a keyword inside the author's own (…) text", () => {
+    expect(types("if (Is the form signed?) is (yes) than")).toEqual([
+      "keyword:if",
+      "punct:(",
+      "plain:Is",
+      "plain:the",
+      "plain:form",
+      "plain:signed?",
+      "punct:)",
+      "keyword:is",
+      "punct:(",
+      "plain:yes",
+      "punct:)",
+      "keyword:than",
+    ]);
+    expect(types("else-if (more than three) than")).toEqual([
+      "keyword:else-if",
+      "punct:(",
+      "plain:more",
+      "plain:than",
+      "plain:three",
+      "punct:)",
+      "keyword:than",
+    ]);
+  });
+
+  it("colours else-if as one keyword, not `else` plus `if`", () => {
+    expect(types("else-if (no) than")).toContain("keyword:else-if");
+    expect(types("else-if than")).toEqual(["keyword:else-if", "keyword:than"]);
+  });
+
+  it("colours a fork's `case (label)` path", () => {
+    expect(types("fork (Shipping)")).toContain("keyword:fork");
+    expect(types("case (Billing)")).toContain("keyword:case");
+  });
+
+  it("colours a blank else-if () as a keyword, same as a labelled one", () => {
+    expect(types("else-if () than")).toContain("keyword:else-if");
+    expect(types("case ()")).toContain("keyword:case");
   });
 });

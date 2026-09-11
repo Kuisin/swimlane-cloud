@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { DslEditor } from "@swimlane-cloud/editor";
 import "@swimlane-cloud/editor/styles.css";
+import { INTEGRATION_BRANCH, isWritableBranch } from "@swimlane-cloud/github-client";
 import { createGitHubHost } from "@/lib/github-host";
 
 /**
@@ -23,6 +24,7 @@ export function EditorClient({
   branch: string;
 }) {
   const [staleSince, setStaleSince] = useState<string | null>(null);
+  const readOnly = !isWritableBranch(branch);
 
   const host = useMemo(
     () =>
@@ -44,6 +46,12 @@ export function EditorClient({
         <span className="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-xs text-blue-700">
           {branch}
         </span>
+        {readOnly ? (
+          <span className="text-xs text-amber-700">
+            Read-only: {branch === INTEGRATION_BRANCH ? "preview" : branch} is never edited
+            directly. Start an edit branch and open a pull request into {INTEGRATION_BRANCH}.
+          </span>
+        ) : null}
         {staleSince ? (
           <span className="text-xs text-amber-700">
             This branch moved on GitHub — a checkpoint will be refused until you reload.
