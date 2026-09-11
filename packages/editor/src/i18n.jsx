@@ -178,8 +178,8 @@ export const EN = {
   "badge.else": "else",
   "badge.and": "and",
   "badge.fork": "fork",
-  "badge.endif": "endif",
-  "badge.endfork": "endfork",
+  "badge.endif": "end-if",
+  "badge.endfork": "end-fork",
   "badge.loop": "loop",
   "badge.merge": "merge",
   "badge.branch": "branch",
@@ -254,17 +254,17 @@ export const EN = {
   "help.block": "Reusable step styles referenced as [role: text] <blockId>.",
   "help.prop": "Side annotations attached to steps via props: a,b;.",
   "help.line":
-    "The flow. [role: text] steps, if / elseif / else / endif, fork / and / endfork, branch / end-branch, section / end-section, merge: id;, [loop].",
+    "The flow. [role: text] steps, if / else-if / else / end-if, fork / and / end-fork, branch / end-branch, section / end-section, merge: id;, [loop].",
   "help.icon": "#name for a Lucide icon (e.g. #check, #zap), or any plain character/emoji.",
   "help.comment":
     "Lines starting with // or *** are comments. Inside /line/ they're kept attached to the next line on format.",
-  "help.loop": "End a case with [loop] to route back to the same if's condition instead of endif.",
+  "help.loop": "End a case with [loop] to route back to the same if's condition instead of end-if.",
   "help.section":
     "Wraps steps in a dashed box for visual grouping only — the main flow is unchanged.",
   "help.branch":
     "Splits off a side path from the main flow; only the last step merges back, into whatever follows end-branch.",
   "help.merge":
-    "Ends a case by jumping forward to a downstream step's id: instead of the endif diamond.",
+    "Ends a case by jumping forward to a downstream step's id: instead of the end-if diamond.",
   "help.arrow":
     "Sets the line style (solid / dashed / dotted) of the connector right after this step.",
   "help.templatesTitle": "Reusable role / block / prop snippets",
@@ -491,8 +491,8 @@ export const JA = {
   "badge.else": "その他",
   "badge.and": "並列",
   "badge.fork": "フォーク",
-  "badge.endif": "分岐終",
-  "badge.endfork": "並列終",
+  "badge.endif": "end-if",
+  "badge.endfork": "end-fork",
   "badge.loop": "ループ",
   "badge.merge": "マージ",
   "badge.branch": "サブ分岐",
@@ -566,17 +566,18 @@ export const JA = {
   "help.block": "再利用するステップ形状。[role: text] <blockId> で参照します。",
   "help.prop": "ステップに付ける注釈。props: a,b; で付与します。",
   "help.line":
-    "フロー本体。[role: text] のステップ、if / elseif / else / endif、fork / and / endfork、branch / end-branch、section / end-section、merge: id;、[loop]。",
+    "フロー本体。[role: text] のステップ、if / else-if / else / end-if、fork / and / end-fork、branch / end-branch、section / end-section、merge: id;、[loop]。",
   "help.icon":
     "#名前 で Lucide アイコンを指定（例：#check、#zap）。# 無しは文字・絵文字としてそのまま表示。",
   "help.comment":
     "// または *** で始まる行はコメントです。/line/ 内では整形しても直後の行に付いたまま保持されます。",
-  "help.loop": "ケースの末尾に [loop] を置くと、endif ではなく同じ if の条件へ戻る矢印になります。",
+  "help.loop":
+    "ケースの末尾に [loop] を置くと、end-if ではなく同じ if の条件へ戻る矢印になります。",
   "help.section": "本流の流れは変えず、関連ステップを点線ボックスで視覚的に囲うだけの枠です。",
   "help.branch":
     "本流から分岐する支線です。末尾のステップだけが end-branch 直後のブロックへ合流します。",
   "help.merge":
-    "ケースの末尾で endif の合流ダイヤモンドを使わず、下流の id: へ直接前方合流します。",
+    "ケースの末尾で end-if の合流ダイヤモンドを使わず、下流の id: へ直接前方合流します。",
   "help.arrow": "このステップの直後に描く矢印の線種（実線／破線／点線）を指定します。",
   "help.templatesTitle": "再利用できる role / block / prop の例",
   "help.templatesHint":

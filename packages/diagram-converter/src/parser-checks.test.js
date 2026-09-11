@@ -18,24 +18,24 @@ describe("parser validation — document structure", () => {
     expect(msgs(src)).toContain("missing @end marker");
   });
 
-  it("errors on unclosed if (missing endif)", () => {
+  it("errors on unclosed if (missing end-if)", () => {
     const errors = parseDSL(DOC(`if (確認) is (OK) than\n  [a: 手順]`)).errors;
-    expect(errors.map((e) => e.msg)).toContain("unclosed if (missing endif)");
+    expect(errors.map((e) => e.msg)).toContain("unclosed if (missing end-if)");
     // The error points at the opening line, like the unclosed-section check.
     const err = errors.find((e) => e.msg.startsWith("unclosed if"));
     expect(err.text).toContain("if (確認)");
   });
 
-  it("errors on unclosed fork (missing endfork)", () => {
+  it("errors on unclosed fork (missing end-fork)", () => {
     expect(msgs(DOC(`fork\n  [a: 並行1]\nand\n  [a: 並行2]`))).toContain(
-      "unclosed fork (missing endfork)",
+      "unclosed fork (missing end-fork)",
     );
   });
 
   it("reports every unclosed nested frame", () => {
     const m = msgs(DOC(`if (外) is (yes) than\n  fork\n    [a: x]`));
-    expect(m).toContain("unclosed if (missing endif)");
-    expect(m).toContain("unclosed fork (missing endfork)");
+    expect(m).toContain("unclosed if (missing end-if)");
+    expect(m).toContain("unclosed fork (missing end-fork)");
   });
 
   it("accepts a well-formed document with no errors", () => {
@@ -61,6 +61,36 @@ if (承認) is (yes) than #green
 endif
 @end`;
     expect(parseDSL(src).errors).toEqual([]);
+  });
+});
+
+describe("parser — end-if/end-fork/else-if closer spellings", () => {
+  const stripLines = (rows) => rows.map(({ dslLines, ...rest }) => rest);
+
+  it("parses old and new closer spellings to identical rows", () => {
+    const oldSrc = DOC(
+      `if (確認) is (OK) than\n  [a: 手順]\nelseif (no) than\n  [a: 別手順]\nendif\nfork\n  [a: 並行1]\nand\n  [a: 並行2]\nendfork`,
+    );
+    const newSrc = DOC(
+      `if (確認) is (OK) than\n  [a: 手順]\nelse-if (no) than\n  [a: 別手順]\nend-if\nfork\n  [a: 並行1]\nand\n  [a: 並行2]\nend-fork`,
+    );
+    const oldModel = parseDSL(oldSrc);
+    const newModel = parseDSL(newSrc);
+    expect(oldModel.errors).toEqual([]);
+    expect(newModel.errors).toEqual([]);
+    expect(stripLines(oldModel.rows)).toEqual(stripLines(newModel.rows));
+  });
+
+  it("errors on end-if without an open if, mentioning end-if", () => {
+    expect(msgs(DOC(`end-if`))).toContain("end-if without if");
+  });
+
+  it("errors on end-fork without an open fork, mentioning end-fork", () => {
+    expect(msgs(DOC(`end-fork`))).toContain("end-fork without fork");
+  });
+
+  it("errors on else-if without an open if, mentioning else-if", () => {
+    expect(msgs(DOC(`else-if (x) than\n  [a: y]`))).toContain("else-if without if");
   });
 });
 

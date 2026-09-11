@@ -548,7 +548,7 @@ export function parseDSL(src, parseOptions = {}) {
    *   - step                          a task in a lane (`[role: text]`)
    *   - branchStart / branchCase / branchEnd
    *                                   an `if`/`fork` block; `parallel: true`
-   *                                   marks the `fork`/`and`/`endfork` variant
+   *                                   marks the `fork`/`and`/`end-fork` variant
    *   - branchLoop                    `[loop]` back-edge to the enclosing `if`
    *   - branchMerge                   `merge: <id>;` jump to a step with matching `id:`
    *   - groupStart / groupEnd         a group with `groupMode`: "section" draws
@@ -556,32 +556,37 @@ export function parseDSL(src, parseOptions = {}) {
    *                                   "branch" is a mid-flow sub-branch (start
    *                                   not connected; merges to main after close)
    * `stack` tracks open branch frames so nested blocks get the right depth and
-   * so each closer (`endif`/`endfork`) matches the frame type it closes.
+   * so each closer (`end-if`/`end-fork`) matches the frame type it closes.
+   * The old spellings `endif`/`endfork`/`elseif` are still accepted on read.
    */
   const rows = [];
   const stack = [];
   const groupStack = [];
-  /** if/fork markers share one level; case/path body is one indent (2 spaces) deeper. */
-  function branchMarkerDepth() {
-    if (stack.length === 0) return 0;
-    return stack[stack.length - 1].depth + 1;
+  /**
+   * if/fork markers share one level; case/path body is one indent (2 spaces)
+   * deeper. Branches and groups live on two stacks; the body depth follows
+   * whichever frame was opened last, so a section inside a case and an if
+   * inside a section both nest one level deeper than their container.
+   */
+  let frameSeq = 0;
+  function innermostFrame() {
+    const b = stack.length ? stack[stack.length - 1] : null;
+    const g = groupStack.length ? groupStack[groupStack.length - 1] : null;
+    if (!b || !g) return b || g;
+    return b.seq > g.seq ? b : g;
   }
+  function bodyDepth() {
+    const f = innermostFrame();
+    return f ? f.depth + 1 : 0;
+  }
+  const branchMarkerDepth = bodyDepth;
   function branchControlDepth() {
     if (stack.length === 0) return 0;
     return stack[stack.length - 1].depth;
   }
-  function branchBodyDepth() {
-    if (stack.length === 0) return 0;
-    return stack[stack.length - 1].depth + 1;
-  }
-  function groupMarkerDepth() {
-    if (groupStack.length === 0) return branchBodyDepth();
-    return groupStack[groupStack.length - 1].depth + 1;
-  }
-  function stepDepth() {
-    if (groupStack.length === 0) return branchBodyDepth();
-    return groupStack[groupStack.length - 1].depth + 1;
-  }
+  const branchBodyDepth = bodyDepth;
+  const groupMarkerDepth = bodyDepth;
+  const stepDepth = bodyDepth;
   let branchCounter = 0;
   let groupCounter = 0;
   let lastRealStepIndex = -1;
@@ -644,7 +649,7 @@ export function parseDSL(src, parseOptions = {}) {
       branchCounter++;
       const id = branchCounter;
       const depth = branchMarkerDepth();
-      stack.push({ id, depth, type: "if" });
+      stack.push({ id, depth, type: "if", seq: ++frameSeq });
       pushLineRow(
         {
           kind: "branchStart",
@@ -658,12 +663,12 @@ export function parseDSL(src, parseOptions = {}) {
       );
       continue;
     }
-    m = u.match(/^elseif\s*\((.+?)\)\s*than(?:\s+#([A-Za-z]+))?$/i);
+    m = u.match(/^else-?if\s*\((.+?)\)\s*than(?:\s+#([A-Za-z]+))?$/i);
     if (m) {
       checkColorToken(m[2], line, text);
       const top = stack[stack.length - 1];
       if (!top || top.type !== "if") {
-        errors.push({ line, text, msg: "elseif without if" });
+        errors.push({ line, text, msg: "else-if without if" });
         continue;
       }
       pushLineRow(
@@ -695,10 +700,10 @@ export function parseDSL(src, parseOptions = {}) {
       );
       continue;
     }
-    if (/^endif$/i.test(u)) {
+    if (/^end-?if$/i.test(u)) {
       const top = stack[stack.length - 1];
       if (!top || top.type !== "if") {
-        errors.push({ line, text, msg: "endif without if" });
+        errors.push({ line, text, msg: "end-if without if" });
         continue;
       }
       stack.pop();
@@ -706,14 +711,14 @@ export function parseDSL(src, parseOptions = {}) {
       continue;
     }
 
-    /** Parallel split: `fork` opens, `and` adds a concurrent path, `endfork` joins. */
+    /** Parallel split: `fork` opens, `and` adds a concurrent path, `end-fork` joins. */
     m = u.match(/^fork(?:\s+#([A-Za-z]+))?$/i);
     if (m) {
       checkColorToken(m[1], line, text);
       branchCounter++;
       const id = branchCounter;
       const depth = branchMarkerDepth();
-      stack.push({ id, depth, type: "fork" });
+      stack.push({ id, depth, type: "fork", seq: ++frameSeq });
       pushLineRow(
         {
           kind: "branchStart",
@@ -749,10 +754,10 @@ export function parseDSL(src, parseOptions = {}) {
       );
       continue;
     }
-    if (/^endfork$/i.test(u)) {
+    if (/^end-?fork$/i.test(u)) {
       const top = stack[stack.length - 1];
       if (!top || top.type !== "fork") {
-        errors.push({ line, text, msg: "endfork without fork" });
+        errors.push({ line, text, msg: "end-fork without fork" });
         continue;
       }
       stack.pop();
@@ -772,7 +777,7 @@ export function parseDSL(src, parseOptions = {}) {
       groupCounter++;
       const id = groupCounter;
       const depth = groupMarkerDepth();
-      groupStack.push({ id, depth, groupMode });
+      groupStack.push({ id, depth, groupMode, seq: ++frameSeq });
       pushLineRow(
         {
           kind: "groupStart",
@@ -1109,7 +1114,8 @@ export function parseDSL(src, parseOptions = {}) {
     errors.push({
       line: lineNum,
       text: openText,
-      msg: open.type === "fork" ? "unclosed fork (missing endfork)" : "unclosed if (missing endif)",
+      msg:
+        open.type === "fork" ? "unclosed fork (missing end-fork)" : "unclosed if (missing end-if)",
     });
   }
 

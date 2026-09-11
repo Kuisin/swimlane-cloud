@@ -68,6 +68,69 @@ describe("serialize/parse round-trip", () => {
   });
 });
 
+describe("closer spelling migration (endif/endfork/elseif -> end-if/end-fork/else-if)", () => {
+  const OLD_SPELLING_SAMPLE = `@kai-swimlane
+
+/title/
+Onboarding
+
+/role/
+
+<user>
+label: User;
+
+<system>
+label: System;
+
+/line/
+
+[user: Submit request]
+
+if (approved?) is (yes) than
+  [system: Provision account]
+elseif (maybe) than
+  [system: Hold for review]
+else
+  [system: Send rejection]
+endif
+
+fork
+  [system: Notify audit]
+and
+  [system: Notify finance]
+endfork
+
+[user: Receive result]
+
+@end
+`;
+
+  it("serializing a v1 document with old closer spellings emits only the new spellings", () => {
+    const model = parseDSL(OLD_SPELLING_SAMPLE);
+    expect(model.errors).toEqual([]);
+    const out = serializeDSL(model);
+
+    expect(out).toContain("else-if (maybe) than");
+    expect(out).toContain("end-if");
+    expect(out).toContain("end-fork");
+    expect(out).not.toMatch(/\belseif\b/);
+    expect(out).not.toMatch(/\bendif\b/);
+    expect(out).not.toMatch(/\bendfork\b/);
+
+    const reparsed = parseDSL(out);
+    expect(reparsed.errors).toEqual([]);
+  });
+
+  it("formatDsl on the same old-spelling document also emits only the new spellings", () => {
+    const formatted = formatDsl(OLD_SPELLING_SAMPLE);
+    expect(formatted.ok).toBe(true);
+    expect(formatted.value).not.toMatch(/\belseif\b/);
+    expect(formatted.value).not.toMatch(/\bendif\b/);
+    expect(formatted.value).not.toMatch(/\bendfork\b/);
+    expect(parseDSL(formatted.value).errors).toEqual([]);
+  });
+});
+
 describe("keys this build has no meaning for", () => {
   // dsl-rule.md:889 requires an unknown key be kept and re-emitted. Before this
   // was implemented the parser reported it as an error and dropped it, so the

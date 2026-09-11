@@ -172,9 +172,9 @@ label: スクリーニング;
 
 if (合格) is (はい) than
   [role_recruiter: 面接を設定]
-elseif (いいえ) than
+else-if (いいえ) than
   [role_recruiter: お見送り連絡]
-endif
+end-if
 
 @end
 `;

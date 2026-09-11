@@ -234,23 +234,14 @@ function serializeProp(id, prop, languages) {
   ];
 }
 
+import { computeRowDepths } from "./row-depths.js";
+
 const INDENT = "  ";
 function indent(depth, line) {
   return INDENT.repeat(Math.max(0, depth ?? 0)) + line;
 }
 function pushBlankLine(out) {
   if (out.length > 0 && out[out.length - 1] !== "") out.push("");
-}
-
-function branchControlDepth(rows, rowIndex) {
-  const row = rows[rowIndex];
-  if (row.kind === "branchStart") return row.depth ?? 0;
-  if (row.kind === "branchCase" || row.kind === "branchEnd") {
-    for (let j = rowIndex; j >= 0; j--) {
-      if (rows[j].kind === "branchStart" && rows[j].id === row.id) return rows[j].depth ?? 0;
-    }
-  }
-  return row.depth ?? 0;
 }
 
 function serializeBranchColor(color) {
@@ -322,11 +313,11 @@ function serializeStepLines(out, row, depth, languages) {
 function serializeLineRows(rows, languages) {
   const out = [];
   let prevKind = null;
+  const depths = computeRowDepths(rows);
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const depth = row.depth ?? 0;
-    const controlDepth = branchControlDepth(rows, i);
+    const { depth, controlDepth } = depths[i];
 
     if (row.leadingComments?.length) {
       const isMarker = [
@@ -399,7 +390,7 @@ function serializeLineRows(rows, languages) {
       if (
         next &&
         (next.kind === "branchStart" ||
-          (next.kind === "step" && !next.empty && (next.depth ?? 0) <= depth))
+          (next.kind === "step" && !next.empty && depths[i + 1].depth <= depth))
       ) {
         pushBlankLine(out);
       }
@@ -436,7 +427,7 @@ function serializeLineRows(rows, languages) {
       out.push(indent(depth, `end-${kw}`));
       prevKind = "groupEnd";
       const next = rows[i + 1];
-      if (next && next.kind === "step" && !next.empty && (next.depth ?? 0) <= depth) {
+      if (next && next.kind === "step" && !next.empty && depths[i + 1].depth <= depth) {
         pushBlankLine(out);
       }
       continue;

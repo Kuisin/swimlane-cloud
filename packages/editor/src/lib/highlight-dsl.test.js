@@ -36,6 +36,7 @@ describe("tokenizeDslLine", () => {
     expect(types("/role/")).toEqual(["section:/role/"]);
     expect(types("@x")).toEqual(["meta:@x"]);
     expect(types("endif")).toEqual(["keyword:endif"]);
+    expect(types("end-if")).toEqual(["keyword:end-if"]);
     expect(types("<ref>")).toEqual(["ref:<ref>"]);
   });
 

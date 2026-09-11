@@ -46,9 +46,9 @@ label: Approver;
 [applicant: Submit request]
 if (approved?) is (yes) than #green
   [approver: Approve request]
-elseif (no) than #red
+else-if (no) than #red
   [approver: Reject request]
-endif
+end-if
 
 @end
 `;
@@ -78,7 +78,7 @@ and
   [accounting: Update ledger]
 and
   [hr_team: Save record]
-endfork
+end-fork
 
 @end
 `;
