@@ -20,6 +20,10 @@ if (!existsSync(join(process.cwd(), "content/examples/index.json"))) {
   execSync("node scripts/sync-dsl-rule.mjs", { cwd: process.cwd() });
 }
 
+// Written without an opener lane selector (`if [manager] (…)`), which parses
+// today but is being removed from the grammar on feat/lane-order — it was
+// serialized and never rendered. The selector is optional either way, so this
+// spelling is the one that is correct in both trees.
 const CLEAN = [
   "@kai-swimlane",
   "",
@@ -35,7 +39,7 @@ const CLEAN = [
   "",
   "/line/",
   "[staff: Submit the claim]",
-  "if [manager] (Approved?) is (Yes) than #green",
+  "if (Approved?) is (Yes) than #green",
   "  [manager: Pay it]",
   "else-if (No) than #red",
   "  [staff: Revise]",

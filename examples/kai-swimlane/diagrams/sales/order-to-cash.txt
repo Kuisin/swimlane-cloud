@@ -81,7 +81,7 @@ right-title: 備考 | Remarks;
 /line/
 // 受付チャネルで入口が分かれる
 phase (受付 | Intake) @intake #gray
-  if [sales] (受注チャネルは？ | Order channel?) is (Web) than @channel #blue
+  if (受注チャネルは？ | Order channel?) is (Web) than @channel #blue
     [system: 注文データ取込 | Import order] <external> +PO
       remark: 夜間バッチと即時取込の両方;
       remark.en: Both the nightly batch and on-demand import;
@@ -112,10 +112,10 @@ phase (与信と承認 | Credit and approval) @approval #teal
     remark: 与信ポリシー第 3 条を参照;
     remark.en: See credit policy, article 3;
     id: credit-check;
-  if [credit] (与信枠内？ | Within the credit limit?) is (はい | Yes) than @credit-ok #green
+  if (与信枠内？ | Within the credit limit?) is (はい | Yes) than @credit-ok #green
     [system: 与信 OK を記録 | Record credit OK]
   else-if (いいえ | No) than #red
-    if [manager] (特別承認する？ | Special approval?) is (承認 | Approve) than @special #green
+    if (特別承認する？ | Special approval?) is (承認 | Approve) than @special #green
       [manager: 承認理由を記録 | Record the reason] +CR
     else-if (条件付き | With conditions) than #yellow
       [sales: 前払い条件を提示 | Offer prepayment terms]
@@ -139,7 +139,7 @@ end-phase
 fork (出荷 | Shipping) @fulfil #purple
   [warehouse: 在庫引当 | Allocate stock]
     id: allocate;
-  if [warehouse] (在庫は十分？ | Enough stock?) is (はい | Yes) than #green
+  if (在庫は十分？ | Enough stock?) is (はい | Yes) than #green
     [warehouse: ピッキングと梱包 | Pick and pack] => ./shipping-prep.txt
   else-if (いいえ | No) than #red
     [warehouse: 入荷待ちを登録 | Register a backorder]
@@ -155,7 +155,7 @@ case (請求 | Billing) #blue
 case (通知 | Notification) #teal
   [system: 出荷通知メール | Shipping notice mail]
     id: notify;
-  if [system] (メール送信に失敗？ | Mail failed?) is (はい | Yes) than #red
+  if (メール送信に失敗？ | Mail failed?) is (はい | Yes) than #red
     [sales: 電話で連絡 | Call the customer]
   else-if (いいえ | No) than #green
     [system: 送信済みを記録 | Record as sent]
@@ -163,7 +163,7 @@ case (通知 | Notification) #teal
 end-fork
 
 section (クロージング | Closing) @closing #blue
-  if [billing] (入金確認できた？ | Payment received?) is (はい | Yes) than @paid #green
+  if (入金確認できた？ | Payment received?) is (はい | Yes) than @paid #green
     [billing: 消込を実行 | Reconcile the payment] +INV
   else-if (いいえ、期日超過 | No, overdue) than #orange
     [sales: 督促 | Send a reminder] ~>

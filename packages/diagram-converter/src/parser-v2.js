@@ -386,6 +386,10 @@ export function parseDSLv2(src, options = {}) {
 
   const page = emptyPage();
   const options_ = emptyDiagramOptions();
+  // `/option/ lane-order:` names roles, and a role may be declared or first
+  // used after the option is read, so its names are checked at end-of-parse.
+  // This is where that check reports from.
+  let laneOrderPos = -1;
   const providedColumnTitles = new Set();
   const providedPageKeys = new Set();
   const roles = {};
@@ -462,7 +466,7 @@ export function parseDSLv2(src, options = {}) {
     }
   };
 
-  /** `#color` / `@id` / `[lane]` after a control keyword, in either order. */
+  /** `#color` / `@id` after a control keyword, in either order. */
   function readOpenerSuffixes(pos) {
     const out = { color: null, id: null };
     for (;;) {
@@ -876,8 +880,30 @@ export function parseDSLv2(src, options = {}) {
       ordered.push(r.role);
     }
   }
+  // `/option/ lane-order:` overrides that implicit order: the roles it names
+  // come first, in the order written, and every other role keeps its implicit
+  // order behind them. A name that is no role at all is `laneOrderUnknown` —
+  // a warning, dropped from the order, never a lane invented out of nothing.
+  const laneOrder = Array.isArray(options_.laneOrder) ? options_.laneOrder : null;
+  const namedLanes = new Set();
+  if (laneOrder) {
+    const known = new Set(ordered);
+    const front = [];
+    for (const id of laneOrder) {
+      if (!known.has(id)) {
+        warn(laneOrderPos, `lane-order names "${id}", which is not a role`);
+        continue;
+      }
+      namedLanes.add(id);
+      front.push(id);
+    }
+    ordered.splice(0, ordered.length, ...front, ...ordered.filter((id) => !namedLanes.has(id)));
+  }
+
   // Every role the document knows, in definition order, so the GUI can offer a
-  // role that no step uses yet. `used` is what the renderer draws a lane for.
+  // role that no step uses yet. `used` is what the renderer draws a lane for —
+  // a role a step references, or one `lane-order` names, which is how a column
+  // can be reserved for a lane the flow has not reached yet.
   const usedLanes = new Set(rows.filter((r) => r.kind === "step" && r.role).map((r) => r.role));
   const lanes = ordered.map((id) => ({
     id,
@@ -887,7 +913,7 @@ export function parseDSLv2(src, options = {}) {
     icon: (roles[id] && roles[id].icon) || null,
     iconAsset: (roles[id] && roles[id].iconAsset) || null,
     unknown: (roles[id] && roles[id].unknown) || undefined,
-    used: usedLanes.has(id),
+    used: usedLanes.has(id) || namedLanes.has(id),
   }));
 
   return {
@@ -1048,7 +1074,10 @@ export function parseDSLv2(src, options = {}) {
       const { field, parse, expected } = DIAGRAM_OPTION_VALUE_MAP[key];
       const v = parse(prop.value);
       if (v === null) err(prop.pos, `"${key}": expected ${expected}`);
-      else options_[field] = v;
+      else {
+        options_[field] = v;
+        if (key === "lane-order") laneOrderPos = prop.pos;
+      }
       return;
     }
     if (OPTION_COLUMN_TITLE_DSL_MAP[key]) {
@@ -1280,7 +1309,6 @@ export function parseDSLv2(src, options = {}) {
       case "note":
       case "note-side":
       case "question":
-      case "lane":
         return;
       default:
         err(prop.pos, `"${prop.key}" is not a property of this statement`);
@@ -1288,12 +1316,22 @@ export function parseDSLv2(src, options = {}) {
   }
 
   function openFrame(kw, pos) {
-    let lane = null;
     sc.skipWs();
-    if (kw === "if" && sc.s[sc.i] === "[") {
-      sc.i++;
-      lane = readRun(sc, ["]"], null);
-      if (sc.s[sc.i] === "]") sc.i++;
+    // `if [sales] (q) …` used to name the lane the diamond is drawn in. It was
+    // never drawn from, so it is gone from the grammar: the bracket is
+    // consumed here and named in the error, rather than left behind to be
+    // misread as a step. Only a lane-shaped run is taken — one bare id, no
+    // colon — so the step and the spacer that may legally follow an opener on
+    // the next line (whitespace is not structural) are untouched.
+    const laneRun = /^\[[ \t]*[^\s\]:：]+[ \t]*\]/.exec(sc.s.slice(sc.i));
+    if (laneRun) {
+      err(
+        sc.i,
+        kw === "if" || kw === "fork"
+          ? `${kw} takes no [lane] — the gateway is drawn in the lane of the step before it`
+          : `${kw} takes no [lane] — a ${kw} spans every lane`,
+      );
+      sc.i += laneRun[0].length;
     }
     let text = null;
     sc.skipWs();
@@ -1342,7 +1380,6 @@ export function parseDSLv2(src, options = {}) {
           firstCase: kw === "if" ? seg(firstCaseText ?? "") : null,
           firstCase$langs: kw === "if" ? langsOf(firstCaseText ?? "") : null,
           branchColor: color,
-          lane: lane || undefined,
           id: branchId,
           openerId: id || null,
           depth,

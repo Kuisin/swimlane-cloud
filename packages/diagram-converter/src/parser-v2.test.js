@@ -486,3 +486,135 @@ describe("imported images", () => {
     expect(scanImports("@kai-swimlane@use a/b.svg;/line/[a:x]@end")).toHaveLength(1);
   });
 });
+
+/**
+ * `/option/ lane-order:` decides which lane is drawn leftmost. Without it the
+ * order is implicit — `/role/` declarations in source order, then roles a step
+ * introduces — and that is still what the unnamed lanes keep, behind the ones
+ * the option names.
+ */
+describe("/option/ lane-order", () => {
+  const ROLES =
+    "/role/\n<sales>\n  label: Sales;\n\n<manager>\n  label: Manager;\n\n<system>\n  label: System;\n";
+  const FLOW = "/line/\n[sales: a]\n[manager: b]\n[system: c]";
+  const withOrder = (value) =>
+    parseDSL(
+      doc(`${value === null ? "" : `/option/\nlane-order: ${value};\n\n`}${ROLES}\n${FLOW}`),
+    );
+  const laneIds = (m) => m.lanes.filter((l) => l.used).map((l) => l.id);
+  /** The lane headings, in the order the SVG paints them. */
+  const headings = (m) => {
+    const svg = renderDiagramSvg({ model: m, theme: THEMES.basic });
+    return [...svg.matchAll(/>([^<>]+)</g)]
+      .map((x) => x[1])
+      .filter((t) => ["Sales", "Manager", "System"].includes(t));
+  };
+
+  it("is implicit — declaration order — when the option is absent", () => {
+    const m = withOrder(null);
+    expect(m.errors).toEqual([]);
+    expect(m.options.laneOrder).toBeUndefined();
+    expect(laneIds(m)).toEqual(["sales", "manager", "system"]);
+  });
+
+  it("reorders the lanes to the order it names", () => {
+    const m = withOrder("system, manager, sales");
+    expect(m.errors).toEqual([]);
+    expect(m.warnings).toEqual([]);
+    expect(m.options.laneOrder).toEqual(["system", "manager", "sales"]);
+    expect(laneIds(m)).toEqual(["system", "manager", "sales"]);
+  });
+
+  it("puts the lanes it does not name after the ones it does, implicit order kept", () => {
+    // "system" jumps to the front; "sales" and "manager" stay in the order
+    // /role/ declared them.
+    expect(laneIds(withOrder("system"))).toEqual(["system", "sales", "manager"]);
+    expect(laneIds(withOrder("manager"))).toEqual(["manager", "sales", "system"]);
+  });
+
+  it("warns on a name that is no role, still renders, and keeps the rest of the order", () => {
+    const m = withOrder("system, nobody, sales");
+    expect(m.errors).toEqual([]);
+    expect(m.warnings.map((w) => w.msg)).toEqual([
+      'lane-order names "nobody", which is not a role',
+    ]);
+    expect(m.warnings[0].severity).toBe("warning");
+    // Dropped from the order, never invented as a lane of its own.
+    expect(laneIds(m)).toEqual(["system", "sales", "manager"]);
+    expect(headings(m)).toEqual(["System", "Sales", "Manager"]);
+  });
+
+  it("reserves a column for a declared lane no step has reached yet", () => {
+    const m = parseDSL(doc(`/option/\nlane-order: system;\n\n${ROLES}\n/line/\n[sales: a]`));
+    expect(m.errors).toEqual([]);
+    expect(laneIds(m)).toEqual(["system", "sales"]);
+    // "manager" is declared but neither used nor named, so it is still not drawn.
+    expect(m.lanes.map((l) => l.id)).toEqual(["system", "sales", "manager"]);
+    expect(m.lanes.find((l) => l.id === "manager").used).toBe(false);
+  });
+
+  it("draws its lanes left to right in that order", () => {
+    expect(headings(withOrder("system, manager, sales"))).toEqual(["System", "Manager", "Sales"]);
+    expect(headings(withOrder(null))).toEqual(["Sales", "Manager", "System"]);
+  });
+
+  it("takes the first mention of a repeated id and rejects an empty list", () => {
+    expect(laneIds(withOrder("system, sales, system"))).toEqual(["system", "sales", "manager"]);
+    const empty = withOrder(" , ");
+    expect(empty.errors.map((e) => e.msg)).toEqual([
+      '"lane-order": expected a comma-separated list of role ids',
+    ]);
+  });
+});
+
+/**
+ * `if [sales] (q) is (a) than` used to parse, store a `lane` on the branchStart
+ * row and serialize back — and nothing ever drew it. It is out of the grammar
+ * now, so it has to fail loudly rather than be read as something else.
+ */
+describe("if takes no [lane]", () => {
+  const ifDoc = (head) => doc(`/line/\n[a: before]\n${head}\n  [a: x]\nend-if`);
+
+  it("is an error, naming what it replaced", () => {
+    const m = parseDSL(ifDoc("if [a] (q?) is (yes) than"));
+    expect(m.errors.map((e) => e.msg)).toEqual([
+      "if takes no [lane] — the gateway is drawn in the lane of the step before it",
+    ]);
+  });
+
+  it("reads the rest of the statement, so the bracket is not taken for a step", () => {
+    const m = parseDSL(ifDoc("if [a] (q?) is (yes) than #green"));
+    expect(m.errors).toHaveLength(1);
+    const start = m.rows.find((r) => r.kind === "branchStart");
+    expect(start).toMatchObject({ cond: "q?", firstCase: "yes", branchColor: "green" });
+    expect(start.lane).toBeUndefined();
+    // Three steps' worth of rows, not four: `[a]` was consumed by the error.
+    expect(m.rows.filter((r) => r.kind === "step").map((r) => r.text)).toEqual(["before", "x"]);
+  });
+
+  it("leaves the step and the spacer that may follow an opener alone", () => {
+    // Whitespace is not structural, so a bare `fork` is followed on the next
+    // line by an ordinary statement — a bracket run with a `:` is a step head
+    // and `[]` is a spacer; neither is a lane selector.
+    const m = parseDSL(doc("/line/\nfork\n[a: one]\ncase (two)\n[]\n[a: three]\nend-fork"));
+    expect(m.errors).toEqual([]);
+    // The spacer is a step row of its own with no text — three rows, not two.
+    expect(m.rows.filter((r) => r.kind === "step").map((r) => r.text)).toEqual([
+      "one",
+      "",
+      "three",
+    ]);
+  });
+
+  it("says so on a group opener too, where it never meant anything", () => {
+    const m = parseDSL(doc("/line/\nsection [a] (Audit)\n  [a: x]\nend-section"));
+    expect(m.errors.map((e) => e.msg)).toEqual([
+      "section takes no [lane] — a section spans every lane",
+    ]);
+  });
+
+  it("no longer accepts `lane:` as a property either", () => {
+    const m = parseDSL(doc("/line/\nif (q?) is (yes) than\n  lane: a;\n  [a: x]\nend-if"));
+    expect(m.errors.map((e) => e.msg)).toEqual(['"lane" is not a property of this statement']);
+  });
+});

@@ -65,7 +65,7 @@ right-title: 備考 | Remarks;
 [hr: 内定通知を送付 | Send the offer letter] +NDA
   id: offer;
 
-if [employee] (承諾する？ | Accept?) is (はい | Yes) than @accept #green
+if (承諾する？ | Accept?) is (はい | Yes) than @accept #green
   [employee: 承諾書を返送 | Return the acceptance] +NDA
 else-if (いいえ | No) than #red
   [hr: 辞退を記録 | Record the decline]
@@ -91,7 +91,7 @@ phase (初日 | Day one) @day-one #teal
     id: orientation;
   [manager: 業務説明 | Role briefing] ..>
   [employee: 初期設定 | Initial setup] +PC
-  if [it] (ログインできた？ | Able to log in?) is (はい | Yes) than #green
+  if (ログインできた？ | Able to log in?) is (はい | Yes) than #green
     [employee: 研修を開始 | Start training]
   else-if (いいえ | No) than #red
     [it: アカウントを修正 | Fix the account]
