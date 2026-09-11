@@ -45,6 +45,26 @@ end-point
     expect(parseDSL(text).errors).toEqual([]);
   });
 
+  it("renames the pre-rename version 2 header", () => {
+    const old = `@kai-swimlane 2\n@lang ja, en;\n\n/role/\n<a>\nlabel: A;\n\n/line/\n[a: x]\n@end\n`;
+    const { text, changed } = migrateLegacySpellings(old);
+    expect(changed).toBe(1);
+    expect(text.startsWith("@kai-swimlane-v2\n@lang ja, en;")).toBe(true);
+    expect(parseDSL(text).errors).toEqual([]);
+    // Leading comment lines do not hide the header from the rewrite.
+    expect(migrateLegacySpellings(`***\n@kai-swimlane 2\n@end`).changed).toBe(0);
+  });
+
+  it("turns a version 2 file's leftover `else` into the blank case, and only there", () => {
+    const v2 = `@kai-swimlane-v2\n/role/\n<a>\nlabel: A;\n/line/\nif (x?)\ncase (yes)\n[a: one]\nelse #gray\n[a: two]\nend-if\n@end\n`;
+    const { text, changed } = migrateLegacySpellings(v2);
+    expect(changed).toBe(1);
+    expect(text).toContain("\ncase () #gray\n");
+    expect(parseDSL(text).errors).toEqual([]);
+    const v1 = `@kai-swimlane\n/line/\nif (x) is (y) than\n[a: 1]\nelse\n[a: 2]\nend-if\n@end\n`;
+    expect(migrateLegacySpellings(v1).changed).toBe(0);
+  });
+
   it("leaves a current document untouched", () => {
     const now = `@kai-swimlane\n/line/\n[a: one]\nif (x) is (y) than\n[a: two]\nend-if\n@end\n`;
     expect(migrateLegacySpellings(now)).toEqual({ text: now, changed: 0 });
