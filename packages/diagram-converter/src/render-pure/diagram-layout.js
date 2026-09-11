@@ -91,6 +91,16 @@ export const DIAGRAM_LAYOUT = {
   rowH: 80,
   laneContentPad: 15,
   sectionInset: 5,
+  /**
+   * Floor for a section/branch box, so an empty one is still a box.
+   *
+   * The two group markers sit `groupMarkerH` apart, which after `sectionInset`
+   * on both sides left an empty section 6px tall — a dashed sliver with its
+   * caption floating underneath, which reads as debris rather than as the
+   * thing the "add section" button just created. This is tall enough to
+   * contain that caption.
+   */
+  sectionMinH: 30,
   // Horizontal padding reserved on the outermost lanes so step/branch content
   // and the side-routed arrows don't crowd the gutter dividers or sit on top of
   // a section's left/right border.

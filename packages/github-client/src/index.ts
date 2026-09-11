@@ -25,6 +25,23 @@ export { createRestClient, nextPageUrl } from "./rest.ts";
 export type { RestClient, RestClientOptions, RestRequestOptions } from "./rest.ts";
 export { createWriteApi } from "./write.ts";
 export type { CommitFilesOptions, CommitResult, FileWrite, WriteApi } from "./write.ts";
+export {
+  isCurrentMainGuard,
+  MAIN_GUARD_WORKFLOW,
+  MAIN_GUARD_WORKFLOW_PATH,
+  MANAGED_PATHS,
+} from "./main-guard.ts";
+export { isCurrentRepoRules, REPO_RULES, REPO_RULES_PATH } from "./repo-rules.ts";
+export {
+  DEFAULT_SETTINGS,
+  isCurrentRepoSettings,
+  parseRepoSettings,
+  repoSettingsJson,
+  REPO_SETTINGS_PATH,
+} from "./repo-settings.ts";
+export type { SwimlaneSettings } from "./repo-settings.ts";
+export { createProtectionApi } from "./protection.ts";
+export type { ProtectionApi, ProtectionOutcome } from "./protection.ts";
 export { createPullsApi } from "./pulls.ts";
 export type { IssueComment, MergeMethod, PullRequest, PullsApi } from "./pulls.ts";
 export { createReposApi } from "./repos.ts";

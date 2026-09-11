@@ -224,6 +224,26 @@
   background: var(--sw-amber);
   flex-shrink: 0;
 }
+/*
+ * The "this file is being fetched" spinner, in the slot the unsaved dot
+ * otherwise occupies. `prefers-reduced-motion` drops the rotation rather than
+ * the indicator, so the state is still legible without the movement.
+ */
+.sw-spin {
+  flex-shrink: 0;
+  color: var(--sw-muted, #737373);
+  animation: sw-spin 0.9s linear infinite;
+}
+@keyframes sw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sw-spin {
+    animation: none;
+  }
+}
 .sw-tree-item-del {
   display: none;
   border: none;

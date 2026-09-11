@@ -7,8 +7,10 @@ import {
   FolderOpen,
   FolderPlus,
   FilePlus,
+  Loader2,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Trash2,
 } from "lucide-react";
 import { buildFolderTree } from "../lib/folder-tree.js";
@@ -37,6 +39,8 @@ export function FolderTree({
   onDeleteFile,
   onDeleteFolder,
   onMoveFile,
+  onRenameFile,
+  openingFileId,
   canCreate,
   canMkdir,
   canDelete,
@@ -147,6 +151,8 @@ export function FolderTree({
           onDeleteFile={onDeleteFile}
           onDeleteFolder={onDeleteFolder}
           onMoveFile={onMoveFile}
+          onRenameFile={onRenameFile}
+          openingFileId={openingFileId}
           canDelete={canDelete}
           canMove={canMove}
           isRoot
@@ -198,6 +204,8 @@ function TreeNode({
   onDeleteFile,
   onDeleteFolder,
   onMoveFile,
+  onRenameFile,
+  openingFileId,
   canDelete,
   canMove,
   isRoot,
@@ -303,6 +311,8 @@ function TreeNode({
               onDeleteFile={onDeleteFile}
               onDeleteFolder={onDeleteFolder}
               onMoveFile={onMoveFile}
+              onRenameFile={onRenameFile}
+              openingFileId={openingFileId}
               canDelete={canDelete}
               canMove={canMove}
             />
@@ -327,7 +337,24 @@ function TreeNode({
             >
               <FileIcon size={13} />
               <span className="sw-tree-label">{file.name}</span>
-              {dirtyIds?.has(file.id) && <span className="sw-dot" aria-label="unsaved" />}
+              {openingFileId === file.id ? (
+                <Loader2 size={11} className="sw-spin" aria-label={t("tree.opening")} />
+              ) : (
+                dirtyIds?.has(file.id) && <span className="sw-dot" aria-label="unsaved" />
+              )}
+              {canMove && onRenameFile && (
+                <button
+                  type="button"
+                  className="sw-tree-item-del"
+                  title={t("tree.renameFile")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRenameFile(file.id);
+                  }}
+                >
+                  <Pencil size={11} />
+                </button>
+              )}
               {canDelete && (
                 <button
                   type="button"

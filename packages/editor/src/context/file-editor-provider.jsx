@@ -64,6 +64,12 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
   const [folders, setFolders] = useState([]);
   const [documents, setDocuments] = useState([]); // loaded/open docs
   const [openDocumentIds, setOpenDocumentIds] = useState([]);
+  /**
+   * The file currently being fetched, if any. Opening one that is not already
+   * in memory is a network round trip, and without this the tree looked
+   * unresponsive for its duration — nothing moved until the content arrived.
+   */
+  const [openingFileId, setOpeningFileId] = useState(null);
   const [activeDocumentId, setActiveDocumentIdState] = useState(null);
   const [themeKey, setThemeKey] = useState(options?.themeKey || "basic");
   const [policies, setPolicies] = useState(null);
@@ -369,11 +375,16 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
         return;
       }
       let content = "";
+      setOpeningFileId(id);
       try {
         content = await host.read(id);
       } catch (err) {
         await dialog.alert(err?.message || `Could not open ${id}`);
         return;
+      } finally {
+        // Cleared on the failure path too, or a file that cannot be read would
+        // leave the tree spinning for the rest of the session.
+        setOpeningFileId((cur) => (cur === id ? null : cur));
       }
       const doc = createDocument(id, content);
       if (autosave && mirrorScope) {
@@ -654,6 +665,32 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     }
   }
 
+  /**
+   * Rename in place: same folder, new file name.
+   *
+   * A rename *is* a move as far as the host is concerned, so this only has to
+   * ask for the new name and hand the rest to `moveFile` — which already
+   * refuses a collision, repoints the open document and its tab, and refreshes
+   * the tree.
+   */
+  async function renameFile(fileId) {
+    if (readOnly || !hostHas(host, "rename")) return;
+    const cut = fileId.lastIndexOf("/");
+    const dir = cut < 0 ? "" : fileId.slice(0, cut);
+    const current = cut < 0 ? fileId : fileId.slice(cut + 1);
+    const entered = await dialog.prompt("New file name", current);
+    if (entered == null) return;
+    const name = entered.trim().replace(/^\/+|\/+$/g, "");
+    if (!name || name === current) return;
+    // A name, not a path — moving between folders is what dragging is for,
+    // and silently relocating a file someone meant to rename would surprise.
+    if (name.includes("/")) {
+      await dialog.alert("Enter a file name, not a path. Drag the file to move it.");
+      return;
+    }
+    await moveFile(fileId, dir ? `${dir}/${name}` : name);
+  }
+
   async function createNewFolder(parentDir = "") {
     if (readOnly || !hostHas(host, "mkdir")) return;
     const entered = await dialog.prompt(
@@ -702,6 +739,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     documents,
     openDocuments: openDocumentIds.map((id) => documents.find((d) => d.id === id)).filter(Boolean),
     openDocumentIds,
+    openingFileId,
     activeDocument,
     activeDocumentId,
     setActiveDocumentId,
@@ -732,6 +770,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     deleteFile,
     deleteFolder,
     moveFile,
+    renameFile,
     checkpoint,
     policies,
     dialog,

@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
           github_login: account.login,
           github_user_id: account.id,
           token_ciphertext: sealToken(providerToken),
-          scopes: "repo",
+          scopes: "repo workflow",
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id" },
