@@ -12,17 +12,11 @@
 // Control-flow keywords. Longer forms first so e.g. "section-start" wins over
 // "section". Matched at a word boundary, case-insensitive.
 const KEYWORDS = [
-  "section-start",
-  "start-point",
   "end-section",
-  "end-point",
   "end-branch",
   "end-if",
   "end-fork",
   "else-if",
-  "elseif",
-  "endfork",
-  "endif",
   "section",
   "branch",
   "fork",

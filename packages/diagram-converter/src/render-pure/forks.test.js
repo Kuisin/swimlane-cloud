@@ -9,7 +9,7 @@ function render(dsl) {
   return renderDiagramSvg({ model: parseDSL(dsl), theme, showStepBlockCaptions: false });
 }
 
-/** Fork/endfork gateways match endif styling: purple fill + stroke circles. */
+/** Fork/end-fork gateways match end-if styling: purple fill + stroke circles. */
 function forkGatewayCircles(svg) {
   return [...svg.matchAll(/<circle[^>]*r="14"[^>]*fill="#f3e8ff"[^>]*stroke="#7e22ce"/g)];
 }
@@ -51,12 +51,12 @@ and
 [b: 台帳更新]
 and
 [c: 配送初期化]
-endfork
+end-fork
 [a: 完了]
 @end`;
 
 describe("parallel fork/join", () => {
-  it("parses fork/and/endfork into parallel branch rows", () => {
+  it("parses fork/and/end-fork into parallel branch rows", () => {
     const model = parseDSL(FORK);
     expect(model.errors).toEqual([]);
     const start = model.rows.find((r) => r.kind === "branchStart");
@@ -68,12 +68,12 @@ describe("parallel fork/join", () => {
     expect(end.parallel).toBe(true);
   });
 
-  it("renders purple fork and endfork circles (not diamonds or bars)", () => {
+  it("renders purple fork and end-fork circles (not diamonds or bars)", () => {
     const circles = forkGatewayCircles(render(FORK));
     expect(circles.length).toBe(2);
   });
 
-  it("rejects elseif/endif against a fork and and/endfork against an if", () => {
+  it("rejects else-if/end-if against a fork and and/end-fork against an if", () => {
     const mixed = parseDSL(`@kai-swimlane
 /role/
 <a>
@@ -81,9 +81,9 @@ label: A;
 /line/
 fork
 [a: x]
-elseif (y) than
+else-if (y) than
 [a: z]
-endif
+end-if
 @end`);
     const msgs = mixed.errors.map((e) => e.msg);
     expect(msgs).toContain("else-if without if");

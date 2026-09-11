@@ -107,7 +107,7 @@ if (x) is (yes) than
   end-section
 else
   [b: no]
-endif
+end-if
 @end`);
     expect(model.errors).toEqual([]);
     const gs = model.rows.find((r) => r.kind === "groupStart");
@@ -201,7 +201,7 @@ if (x) is (yes) than
   [a: yes]
 else
   [b: no]
-endif
+end-if
 section (after)
   [a: after-step]
 end-section
@@ -211,7 +211,7 @@ if (x) is (yes) than
   [a: yes]
 else
   [b: no]
-endif
+end-if
 [a: after-step]
 @end`);
     // Both flows are structurally identical (section is visual-only).
@@ -298,7 +298,7 @@ and
   section (fork-section)
     [b: section-step]
   end-section
-endfork
+end-fork
 [a: after]
 @end`);
     expect(model.errors).toEqual([]);
@@ -309,7 +309,7 @@ and
   section (fork-section)
     [b: section-step]
   end-section
-endfork
+end-fork
 [a: after]
 @end`);
     expect(sectionBoxCount(svg)).toBeGreaterThanOrEqual(1);

@@ -34,10 +34,9 @@ end-if
 - `/line/` is the flow itself: steps in `[role: text]` form, plus `if`,
   `fork`, `section` and a handful of other flow keywords.
 
-The editor writes `end-if`, `end-fork` and `else-if`. Existing files that still
-use the older `endif`, `endfork` or `elseif` spellings keep reading and
-working exactly as before — only newly formatted or saved files switch to
-the new spelling.
+Closers are spelled `end-if`, `end-fork`, `end-section` and `end-branch`, and
+an extra case is `else-if`. The older `endif`, `endfork` and `elseif` are no
+longer read: the editor reports the line and the spelling to use instead.
 
 ## The full syntax reference is one click away
 
@@ -292,12 +291,11 @@ id: closed;
 @end
 ```
 
-### Older spellings
+### Spellings no longer read
 
-These still read, and are rewritten the next time the file is formatted or
-saved: `endif` → `end-if`, `endfork` → `end-fork`, `elseif` → `else-if`,
-`section-start (n)` → `section (n)`, `start-point` → `section`,
-`end-point` → `end-section`, `***` comments → `//` comments.
+Each of these is an error that names the replacement: `endif` → `end-if`,
+`endfork` → `end-fork`, `elseif` → `else-if`, `section-start (n)` → `section (n)`,
+`start-point` → `section`, `end-point` → `end-section`.
 
 ### What version 2 changes
 

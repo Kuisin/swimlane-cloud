@@ -29,9 +29,9 @@ end-if
 - `/title/`、`/role/`、`/block/`、`/prop/` で図のタイトル、関わる人、共有の見た目のスタイルを設定します。
 - `/line/` がフローそのものです。`[role: text]` 形式のステップに加え、`if`・`fork`・`section` などいくつかのフロー用キーワードがあります。
 
-エディタが書き出すのは `end-if`・`end-fork`・`else-if` です。既存のファイルで使われている古い表記
-`endif`・`endfork`・`elseif` も引き続き問題なく読み込め、動作します——新しい表記に変わるのは
-フォーマットまたは保存し直したファイルだけです。
+閉じ記号は `end-if`・`end-fork`・`end-section`・`end-branch`、追加の分岐は `else-if` と書きます。
+古い表記の `endif`・`endfork`・`elseif` は読み込まれません。エディタが該当行と、代わりに使う表記を
+報告します。
 
 ## 完全な構文リファレンスはワンクリック
 
@@ -254,9 +254,9 @@ id: closed;
 @end
 ```
 
-### 古い表記
+### 読み込まれなくなった表記
 
-以下も引き続き読み込めますが、フォーマットまたは保存のときに書き換わります。`endif` → `end-if`、`endfork` → `end-fork`、`elseif` → `else-if`、`section-start (n)` → `section (n)`、`start-point` → `section`、`end-point` → `end-section`、`***` のコメント → `//` のコメント。
+以下はそれぞれエラーになり、代わりの表記が示されます。`endif` → `end-if`、`endfork` → `end-fork`、`elseif` → `else-if`、`section-start (n)` → `section (n)`、`start-point` → `section`、`end-point` → `end-section`。
 
 ### バージョン 2 で変わるところ
 

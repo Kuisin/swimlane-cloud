@@ -66,10 +66,10 @@ describe("a case that opens with a nested fork or if", () => {
     [ops: a]
   and
     [sales: b]
-  endfork
+  end-fork
 else
   [ops: c]
-endif`),
+end-if`),
     );
     const [split] = circles(svg)
       .filter((c) => c.r === FORK_GATEWAY_RADIUS)
@@ -88,10 +88,10 @@ endif`),
     [ops: a]
   else
     [ops: b]
-  endif
+  end-if
 else
   [ops: c]
-endif`),
+end-if`),
     );
     const [, nested] = diamonds(svg).sort((a, b) => a[0][1] - b[0][1]);
     const topX = nested[0][0];
@@ -110,10 +110,10 @@ endif`),
     [ops: a]
   and
     [sales: b]
-  endfork
+  end-fork
 else
   [ops: c]
-endif`),
+end-if`),
     );
     const [split] = circles(svg)
       .filter((c) => c.r === FORK_GATEWAY_RADIUS)
@@ -129,7 +129,7 @@ describe("a blank case", () => {
       doc(`if (q?) is (yes) than
   [ops: work]
 else
-endif`),
+end-if`),
     );
     const [diamond] = diamonds(svg);
     const bottom = diamond.reduce((a, p) => (p[1] > a[1] ? p : a));
@@ -146,8 +146,8 @@ endif`),
   it("does not stack on a second blank case", () => {
     const svg = render(
       doc(`if (q?) is (yes) than
-elseif (no) than
-endif`),
+else-if (no) than
+end-if`),
     );
     const labels = caseLabels(svg).filter((l) => l.text === "yes" || l.text === "no");
     expect(labels).toHaveLength(2);

@@ -268,9 +268,8 @@ box: its first row receives no inbound edge and its last row merges back into th
 the closer. Both take an optional name — without one the display name is the constant `Section` or
 `Branch` — and an optional palette colour.
 
-The two share **one** stack and **one** closer check: `end-section`, `end-branch` and `end-point`
-are three spellings of "close the innermost open group", so `end-branch` silently closes a
-`section`. Only the count is checked; an unclosed group reports `unclosed section (missing
+The two share **one** stack and **one** closer check: `end-section` and `end-branch` both mean
+"close the innermost open group", so `end-branch` silently closes a `section`. Only the count is checked; an unclosed group reports `unclosed section (missing
 end-section)` whichever keyword opened it, and a closer with nothing open is `end-section without
 section`.
 
@@ -299,20 +298,19 @@ merge: <id>; instead of merge <id>;`.
 `[loop]` (trailing `;` tolerated) is the back-edge to the question of the enclosing `if`; outside
 one it is `[loop] outside if`. There is no way to name a loop target in version 1.
 
-### Legacy spellings
+### Spellings this grammar no longer has
 
-All of these still read. None is ever written back: the serializer emits the canonical spelling in
-the right-hand column on the next Format or save.
+These are refused, each with an error naming the spelling to write instead — one spelling per
+construct, no compatibility layer. (`***` comment rows are still read as comments.)
 
-| accepted               | written as                                    |
-| ---------------------- | --------------------------------------------- |
-| `endif`                | `end-if`                                      |
-| `endfork`              | `end-fork`                                    |
-| `elseif (x) than`      | `else-if (x) than`                            |
-| `section-start (name)` | `section (name)`                              |
-| `start-point`          | `section` (a group named `Section`)           |
-| `end-point`            | `end-section` / `end-branch`, by what is open |
-| `***` comment rows     | `//` comment rows                             |
+| refused                | write instead                |
+| ---------------------- | ---------------------------- |
+| `endif`                | `end-if`                     |
+| `endfork`              | `end-fork`                   |
+| `elseif (x) than`      | `else-if (x) than`           |
+| `section-start (name)` | `section (name)`             |
+| `start-point`          | `section`                    |
+| `end-point`            | `end-section` / `end-branch` |
 
 ## Diagnostics
 

@@ -18,7 +18,7 @@ by converting (see _Converting from v1_). A file whose major version is 3 or hig
 **Goal.** Keep the shape of the current file, remove the three biggest sources of syntax errors
 (`;`, `than`, the asymmetric `if … is … than` / `elseif`), and add the roadmap features. Within a
 version 2 file there is one spelling per construct: no legacy production is part of this grammar,
-`endif`, `elseif`, `else` and `merge:` are read only by the version 1 reader, and the version 2
+`else-if`, `else` and `merge:` are read only by the version 1 reader, and the version 2
 formatter re-spells what it read and never repairs. Every rule below is stated once, for one
 reader. An existing version 1 file is moved across by the standalone converter described under
 _Converting from v1_, in a reviewable diff — never silently, and never by this reader.

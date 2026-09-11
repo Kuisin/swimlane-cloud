@@ -43,7 +43,7 @@ if (x) is (yes) than
 [a: yes]
 else
 [b: no]
-endif
+end-if
 [a: After]
 @end`);
 
@@ -69,7 +69,7 @@ label: A;
 [a: Start]
 if (x) is (yes) than
 [a: yes]
-endif
+end-if
 [a: End]
 @end`);
     const circles = terminalCircles(svg);
