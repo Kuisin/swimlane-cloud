@@ -1,3 +1,4 @@
+import { REPO_CONFIG_PATH } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { assertRef, assertRepoPath } from "@/lib/guard";
 import {
@@ -7,7 +8,7 @@ import {
   lockedBranches,
   requireProjectRole,
 } from "@/lib/projects";
-import { isDraftablePath, loadDraftState } from "@/lib/repo-files";
+import { isDraftablePath, isSettingsPath, loadDraftState } from "@/lib/repo-files";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { assertForcedSections } from "@/lib/templates";
 
@@ -53,12 +54,16 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     if (f.id.endsWith(".txt")) assertForcedSections(f.dsl, policies, templatesById);
   }
 
-  const summary =
-    changed.length && deletions.length
-      ? `Checkpoint ${changed.length} diagram(s), remove ${deletions.length}`
-      : deletions.length
-        ? `Remove ${deletions.length} diagram(s)`
-        : `Checkpoint ${changed.length} diagram(s)`;
+  // Settings are drafted alongside diagrams but are not one, so they are
+  // counted separately: a settings-only commit should not claim to have
+  // checkpointed a diagram.
+  const diagrams = changed.filter((f) => !isSettingsPath(f.id));
+  const settings = changed.length - diagrams.length;
+  const parts: string[] = [];
+  if (diagrams.length) parts.push(`Checkpoint ${diagrams.length} diagram(s)`);
+  if (settings) parts.push(`Update ${REPO_CONFIG_PATH}`);
+  if (deletions.length) parts.push(`remove ${deletions.length} diagram(s)`);
+  const summary = parts.join(", ");
 
   const result = await project.write.commitFiles({
     branch: body.branch,

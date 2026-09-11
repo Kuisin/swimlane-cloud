@@ -3,7 +3,7 @@ import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { assertSha } from "@/lib/guard";
 import { audit, requireProjectRole } from "@/lib/projects";
 import { render } from "@/lib/render";
-import { hasPendingDrafts, snapshotAt } from "@/lib/repo-files";
+import { hasPendingDrafts, readConfigAt, snapshotAt } from "@/lib/repo-files";
 import { getServiceSupabase } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -52,8 +52,15 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   const snapshot = await snapshotAt(project, sha);
   const paths = Object.keys(snapshot.files).sort();
   if (paths.length === 0) throw new ApiError(400, "There are no diagrams to flag at this commit.");
+  // Render with the settings committed at `sha`, so the check matches what a
+  // viewer of this version will actually be served.
+  const versionConfig = await readConfigAt(project, sha);
   const renderFailures = paths.filter((p) => {
-    const { svg, errors } = render(snapshot.files[p]!, "basic");
+    const { svg, errors } = render(
+      snapshot.files[p]!,
+      versionConfig.themeKey,
+      versionConfig.layout,
+    );
     return !svg || errors.length > 0;
   });
 

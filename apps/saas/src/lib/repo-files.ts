@@ -31,6 +31,18 @@ export function isDraftablePath(path: string): boolean {
 }
 
 /**
+ * The repo-wide settings file.
+ *
+ * Deliberately *not* folded into `isDraftablePath`: that predicate also gates
+ * `files/route.ts` (delete / rmdir / rename), and `.swimlane.json` must never be
+ * renameable or deletable from the file tree — every surface resolves it by
+ * that exact path. Only the draft write path opts this in.
+ */
+export function isSettingsPath(path: string): boolean {
+  return path === REPO_CONFIG_PATH;
+}
+
+/**
  * Bring a path inside the repository's diagram root.
  *
  * The editor suggests a bare name (`new-1.txt`) when no folder is selected,

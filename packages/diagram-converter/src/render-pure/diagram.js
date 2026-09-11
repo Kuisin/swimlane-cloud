@@ -27,6 +27,7 @@ import {
   blockMaxTextCols,
   decisionDiamondWidth,
   gutterTextCols,
+  resolveLayout,
 } from "./diagram-layout.js";
 /**
  * Wrapped multi-line gutter body text (step description / remark): one tspan
@@ -269,6 +270,7 @@ function renderDiagramSvg({
   interactive = false,
   selectedRowIndex = null,
   onRowSelect,
+  layout,
 }) {
   const { title, page = {}, lanes, rows, blocks = {}, props = {} } = model;
   const pageDescription = (showDescription ? page.description || "" : "").trim();
@@ -280,7 +282,7 @@ function renderDiagramSvg({
     showFooter &&
     (page.footerLeft?.trim() || page.footerCenter?.trim() || page.footerRight?.trim()),
   );
-  const L = DIAGRAM_LAYOUT;
+  const L = resolveLayout(layout);
   const {
     xPad,
     leftGutterWidth,
@@ -362,10 +364,10 @@ function renderDiagramSvg({
   const hasRemarks = (rows || []).some((r) => r.kind === "step" && (r.remark || "").trim());
   const rightGutterVisible = showRightGutter && hasRemarks;
   const rightGutter = rightGutterVisible ? rightGutterWidth : 0;
-  const descWrapCols = gutterTextCols(leftGutterWidth, L.gutterBodyFontSize);
+  const descWrapCols = gutterTextCols(leftGutterWidth, L.gutterBodyFontSize, L.gutterInnerPad);
   const remarkWrapCols = Math.max(
     remarkWrapColsMin,
-    gutterTextCols(rightGutterWidth, L.gutterBodyFontSize),
+    gutterTextCols(rightGutterWidth, L.gutterBodyFontSize, L.gutterInnerPad),
   );
   const propExtraWPerProps = docGapX;
   const propRowExtraHPerProps = docGapY;
@@ -1752,7 +1754,7 @@ function renderDiagramSvg({
               },
               truncateToColumns(
                 page.leftTitle.trim(),
-                gutterTextCols(leftGutterWidth, L.gutterHeaderTitleFontSize),
+                gutterTextCols(leftGutterWidth, L.gutterHeaderTitleFontSize, L.gutterInnerPad),
               ),
             ),
           page.leftSubtitle?.trim() &&
@@ -1768,7 +1770,7 @@ function renderDiagramSvg({
               },
               truncateToColumns(
                 page.leftSubtitle.trim(),
-                gutterTextCols(leftGutterWidth, L.gutterHeaderSubtitleFontSize),
+                gutterTextCols(leftGutterWidth, L.gutterHeaderSubtitleFontSize, L.gutterInnerPad),
               ),
             ),
           /* @__PURE__ */ h("line", {
@@ -1801,7 +1803,7 @@ function renderDiagramSvg({
             const prefix = hasNum ? `${d.displayIndex}. ` : "";
             if (!titleText && !r.description) return null;
             const titleCols =
-              gutterTextCols(leftGutterWidth, L.gutterStepTitleFontSize) -
+              gutterTextCols(leftGutterWidth, L.gutterStepTitleFontSize, L.gutterInnerPad) -
               stringDisplayColumnWidth(prefix);
             return /* @__PURE__ */ h(
               "g",
@@ -1857,7 +1859,7 @@ function renderDiagramSvg({
               },
               truncateToColumns(
                 page.rightTitle.trim(),
-                gutterTextCols(rightGutterWidth, L.gutterHeaderTitleFontSize),
+                gutterTextCols(rightGutterWidth, L.gutterHeaderTitleFontSize, L.gutterInnerPad),
               ),
             ),
           page.rightSubtitle?.trim() &&
@@ -1873,7 +1875,7 @@ function renderDiagramSvg({
               },
               truncateToColumns(
                 page.rightSubtitle.trim(),
-                gutterTextCols(rightGutterWidth, L.gutterHeaderSubtitleFontSize),
+                gutterTextCols(rightGutterWidth, L.gutterHeaderSubtitleFontSize, L.gutterInnerPad),
               ),
             ),
           /* @__PURE__ */ h("line", {

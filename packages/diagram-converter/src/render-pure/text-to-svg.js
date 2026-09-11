@@ -8,15 +8,15 @@ import { renderDiagramSvg } from "./diagram.js";
  * Platform-free: works in Node.js, browsers, and workers — no React, no DOM.
  *
  * @param {string} src
- * @param {{ theme?: object, themeKey?: string }} [options]
+ * @param {{ theme?: object, themeKey?: string, layout?: Record<string, number> }} [options]
  * @returns {{ svg: string | null, model: object, errors: Array }}
  */
-export function textToSvg(src, { theme, themeKey } = {}) {
+export function textToSvg(src, { theme, themeKey, layout } = {}) {
   const model = parseDSL(src);
   const resolvedTheme = theme ?? (themeKey ? THEMES[themeKey] : null) ?? THEMES.basic;
   const opts = resolveDiagramOptions(model.options);
   try {
-    const svg = renderDiagramSvg({ model, theme: resolvedTheme, ...opts });
+    const svg = renderDiagramSvg({ model, theme: resolvedTheme, layout, ...opts });
     return { svg, model, errors: model.errors };
   } catch (err) {
     return {

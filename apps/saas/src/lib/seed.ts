@@ -3,7 +3,12 @@
  * templates every project row is seeded with. Kept in one place so the
  * repository seed and the database seed cannot drift apart.
  */
-import { REPO_CONFIG_PATH, type FileWrite } from "@swimlane-cloud/github-client";
+import {
+  DEFAULT_REPO_CONFIG,
+  REPO_CONFIG_PATH,
+  serializeRepoConfig,
+  type FileWrite,
+} from "@swimlane-cloud/github-client";
 import { getServiceSupabase } from "./supabase/server";
 import { TEMPLATE_SECTIONS, templateRepoPath, type TemplateSection } from "./templates";
 
@@ -58,13 +63,13 @@ background-color: #e6f2ff;
 @end
 `;
 
-/** `.swimlane.json` for a repository this app created. */
+/**
+ * `.swimlane.json` for a repository this app created. Formatted by the same
+ * serializer the settings editor commits with, so a seeded file and an edited
+ * one are byte-identical for the same values.
+ */
 export function repoConfigJson(title: string, diagramsRoot = DIAGRAMS_ROOT): string {
-  return `${JSON.stringify(
-    { diagramsRoot, title, themeKey: "basic", integrationBranch: "test" },
-    null,
-    2,
-  )}\n`;
+  return serializeRepoConfig({ ...DEFAULT_REPO_CONFIG, diagramsRoot, title });
 }
 
 /** The initial commit of a created repository: config, a sample, and the template mirror. */

@@ -192,13 +192,64 @@ export const DIAGRAM_LAYOUT = {
 };
 
 /**
+ * The subset of DIAGRAM_LAYOUT a repository may override, with the bounds the
+ * settings form and the API both enforce. One definition so the input widget,
+ * the validator and the renderer cannot drift apart.
+ */
+export const LAYOUT_SETTINGS = [
+  { key: "xPad", group: "margins", min: 0, max: 400 },
+  { key: "leftGutterWidth", group: "margins", min: 0, max: 800 },
+  { key: "rightGutterWidth", group: "margins", min: 0, max: 800 },
+  { key: "gutterInnerPad", group: "margins", min: 0, max: 100 },
+  { key: "baseBottomPadding", group: "margins", min: 0, max: 400 },
+  { key: "topPadDefault", group: "margins", min: 0, max: 400 },
+  { key: "nodeW", group: "grid", min: 60, max: 600 },
+  { key: "rowH", group: "grid", min: 30, max: 400 },
+  { key: "headerH", group: "grid", min: 20, max: 300 },
+  { key: "laneContentPad", group: "grid", min: 0, max: 100 },
+  { key: "outerLanePad", group: "grid", min: 0, max: 200 },
+];
+
+export const LAYOUT_SETTING_KEYS = LAYOUT_SETTINGS.map((s) => s.key);
+
+const LAYOUT_SETTING_BY_KEY = new Map(LAYOUT_SETTINGS.map((s) => [s.key, s]));
+
+/** True when `value` is a usable override for `key`: known, numeric, in range. */
+export function isLayoutOverride(key, value) {
+  const spec = LAYOUT_SETTING_BY_KEY.get(key);
+  if (!spec) return false;
+  return (
+    typeof value === "number" && Number.isFinite(value) && value >= spec.min && value <= spec.max
+  );
+}
+
+/**
+ * Engine defaults with a repository's overrides applied.
+ *
+ * Anything unknown or out of range is ignored rather than rejected: this runs
+ * on the render path, where a bad value in someone's `.swimlane.json` must
+ * degrade to the default, never throw away the diagram.
+ */
+export function resolveLayout(overrides) {
+  if (!overrides || typeof overrides !== "object") return DIAGRAM_LAYOUT;
+  const applied = {};
+  for (const [key, value] of Object.entries(overrides)) {
+    if (isLayoutOverride(key, value)) applied[key] = value;
+  }
+  return Object.keys(applied).length === 0 ? DIAGRAM_LAYOUT : { ...DIAGRAM_LAYOUT, ...applied };
+}
+
+/**
  * Display-column budget for text inside a gutter of `gutterWidth` px: the
  * usable width after inner padding on both sides, divided by the font size
  * (one column = one full-width CJK cell = 1em at that font size).
+ *
+ * `innerPad` is a parameter rather than a constant read because it is one of
+ * the values a repository can override; callers inside the renderer pass their
+ * resolved layout.
  */
-export function gutterTextCols(gutterWidth, fontSize) {
-  const { gutterInnerPad } = DIAGRAM_LAYOUT;
-  return Math.max(1, Math.floor((gutterWidth - 2 * gutterInnerPad) / fontSize));
+export function gutterTextCols(gutterWidth, fontSize, innerPad = DIAGRAM_LAYOUT.gutterInnerPad) {
+  return Math.max(1, Math.floor((gutterWidth - 2 * innerPad) / fontSize));
 }
 
 export function blockMaxTextCols(shape, hasIcon) {

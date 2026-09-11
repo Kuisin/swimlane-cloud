@@ -155,6 +155,8 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
       repo: ctx.repo.repo,
       htmlUrl: ctx.repoInfo.htmlUrl,
       diagramsRoot: config.diagramsRoot,
+      themeKey: config.themeKey,
+      layout: config.layout,
     },
     me: { githubLogin: ctx.login, role: ctx.role, canPush: ctx.repoInfo.permissions.push },
     branches: branchStates,

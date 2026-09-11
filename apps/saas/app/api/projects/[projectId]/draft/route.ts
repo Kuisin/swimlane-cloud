@@ -1,3 +1,4 @@
+import { parseRepoConfig, REPO_CONFIG_PATH } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
 import { assertRef, assertRepoPath } from "@/lib/guard";
 import {
@@ -6,7 +7,8 @@ import {
   lockedBranches,
   requireProjectRole,
 } from "@/lib/projects";
-import { isDraftablePath, readConfigAt, withinDiagramsRoot } from "@/lib/repo-files";
+import { isDraftablePath, isSettingsPath, readTextAt, withinDiagramsRoot } from "@/lib/repo-files";
+import { canonicalizeSettings } from "@/lib/repo-settings";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { assertForcedSections } from "@/lib/templates";
 
@@ -22,6 +24,11 @@ interface DraftBody {
  * POST /api/projects/[projectId]/draft — save working copies. No GitHub
  * write; drafts become a commit at checkpoint. Forced sections are validated
  * here too so an author learns about a template violation on Save, not later.
+ *
+ * `.swimlane.json` rides the same path: the settings editor is just another
+ * author making a pending change on a branch, so a settings edit shows up as a
+ * dirty branch, lands in the next checkpoint and reaches `test` through the
+ * usual pull request.
  */
 export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
@@ -33,7 +40,9 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
   assertRef(body.branch);
   for (const f of body.files) {
     assertRepoPath(f.id);
-    if (!isDraftablePath(f.id)) throw new ApiError(400, `${f.id} is not a diagram path.`);
+    if (!isDraftablePath(f.id) && !isSettingsPath(f.id)) {
+      throw new ApiError(400, `${f.id} is not a diagram path.`);
+    }
     if (typeof f.dsl !== "string") throw new ApiError(400, `${f.id}: dsl must be a string`);
   }
 
@@ -47,10 +56,18 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
     }
   }
 
+  const settingsRaw = await readTextAt(project, REPO_CONFIG_PATH, body.branch);
+  const config = parseRepoConfig(settingsRaw);
+
   // A path the editor suggested without a folder selected would otherwise be
-  // written outside the diagram tree and vanish from the listing.
-  const config = await readConfigAt(project, body.branch);
-  const files = body.files.map((f) => ({ ...f, id: withinDiagramsRoot(f.id, config) }));
+  // written outside the diagram tree and vanish from the listing. The settings
+  // file is exempt: it is resolved at the repo root by every reader, so
+  // re-rooting it under `diagramsRoot` would write it where nothing looks.
+  const files = body.files.map((f) =>
+    isSettingsPath(f.id)
+      ? { ...f, dsl: canonicalizeSettings(f.dsl, settingsRaw).raw }
+      : { ...f, id: withinDiagramsRoot(f.id, config) },
+  );
 
   const supabase = getServiceSupabase();
   const now = new Date().toISOString();

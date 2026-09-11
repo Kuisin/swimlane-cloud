@@ -65,6 +65,7 @@ function DslEditorInner({ options }) {
     closeDocumentTab,
     themeKey,
     theme,
+    layout,
     src,
     model,
     activeParseErrorPolicy,
@@ -93,7 +94,7 @@ function DslEditorInner({ options }) {
     parse: (v) => v === "true",
   });
 
-  const { svg, errors } = useLivePreview(src, { themeKey, theme });
+  const { svg, errors } = useLivePreview(src, { themeKey, theme, layout });
   const { leftPct, containerRef, onDividerMouseDown } = useSplitPane(options?.initialSplit ?? 52, {
     storageKey: "sw-editor:split-pct",
   });

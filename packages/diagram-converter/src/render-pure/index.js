@@ -13,6 +13,10 @@ export {
   STEP_SHAPE,
   blockMaxTextCols,
   decisionDiamondWidth,
+  LAYOUT_SETTINGS,
+  LAYOUT_SETTING_KEYS,
+  isLayoutOverride,
+  resolveLayout,
 } from "./diagram-layout.js";
 export { renderStepShape, StepShape } from "./step-shape.js";
 export { renderBlockIcon, BlockIcon } from "./block-icon.js";

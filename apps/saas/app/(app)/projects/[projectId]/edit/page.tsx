@@ -384,6 +384,10 @@ function EditPageInner() {
                   showLanguageToggle: false,
                   initialDocumentId: mFile,
                   onActiveDocument: setMFile,
+                  // Repo-wide render settings, so the live preview matches what
+                  // the version and share pages will draw.
+                  themeKey: state.project.themeKey,
+                  layout: state.project.layout,
                 }}
               />
             )}

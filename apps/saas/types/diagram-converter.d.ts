@@ -9,7 +9,7 @@ declare module "@swimlane-cloud/diagram-converter" {
   }
   export function textToSvg(
     src: string,
-    options?: { theme?: object; themeKey?: string },
+    options?: { theme?: object; themeKey?: string; layout?: Record<string, number> },
   ): TextToSvgResult;
   export function renderPartsPreviewHtml(code: string, theme: unknown): string;
   export const ARROW_LINE_TYPES: string[];
@@ -33,6 +33,23 @@ declare module "@swimlane-cloud/diagram-converter/parser" {
 
 declare module "@swimlane-cloud/diagram-converter/themes" {
   export const THEMES: Record<string, unknown>;
+}
+
+declare module "@swimlane-cloud/diagram-converter/diagram-layout" {
+  /** A DIAGRAM_LAYOUT key a repository may override, with the bounds to enforce. */
+  export interface LayoutSetting {
+    key: string;
+    group: "margins" | "grid";
+    min: number;
+    max: number;
+  }
+  export const DIAGRAM_LAYOUT: Record<string, number | string>;
+  export const LAYOUT_SETTINGS: LayoutSetting[];
+  export const LAYOUT_SETTING_KEYS: string[];
+  export function isLayoutOverride(key: string, value: unknown): boolean;
+  export function resolveLayout(
+    overrides?: Record<string, number> | null,
+  ): Record<string, number | string>;
 }
 
 declare module "@swimlane-cloud/editor/styles.css";

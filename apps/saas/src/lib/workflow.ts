@@ -3,6 +3,7 @@
  * pure branch-rule helpers the pages use. Replaces the localStorage demo
  * (`demo-workflow.ts`) with the same names where the UX is the same.
  */
+import { REPO_CONFIG_PATH } from "@swimlane-cloud/github-client";
 import { api, del, patchJson, postJson } from "./client";
 import type {
   BranchState,
@@ -11,6 +12,7 @@ import type {
   LockReason,
   ProjectState,
   PullDetail,
+  RepoConfigResponse,
   ShareMode,
   SnapshotResponse,
   TreeResponse,
@@ -49,6 +51,23 @@ export const listCommits = (pid: string, branch: string, page = 1, perPage = 30)
 
 export const getPR = (pid: string, number: number) =>
   api<PullDetail>(`${base(pid)}/pulls/${number}`);
+
+// ── Repo-wide settings (`.swimlane.json`) ───────────────────────────────────
+
+export const getRepoConfig = (pid: string, branch: string) =>
+  api<RepoConfigResponse>(`${base(pid)}/config?${q({ branch })}`);
+
+/**
+ * Settings are an ordinary draft, so they go through the same save the editor
+ * uses and land in the next checkpoint. `raw` is the whole file: the form
+ * serializes it, JSON mode sends what was typed, and the server canonicalises
+ * either way.
+ */
+export const saveRepoConfig = (pid: string, branch: string, raw: string) =>
+  saveDrafts(pid, branch, [{ id: REPO_CONFIG_PATH, dsl: raw }]);
+
+export const discardRepoConfig = (pid: string, branch: string) =>
+  discardDrafts(pid, branch, REPO_CONFIG_PATH);
 
 // ── Drafts & commits ─────────────────────────────────────────────────────────
 

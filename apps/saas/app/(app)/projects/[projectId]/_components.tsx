@@ -62,6 +62,23 @@ import { useT, LanguageToggle } from "@/i18n";
 
 export type Files = Record<string, string>;
 
+/**
+ * The repository's render settings, from `.swimlane.json` via `ProjectState`.
+ * Carried as its own object so a preview buried a few components deep does not
+ * need the whole `ProjectState` passed down to it.
+ */
+export interface RenderSettings {
+  themeKey: string;
+  layout: Record<string, number>;
+}
+
+export function renderSettingsOf(state: ProjectState | null): RenderSettings {
+  return {
+    themeKey: state?.project.themeKey ?? "basic",
+    layout: state?.project.layout ?? {},
+  };
+}
+
 /** primary diagram = first .txt path (sorted) for thumbnails/version SVG. */
 export function primaryPath(files: Files): string | null {
   const txt = Object.keys(files)
@@ -175,6 +192,9 @@ export function ProjectNav({
     { key: "pulls", label: t("nav.pulls"), href: "pulls" },
     { key: "versions", label: t("nav.versions"), href: "versions" },
     { key: "activity", label: t("nav.activity"), href: "activity" },
+    // Not owner-gated, unlike Templates: editors change repository settings on
+    // their own edit branch, and viewers get the read-only view.
+    { key: "repo", label: t("nav.repoSettings"), href: "settings/repo" },
     ...(state?.me.role === "owner"
       ? [{ key: "templates", label: t("nav.templates"), href: "settings/templates" }]
       : []),
@@ -450,6 +470,7 @@ export function HistoryPanel({
           title={detail.message.split("\n")[0] ?? ""}
           headRef={detail.sha}
           baseRef={detail.parents[0] ?? null}
+          settings={renderSettingsOf(state)}
           onClose={() => setDetail(null)}
         />
       )}
@@ -469,6 +490,7 @@ export function CommitDetailModal({
   headRef,
   baseRef,
   preloaded,
+  settings,
   onClose,
 }: {
   projectId: string;
@@ -477,6 +499,7 @@ export function CommitDetailModal({
   baseRef: string | null;
   /** Already-fetched changed files (pull request review) — skips the compare call. */
   preloaded?: CompareFile[];
+  settings?: RenderSettings;
   onClose: () => void;
 }) {
   const { t } = useT();
@@ -536,14 +559,18 @@ export function CommitDetailModal({
   const status = statusOf(path);
   const changed = status !== "same";
 
+  const themeKey = settings?.themeKey ?? "basic";
+  const layout = settings?.layout;
+  const layoutKey = layout ? JSON.stringify(layout) : "";
   const svg = useMemo(() => {
     if (mode !== "preview" || !after) return null;
     try {
-      return textToSvg(after, { themeKey: "basic" }).svg;
+      return textToSvg(after, { themeKey, layout }).svg;
     } catch {
       return null;
     }
-  }, [after, mode]);
+    // layoutKey stands in for `layout`, which is a fresh object on every state refresh.
+  }, [after, mode, themeKey, layoutKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusBadge =
     status === "added"
@@ -639,6 +666,7 @@ export function PrPanel({
           pr={pr}
           me={state.me.githubLogin}
           isOwner={isOwner}
+          settings={renderSettingsOf(state)}
           onMerge={onMerge}
           onClose={onClose}
         />
@@ -652,6 +680,7 @@ function PrItem({
   pr,
   me,
   isOwner,
+  settings,
   onMerge,
   onClose,
 }: {
@@ -659,6 +688,7 @@ function PrItem({
   pr: PullState;
   me: string;
   isOwner: boolean;
+  settings: RenderSettings;
   onMerge: (pr: PullState) => void;
   onClose: (pr: PullState) => void;
 }) {
@@ -775,6 +805,7 @@ function PrItem({
           headRef={pr.state === "open" ? pr.head : pr.headSha || pr.head}
           baseRef={pr.state === "open" ? pr.base : pr.baseSha || pr.base}
           preloaded={detail.files}
+          settings={settings}
           onClose={() => setShowFiles(false)}
         />
       )}

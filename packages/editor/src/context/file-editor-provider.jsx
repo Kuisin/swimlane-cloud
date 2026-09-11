@@ -44,6 +44,10 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
   const [openDocumentIds, setOpenDocumentIds] = useState([]);
   const [activeDocumentId, setActiveDocumentIdState] = useState(null);
   const [themeKey, setThemeKey] = useState(options?.themeKey || "basic");
+  // Repo-wide DIAGRAM_LAYOUT overrides from the host (`.swimlane.json` in the
+  // SaaS). Read straight from options: the host owns this, the editor never
+  // edits it, so there is no local state to keep in sync.
+  const layout = options?.layout;
   const [policies, setPolicies] = useState(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [loadError, setLoadError] = useState(null);
@@ -459,6 +463,7 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
     themeKey,
     setThemeKey,
     theme,
+    layout,
     src,
     model,
     activeParseErrorPolicy,

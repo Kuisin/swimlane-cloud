@@ -1,7 +1,14 @@
 /**
  * Wire types shared by the API routes and the browser. Nothing here imports
  * a server module, so `workflow.ts` and the pages can use these directly.
+ *
+ * `RepoConfig` is a type-only import: `@swimlane-cloud/github-client` never
+ * imports Next by design, and the import is erased at compile time anyway, so
+ * nothing reaches the browser bundle.
  */
+import type { RepoConfig } from "@swimlane-cloud/github-client";
+
+export type { RepoConfig };
 
 export type Role = "owner" | "editor" | "viewer";
 export type BranchKind = "main" | "test" | "tmp" | "release" | "other";
@@ -68,6 +75,9 @@ export interface ProjectState {
     repo: string;
     htmlUrl: string;
     diagramsRoot: string;
+    /** Render settings from `.swimlane.json`, for every preview in the app. */
+    themeKey: string;
+    layout: Record<string, number>;
   };
   me: { githubLogin: string; role: Role; canPush: boolean };
   branches: BranchState[];
@@ -128,4 +138,18 @@ export interface PullDetail {
   pull: PullState;
   comments: PullComment[];
   files: CompareFile[];
+}
+
+/** GET /api/projects/[id]/config — the repo-wide settings on one branch. */
+export interface RepoConfigResponse {
+  branch: string;
+  path: string;
+  /** Where the returned values came from: a pending draft, the commit, or nothing at all. */
+  source: "draft" | "git" | "default";
+  /** The file exactly as stored, or null when the repository has none yet. */
+  raw: string | null;
+  config: RepoConfig;
+  defaults: RepoConfig;
+  editable: boolean;
+  lockReason: LockReason | null;
 }
