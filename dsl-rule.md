@@ -78,9 +78,10 @@ right-title: 備考;
 
 /line/
 phase (見積) #gray
-  [sales: 見積作成] <hex> @quote +RQ
+  [sales: 見積作成] <hex> +RQ
     desc: 顧客要件を確認して見積を作成;
     remark: 金額が 100 万円超なら本部承認;
+    id: quote;
   if [manager] (承認する？)
   // 上長の一次判断のみ
   case (はい) #green
@@ -106,29 +107,31 @@ end-section
 if (キャンセル要求は？)
 case (あり) #red
   [sales: キャンセル受付]
-  goto @done
+  [goto: done]
 case (なし) #gray
   [manager: 通常クローズ処理]
 end-if
 
-[sales: 完了] @done
+[sales: 完了]
+  id: done;
 
 @end
 ```
 
 ```
-@kai-swimlane@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>@quote+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;if[manager](承認する？)/* 上長の一次判断のみ */case(はい)#green[system:受注登録]case(いいえ)#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]and(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)case(あり)#red[sales:キャンセル受付]goto@done case(なし)#gray[manager:通常クローズ処理]end-if[sales:完了]@done@end
+@kai-swimlane@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;id:quote;if[manager](承認する？)/* 上長の一次判断のみ */case(はい)#green[system:受注登録]case(いいえ)#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]and(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)case(あり)#red[sales:キャンセル受付][goto:done]case(なし)#gray[manager:通常クローズ処理]end-if[sales:完了]id:done;@end
 ```
 
-Ten of the surviving spaces are separators. Nine are invariant 2's fusion case — the left token
+Nine of the surviving spaces are separators. Eight are invariant 2's fusion case — the left token
 ends in an `idChar` and the right begins with one: `@use templates/…`, `+RQ
-desc:`, `@quote end-if`, `end-if end-phase`, `end-phase fork`, `end-fork section`, `+LG note:`,
-`end-section if` and `@done case`. The tenth is a path's side of the same rule: a bare `=>` path
+desc:`, `@quote end-if`, `end-if end-phase`, `end-phase fork`, `end-fork section`, `+LG note:` and
+`end-section if`. The ninth is a path's side of the same rule: a bare `=>` path
 ends only at structural whitespace, `;`, `]` or another suffix token. Two more are comment padding,
 and four are bytes inside a run, `金額が 100 万円` and `保存期間は 7 年`. What looks like a separator and is
-not: `loop@quote`, `goto@done`, `@quote+RQ`, `@audit#blue`, `]and(`, `@done@end` and `#gray[sales:`
-— `@`, `+`, `#` and `(` cannot continue the word to their left, the four directive names are never
-an `@id` suffix, and a colour token ends at the first character outside `[A-Za-z0-9-]`.
+not: `loop@quote`, `<hex>+RQ`, `@audit#blue`, `]and(`, `]id:done;`, `[goto:done]case(` and
+`#gray[sales:` — `@`, `+`, `#`, `(` and `[` cannot continue the word to their left, `]` and `>`
+close a run rather than continuing one, and a colour token ends at the first character outside
+`[A-Za-z0-9-]`.
 
 ## Lexical rules
 
@@ -149,10 +152,13 @@ only statement boundaries. At a boundary it reads one **maximal word** — the l
 At `@`-statement position the `@` is followed by one maximal word matched **exactly** against the
 four-entry directive table `kai-swimlane`, `use`, `lang`, `end`, so `@endpoint` is one word —
 `unknownDirective` at statement position, one `@id` in suffix position, never `@end` then `point`.
-Those four names are **never read as a step's `@id` suffix**: there an `@` followed by one of them
-ends the suffix run and starts a new statement, so `[sales: 完了] @end` is a step and then the file
-marker. Keyword table: `if case end-if fork and end-fork section end-section branch
-end-branch phase end-phase loop goto merge`; nothing else is a keyword.
+Those four names are **never read as an opener's `@id` slot or a `loop` target**: there an `@`
+followed by one of them ends the suffix run and starts a new statement, so `section (監査) @end` is
+a section opener and then the file marker. Keyword table: `if case end-if fork and end-fork section
+end-section branch end-branch phase end-phase loop`; nothing else is a keyword. `goto` is not in it
+— `[goto: id]` is a bracket statement, recognised by the literal word `goto` immediately after the
+`[` and before the run is read as a step head — but it is still a **reserved id**: `/role/ <goto>`
+is refused, because otherwise `[goto: …]` would be ambiguous with a step in a lane called `goto`.
 
 **Structural whitespace** is exactly U+0009, U+000A, U+000D, U+0020, U+00A0 and U+3000, outside
 runs, fences, strings and comments; inside those all six are content. The last two are included because Japanese input produces them in delimiter position, and the
@@ -294,8 +300,8 @@ the header, before the first section marker, at most one `@lang`. Anywhere else 
 `misplacedDirective`, an error that blocks nothing so that the hoist stays reachable: the directive
 is still _applied_, with prologue semantics, and format-on-save hoists it to the **end** of the
 existing `@use` run, never before it. An `@word` that is none of the four directive names and is
-not a step's `@id` suffix is `unknownDirective`, a **warning**, retained verbatim and re-emitted at
-its position.
+not an opener's `@id` slot or a `loop` target is `unknownDirective`, a **warning**, retained
+verbatim and re-emitted at its position — which is what a step's old `@id` suffix now is.
 
 **Sections.** The set is closed: `meta title page option role block prop line i18n`. A `/word/`
 marker always **closes the current section**, known or not, at any position. A marker naming a
@@ -337,13 +343,13 @@ statement, as invariant 9 says; there is no other candidate. `desc:` under an `i
 **Per-statement key sets** are closed, and `keyNotAllowedHere` lists the allowed set verbatim from
 this table.
 
-| statement                              | suffixes                           | keys                                                                                                                                                     |
-| -------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| step                                   | `<block> @id +prop* glyph => path` | `label desc remark remark-desc note note-side skip level`                                                                                                |
-| `if`                                   | `[lane] @id #color`                | `question` _(the parenthesised run)_, `lane`, `desc`, `note`, `note-side`                                                                                |
-| `case` / `and` / `fork`                | `@id #color`                       | `label` _(the parenthesised run, optional — a blank or absent one is the unlabelled, catch-all case; on `fork` it names path 1)_, `note`, `note-side`    |
-| `section` / `branch` / `phase`         | `@id #color`                       | `name` _(the parenthesised run)_, `desc`, `note`, `note-side`; with no name the display name is the translatable constant `Section` / `Branch` / `Phase` |
-| closers, `loop`, `goto`, `[]`, markers | —                                  | **none**                                                                                                                                                 |
+| statement                           | suffixes                       | keys                                                                                                                                                     |
+| ----------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| step                                | `<block> +prop* glyph => path` | `label desc remark remark-desc note note-side id skip level`                                                                                             |
+| `if`                                | `[lane] @id #color`            | `question` _(the parenthesised run)_, `lane`, `desc`, `note`, `note-side`                                                                                |
+| `case` / `and` / `fork`             | `@id #color`                   | `label` _(the parenthesised run, optional — a blank or absent one is the unlabelled, catch-all case; on `fork` it names path 1)_, `note`, `note-side`    |
+| `section` / `branch` / `phase`      | `@id #color`                   | `name` _(the parenthesised run)_, `desc`, `note`, `note-side`; with no name the display name is the translatable constant `Section` / `Branch` / `Phase` |
+| closers, `loop`, `[goto: id]`, `[]` | —                              | **none**                                                                                                                                                 |
 
 **Canonical key and entry order** is published per node type. `x-*` and unknown keys come last
 within their node by code point; a `.lang` variant follows its base key; `unset:` is last in every
@@ -355,7 +361,7 @@ body that carries it.
 | `/meta/`                      | `owner, status, tags, version, updated`, then every other key by code point                                                                                                                                                                              |
 | `/page/`, `/option/`          | `description` and the six header/footer slots; the display booleans, then `show-notes, auto-define, branch-color-arrows, i18n-strict, i18n-uniform-layout, i18n-storage, lang, lane-order`; then `block-margin, block-text`; then the four gutter titles |
 | `/role/`, `/block/`, `/prop/` | `label, text-color, background-color, icon`; `label, background-color, text-color, border-color, shape, icon`; `label, side, background-color, border-color, text-color, title, max-chars`                                                               |
-| step                          | `label, desc, remark, note, note-side, skip, level`                                                                                                                                                                                                      |
+| step                          | `label, desc, remark, note, note-side, id, skip, level`                                                                                                                                                                                                  |
 | control statements            | `desc, note, note-side` on `if`, `section`, `branch` and `phase`; `note, note-side` on `case`, `and` and `fork`                                                                                                                                          |
 | `/i18n/`                      | id-keyed subjects first, in the first-appearance order of the node they address in `/line/`; then quoted-source subjects by `keyForm` code point; within a subject, fields in the owning node's key order and languages in `@lang` order                 |
 
@@ -381,13 +387,18 @@ opaque string, never split, typed, flagged or translated. `/meta/` is never rend
 
 ```
 step   := "[" roleId colon text "]" suffix* property*
-suffix := "<" blockId ">" | "@" id | "+" propId | glyph | "=>" suffixPath
+suffix := "<" blockId ">" | "+" propId | glyph | "=>" suffixPath
 ```
 
+A step's own **destination id is not a suffix**: it is the property line `id: <id>;`, in the same
+block as `label:` / `desc:` / `skip;` / `level:` and subject to the same rules. `[role: text] @id`
+does not parse. An opener's `@id` — on `if`, `fork`, `section`, `branch`, `phase` — is unaffected
+and stays an inline suffix; the two are different slots and the move applies to the step only.
+
 Each slot occurs at most once except `+prop`. The **reader accepts any order**, each slot having a
-unique first token, and the **formatter writes** `[role: text] <block> @id +prop* glyph => path`. A
+unique first token, and the **formatter writes** `[role: text] <block> +prop* glyph => path`. A
 suffix after a property row is an error, as is a repeated slot; `+prop` ids keep source order. The
-suffix run ends at the first token that opens none of the five slots.
+suffix run ends at the first token that opens none of the four slots.
 
 `suffixPath` is its own production and is not the `@use` path. A bare suffix path ends at the first
 structural whitespace, `;`, `]`, or first character of another suffix token, so one containing a
@@ -402,7 +413,8 @@ up to the first `:` or `：`, further colons being text, and a step head takes n
 `label:` and the bracket text are **two render slots, not one**: the bracket text is the step
 box's own text, `label:` names the step's **left-gutter caption**, and they are separate IR fields,
 `text` and `label`. `+prop` **accumulates** in source order, duplicates dropped keeping the first;
-`@id` and the glyph are single-valued, a second one being `badSuffix`.
+the glyph is single-valued, a second one being `badSuffix`, and a second `id:` line on one step is
+`duplicateKey`.
 
 Two step spellings look alike and are not: `[]` is a **spacer** — no lane, no text, one row, never
 numbered, no id, no properties — while `[sales:]`, and
@@ -448,20 +460,35 @@ exactly like every other opener's — a blank or absent one is the unlabelled, c
 being no second keyword for it, any number of cases may be unlabelled, and none is positionally
 special; an empty case **body** is legal and renders as a bare edge to the join. An unlabelled case's chip is simply not drawn, the same as an unlabelled `and` path's.
 
-### `loop`, `goto` and `merge`
+### `loop` and `[goto: id]`
+
+There are exactly two jumps and no landing marker: **every jump either names a real node or is the
+bare `loop`.** A node is named by the id it already carries — a step's own `id: <id>;` property
+line, or an opener's `@id` slot — and nothing in `/line/` exists only to be jumped to.
 
 Bare `loop` is a back-edge to the question of the **nearest enclosing `if`**, searched outward
 through _every_ frame kind, and `unknownId` where there is none. `loop @id` names a node. The two
 are different constructs and no tool converts one into the other, so a bare `loop` never gains a
-generated id on save. A named jump target always carries the `@` sigil, at the declaration and at
-every reference. `goto` and `loop` are ordinary rows, legal in **every** body and taking no
-suffixes and no properties. Two static clauses govern a jump `G` and the row `T` defining its
-target.
+generated id on save. `loop`'s target, when it has one, carries the `@` sigil, written `loop @id`
+on the keyword's own line and never crossing a newline; it is never one of the four directive names.
+
+`goto` is a **bracket statement**, `[goto: id]` — written `[goto: done]`, which is why it looks
+like a step at a glance, and is spelled out in full in the example below. It always names a target
+— there is no bare form, and `[goto: ]` is an error. The reader
+special-cases the literal word `goto` followed by an **ASCII** `:` immediately after the `[`, before
+the run would be read as a step head, and for that to stay unambiguous the role id `goto` is
+**reserved**: a `/role/ <goto>` definition is refused with _role id "goto" is reserved for the
+[goto: id] statement_, so `[goto: …]` is never a step in a lane called `goto`. The full-width
+`[goto： …]` is _not_ the statement: the general rule that a step's role id runs to the first colon
+of either width wins there, so it is an ordinary step head — write the ASCII colon.
+
+`loop` and `[goto: id]` are ordinary rows, legal in **every** body and taking no suffixes and no
+properties. Two static clauses govern a jump `G` and the row `T` defining its target.
 
 - **Containment.** `scopePath(T)` must be a prefix of `scopePath(G)`. A target inside a case, fork
   path or branch body that does not contain the jump is an **error**, whatever the row index.
-- **Direction.** `rowIndex(T) > rowIndex(G)` for `goto`, `<` for `loop` — an integer comparison,
-  not graph reachability. It is a **warning**.
+- **Direction.** `rowIndex(T) > rowIndex(G)` for `[goto: id]`, `<` for `loop` — an integer
+  comparison, not graph reachability. It is a **warning**.
 
 A step target is that step; an `if` or `fork` target is its gateway row. A `section` or `phase`
 target is the **first row of its body that can receive an inbound edge**, decided by one closed
@@ -473,28 +500,26 @@ A `case`, `and` or `branch` id is not a target at all. A jump contributes exactl
 so its body terminates there, and anything not reachable from the flow entry is `unreachableRow`,
 computed in one worklist pass.
 
-**The landing marker.** `merge` is a row in the flow, not a jump: it names a place a case can come
-back to.
+**A step's `id:` line** declares that id in the one flat flow-node namespace, so `duplicate node
+id` applies across steps and openers alike. It is what a `[goto: id]` or a `loop @id` names, and
+the way a case leaves an `if` is to name the step it should continue at:
 
 ```
-merge            merge @join
+[role: text]
+  id: mystep;
+if (q)
+case (yes)
+  [goto: mystep]
+case (no)
+  [role: other]
+  loop @mystep
+end-if
 ```
-
-A bare `merge` is an anonymous landing place; `merge @id` additionally declares the id, in the one
-flat flow-node namespace, so `duplicate node id` applies to it exactly as to a step's `@id`. A
-marker takes no suffixes, no properties and no colour, is legal at any position in `/line/`, and is
-the one row kind whose whole purpose is to be jumped to.
-
-**Bare `goto`** is the statement that pairs with it: where `goto @id` names its target, a bare
-`goto` lands on the **first `merge` marker that follows its enclosing `if`'s `end-if`**, which is
-what lets a case leave the block without anything upstream having to be named. With no such marker
-after the `end-if`, the diagnostic is `goto has no merge marker after this if`. As with `loop`, a
-bare `goto` never gains a generated id on save.
 
 Where the enclosing `if` is what a jump is written against, this reader requires it to exist: a
-`goto` or a `loop` at the root, in a `section` body or in a fork path is reported today rather than
-drawn, even though the rules above license it — a known gap between this specification and
-`parser-v2.js`, not a second rule.
+`[goto: id]` or a `loop` at the root, in a `section` body or in a fork path is reported today
+rather than drawn, even though the rules above license it — a known gap between this specification
+and `parser-v2.js`, not a second rule.
 
 ### `fork` / `and`
 
@@ -674,10 +699,11 @@ it.
 受注処理;
 
 /line/
-[sales: 見積作成 | Create quote] @quote
+[sales: 見積作成 | Create quote]
   desc: 顧客要件を確認して見積を作成;
   desc.en: Check the customer requirements and draft the quote;
   remark: 金額が 100 万円超なら本部承認;
+  id: quote;
 if (承認する？ | Approve?)
 case (はい | Yes) #green
   [system: 監査ログ保存]
@@ -756,12 +782,13 @@ Attachment is one buffer-and-flush rule: a comment joins the buffer of the body 
 the buffer drains either into the next statement pushed into that same body or, when the body ends
 — at its closer _or_ at a sibling `case` or `and` — into that body's trailing comments.
 
-**Ids are never invented.** A node's id is set only by an explicit `@id` in the source or by the
-explicit, idempotent `assignIds` transform, whose callers are the GUI immediately before its first
-structural mutation of a node, the id command, and a pre-format pass under a project setting that
-defaults to "referenced". The formatter writes `@id` iff the node's id is set and the referenced
-set that keeps an id alive is `{goto targets} ∪ {loop targets} ∪ {/i18n/ id
-keys} ∪ {per-node field.lang lines} ∪ {ids present in the source}`.
+**Ids are never invented.** A node's id is set only by an explicit id in the source — a step's
+`id: <id>;` line, an opener's `@id` slot — or by the explicit, idempotent `assignIds` transform,
+whose callers are the GUI immediately before its first structural mutation of a node, the id
+command, and a pre-format pass under a project setting that defaults to "referenced". The formatter
+writes the id back, in whichever of the two positions the node kind uses, iff the node's id is set,
+and the referenced set that keeps an id alive is `{[goto: id] targets} ∪ {loop targets} ∪ {/i18n/
+id keys} ∪ {per-node field.lang lines} ∪ {ids present in the source}`.
 
 **Error positions are offsets, not lines.** Every node carries a span, a node path and the path of
 its nearest flow-node ancestor-or-self; line and column are derived for display and no component
@@ -812,10 +839,12 @@ entryKey     := key | string ("." tag)?              -- an /i18n/ unset: key is 
 
 row          := statement | property | comment | errorNode
               -- a bare property row attaches to the preceding statement (invariant 9); one after
-              -- a closer, a jump, a spacer or a marker is `keyNotAllowedHere`
-statement    := (step | spacer | jump | marker) property* | block
+              -- a closer, a jump or a spacer is `keyNotAllowedHere`
+statement    := (step | spacer | jump | gotoStmt) property* | block
 step         := "[" id colon text "]" suffix*        spacer := "[" "]"
-suffix       := "<" id ">" | "@" id | "+" id | glyph | "=>" suffixPath
+              -- id is not "goto": that word after "[" opens gotoStmt, and <goto> is reserved
+suffix       := "<" id ">" | "+" id | glyph | "=>" suffixPath
+              -- no "@" id: a step's own id is the property line `id: <id>;`
 suffixPath   := string | bare(";" | "]" | WS | suffixStart)
 suffixStart  := "<" | "@" | "+" | glyph
 glyph        := "->" | "~>" | "..>" | "-.>" | "-->"  -- longest match; "->" is never emitted
@@ -833,8 +862,9 @@ sectionBlock := "section" (lparen text rparen)?
 branchBlock  := "branch" (lparen text rparen)? idSlot? color? property* row* groupClose
 phaseBlock   := "phase" (lparen text rparen)? idSlot? color? property* row* groupClose
 groupClose   := "end-section" | "end-branch" | "end-phase"   -- must match the opener: constraint 3
-jump         := "goto" ("@" id)? | "loop" ("@" id)?   -- bare: the next marker / the enclosing if
-marker       := "merge" ("@" id)?                    -- a landing row; declares the id when named
+jump         := "loop" ("@" id)?                     -- bare: back to the enclosing if
+gotoStmt     := "[" "goto" ":" id "]"                -- a bracket statement, never a step; no bare
+                                                     -- form, so the id is required; ASCII ":" only
 lane         := "[" id "]"                           idSlot := "@" id
 color        := "#" (paletteName | hex)              -- hex is 3, 4, 6 or 8 digits
 
@@ -880,10 +910,10 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | `[sales: 見積  作成 ]`, `[sales: " 見積作成"]` (L10)                                                                                               | edges trimmed, interior preserved; quoting is the only way to keep edge whitespace                                                                                                                                 | `edgeWhitespaceQuoted`                                                                       |
 | `quote.remark en: …;` (L11)                                                                                                                        | a space is not a tag separator; squashed the row is `quote.remarken:`                                                                                                                                              | `i18nEntryMalformed`                                                                         |
 | `<hex> shape: hex; <terminal> shape: rounded;` on one line (L13); `@use "./role/sales standard.swim";` (L14)                                       | one definition ends at the next `<` at a statement boundary; a path is an ordinary value, bare to `;` or quoted, never folded                                                                                      | none                                                                                         |
-| **Control flow.** `goto @top` where `@top` is upstream (C01); `loop @c` where `@c` is downstream (C06)                                             | accepted and drawn; direction is a warning and no tool substitutes one keyword for the other                                                                                                                       | `jumpDirection`                                                                              |
-| `goto` from `case (a)` into `case (b)` (C02); `goto @side` naming a `branch` (C17)                                                                 | rejected: the row can never reach the target; a branch head has no inbound edge                                                                                                                                    | `unreachableRow`, `unknownId`                                                                |
-| A fork path ending in `goto` (C03); a `fork` with one path (C13)                                                                                   | the split is always drawn, the join iff ≥ 1 path reaches it, with that arity; one path keeps both gateways                                                                                                         | `forkArity`                                                                                  |
-| `goto` at the root, in a `section` or in a `phase` (C04); a row after `loop @quote` (C05)                                                          | jumps are legal in every body; nothing is deleted, so the diagnostic survives format-on-save                                                                                                                       | none; `unreachableRow`                                                                       |
+| **Control flow.** `[goto: top]` where `top` is upstream (C01); `loop @c` where `@c` is downstream (C06)                                            | accepted and drawn; direction is a warning and no tool substitutes one jump for the other                                                                                                                          | `jumpDirection`                                                                              |
+| `[goto: x]` from `case (a)` into `case (b)` (C02); `[goto: side]` naming a `branch` (C17)                                                          | rejected: the row can never reach the target; a branch head has no inbound edge                                                                                                                                    | `unreachableRow`, `unknownId`                                                                |
+| A fork path ending in `[goto: id]` (C03); a `fork` with one path (C13)                                                                             | the split is always drawn, the join iff ≥ 1 path reaches it, with that arity; one path keeps both gateways                                                                                                         | `forkArity`                                                                                  |
+| `[goto: id]` at the root, in a `section` or in a `phase` (C04); a row after `loop @quote` (C05)                                                    | jumps are legal in every body; nothing is deleted, so the diagnostic survives format-on-save                                                                                                                       | none; `unreachableRow`                                                                       |
 | `loop @retry` where `@retry` names an `if` (C07)                                                                                                   | legal — every opener takes an optional `@id`, which is also what makes control text addressable                                                                                                                    | none                                                                                         |
 | Bare `loop` inside a `section` inside a case; with no enclosing `if` (C08)                                                                         | searches outward through every frame kind; the fix offers each upstream node that already has an id                                                                                                                | `unknownId`                                                                                  |
 | `if [manager] (承認する？)`, `if []` (C09)                                                                                                         | the lane populates the IR's `if.lane`; omitted means "keep today's derived placement"                                                                                                                              | `emptyValue`                                                                                 |
@@ -893,14 +923,14 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | A `branch` followed only by `@end`; a `branch` at the end of a case (C15, C16)                                                                     | the tail is drawn as a terminal; inside a case it merges into the `end-if` join and the escaping edge is unconstructible                                                                                           | `branchNoNeighbour`; none                                                                    |
 | A `phase` containing a complete `if` (C18); a `phase` in a fork path, or nested (C19); `loop` across `end-phase` (C20)                             | legal; rejected, since a band covers a contiguous range of root-level rows; legal, a phase being a region and not a scope                                                                                          | none; `frameNotAllowedHere`; none                                                            |
 | `[sales: X] ~>` last in a case (C21); two glyphs on one step                                                                                       | styles the edge into the `end-if` join; the arrow slot is single-valued                                                                                                                                            | `arrowNoEdge` where there is no edge; `badSuffix`                                            |
-| `[warehouse: 出荷準備] => ./a.swim @ship`, two `=>` on one step (C22); a `[…]` row in `/page/`, a `/line/` with zero rows (C23)                    | any suffix order is read and written canonically; a step links to at most one diagram; the first is rejected, the second legal                                                                                     | `badSuffix`; `flowRowOutsideLine`                                                            |
+| `[warehouse: 出荷準備] @ship`, two `=>` on one step (C22); a `[…]` row in `/page/`, a `/line/` with zero rows (C23)                                | a step's id is a property line, so a trailing `@ship` is not a suffix but the next statement; a step links to at most one diagram; the first is rejected, the second legal                                         | `unknownDirective`, `badSuffix`; `flowRowOutsideLine`                                        |
 | **Properties.** `skip;`, `skip: true;`, `skip-reason:`; `[]`, `[sales:]` (P01)                                                                     | the first two are one fact and the third an unknown key; `[]` is never numbered while `[sales:]` is                                                                                                                | `unknownKey`; none                                                                           |
-| `+RQ +RQ`, a second `@id` (P02); `+RQ` written after a property row                                                                                | `+prop` accumulates and dedupes; `@id` and the glyph are single-valued; suffixes precede the property block                                                                                                        | `badSuffix`                                                                                  |
+| `+RQ +RQ`, two `id:` lines on one step (P02); `+RQ` written after a property row                                                                   | `+prop` accumulates and dedupes; the glyph is single-valued and a step's id is set once; suffixes precede the property block                                                                                       | `badSuffix`, `duplicateKey`                                                                  |
 | `hint:` and `title:` in one block (P03); `remark-desc:` before `remark:` (P04)                                                                     | aliases are one key, while `label:` and `label.en:` are not; `remark-desc` appends, so it must follow the block's `remark:`                                                                                        | `duplicateKey`; `duplicateKey`                                                               |
 | `lang: fr;` with `@lang ja, en;`; a gutter title in both `/page/` and `/option/` (P05)                                                             | rejected, since it selects what renders; `/option/` wins                                                                                                                                                           | `unknownLanguage`; `titleInBothSections`                                                     |
 | `colour:` in `/role/`, `x-figma-node: 12:345;` (P06); `status: wip;`, `updated: 2026/09/05;`, `max-chars: 十;` (P07)                               | kept verbatim in an ordered `unknown` bag and re-emitted after the known keys; `x-` is opaque; each falls back to its default                                                                                      | `unknownKey`; none; `badValue`                                                               |
 | `icon: ;` vs `icon: "";` vs `icon: none;` (P08)                                                                                                    | error, explicitly empty, clears an inherited value and is always re-emitted                                                                                                                                        | `emptyValue`                                                                                 |
-| `[sales: 見積作成] +RQ` with no definitions (P09); `desc:` under a `case`, `note:` after `end-if` (P10)                                            | stubbed from the id and flagged provisional; closers, jumps, `[]` and markers take no properties                                                                                                                   | `undefinedReference`; `keyNotAllowedHere`                                                    |
+| `[sales: 見積作成] +RQ` with no definitions (P09); `desc:` under a `case`, `note:` after `end-if` (P10)                                            | stubbed from the id and flagged provisional; closers, jumps and `[]` take no properties                                                                                                                            | `undefinedReference`; `keyNotAllowedHere`                                                    |
 | `shape: arrow-down;`, `shape: hexagon;` (P11); two `note:`, `note-side:` with no `note:` (P12)                                                     | documented and parses; falls back to `rounded`; a note is single assignment, the default side the constant `right`                                                                                                 | `badValue`; `duplicateKey`, `noteSideWithoutNote`                                            |
 | **Imports.** `@use assets/logo.png;` then `icon: @logo;`                                                                                           | the stem binds the id; the image is embedded as a `data:` URI in an `<image>`, never inlined as markup                                                                                                             | none                                                                                         |
 | Two imports whose stems agree; `@use a/logo.png as brand;`                                                                                         | refused rather than one silently winning; `as` names it                                                                                                                                                            | `duplicateAsset`                                                                             |
@@ -924,7 +954,7 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | A local `"完了".en:` and a glossary `"完了".en:` (N05); a glossary declaring `ja, en, zh` imported by a `ja, en` diagram (N06)                     | local beats imported silently; two imports disagreeing is reported; the importer's `@lang` is authoritative and the extra entry is inert, while a glossary whose source language differs is an error at the `@use` | `importConflict`; `redundantOverride`, `notAFragment`                                        |
 | `"監査ログ保存 ".en:`; a decorated and an undecorated occurrence of one sentence (N07, N15)                                                        | keys compare byte-exactly after edge-trim and NFC — no folding of any kind, no markup stripping                                                                                                                    | `staleCatalogEntry`                                                                          |
 | `見積 \| \| Angebot` with three languages; `\| Done` (N09)                                                                                         | an interior empty segment falls through to the catalog; an empty _first_ segment is an error                                                                                                                       | `segmentCount`                                                                               |
-| `case (あり) @need-yes` plus `/i18n/ need-yes.label.en:` (N10); `@done` reached only by `/i18n/ done.label.en:` (N11)                              | control heads take `@id`, with reserved field names per kind; a catalog key and a `field.lang:` line both count as references, so the id survives every format                                                     | `badKeySuffix`; `unknownId` on a positional id                                               |
+| `case (あり) @need-yes` plus `/i18n/ need-yes.label.en:` (N10); a step's `id: done;` reached only by `/i18n/ done.label.en:` (N11)                 | control heads take `@id`, with reserved field names per kind; a catalog key and a `field.lang:` line both count as references, so the id survives every format                                                     | `badKeySuffix`; `unknownId` on a positional id                                               |
 | An inline `\| Create quote` plus `quote.text.en:` (N12); `desc:` plus `desc.ja:` (N13); `label.fr:` with `@lang ja, en;` (N14)                     | node-local wins, so the catalog entry can never render; `key.<source>:` is exactly the bare key; an undeclared tag is a reference failure and stays an error                                                       | `unusedCatalogEntry`; `duplicateKey`; `unknownLanguage`                                      |
 | A fenced `desc:` containing a Markdown table (N16); a two-line `/title/` (N17)                                                                     | nothing is structural inside a fence; a newline inside the title is one structural space, so it segments as its one-line form                                                                                      | `i18nEntryMalformed` on a multi-line quoted key; `segmentCount` quoting the joined text      |
 | Two occurrences of `確認` translated differently under `i18n-storage: catalog;` (N18); a hand edit of a step whose text keys a catalog entry (N19) | nothing is hoisted, hoisting running only when it changes no rendered string; the entry is never rekeyed or deleted by the formatter                                                                               | `unusedCatalogEntry`; `staleCatalogEntry`, `missingTranslation`                              |
@@ -941,7 +971,7 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | `[sales: 予算]確定]を承認]` (S13)                                                                                                                  | an _unbalanced_ `]` ends the run at the first `]`; escape it or quote the run                                                                                                                                      | `unbalancedBracket`                                                                          |
 | **Migrating older files.** `@kai-swimlane-v2`, `@kai-swimlane 2`, `@kai-swimlane2` (V06, V08, V10)                                                 | a header carrying a version is refused, never read as something else and never a fallthrough; Update DSL rewrites it                                                                                               | `malformedHeader`                                                                            |
 | A squashed one-line file; `@kai-swimlane v2` (V03)                                                                                                 | detected exactly as an expanded one, the header being prefix-matched                                                                                                                                               | none; `malformedHeader`                                                                      |
-| `merge: done;`, `[loop]` (V01); `merge: x;` pointing upstream (V17)                                                                                | the migration writes `goto @done` or `loop @x` by position, and bare `loop`                                                                                                                                        | migration report                                                                             |
+| `merge: done;`, `[loop]` (V01); `merge: x;` pointing upstream (V17)                                                                                | the migration writes `[goto: done]` and `loop`; it never consults position, so an upstream target becomes a `[goto: …]` too and the reader reports the direction                                                   | migration report; `jumpDirection`                                                            |
 | `&lt;hex&gt;` in step text or in suffix position (V02)                                                                                             | the migration decodes entities in the positions the older grammar left unescaped, so a `&lt;hex&gt;` suffix becomes `<hex>`; the reader decodes nothing                                                            | migration report                                                                             |
 | `end-branch` closing a `section`; `end-point` (V04)                                                                                                | the migration writes the opener's closer for a same-family mismatch and `end-section` for `end-point`; a cross-family mismatch is refused                                                                          | migration report; `closerMismatch`                                                           |
 | `label.en:`, `/i18n/`, `/option/ lang:` (V05)                                                                                                      | the migration carries nothing multilingual, so adding them is an edit afterwards                                                                                                                                   | none                                                                                         |
@@ -950,7 +980,7 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | Two headers in one file (V13); `/meta/` after `/role/` (V14)                                                                                       | the first header wins and the trailer is an error; a marker always closes the current section                                                                                                                      | `textOutsideDiagram`; none                                                                   |
 | A `/role/` fragment posted for validation (V15)                                                                                                    | validated in fragment mode, never by string-wrapping it in a synthetic document                                                                                                                                    | none                                                                                         |
 | Any older file (V16); `id: 完了 ステップ;` (V19)                                                                                                   | the migration's output renders the same picture, checked by `renderHash`; an out-of-charset id is slugified once with every reference rewritten                                                                    | migration report                                                                             |
-| **Tooling.** Two steps sharing one `<block>` (T01)                                                                                                 | a step's id comes only from `@id` or the explicit transform, never from its `<block>` reference                                                                                                                    | `duplicateId` on a real collision                                                            |
+| **Tooling.** Two steps sharing one `<block>` (T01)                                                                                                 | a step's id comes only from its `id:` line or the explicit transform, never from its `<block>` reference                                                                                                           | `duplicateId` on a real collision                                                            |
 | A diagnostic in a squashed file (T02); a `/meta/ status:` edit (T03)                                                                               | anchored by offset and node path, the GUI lock being a path-prefix test; `sourceHash` changes and `renderHash` does not                                                                                            | none                                                                                         |
 | A host rendering the IR as something other than the diagram (T04)                                                                                  | it walks the same node kinds, and a jump resolves through an index built over every kind and not steps only, so a target that is an `if` or a frame shows a label                                                  | none                                                                                         |
 | `if (承認する？) case (はい` … (T05)                                                                                                               | one diagnostic, recovery to the next sync token, and the bracketed step still lands in the はい case                                                                                                               | `unbalancedParen`, `unclosedBlock`                                                           |
@@ -969,80 +999,80 @@ suspended whenever import resolution produced any error. Every value-level probl
 with a documented fallback and a verbatim round trip, except a value that is itself a reference, a
 delimiter or a key — exactly the value-level codes listed below as errors.
 
-| code                     | severity | impact | message                                                                                                                                                                                                       | quick-fix                                         |
-| ------------------------ | -------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `unterminated`           | error    | render | unterminated string, fence or `/* */`                                                                                                                                                                         | Insert the closer before the next statement       |
-| `danglingEscape`         | error    | render | `\` must be followed by the character it escapes                                                                                                                                                              | Write `\\`                                        |
-| `headerMissing`          | error    | render | `@kai-swimlane` marker not found                                                                                                                                                                              | — (the sole code licensing starter-template init) |
-| `malformedHeader`        | error    | render | the header is `@kai-swimlane` — there are no versions any more                                                                                                                                                | Run **Update DSL** (read-only until it has)       |
-| `limitExceeded`          | error    | render | file exceeds 1 MiB / 10 000 nodes                                                                                                                                                                             | —                                                 |
-| `missingSemicolon`       | error    | format | "…" must end with `;`                                                                                                                                                                                         | Insert `;` before the next sync token             |
-| `unterminatedTitle`      | error    | format | `/title/` value must end with `;`                                                                                                                                                                             | Insert `;`                                        |
-| `unknownStatement`       | error    | format | unknown statement, section marker or step head                                                                                                                                                                | did-you-mean / Insert `:` after the role id       |
-| `emptyValue`             | error    | format | "…" has no value; empty `()` or `[]` — omit it instead                                                                                                                                                        | Write `""` / Write `none` / Delete                |
-| `unbalancedBracket`      | error    | format | unbalanced `[` or `]` in step text, or a run ended at a delimiter                                                                                                                                             | Escape it / Quote the run                         |
-| `unbalancedParen`        | error    | format | `(` is not closed, closed by the other width, or followed by text                                                                                                                                             | Insert `)` / Quote the run                        |
-| `fenceOpenerNotAlone`    | error    | format | a fence opener must be last on its line, and `//` must be first                                                                                                                                               | Move the content / Convert to `/* … */`           |
-| `duplicateKey`           | error    | format | "…" is already set on …                                                                                                                                                                                       | Remove one / Swap the lines / Merge               |
-| `duplicateId`            | error    | format | duplicate id or `<…>` definition                                                                                                                                                                              | Rename to `…-2` (updates N references)            |
-| `invalidId`              | error    | format | invalid, empty or reserved id "…"                                                                                                                                                                             | Rename to `…` (updates N references)              |
-| `unknownId`              | error    | format | no node with id "…"; a jump needs a target; `case`, `and` and `branch` heads and empty frames are not targets; bare `loop` needs an enclosing `if`, and bare `goto` a `merge` marker after that `if`'s closer | did-you-mean / Add `@id`                          |
-| `unreachableRow`         | error    | format | nothing reaches this statement, or the target is in a scope this row cannot reach                                                                                                                             | Move above the jump / Delete                      |
-| `badSuffix`              | error    | format | "…" is given twice, or after the first property row                                                                                                                                                           | Remove the second / Move it                       |
-| `keyNotAllowedHere`      | error    | format | "…" is not a property of "…" (allowed: …); `unset:` needs a mergeable section                                                                                                                                 | Change to `note:` / Move under the step           |
-| `flowRowOutsideLine`     | error    | format | flow row outside `/line/`                                                                                                                                                                                     | Move into `/line/`                                |
-| `malformedIf`            | error    | format | row before the first `case`; `if` with no case                                                                                                                                                                | Insert `case (…)`                                 |
-| `closerMismatch`         | error    | format | "…" closes "…", or closes nothing, while "…" is still open                                                                                                                                                    | Insert the missing closer / Delete                |
-| `unclosedBlock`          | error    | format | "…" is not closed (missing "…")                                                                                                                                                                               | Insert the closer at the closure point            |
-| `frameNotAllowedHere`    | error    | format | `phase` must be at the top level and phases do not nest; `branch` may not nest inside `branch`                                                                                                                | Replace with `section (…)` / Move it out          |
-| `badKeySuffix`           | error    | format | keys may not contain "."; at most one `.lang` suffix; "…" is not translatable                                                                                                                                 | Replace "." with "-" / Remove the suffix          |
-| `unknownLanguage`        | error    | format | "…" is not a declared BCP 47 language tag                                                                                                                                                                     | Add "…" to `@lang` (appends) / Delete             |
-| `segmentCount`           | error    | format | K segments but this file declares M languages; the first segment must not be empty                                                                                                                            | Escape the extra bar / Add a language             |
-| `i18nEntryMalformed`     | error    | format | an entry must be written `<key>.<lang>: <text>;`, single-line, never the source language, and `id.field` needs a `/line/`                                                                                     | Replace the space with `.` / Rekey                |
-| `textOutsideDiagram`     | error    | format | text before the header or after `@end`, or a second header                                                                                                                                                    | Delete / Move into a comment                      |
-| `emptyImportPath`        | error    | format | an import path must not be empty                                                                                                                                                                              | —                                                 |
-| `importColon`            | error    | format | a path must not contain `:`                                                                                                                                                                                   | — (no fetch is issued)                            |
-| `importBackslash`        | error    | format | path separators are `/`                                                                                                                                                                                       | Replace `\` with `/`                              |
-| `absoluteImportPath`     | error    | format | a path is relative to the repository root                                                                                                                                                                     | Drop the leading `/`                              |
-| `importEscapesRoot`      | error    | format | "…" is outside the repository                                                                                                                                                                                 | — (never fetched)                                 |
-| `forbiddenImportPath`    | error    | format | "…" is not importable                                                                                                                                                                                         | —                                                 |
-| `missingExtension`       | error    | format | a path must include a file extension                                                                                                                                                                          | Append `.swim`                                    |
-| `notAFragment`           | error    | format | "…" is not a swimlane fragment, or its catalog's source language is "…"                                                                                                                                       | Insert `/role/` / `/block/` / `/prop/`            |
-| `duplicateAsset`         | error    | format | two imported images resolve to the id "…"                                                                                                                                                                     | Name one with `as`                                |
-| `assetTooLarge`          | error    | format | "…" is larger than the 2 MiB limit, or the diagram's images exceed 8 MiB                                                                                                                                      | —                                                 |
-| `assetNotAnImage`        | error    | format | "…" did not resolve to a base64 image data URI                                                                                                                                                                | —                                                 |
-| `misplacedDirective`     | error    | none   | `@use` and `@lang` must come before the first section                                                                                                                                                         | Move to the prologue                              |
-| `importNotFound`         | error    | none   | cannot resolve "…" — definitions fall back to theme defaults                                                                                                                                                  | did-you-mean / Delete                             |
-| `importCycle`            | error    | none   | import cycle a → b → a, or nesting or closure too large (8 deep, 32 files, 1 MiB)                                                                                                                             | Delete this directive                             |
-| `forcedTemplateMissing`  | error    | none   | `/…/` must `@use` project template "…", and directly where the policy says so                                                                                                                                 | Add `@use "…";`                                   |
-| `forcedTemplateOverride` | error    | none   | "…" overrides or shadows project template "…", or adds a key outside it                                                                                                                                       | Delete this line / Pin the bundle                 |
-| `unknownColor`           | warning  | none   | unknown colour or icon "…" — theme default used, icon omitted                                                                                                                                                 | Change to `#gray` / did-you-mean                  |
-| `assetNotFound`          | warning  | none   | cannot resolve the image "…" — the icon is omitted                                                                                                                                                            | did-you-mean / Delete                             |
-| `unknownAsset`           | warning  | none   | no imported image named "…"                                                                                                                                                                                   | Add `@use <path>;` / did-you-mean                 |
-| `badValue`               | warning  | none   | "…": expected a boolean, one of an enum, a date, a number, a side, an arrow or a shape                                                                                                                        | Use the first legal value                         |
-| `unknownKey`             | warning  | none   | unknown key "…" — kept, not rendered; `/meta/` keys are untyped and take no flag form                                                                                                                         | did-you-mean / Rename to `x-…`                    |
-| `unknownDirective`       | warning  | none   | unknown directive "@…" — kept verbatim, not applied                                                                                                                                                           | did-you-mean                                      |
-| `undefinedReference`     | warning  | none   | lane, prop or block "…" is not declared — created from its id                                                                                                                                                 | Define it / Fix the reference                     |
-| `laneOrderUnknown`       | warning  | none   | `lane-order` names "…", which is not a role                                                                                                                                                                   | did-you-mean (edit distance 1 only)               |
-| `jumpDirection`          | warning  | none   | target "…" is upstream of a `goto`, or downstream of a `loop`                                                                                                                                                 | Replace with `loop @…` / `goto @…`                |
-| `idIsKeyword`            | warning  | none   | id "…" is also a control keyword                                                                                                                                                                              | Rename                                            |
-| `forkArity`              | warning  | none   | the join has K of N incoming paths; a `fork` with one path                                                                                                                                                    | Add `and` / Remove the frame                      |
-| `branchNoNeighbour`      | warning  | none   | the branch tail is drawn as a terminal, or its head as a start terminal                                                                                                                                       | Add a step / End with `goto @id`                  |
-| `arrowNoEdge`            | warning  | none   | arrow glyph on a step with no outgoing edge                                                                                                                                                                   | Delete the glyph                                  |
-| `noteSideWithoutNote`    | warning  | none   | `note-side:` with no `note:`                                                                                                                                                                                  | Delete the line                                   |
-| `titleInBothSections`    | warning  | none   | "…" is set in both `/page/` and `/option/` — `/option/` wins                                                                                                                                                  | Delete the `/page/` line                          |
-| `staleCatalogEntry`      | warning  | none   | catalog key "…" matches no source string, or matches only after folding                                                                                                                                       | Rekey to the exact source string                  |
-| `unusedCatalogEntry`     | warning  | none   | `/i18n/` entry "…" is never reached — the node's own value wins, or nothing uses it                                                                                                                           | Delete the entry                                  |
-| `importConflict`         | warning  | none   | "…" differs between two imports — "…" wins; N id-keyed entries were not imported                                                                                                                              | —                                                 |
-| `importIsDiagram`        | warning  | none   | "…" is a diagram; only definitions were imported                                                                                                                                                              | Extract its definitions to a fragment             |
-| `invisibleCharacter`     | warning  | none   | invisible character U+…; it changes the render                                                                                                                                                                | Remove it / Keep it                               |
-| `quoteNotDelimiter`      | warning  | none   | `"` at the start of an unquoted run is literal text                                                                                                                                                           | Quote the run and escape the inner quotes         |
-| `fullWidthPunctuation`   | info     | none   | a full-width delimiter was normalised to ASCII; `；` is never a terminator                                                                                                                                    | Replace with `;` (never auto-applied)             |
-| `missingEnd`             | info     | none   | missing `@end` marker                                                                                                                                                                                         | Append `@end`                                     |
-| `edgeWhitespaceQuoted`   | info     | none   | this run has significant edge whitespace and will be quoted                                                                                                                                                   | —                                                 |
-| `redundantOverride`      | info     | none   | "…" repeats the value from "…", is already imported, is an ignored imported `/meta/`, or supplies an undeclared language                                                                                      | Delete this line                                  |
-| `importsUnsupportedHere` | info     | none   | this host cannot resolve imports                                                                                                                                                                              | —                                                 |
-| `missingTranslation`     | info     | none   | `<lang>`: N/M — missing …                                                                                                                                                                                     | Rekey / Add an inline segment                     |
+| code                     | severity | impact | message                                                                                                                                                                                            | quick-fix                                         |
+| ------------------------ | -------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `unterminated`           | error    | render | unterminated string, fence or `/* */`                                                                                                                                                              | Insert the closer before the next statement       |
+| `danglingEscape`         | error    | render | `\` must be followed by the character it escapes                                                                                                                                                   | Write `\\`                                        |
+| `headerMissing`          | error    | render | `@kai-swimlane` marker not found                                                                                                                                                                   | — (the sole code licensing starter-template init) |
+| `malformedHeader`        | error    | render | the header is `@kai-swimlane` — there are no versions any more                                                                                                                                     | Run **Update DSL** (read-only until it has)       |
+| `limitExceeded`          | error    | render | file exceeds 1 MiB / 10 000 nodes                                                                                                                                                                  | —                                                 |
+| `missingSemicolon`       | error    | format | "…" must end with `;`                                                                                                                                                                              | Insert `;` before the next sync token             |
+| `unterminatedTitle`      | error    | format | `/title/` value must end with `;`                                                                                                                                                                  | Insert `;`                                        |
+| `unknownStatement`       | error    | format | unknown statement, section marker or step head                                                                                                                                                     | did-you-mean / Insert `:` after the role id       |
+| `emptyValue`             | error    | format | "…" has no value; empty `()` or `[]` — omit it instead                                                                                                                                             | Write `""` / Write `none` / Delete                |
+| `unbalancedBracket`      | error    | format | unbalanced `[` or `]` in step text, or a run ended at a delimiter                                                                                                                                  | Escape it / Quote the run                         |
+| `unbalancedParen`        | error    | format | `(` is not closed, closed by the other width, or followed by text                                                                                                                                  | Insert `)` / Quote the run                        |
+| `fenceOpenerNotAlone`    | error    | format | a fence opener must be last on its line, and `//` must be first                                                                                                                                    | Move the content / Convert to `/* … */`           |
+| `duplicateKey`           | error    | format | "…" is already set on …                                                                                                                                                                            | Remove one / Swap the lines / Merge               |
+| `duplicateId`            | error    | format | duplicate id or `<…>` definition                                                                                                                                                                   | Rename to `…-2` (updates N references)            |
+| `invalidId`              | error    | format | invalid, empty or reserved id "…"; `<goto>` is reserved for the `[goto: id]` statement                                                                                                             | Rename to `…` (updates N references)              |
+| `unknownId`              | error    | format | no node with id "…"; a jump needs a target; `case`, `and` and `branch` heads and empty frames are not targets; bare `loop` needs an enclosing `if`, and `[goto: id]` needs a node carrying that id | did-you-mean / Add an `id:` line                  |
+| `unreachableRow`         | error    | format | nothing reaches this statement, or the target is in a scope this row cannot reach                                                                                                                  | Move above the jump / Delete                      |
+| `badSuffix`              | error    | format | "…" is given twice, or after the first property row                                                                                                                                                | Remove the second / Move it                       |
+| `keyNotAllowedHere`      | error    | format | "…" is not a property of "…" (allowed: …); `unset:` needs a mergeable section                                                                                                                      | Change to `note:` / Move under the step           |
+| `flowRowOutsideLine`     | error    | format | flow row outside `/line/`                                                                                                                                                                          | Move into `/line/`                                |
+| `malformedIf`            | error    | format | row before the first `case`; `if` with no case                                                                                                                                                     | Insert `case (…)`                                 |
+| `closerMismatch`         | error    | format | "…" closes "…", or closes nothing, while "…" is still open                                                                                                                                         | Insert the missing closer / Delete                |
+| `unclosedBlock`          | error    | format | "…" is not closed (missing "…")                                                                                                                                                                    | Insert the closer at the closure point            |
+| `frameNotAllowedHere`    | error    | format | `phase` must be at the top level and phases do not nest; `branch` may not nest inside `branch`                                                                                                     | Replace with `section (…)` / Move it out          |
+| `badKeySuffix`           | error    | format | keys may not contain "."; at most one `.lang` suffix; "…" is not translatable                                                                                                                      | Replace "." with "-" / Remove the suffix          |
+| `unknownLanguage`        | error    | format | "…" is not a declared BCP 47 language tag                                                                                                                                                          | Add "…" to `@lang` (appends) / Delete             |
+| `segmentCount`           | error    | format | K segments but this file declares M languages; the first segment must not be empty                                                                                                                 | Escape the extra bar / Add a language             |
+| `i18nEntryMalformed`     | error    | format | an entry must be written `<key>.<lang>: <text>;`, single-line, never the source language, and `id.field` needs a `/line/`                                                                          | Replace the space with `.` / Rekey                |
+| `textOutsideDiagram`     | error    | format | text before the header or after `@end`, or a second header                                                                                                                                         | Delete / Move into a comment                      |
+| `emptyImportPath`        | error    | format | an import path must not be empty                                                                                                                                                                   | —                                                 |
+| `importColon`            | error    | format | a path must not contain `:`                                                                                                                                                                        | — (no fetch is issued)                            |
+| `importBackslash`        | error    | format | path separators are `/`                                                                                                                                                                            | Replace `\` with `/`                              |
+| `absoluteImportPath`     | error    | format | a path is relative to the repository root                                                                                                                                                          | Drop the leading `/`                              |
+| `importEscapesRoot`      | error    | format | "…" is outside the repository                                                                                                                                                                      | — (never fetched)                                 |
+| `forbiddenImportPath`    | error    | format | "…" is not importable                                                                                                                                                                              | —                                                 |
+| `missingExtension`       | error    | format | a path must include a file extension                                                                                                                                                               | Append `.swim`                                    |
+| `notAFragment`           | error    | format | "…" is not a swimlane fragment, or its catalog's source language is "…"                                                                                                                            | Insert `/role/` / `/block/` / `/prop/`            |
+| `duplicateAsset`         | error    | format | two imported images resolve to the id "…"                                                                                                                                                          | Name one with `as`                                |
+| `assetTooLarge`          | error    | format | "…" is larger than the 2 MiB limit, or the diagram's images exceed 8 MiB                                                                                                                           | —                                                 |
+| `assetNotAnImage`        | error    | format | "…" did not resolve to a base64 image data URI                                                                                                                                                     | —                                                 |
+| `misplacedDirective`     | error    | none   | `@use` and `@lang` must come before the first section                                                                                                                                              | Move to the prologue                              |
+| `importNotFound`         | error    | none   | cannot resolve "…" — definitions fall back to theme defaults                                                                                                                                       | did-you-mean / Delete                             |
+| `importCycle`            | error    | none   | import cycle a → b → a, or nesting or closure too large (8 deep, 32 files, 1 MiB)                                                                                                                  | Delete this directive                             |
+| `forcedTemplateMissing`  | error    | none   | `/…/` must `@use` project template "…", and directly where the policy says so                                                                                                                      | Add `@use "…";`                                   |
+| `forcedTemplateOverride` | error    | none   | "…" overrides or shadows project template "…", or adds a key outside it                                                                                                                            | Delete this line / Pin the bundle                 |
+| `unknownColor`           | warning  | none   | unknown colour or icon "…" — theme default used, icon omitted                                                                                                                                      | Change to `#gray` / did-you-mean                  |
+| `assetNotFound`          | warning  | none   | cannot resolve the image "…" — the icon is omitted                                                                                                                                                 | did-you-mean / Delete                             |
+| `unknownAsset`           | warning  | none   | no imported image named "…"                                                                                                                                                                        | Add `@use <path>;` / did-you-mean                 |
+| `badValue`               | warning  | none   | "…": expected a boolean, one of an enum, a date, a number, a side, an arrow or a shape                                                                                                             | Use the first legal value                         |
+| `unknownKey`             | warning  | none   | unknown key "…" — kept, not rendered; `/meta/` keys are untyped and take no flag form                                                                                                              | did-you-mean / Rename to `x-…`                    |
+| `unknownDirective`       | warning  | none   | unknown directive "@…" — kept verbatim, not applied                                                                                                                                                | did-you-mean                                      |
+| `undefinedReference`     | warning  | none   | lane, prop or block "…" is not declared — created from its id                                                                                                                                      | Define it / Fix the reference                     |
+| `laneOrderUnknown`       | warning  | none   | `lane-order` names "…", which is not a role                                                                                                                                                        | did-you-mean (edit distance 1 only)               |
+| `jumpDirection`          | warning  | none   | target "…" is upstream of a `goto`, or downstream of a `loop`                                                                                                                                      | Replace with `loop @…` / `[goto: …]`              |
+| `idIsKeyword`            | warning  | none   | id "…" is also a control keyword                                                                                                                                                                   | Rename                                            |
+| `forkArity`              | warning  | none   | the join has K of N incoming paths; a `fork` with one path                                                                                                                                         | Add `and` / Remove the frame                      |
+| `branchNoNeighbour`      | warning  | none   | the branch tail is drawn as a terminal, or its head as a start terminal                                                                                                                            | Add a step / End with `[goto: id]`                |
+| `arrowNoEdge`            | warning  | none   | arrow glyph on a step with no outgoing edge                                                                                                                                                        | Delete the glyph                                  |
+| `noteSideWithoutNote`    | warning  | none   | `note-side:` with no `note:`                                                                                                                                                                       | Delete the line                                   |
+| `titleInBothSections`    | warning  | none   | "…" is set in both `/page/` and `/option/` — `/option/` wins                                                                                                                                       | Delete the `/page/` line                          |
+| `staleCatalogEntry`      | warning  | none   | catalog key "…" matches no source string, or matches only after folding                                                                                                                            | Rekey to the exact source string                  |
+| `unusedCatalogEntry`     | warning  | none   | `/i18n/` entry "…" is never reached — the node's own value wins, or nothing uses it                                                                                                                | Delete the entry                                  |
+| `importConflict`         | warning  | none   | "…" differs between two imports — "…" wins; N id-keyed entries were not imported                                                                                                                   | —                                                 |
+| `importIsDiagram`        | warning  | none   | "…" is a diagram; only definitions were imported                                                                                                                                                   | Extract its definitions to a fragment             |
+| `invisibleCharacter`     | warning  | none   | invisible character U+…; it changes the render                                                                                                                                                     | Remove it / Keep it                               |
+| `quoteNotDelimiter`      | warning  | none   | `"` at the start of an unquoted run is literal text                                                                                                                                                | Quote the run and escape the inner quotes         |
+| `fullWidthPunctuation`   | info     | none   | a full-width delimiter was normalised to ASCII; `；` is never a terminator                                                                                                                         | Replace with `;` (never auto-applied)             |
+| `missingEnd`             | info     | none   | missing `@end` marker                                                                                                                                                                              | Append `@end`                                     |
+| `edgeWhitespaceQuoted`   | info     | none   | this run has significant edge whitespace and will be quoted                                                                                                                                        | —                                                 |
+| `redundantOverride`      | info     | none   | "…" repeats the value from "…", is already imported, is an ignored imported `/meta/`, or supplies an undeclared language                                                                           | Delete this line                                  |
+| `importsUnsupportedHere` | info     | none   | this host cannot resolve imports                                                                                                                                                                   | —                                                 |
+| `missingTranslation`     | info     | none   | `<lang>`: N/M — missing …                                                                                                                                                                          | Rekey / Add an inline segment                     |
 
 ## Migrating older files
 
@@ -1059,9 +1089,10 @@ diff — never silently, and never as part of a save. Spelling rewrites:
 | `@kai-swimlane-v2`, `@kai-swimlane 2`                                                        | `@kai-swimlane` — the one header                                                            |
 | `if (q) is (a) than #c`                                                                      | `if (q) #c` + `case (a)` — the old one token coloured the diamond, and the case inherits it |
 | `else-if (b) than #c`; `else than #c`                                                        | `case (b) #c`; a blank `case () #c` — there is no `else`                                    |
-| `[loop]`, `[loop];`; `merge: id;` and `[merge: id]` in a case                                | `loop`; `goto @id`                                                                          |
-| bare `merge;` and `[merge]` in a case; a `[merge]` / `[merge: name]` marker in the flow      | bare `goto`; `merge`, `merge @name`                                                         |
-| `id: name;`, `props: A,B;`, `arrow: dashed;`, `link: path;`                                  | the suffixes `@name`, `+A +B`, `~>` (`solid` → nothing), `=> path`                          |
+| `[loop]`, `[loop];`; `merge: id;` and `[merge: id]`                                          | `loop`; `[goto: id]`                                                                        |
+| bare `merge;` and `[merge]`; a `[merge]` / `[merge: name]` landing marker in the flow        | **nothing** — left untouched, so the reader errors on the line (see below)                  |
+| `props: A,B;`, `arrow: dashed;`, `link: path;`                                               | the suffixes `+A +B`, `~>` (`solid` → nothing), `=> path`                                   |
+| a step's `id: name;`                                                                         | unchanged — it was never a suffix in this grammar                                           |
 | `section-start (n)`, `start-point`, `end-point`; `endif` and the other un-hyphenated closers | `section (n)`, `section`, `end-section`; `"end-" + opener`                                  |
 | a group closer naming another member of the group family                                     | the opener's closer                                                                         |
 | a lone `:` row; `remark-desc:`                                                               | `[]`; folded into `remark:`                                                                 |
@@ -1069,6 +1100,13 @@ diff — never silently, and never as part of a save. Spelling rewrites:
 | `shape: if;`                                                                                 | `shape: rounded;`                                                                           |
 | `yes on 1` / `no off 0`                                                                      | `true` / `false`                                                                            |
 | a `/title/` with no `;`                                                                      | the lines joined with one space, then `;`                                                   |
+
+**The one construct with no automatic mapping is a jump with no target.** The older grammar's bare
+`merge;` / `[merge]` in a case landed on the next landing marker, and a `[merge]` / `[merge: name]`
+row in the flow _was_ that marker. Neither has an equivalent here: there is no marker concept any
+more, and every jump names a real node. Rather than guess which node was meant, the migration
+leaves those lines exactly as written; the reader then errors on them, pointing at the line to fix
+by hand — name the intended landing step with `id: <id>;` and write the jump as `[goto: <id>]`.
 
 Byte-changing rewrites, each because the older grammar gave the bytes a different meaning: HTML
 entities are decoded in the positions it left unescaped; an unbalanced `]` or `)` is escaped; a

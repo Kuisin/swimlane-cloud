@@ -299,10 +299,6 @@ function serializeStepLines(out, row, depth, languages) {
   }
   const suffixes = [];
   if (row.blockRef) suffixes.push(`<${row.blockRef}>`);
-  // `stepId` is always populated (auto-generated when the source gave no
-  // `@id`); `mergeId` is only set when one was actually authored — writing
-  // the auto-generated one back would turn it into a real id on reparse.
-  if (row.mergeId) suffixes.push(`@${row.mergeId}`);
   if (row.props?.length) for (const p of row.props) suffixes.push(`+${p}`);
   if (row.link) suffixes.push(`=> ${row.link}`);
   if (row.arrowLine && row.arrowLine !== "solid") {
@@ -320,6 +316,10 @@ function serializeStepLines(out, row, depth, languages) {
   for (const l of desc) out.push(indent(depth + 1, l));
   const remark = emitLocalizedTag("remark", row.remark, row.remark$langs, languages);
   for (const l of remark) out.push(indent(depth + 1, l));
+  // `stepId` is always populated (auto-generated when the source named no
+  // `id:`); `mergeId` is only set when one was actually authored — writing
+  // the auto-generated one back would turn it into a real id on reparse.
+  if (row.mergeId) out.push(indent(depth + 1, `id: ${row.mergeId};`));
   if (row.skipIndex) out.push(indent(depth + 1, "skip;"));
   if (row.level > 1) out.push(indent(depth + 1, `level: ${row.level};`));
 }
@@ -419,15 +419,8 @@ function serializeLineRows(rows, languages) {
 
     if (row.kind === "branchMerge") {
       const target = (row.mergeTarget || "").trim();
-      out.push(indent(depth, target ? `goto @${target}` : "goto"));
+      out.push(indent(depth, `[goto: ${target}]`));
       prevKind = "branchMerge";
-      continue;
-    }
-
-    if (row.kind === "mergeMarker") {
-      const name = (row.name || "").trim();
-      out.push(indent(depth, name ? `merge @${name}` : "merge"));
-      prevKind = "mergeMarker";
       continue;
     }
 

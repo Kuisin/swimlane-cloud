@@ -51,6 +51,8 @@ export {
   sameReorderFrame,
   getFrameStepIndices,
   collectMergeTargetOptions,
+  makeStepId,
+  pruneUnreferencedStepIds,
 } from "./lib/flow-rows.js";
 // Block boundaries — a host that edits branch/group rows (the mobile view)
 // needs these to delete or extend a whole block, not just its opening row.

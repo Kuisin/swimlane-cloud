@@ -83,32 +83,36 @@ right-title: 備考 | Remarks;
 phase (受付 | Intake) @intake #gray
   if [sales] (受注チャネルは？ | Order channel?) @channel
   case (Web) #blue
-    [system: 注文データ取込 | Import order] <external> @import +PO
+    [system: 注文データ取込 | Import order] <external> +PO
       remark: 夜間バッチと即時取込の両方;
       remark.en: Both the nightly batch and on-demand import;
+      id: import;
   case (電話 | Phone) #orange
-    [sales: 注文内容の聞き取り | Take the order by phone] @phone-order
+    [sales: 注文内容の聞き取り | Take the order by phone]
       desc: 品目・数量・納期を確認;
       desc.en: Confirm items, quantity and delivery date;
       remark: 記録形式は「品目 \| 数量 \| 納期」;
       remark.en: Record as "item \| quantity \| date";
+      id: phone-order;
     [sales: 注文書（控え）を起票 | Draft the purchase order (copy)] +PO ~>
   case (その他 | Other) #gray
     [sales: 受付不可を連絡 | Decline the order]
-    goto @closed
+    [goto: closed]
   end-if
-  [system: 注文を登録 | Register the order] @registered
+  [system: 注文を登録 | Register the order]
     label: 受注登録 | Order registration;
+    id: registered;
 end-phase
 
 phase (与信と承認 | Credit and approval) @approval #teal
-  [credit: 与信チェック | Credit check] @credit-check +CR ..>
+  [credit: 与信チェック | Credit check] +CR ..>
     desc: ```
     取引先マスタの与信枠と未回収残高を照合する。
     枠超過なら上長判断へ回す。
     ```;
     remark: 与信ポリシー第 3 条を参照;
     remark.en: See credit policy, article 3;
+    id: credit-check;
   if [credit] (与信枠内？ | Within the credit limit?) @credit-ok
   case (はい | Yes) #green
     [system: 与信 OK を記録 | Record credit OK]
@@ -123,7 +127,7 @@ phase (与信と承認 | Credit and approval) @approval #teal
       loop @credit-check
     case (却下 | Reject) #red
       [sales: 受注を辞退 | Decline the order]
-      goto @closed
+      [goto: closed]
     end-if
   end-if
   branch (監査記録 | Audit trail) #gray
@@ -131,11 +135,13 @@ phase (与信と承認 | Credit and approval) @approval #teal
       remark: 保存期間は 7 年;
       remark.en: Kept for seven years;
   end-branch
-  [manager: 受注を承認 | Approve the order] @approved
+  [manager: 受注を承認 | Approve the order]
+    id: approved;
 end-phase
 
 fork (出荷 | Shipping) @fulfil #purple
-  [warehouse: 在庫引当 | Allocate stock] @allocate
+  [warehouse: 在庫引当 | Allocate stock]
+    id: allocate;
   if [warehouse] (在庫は十分？ | Enough stock?)
   case (はい | Yes) #green
     [warehouse: ピッキングと梱包 | Pick and pack] => ./shipping-prep.txt
@@ -143,14 +149,16 @@ fork (出荷 | Shipping) @fulfil #purple
     [warehouse: 入荷待ちを登録 | Register a backorder]
     [sales: 納期変更を連絡 | Notify the new delivery date] -->
   end-if
-  [warehouse: 出荷 | Ship] @shipped
+  [warehouse: 出荷 | Ship]
+    id: shipped;
 and (請求 | Billing) #blue
   [billing: 請求書を発行 | Issue the invoice] +INV
     remark: 出荷日基準で計上;
     remark.en: Booked on the shipping date;
   [billing: 入金を待つ | Wait for payment]
 and (通知 | Notification) #teal
-  [system: 出荷通知メール | Shipping notice mail] @notify
+  [system: 出荷通知メール | Shipping notice mail]
+    id: notify;
   if [system] (メール送信に失敗？ | Mail failed?)
   case (はい | Yes) #red
     [sales: 電話で連絡 | Call the customer]
@@ -168,10 +176,12 @@ section (クロージング | Closing) @closing #blue
     [sales: 回答を待つ | Wait for the reply]
     loop
   end-if
-  [system: 受注をクローズ | Close the order] <terminal> @closed
+  [system: 受注をクローズ | Close the order] <terminal>
+    id: closed;
 end-section
 
-[sales: 完了 | Done] <terminal> @done
+[sales: 完了 | Done] <terminal>
+  id: done;
   skip;
 
 @end

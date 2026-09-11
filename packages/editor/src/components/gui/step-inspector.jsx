@@ -21,7 +21,7 @@ const ARROW_LABEL_KEY = {
 
 /**
  * Inspector for a single step row. Edits role / text / label / desc / remark /
- * block ref / props / merge id / arrow style, plus move up/down and delete.
+ * block ref / props / arrow style, plus move up/down and delete.
  * All edits go through `onPatch` which mutates the parsed model row. The block
  * and prop pickers each gain an eye button that opens a design preview popup
  * (the dropdown / chips stay the primary way to pick).
@@ -250,16 +250,12 @@ export function StepInspector({
           </label>
         </div>
 
-        <label className="sw-field">
-          <span className="sw-field-label">{t("step.mergeId")}</span>
-          <input
-            type="text"
-            className="sw-input"
-            value={row.mergeId || ""}
-            disabled={fieldDisabled}
-            onChange={(e) => set("mergeId")(e.target.value || "")}
-          />
-        </label>
+        {/* No field for a step's `id:`. An id exists only so a `[goto: …]`
+            has something to name, and it is assigned (and taken away again)
+            by the jump's own destination picker — see BranchInspector and
+            gui-mode's pickMergeTarget. Asking an author to invent one, or
+            showing them the `step-3` the tool invented, would be exposing
+            plumbing they have no reason to think about. */}
 
         <label className="sw-field">
           <span className="sw-field-label">{t("step.link")}</span>

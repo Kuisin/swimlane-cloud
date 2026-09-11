@@ -10,11 +10,16 @@
  * - the header: `@kai-swimlane-v2` and `@kai-swimlane 2` → `@kai-swimlane`
  * - `if (q) is (a) than #c` → `if (q) #c` + `case (a)`; `else-if (b) than` →
  *   `case (b)`; `else` → `case ()`; the un-hyphenated closers → `end-if` …
- * - `[loop]` → `loop`; `merge: id;` / `[merge: id]` in a case → `goto @id`;
- *   `merge;` / `[merge]` in a case → `goto`; a `[merge]` / `[merge: n]`
- *   marker in the flow → `merge` / `merge @n`
- * - a step's `id:` / `props:` / `arrow:` / `link:` lines → the `@id`,
- *   `+prop`, glyph and `=> path` suffixes on the step itself; `:` → `[]`
+ * - `[loop]` → `loop`; `merge: id;` / `[merge: id]` in a case → `[goto: id]`.
+ *   A bare `merge;` / `[merge]` in a case, and a `[merge]` / `[merge: n]`
+ *   landing marker in the flow, have no automatic mapping — there is no
+ *   marker concept any more, so every jump needs a real target id — and are
+ *   left untouched; the reader then errors on them, pointing at the line to
+ *   fix by hand (name the intended landing step with `id:` and change the
+ *   jump to `[goto: id]`).
+ * - a step's `props:` / `arrow:` / `link:` lines → the `+prop`, glyph and
+ *   `=> path` suffixes on the step itself; a step's `id:` line is unchanged
+ *   (it was never a suffix in this grammar); `:` → `[]`
  * - `section-start (n)` / `start-point` / `end-point` → `section` forms;
  *   `***` comments → `//`
  */
@@ -35,10 +40,6 @@ export function migrateLegacyDsl(text) {
   const push = (indent, next) => {
     changed++;
     out.push(indent + next);
-  };
-  const innermost = (kinds) => {
-    for (let k = frames.length - 1; k >= 0; k--) if (kinds.includes(frames[k])) return frames[k];
-    return null;
   };
   const popTo = (kinds) => {
     for (let k = frames.length - 1; k >= 0; k--) {
@@ -139,20 +140,21 @@ export function migrateLegacyDsl(text) {
       continue;
     }
     if ((m = t.match(/^merge:\s*(.+?)\s*;\s*$/i))) {
-      push(indent, `goto @${m[1].trim()}`);
+      push(indent, `[goto: ${m[1].trim()}]`);
       lastStep = -1;
       continue;
     }
-    if (/^merge\s*;\s*$/i.test(t)) {
-      push(indent, "goto");
+    if ((m = t.match(/^\[merge\s*:\s*([^\]]+)\]\s*;?\s*$/i))) {
+      push(indent, `[goto: ${m[1].trim()}]`);
       lastStep = -1;
       continue;
     }
-    if ((m = t.match(/^\[merge(?:\s*:\s*([^\]]*))?\]\s*;?\s*$/i))) {
-      const name = (m[1] || "").trim();
-      const inIf = innermost(["if", "fork"]) === "if";
-      const kw = inIf ? "goto" : "merge";
-      push(indent, name ? `${kw} @${name}` : kw);
+    // A bare `merge;` / `[merge]` — in a case or as a landing marker — names
+    // no target; left as-is for the reader to error on (see the note above).
+    if (/^\[\s*goto\s*:/i.test(t)) {
+      // Already the current grammar's own bracket statement, not a step —
+      // left untouched, and not tracked as the step a property line follows.
+      out.push(line);
       lastStep = -1;
       continue;
     }
@@ -199,7 +201,6 @@ export function migrateLegacyDsl(text) {
       lastStep = out.length - 1;
       continue;
     }
-    if ((m = t.match(/^id:\s*(.+?)\s*;\s*$/i)) && suffix(`@${m[1].trim()}`)) continue;
     if ((m = t.match(/^props:\s*(.+?)\s*;\s*$/i))) {
       const ids = m[1]
         .split(/[,\s]+/)

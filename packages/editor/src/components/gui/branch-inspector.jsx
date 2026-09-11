@@ -3,8 +3,17 @@ import { useT } from "../../i18n.jsx";
 import { collectMergeTargetOptions } from "../../lib/flow-rows.js";
 import { BranchColorField } from "./branch-color-field.jsx";
 
-/** Inspector for branch/case/group/merge rows (condition, case label, accent color, merge target). */
-export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readOnly, locked }) {
+/** Inspector for branch/case/group/goto rows (condition, case label, accent color, jump target). */
+export function BranchInspector({
+  row,
+  rows,
+  onPatch,
+  onPickMergeTarget,
+  onDelete,
+  onAddCase,
+  readOnly,
+  locked,
+}) {
   const { t } = useT();
   if (!row) return <div className="sw-gui-empty">{t("gui.selectRow")}</div>;
 
@@ -12,12 +21,16 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
   const isCase = row.kind === "branchCase";
   const isGroup = row.kind === "groupStart";
   const isMerge = row.kind === "branchMerge";
-  const isMarker = row.kind === "mergeMarker";
   const canAddCase = (isStart || isCase) && !isGroup;
   const addCaseLabel = row.parallel ? t("branch.addPath") : t("branch.addCase");
-  const mergeTargets = isMerge
-    ? collectMergeTargetOptions(rows || []).filter((o) => o.mergeId)
-    : [];
+  // Every step is a candidate, listed by its own label. Picking one that has
+  // no `id:` yet quietly gives it one (see gui-mode's onPickMergeTarget),
+  // because `[goto: id]` has no bare form — but the id itself never surfaces
+  // here: as far as this picker is concerned the author is choosing a step.
+  const mergeTargets = isMerge ? collectMergeTargetOptions(rows || [], t) : [];
+  const current = mergeTargets.find(
+    (o) => o.mergeId && o.mergeId === (row.mergeTarget || "").trim(),
+  );
   // A row with a syntax error is still viewable but not editable from here —
   // fixing a broken line has to happen where the actual text is, in Text mode.
   const fieldDisabled = readOnly || locked;
@@ -30,8 +43,7 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
           {isCase && (row.parallel ? t("branch.parallelPath") : t("branch.case"))}
           {isGroup && (row.groupMode === "section" ? t("branch.section") : t("branch.subbranch"))}
           {isMerge && t("branch.merge")}
-          {isMarker && t("branch.landingMarker")}
-          {!isStart && !isCase && !isGroup && !isMerge && !isMarker && t("branch.row")}
+          {!isStart && !isCase && !isGroup && !isMerge && t("branch.row")}
         </h3>
         <div className="sw-inspector-tools">
           {!fieldDisabled && canAddCase && onAddCase && (
@@ -104,34 +116,30 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
           <span className="sw-field-label">{t("branch.mergeTarget")}</span>
           <select
             className="sw-input"
-            value={row.mergeTarget || ""}
+            // Options are keyed by the target step's row index, not by its id:
+            // an unnamed step has no id to key on yet, and gets given one when
+            // it's picked.
+            value={current ? String(current.stepIndex) : ""}
             disabled={fieldDisabled}
-            onChange={(e) => onPatch({ mergeTarget: e.target.value || "" })}
+            onChange={(e) => {
+              const stepIndex = Number(e.target.value);
+              if (Number.isInteger(stepIndex)) onPickMergeTarget?.(stepIndex);
+            }}
           >
-            {/* Empty is a real value now, not a placeholder: a bare merge
-                lands on the next landing marker after this if. */}
-            <option value="">{t("branch.mergeTargetNext")}</option>
+            {/* Only reachable for a jump written in Text mode whose target id
+                matches no step — disabled, so the GUI can't re-create it. */}
+            {!current && (
+              <option value="" disabled>
+                {t("branch.mergeTargetUnset")}
+              </option>
+            )}
             {mergeTargets.map((opt) => (
-              <option key={`${opt.kind}-${opt.rowIndex ?? opt.stepIndex}`} value={opt.mergeId}>
+              <option key={opt.stepIndex} value={String(opt.stepIndex)}>
                 {opt.label}
               </option>
             ))}
           </select>
           <p className="sw-field-hint">{t("branch.mergeTargetHint")}</p>
-        </label>
-      )}
-
-      {isMarker && (
-        <label className="sw-field">
-          <span className="sw-field-label">{t("branch.markerName")}</span>
-          <input
-            type="text"
-            className="sw-input"
-            value={row.name || ""}
-            disabled={fieldDisabled}
-            onChange={(e) => onPatch({ name: e.target.value })}
-          />
-          <p className="sw-field-hint">{t("branch.markerNameHint")}</p>
         </label>
       )}
 

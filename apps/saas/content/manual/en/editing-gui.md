@@ -8,8 +8,8 @@ default for anyone opening a diagram for the first time.
 Use **Add step** to append to the flow, or the insert button between two
 existing steps to slot one in between. A new step needs only two things:
 **who does it** (the role) and **what they do** (the text). Everything else
-— description, remark, a landing-point name, side notes, look/style — is
-tucked under **More options**, so the common case stays a two-field form.
+— description, remark, side notes, look/style — is tucked under **More
+options**, so the common case stays a two-field form.
 
 ## Branching, parallel paths, groups and side paths
 

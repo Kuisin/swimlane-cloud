@@ -23,8 +23,6 @@ const KEYWORDS = [
   "phase",
   "fork",
   "loop",
-  "goto",
-  "merge",
   "case",
   "and",
   "if",
@@ -70,7 +68,13 @@ export function tokenizeDslLine(line) {
     else if ((m = /^#[A-Za-z0-9_-]+/.exec(rest))) tokens.push({ t: "anchor", s: m[0] });
     // The bare spacer statement — a step-shaped line with nothing in it.
     else if ((m = /^\[\]/.exec(rest))) tokens.push({ t: "keyword", s: m[0] });
-    else if (
+    // `[goto: id]` is a jump statement, not a step whose role is "goto" — so
+    // colour the word as control flow even though `goto` is no longer a
+    // keyword anywhere else (there is no bare `goto` line any more).
+    else if (atStart && (m = /^(\[\s*)(goto)(?=\s*:)/i.exec(rest))) {
+      tokens.push({ t: "plain", s: m[1] });
+      tokens.push({ t: "keyword", s: m[2] });
+    } else if (
       atStart &&
       (m = /^[A-Za-z][A-Za-z0-9_-]*(?=\s*[:;])/.exec(rest)) &&
       !KEYWORDS.includes(m[0].toLowerCase())

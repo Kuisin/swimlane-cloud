@@ -62,14 +62,15 @@ right-title: 備考 | Remarks;
   side: left;
 
 /line/
-[hr: 内定通知を送付 | Send the offer letter] @offer +NDA
+[hr: 内定通知を送付 | Send the offer letter] +NDA
+  id: offer;
 
 if [employee] (承諾する？ | Accept?) @accept
 case (はい | Yes) #green
   [employee: 承諾書を返送 | Return the acceptance] +NDA
 case (いいえ | No) #red
   [hr: 辞退を記録 | Record the decline]
-  goto @wrap-up
+  [goto: wrap-up]
 end-if
 
 section (入社前 | Before day one) @prep #gray
@@ -85,9 +86,10 @@ section (入社前 | Before day one) @prep #gray
 end-section
 
 phase (初日 | Day one) @day-one #teal
-  [hr: オリエンテーション | Orientation] @orientation
+  [hr: オリエンテーション | Orientation]
     desc: 就業規則、セキュリティ研修;
     desc.en: Work rules and security training;
+    id: orientation;
   [manager: 業務説明 | Role briefing] ..>
   [employee: 初期設定 | Initial setup] +PC
   if [it] (ログインできた？ | Able to log in?)
@@ -99,7 +101,8 @@ phase (初日 | Day one) @day-one #teal
   end-if
 end-phase
 
-[hr: 試用期間の面談を予定 | Schedule the probation review] <terminal> @wrap-up
+[hr: 試用期間の面談を予定 | Schedule the probation review] <terminal>
+  id: wrap-up;
   skip;
 
 @end

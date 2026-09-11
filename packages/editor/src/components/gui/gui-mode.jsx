@@ -13,6 +13,9 @@ import {
   findAdjacentStepIndex,
   findBranchEndIndex,
   getReorderBounds,
+  isStepRow,
+  makeStepId,
+  pruneUnreferencedStepIds,
   resolveInspectorTarget,
   swapStepRows,
   moveRow,
@@ -130,8 +133,12 @@ export function GuiMode({
 
   function deleteRow() {
     if (saveIndex < 0 || lockedRows.has(saveIndex)) return;
+    // Deleting a jump can leave the step it pointed at holding an id nothing
+    // references any more; the same sweep as retargeting clears it.
+    const wasJump = ["branchMerge", "branchLoop"].includes(rows[saveIndex]?.kind);
     commit((draft) => {
       draft.rows.splice(saveIndex, 1);
+      if (wasJump) draft.rows = pruneUnreferencedStepIds(draft.rows);
     });
     setSelectedIndex(-1);
   }
@@ -327,11 +334,38 @@ export function GuiMode({
     return start.id;
   }
 
-  function addMergeMarker() {
-    setDropOpen(false);
+  /**
+   * The id of the step at `index`, giving it one (`id: …;`) if it has none.
+   * `[goto: id]` has no bare form, so anything that targets a step has to be
+   * able to name it — including a step the author never bothered to name.
+   */
+  function ensureStepIdAt(draft, index) {
+    const step = draft.rows[index];
+    const existing = (step?.mergeId || "").trim();
+    if (existing) return existing;
+    const id = makeStepId(draft.rows);
+    draft.rows[index] = { ...step, mergeId: id };
+    return id;
+  }
+
+  /**
+   * Point the selected `[goto: …]` row at the step at `stepIndex`, giving
+   * that step an id if it has none — then sweep up the id the jump just
+   * stopped using, so retargeting doesn't leave an orphan `id:` line on the
+   * old destination.
+   */
+  function pickMergeTarget(stepIndex) {
+    if (saveIndex < 0 || lockedRows.has(saveIndex)) return;
     commit((draft) => {
-      const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
-      draft.rows.splice(insertAt, 0, { kind: "mergeMarker", name: "", depth: 0 });
+      const step = draft.rows[stepIndex];
+      if (!step || step.kind !== "step" || step.empty) return;
+      // Let go of the old target *before* naming the new one, so the sweep
+      // frees that id and the fresh one can reuse it — otherwise every
+      // retarget would ratchet the counter up and leave a hole behind.
+      draft.rows[saveIndex] = { ...draft.rows[saveIndex], mergeTarget: "" };
+      draft.rows = pruneUnreferencedStepIds(draft.rows);
+      const id = ensureStepIdAt(draft, stepIndex);
+      draft.rows[saveIndex] = { ...draft.rows[saveIndex], mergeTarget: id };
     });
   }
 
@@ -345,15 +379,47 @@ export function GuiMode({
     });
   }
 
+  /**
+   * Add a `[goto: id]` jump. Unlike `loop`, it has no bare spelling — it must
+   * name a step from the moment it exists, or the document it serializes to
+   * doesn't parse and the row vanishes on the next round trip. So pick a
+   * sensible default here (the first step past the enclosing `end-if`, which
+   * is what "jump ahead, skipping the rest of this decision" means, falling
+   * back to the nearest step before the `if`) and name it if it has no id.
+   */
   function addMerge() {
     setDropOpen(false);
     const branchId = enclosingIfId(rows, selectedIndex);
     if (!branchId) return;
     commit((draft) => {
+      const startIdx = draft.rows.findIndex((r) => r.kind === "branchStart" && r.id === branchId);
+      if (startIdx < 0) return;
+      const endIdx = findBranchEndIndex(draft.rows, startIdx);
+      let targetIdx = -1;
+      if (endIdx >= 0) {
+        for (let i = endIdx + 1; i < draft.rows.length; i++) {
+          if (isStepRow(draft.rows[i])) {
+            targetIdx = i;
+            break;
+          }
+        }
+      }
+      if (targetIdx < 0) {
+        for (let i = startIdx - 1; i >= 0; i--) {
+          if (isStepRow(draft.rows[i])) {
+            targetIdx = i;
+            break;
+          }
+        }
+      }
+      // No step anywhere outside this if to land on — adding the jump would
+      // only produce an unparseable line, so add nothing.
+      if (targetIdx < 0) return;
+      const mergeTarget = ensureStepIdAt(draft, targetIdx);
       const insertAt = selectedIndex >= 0 ? selectedIndex + 1 : draft.rows.length;
       draft.rows.splice(insertAt, 0, {
         kind: "branchMerge",
-        mergeTarget: "",
+        mergeTarget,
         mergeBranchId: branchId,
         depth: 0,
       });
@@ -455,7 +521,6 @@ export function GuiMode({
                           onAddFork={addFork}
                           onAddSection={addSection}
                           onAddBranch={addSubBranch}
-                          onAddMergeMarker={addMergeMarker}
                           onAddLoop={addLoop}
                           onAddMerge={addMerge}
                           canJump={enclosingIfId(rows, selectedIndex) != null}
@@ -518,6 +583,7 @@ export function GuiMode({
               readOnly={readOnly}
               locked={isLocked}
               onPatch={patchRow}
+              onPickMergeTarget={pickMergeTarget}
               onDelete={deleteRow}
               onAddCase={
                 !readOnly && !isLocked && ["branchStart", "branchCase"].includes(inspectorRow?.kind)

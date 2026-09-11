@@ -439,6 +439,9 @@ function renderDiagramSvg({
     stepBoxH,
     stepTextLineH,
     loopDropPad,
+    jumpRailMargin,
+    jumpRailPitch,
+    jumpArrivalPitch,
     pageDescLineHeight,
     pageDescWrapCols,
     laneContentPad,
@@ -506,7 +509,6 @@ function renderDiagramSvg({
   );
   const propExtraWPerProps = docGapX;
   const propRowExtraHPerProps = docGapY;
-  const loopRouteMargin = caseClearance;
   const pageDescLines = pageDescription
     ? wrapTextToDisplayColumns(pageDescription, pageDescWrapCols)
     : [];
@@ -563,6 +565,10 @@ function renderDiagramSvg({
   }
   function branchDecisionCy(f) {
     return f.yDecision + diamondH / 2 + (f.parallel ? 0 : decisionYOffset);
+  }
+  /** The bottom edge of a frame's join node — where its outgoing edge leaves. */
+  function joinBottomY(f) {
+    return f.yMerge + mergeH / 2 + (f.parallel ? gatewayR : mergeNodeHEff) / 2;
   }
   function stepPropCounts(row) {
     const acc = { left: 0, right: 0 };
@@ -815,11 +821,6 @@ function renderDiagramSvg({
       rowMeta[i] = { y, kind: "branchMerge" };
       pushToActiveCase(i);
       y += branchMergeH;
-    } else if (r.kind === "mergeMarker") {
-      // Invisible: the merge arrow it attracts is what shows where it is.
-      stepRowHeightByIndex.set(i, 0);
-      rowMeta[i] = { y, kind: "mergeMarker" };
-      pushToActiveCase(i);
     } else if (r.kind === "groupStart") {
       stepRowHeightByIndex.set(i, groupMarkerH);
       rowMeta[i] = { y, kind: "groupStart" };
@@ -1168,26 +1169,149 @@ function renderDiagramSvg({
         max: Math.max(cur.max, right),
       });
   });
-  const loopRailAllowance = caseClearance;
-  rows.forEach((row, i) => {
-    if (row.kind !== "branchLoop") return;
-    let srcLane = -1;
-    for (let j = i - 1; j >= 0; j--) {
+  // ---------------------------------------------------------------------
+  // Jump routing plan (`goto`, `goto @id`, `loop`, `loop @id`)
+  //
+  // Every jump is one edge: it leaves the last block of its case, runs down
+  // (or up) a vertical rail clear of every block it passes, and arrives on
+  // the side of its target that the rail is on. The plan is built here —
+  // before the lane widths are fixed — because it decides which side of the
+  // diagram each rail uses, and therefore how much blank column the outer
+  // lanes have to reserve for them. It needs only row positions and lane
+  // *indices*, both of which are already known; the x coordinates it feeds
+  // are computed later, from the widths this pass sizes.
+  // ---------------------------------------------------------------------
+  /**
+   * Where a jump's edge leaves from — the end of its own case's body:
+   * `{ stepIdx }` for a block, `{ frameId }` for the join of a nested `if` or
+   * `fork` the case ends with, or neither when the jump is the whole body.
+   */
+  function jumpSource(jumpIdx) {
+    const row = rows[jumpIdx];
+    const frameId = row.kind === "branchLoop" ? row.loopBranchId : row.mergeBranchId;
+    // A jump written inside a `branch` group leaves from a block of that
+    // group; one written outside never leaves from a block inside one.
+    const ownGroup = findEnclosingBranchGroupStart(rows, jumpIdx);
+    for (let j = jumpIdx - 1; j >= 0; j--) {
       const r = rows[j];
-      if (r.kind === "step" && !r.empty && r.role) {
-        srcLane = laneIndexById.get(r.role) ?? -1;
-        break;
-      }
-      if (r.kind === "branchStart" && r.id === row.loopBranchId) break;
+      if (
+        r.kind === "step" &&
+        !r.empty &&
+        r.role &&
+        findEnclosingBranchGroupStart(rows, j) === ownGroup
+      )
+        return { stepIdx: j, frameId: null };
+      // A complete nested block just before the jump: the edge leaves its
+      // join, not the last block inside one of its cases.
+      if (r.kind === "branchEnd" && r.id !== frameId) return { stepIdx: -1, frameId: r.id };
+      // Stop at the case head (or the `if` itself): a jump never leaves from a
+      // block belonging to a sibling case.
+      if (r.kind === "branchCase" && r.id === frameId) break;
+      if (r.kind === "branchStart") break;
     }
-    if (srcLane < 0) srcLane = 0;
-    const routesLeft = srcLane <= (lanes.length - 1) / 2;
-    const laneId = routesLeft ? lanes[0]?.id : lanes[lanes.length - 1]?.id;
-    const edge = laneId != null ? stepEdgesByLane.get(laneId) : null;
-    if (!edge) return;
-    if (routesLeft) edge.min -= loopRailAllowance;
-    else edge.max += loopRailAllowance;
-  });
+    return { stepIdx: -1, frameId: null };
+  }
+  /** The row a jump lands on: `-1` when nothing resolves (drawn as no jump). */
+  function jumpTargetStepIdx(jumpIdx) {
+    const row = rows[jumpIdx];
+    if (row.kind === "branchMerge") return resolveMergeTargetIdx(jumpIdx);
+    const name = (row.loopTarget || "").trim();
+    if (!name) return -1; // bare `loop` — the target is the `if`'s gateway
+    return resolveNamedTargetIdx(name);
+  }
+  const laneIdxOfRow = (idx) => {
+    const r = rows[idx];
+    return r?.kind === "step" && !r.empty && r.role ? (laneIndexById.get(r.role) ?? -1) : -1;
+  };
+  /** The lane an `if`/`fork` gateway is drawn in (what `frameAnchorX` picks). */
+  function frameGatewayLaneIdx(frameId) {
+    const startIdx = rows.findIndex((r) => r.kind === "branchStart" && r.id === frameId);
+    for (let j = startIdx - 1; j >= 0; j--) {
+      const li = laneIdxOfRow(j);
+      if (li >= 0 && !isInsideBranchGroup(rows, j)) return li;
+    }
+    return 0;
+  }
+  /**
+   * Which side of the lane grid a rail runs down. The target's lane decides:
+   * the rail has to come back in to the target, so keeping it on the target's
+   * own side of the page keeps that final approach short.
+   */
+  const railSideForLane = (laneIdx) =>
+    lanes.length > 1 && laneIdx > (lanes.length - 1) / 2 ? 1 : -1;
+  const jumpPlans = /* @__PURE__ */ new Map();
+  {
+    const pending = [];
+    rows.forEach((row, i) => {
+      if (row.kind !== "branchLoop" && row.kind !== "branchMerge") return;
+      const isLoop = row.kind === "branchLoop";
+      const frameId = isLoop ? row.loopBranchId : row.mergeBranchId;
+      const { stepIdx: sourceIdx, frameId: sourceFrameId } = jumpSource(i);
+      const targetIdx = jumpTargetStepIdx(i);
+      if (!isLoop && targetIdx < 0) return; // unresolved `goto`: no arrow to plan
+      const targetLane = targetIdx >= 0 ? laneIdxOfRow(targetIdx) : frameGatewayLaneIdx(frameId);
+      const frame = frames.find((f) => f.id === frameId);
+      const sourceFrame = sourceFrameId ? frames.find((f) => f.id === sourceFrameId) : null;
+      const sourceY =
+        sourceIdx >= 0
+          ? stepBlockBottomY(sourceIdx)
+          : sourceFrame?.yMerge != null
+            ? joinBottomY(sourceFrame)
+            : (rowMeta[i]?.y ?? frame?.yDecision ?? 0) + (isLoop ? branchLoopH : branchMergeH);
+      const targetY =
+        targetIdx >= 0 ? stepBlockCenterY(targetIdx) : frame ? branchDecisionCy(frame) : sourceY;
+      pending.push({
+        rowIdx: i,
+        kind: isLoop ? "loop" : "goto",
+        frameId,
+        sourceIdx,
+        sourceFrameId: sourceFrame?.yMerge != null ? sourceFrameId : null,
+        targetIdx,
+        side: railSideForLane(targetLane < 0 ? 0 : targetLane),
+        top: Math.min(sourceY, targetY),
+        bottom: Math.max(sourceY, targetY),
+      });
+    });
+    // Greedy interval colouring per side: two rails share a column only when
+    // their vertical spans do not overlap, so no two jump arrows coincide.
+    const trackEnds = { "-1": [], 1: [] };
+    for (const p of [...pending].sort((a, b) => a.top - b.top || a.rowIdx - b.rowIdx)) {
+      const ends = trackEnds[String(p.side)];
+      let track = ends.findIndex((end) => end <= p.top);
+      if (track < 0) track = ends.length;
+      ends[track] = p.bottom;
+      p.track = track;
+    }
+    // Several jumps landing on one block share its edge; fan the arrowheads
+    // out over the edge so they stay countable.
+    const arrivals = new Map();
+    for (const p of pending) {
+      const key = `${p.targetIdx}|${p.frameId}|${p.side}`;
+      const list = arrivals.get(key) || [];
+      list.push(p);
+      arrivals.set(key, list);
+    }
+    for (const list of arrivals.values()) {
+      list.forEach((p, k) => {
+        p.arrivalRank = k;
+        p.arrivalCount = list.length;
+      });
+    }
+    for (const p of pending) jumpPlans.set(p.rowIdx, p);
+    // Reserve the blank column each side's rails need, so the outermost rail
+    // still lands inside the lane grid instead of being clamped back over a
+    // block (which is what drew a jump straight through its own target).
+    for (const side of [-1, 1]) {
+      const tracks = trackEnds[String(side)].length;
+      if (tracks === 0) continue;
+      const laneId = side < 0 ? lanes[0]?.id : lanes[lanes.length - 1]?.id;
+      const edge = laneId != null ? stepEdgesByLane.get(laneId) : null;
+      if (!edge) continue;
+      const allowance = jumpRailMargin + tracks * jumpRailPitch;
+      if (side < 0) edge.min -= allowance;
+      else edge.max += allowance;
+    }
+  }
   const laneWidths = lanes.map((lane) => {
     const headerWidth = estimateTextWidth(
       lane.label || lane.id,
@@ -1277,14 +1401,25 @@ function renderDiagramSvg({
     }
     return null;
   }
-  /** Where a loop-only case turns back: clear of its label chip. */
-  function loopOnlyOriginY(bendY) {
+  /**
+   * Where a case whose whole body is one jump turns away: clear of its own
+   * label chip, and nowhere near the jump row's position in the document.
+   */
+  function caseStubOriginY(bendY) {
     return bendY + caseLabelOffsetY + caseLabelHeight;
   }
+  /** The `goto` / `loop` a case ends with, if it has one that resolves. */
+  function jumpAnchorInCase(c, branchId) {
+    return mergeAnchorInCase(c.rowIndices, branchId) ?? loopAnchorInCase(c.rowIndices, branchId);
+  }
+  /** A case with no body at all: a bare rail from the decision to the join. */
   function isStubCase(c, branchId) {
-    if (loopAnchorInCase(c.rowIndices, branchId)) return false;
-    if (c.childFrame) return false;
-    return firstStepIdxInCase(c) == null;
+    if (jumpAnchorInCase(c, branchId)) return false;
+    return needsOwnRailX(c) && firstStepIdxInCase(c) == null;
+  }
+  /** A case with no column of its own, so its rail has to be placed by hand. */
+  function needsOwnRailX(c) {
+    return firstDirectStepIdx(c) == null && !c.childFrame;
   }
   function forkFirstBlockX(f) {
     const startIdx = rows.findIndex((r) => r.kind === "branchStart" && r.id === f.id);
@@ -1353,20 +1488,30 @@ function renderDiagramSvg({
         c.x = width / 2;
       }
     });
-    // A blank case has nothing to aim at. Hang its rail straight under the
-    // decision — or beside it when that x is taken — rather than at the canvas
-    // centre, which lands wherever the page happens to be wide.
+    // A case with no column of its own — no direct step and no nested block,
+    // so an empty case or one whose whole body is a `goto` / `loop` — has
+    // nothing to aim at. Hang its rail straight under the decision, or beside
+    // it when that x is taken, rather than at the canvas centre, which lands
+    // wherever the page happens to be wide (for a jump-only case that put the
+    // rail out in the left gutter).
     const anchorX = frameAnchorX(f);
-    const taken = new Set(f.cases.filter((c) => !isStubCase(c, f.id)).map((c) => Math.round(c.x)));
+    const taken = new Set(f.cases.filter((c) => !needsOwnRailX(c)).map((c) => Math.round(c.x)));
     let slot = 0;
     f.cases.forEach((c) => {
-      if (!isStubCase(c, f.id)) return;
+      if (!needsOwnRailX(c)) return;
+      // A case whose whole body is a jump has to turn away again, so it never
+      // takes the decision's own column: a rail straight down and straight
+      // back up into the same gateway is a stub, not an edge.
+      const mustClearAnchor = Boolean(jumpAnchorInCase(c, f.id));
       let x;
-      do {
+      for (;;) {
         const step = Math.ceil(slot / 2) * caseCollisionShift;
         x = slot % 2 ? anchorX - step : anchorX + step;
         slot++;
-      } while (taken.has(Math.round(x)));
+        if (taken.has(Math.round(x))) continue;
+        if (mustClearAnchor && step === 0) continue;
+        break;
+      }
       taken.add(Math.round(x));
       c.x = x;
     });
@@ -1424,12 +1569,12 @@ function renderDiagramSvg({
         targetY = bendY;
       }
       labelClampY = stepTarget ? stepTarget.y : stepBlockCenterY(firstStepIdx) - 22;
-    } else if (loopAnchorInCase(c.rowIndices, f.id)) {
-      // A case holding only `[loop]`: its loop row is laid out in document
-      // order, after every row of the cases before it, so aiming there drew
-      // a rail down the whole diagram for a path that does nothing but turn
-      // back. It turns back just under its label instead.
-      targetY = loopOnlyOriginY(bendY);
+    } else if (jumpAnchorInCase(c, f.id)) {
+      // A case whose whole body is one `goto` or `loop`: the jump row is laid
+      // out in document order, after every row of the cases before it, so
+      // aiming there drew a rail down the whole diagram for a path that does
+      // nothing but leave. It turns away just under its label instead.
+      targetY = caseStubOriginY(bendY);
       labelClampY = mergeTopY;
     } else if (isStubCase(c, f.id)) {
       targetY = bendY;
@@ -1477,99 +1622,125 @@ function renderDiagramSvg({
       .reverse()
       .find((idx) => rows[idx]?.kind === "branchLoop" && rows[idx].loopBranchId === branchId);
     if (loopIdx == null) return null;
-    const prevStepIdx = [...rowIndices]
-      .filter((idx) => idx < loopIdx)
-      .reverse()
-      .find((idx) => rows[idx]?.kind === "step" && !rows[idx].empty && rows[idx].role);
-    return { loopIdx, prevStepIdx: prevStepIdx ?? null };
+    const plan = jumpPlans.get(loopIdx);
+    if (!plan) return null;
+    return { loopIdx, prevStepIdx: plan.sourceIdx >= 0 ? plan.sourceIdx : null, plan };
   }
-  function firstRealStepAfter(idx) {
-    for (let i = idx + 1; i < rows.length; i++) {
-      const r = rows[i];
-      if (r.kind === "step" && !r.empty && r.role) return i;
-    }
-    return -1;
-  }
-  /**
-   * The step a merge lands on. A named target is a step's `id:` or a
-   * `[merge: <name>]` marker (then the step after it); a bare merge is the
-   * step after the next marker following its own `if`.
-   */
-  function resolveMergeTargetIdx(mergeIdx) {
-    const merge = rows[mergeIdx];
-    const name = (merge.mergeTarget || "").trim();
-    if (!name) {
-      const endIdx = rows.findIndex(
-        (r, i) => i > mergeIdx && r.kind === "branchEnd" && r.id === merge.mergeBranchId,
-      );
-      if (endIdx < 0) return -1;
-      const markerIdx = rows.findIndex((r, i) => i > endIdx && r.kind === "mergeMarker");
-      return markerIdx < 0 ? -1 : firstRealStepAfter(markerIdx);
-    }
+  /** A named jump target: the step carrying that `id:`. */
+  function resolveNamedTargetIdx(name) {
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       if (r.kind === "step" && !r.empty && r.role && r.mergeId === name) return i;
-      if (r.kind === "mergeMarker" && r.name === name) return firstRealStepAfter(i);
     }
     return -1;
+  }
+  /** The step a `[goto: id]` lands on. There is no bare, unnamed form. */
+  function resolveMergeTargetIdx(mergeIdx) {
+    return resolveNamedTargetIdx((rows[mergeIdx].mergeTarget || "").trim());
   }
   function mergeAnchorInCase(rowIndices, branchId) {
     const mergeIdx = [...rowIndices]
       .reverse()
       .find((idx) => rows[idx]?.kind === "branchMerge" && rows[idx].mergeBranchId === branchId);
     if (mergeIdx == null) return null;
-    let prevStepIdx = null;
-    for (const idx of rowIndices) {
-      if (idx < mergeIdx && rows[idx]?.kind === "step" && !rows[idx].empty && rows[idx].role)
-        prevStepIdx = idx;
-    }
-    const targetIdx = resolveMergeTargetIdx(mergeIdx);
-    if (targetIdx < 0) return null;
-    return { mergeIdx, prevStepIdx, targetIdx };
+    const plan = jumpPlans.get(mergeIdx);
+    if (!plan || plan.targetIdx < 0) return null;
+    return { mergeIdx, prevStepIdx: plan.sourceIdx >= 0 ? plan.sourceIdx : null, plan };
   }
-  function buildMergeForwardPath({ fromX, fromBottomY, targetIdx }) {
-    const targetCenterX = nodeCenterX(targetIdx, rows[targetIdx].role);
-    const targetCenterY = stepBlockCenterY(targetIdx);
-    const dropY = fromBottomY + loopDropPad;
-    // A jump may go back up to an earlier block as well as ahead; either way
-    // every block between the two ends is something to route around, or the
-    // line runs straight up the flow's own spine.
-    const spanTop = Math.min(dropY, targetCenterY);
-    const spanBottom = Math.max(dropY, targetCenterY);
-    const obstacles = [];
+  const lastLaneIdx = lanes.length - 1;
+  const laneGridLeft = () => laneX(0);
+  const laneGridRight = () =>
+    lastLaneIdx >= 0 ? laneX(lastLaneIdx) + laneWidth(lastLaneIdx) : width - xPad;
+  /** Every block a jump has to clear between its two ends. */
+  function jumpObstacles(spanTop, spanBottom) {
+    const out = [];
     rows.forEach((row, idx) => {
-      if (idx === targetIdx) return;
       if (row?.kind !== "step" || row.empty || !row.role) return;
       const b = stepObstacleBounds(idx);
-      if (b.bottom >= spanTop && b.top <= spanBottom) obstacles.push(b);
+      if (b.bottom >= spanTop && b.top <= spanBottom) out.push(b);
     });
-    let sideSign;
-    if (obstacles.length > 0) {
-      const minLeft = Math.min(...obstacles.map((o) => o.left));
-      const maxRight = Math.max(...obstacles.map((o) => o.right));
-      const spaceLeft = fromX - minLeft;
-      const spaceRight = maxRight - fromX;
-      sideSign = spaceRight >= spaceLeft ? 1 : -1;
-    } else {
-      sideSign = targetCenterX >= fromX ? 1 : -1;
+    return out;
+  }
+  /**
+   * The one place a jump's polyline is built, for every form the grammar has
+   * (`goto`, `goto @id`, `loop`, `loop @id`) and in both directions.
+   *
+   * It leaves the source block's bottom edge, turns sideways one `loopDropPad`
+   * below it, runs the whole way in a rail that clears *every* block between
+   * the two ends — the target included, which is what stops a jump ending
+   * inside the box it points at — and comes back in horizontally to the edge
+   * of the target on the rail's own side, where the arrowhead sits.
+   *
+   * `plan.side` and `plan.track` come from the pass that reserved the blank
+   * column this rail runs in, so the rail is never clamped back over a block.
+   */
+  function buildJumpPath({ plan, fromX, fromBottomY, target, leaveSideways = false }) {
+    const side = plan?.side ?? 1;
+    const track = plan?.track ?? 0;
+    const rank = plan?.arrivalRank ?? 0;
+    const count = plan?.arrivalCount ?? 1;
+    // Several arrows landing on one edge fan out over it rather than stacking
+    // their arrowheads on one pixel.
+    const spread = Math.min(
+      jumpArrivalPitch,
+      Math.max(0, target.bottom - target.top) / (count + 1),
+    );
+    const toY = (target.top + target.bottom) / 2 + (rank - (count - 1) / 2) * spread;
+    // The line turns sideways one `loopDropPad` below the source, unless the
+    // band it would cross on the way to the rail is occupied — then it drops
+    // past whatever is in the way first. A jump that continues its case's own
+    // rail turns at once: that rail ends in the case-label band, with the
+    // first block of every sibling case below it, so there is nothing to clear
+    // and dropping would cut straight through one of them.
+    let dropY = fromBottomY;
+    if (!leaveSideways) {
+      dropY += loopDropPad;
+      for (let pass = 0; pass < 4; pass++) {
+        const blocked = jumpObstacles(dropY, dropY).filter(
+          (o) => o.top > fromBottomY && (side < 0 ? o.left < fromX : o.right > fromX),
+        );
+        if (blocked.length === 0) break;
+        dropY = Math.max(...blocked.map((o) => o.bottom)) + loopDropPad;
+      }
     }
-    let routeX;
-    if (sideSign < 0) {
-      routeX = Math.min(fromX, targetCenterX, ...obstacles.map((o) => o.left)) - loopRouteMargin;
-    } else {
-      routeX = Math.max(fromX, targetCenterX, ...obstacles.map((o) => o.right)) + loopRouteMargin;
-    }
-    const lastLaneIdx = lanes.length - 1;
-    const laneGridLeft = laneX(0);
-    const laneGridRight =
-      lastLaneIdx >= 0 ? laneX(lastLaneIdx) + laneWidth(lastLaneIdx) : width - xPad;
-    routeX = Math.max(laneGridLeft, Math.min(laneGridRight, routeX));
-    const toSideX = sideSign < 0 ? targetCenterX - nodeW / 2 : targetCenterX + nodeW / 2;
-    const toY = targetCenterY;
+    const spanTop = Math.min(dropY, toY, target.top);
+    const spanBottom = Math.max(dropY, toY, target.bottom);
+    const obstacles = jumpObstacles(spanTop, spanBottom);
+    const edges = obstacles.map((o) => (side < 0 ? o.left : o.right));
+    const outermost = side < 0 ? Math.min(target.left, ...edges) : Math.max(target.right, ...edges);
+    const railX = outermost + side * (jumpRailMargin + track * jumpRailPitch);
+    // When the source column is already outside everything the jump passes,
+    // run straight down it instead of jogging sideways for no reason.
+    const routeX = Math.max(
+      laneGridLeft(),
+      Math.min(laneGridRight(), side < 0 ? Math.min(fromX, railX) : Math.max(fromX, railX)),
+    );
+    const toSideX = side < 0 ? target.left : target.right;
+    const parts = [`M ${fromX} ${fromBottomY}`];
     if (Math.abs(fromX - routeX) < branchConnectorElbowThreshold) {
-      return `M ${fromX} ${fromBottomY} L ${fromX} ${dropY} L ${routeX} ${toY} L ${toSideX} ${toY}`;
+      parts.push(`L ${routeX} ${toY}`);
+    } else {
+      if (Math.abs(dropY - fromBottomY) >= branchConnectorElbowThreshold) {
+        parts.push(`L ${fromX} ${dropY}`);
+      }
+      parts.push(`L ${routeX} ${dropY}`, `L ${routeX} ${toY}`);
     }
-    return `M ${fromX} ${fromBottomY} L ${fromX} ${dropY} L ${routeX} ${dropY} L ${routeX} ${toY} L ${toSideX} ${toY}`;
+    if (Math.abs(routeX - toSideX) >= branchConnectorElbowThreshold)
+      parts.push(`L ${toSideX} ${toY}`);
+    return parts.join(" ");
+  }
+  /** The bounding box a jump aims at, for a step target. */
+  function stepTargetBox(targetIdx) {
+    const row = rows[targetIdx];
+    const cx = nodeCenterX(targetIdx, row.role);
+    const cy = stepBlockCenterY(targetIdx);
+    const boxH = stepBoxHeight(row);
+    return {
+      left: cx - nodeW / 2,
+      right: cx + nodeW / 2,
+      top: cy - boxH / 2,
+      bottom: cy + boxH / 2,
+    };
   }
   function applyCaseOffsetsForFrame(frame, inheritedByLane = null) {
     const inherited = inheritedByLane || Object.fromEntries(lanes.map((lane) => [lane.id, 0]));
@@ -1642,68 +1813,17 @@ function renderDiagramSvg({
     });
     return { left, right, top, bottom };
   }
-  function collectLoopObstacles(frame, sourceStepIdx, routeBottomY) {
-    const yMin = frame.yDecision;
-    const yMax = routeBottomY;
-    const overlaps = (top, bottom) => bottom >= yMin && top <= yMax;
-    const rects = [];
-    rows.forEach((row, idx) => {
-      if (row?.kind !== "step" || row.empty || !row.role) return;
-      const b = stepObstacleBounds(idx);
-      if (overlaps(b.top, b.bottom)) rects.push(b);
-    });
-    return rects;
-  }
-  function buildLoopBackPath({
-    fromX,
-    fromBottomY,
-    dCx,
-    dCy,
-    dW,
-    frame,
-    sourceStepIdx,
-    caseOffset,
-  }) {
-    const startY = fromBottomY;
-    const sourceBounds = sourceStepIdx != null ? stepObstacleBounds(sourceStepIdx) : null;
-    const dropY = (sourceBounds?.bottom ?? startY) + loopDropPad;
-    const obstacles = collectLoopObstacles(frame, sourceStepIdx, dropY);
-    let sideSign;
-    if (caseOffset !== 0) {
-      sideSign = Math.sign(caseOffset);
-    } else if (obstacles.length > 0) {
-      const minLeft = Math.min(...obstacles.map((o) => o.left));
-      const maxRight = Math.max(...obstacles.map((o) => o.right));
-      const spaceLeft = fromX - minLeft;
-      const spaceRight = maxRight - fromX;
-      sideSign = spaceRight >= spaceLeft ? 1 : -1;
-    } else {
-      sideSign = fromX <= dCx ? -1 : 1;
-    }
-    const extentLeft = obstacles.length
-      ? Math.min(...obstacles.map((o) => o.left))
-      : (sourceBounds?.left ?? fromX - nodeW / 2);
-    const extentRight = obstacles.length
-      ? Math.max(...obstacles.map((o) => o.right))
-      : (sourceBounds?.right ?? fromX + nodeW / 2);
-    let routeX;
-    if (sideSign < 0) {
-      routeX = Math.min(extentLeft, fromX, dCx - dW / 2) - loopRouteMargin;
-    } else {
-      routeX = Math.max(extentRight, fromX, dCx + dW / 2) + loopRouteMargin;
-    }
-    const lastLaneIdx = lanes.length - 1;
-    const laneGridLeft = laneX(0);
-    const laneGridRight =
-      lastLaneIdx >= 0 ? laneX(lastLaneIdx) + laneWidth(lastLaneIdx) : width - xPad;
-    routeX = Math.max(laneGridLeft, Math.min(laneGridRight, routeX));
-    const enterFromLeft = routeX < dCx;
-    const toX = enterFromLeft ? dCx - dW / 2 : dCx + dW / 2;
-    const toY = dCy;
-    if (Math.abs(fromX - routeX) < branchConnectorElbowThreshold) {
-      return `M ${fromX} ${startY} L ${fromX} ${dropY} L ${routeX} ${toY} L ${toX} ${toY}`;
-    }
-    return `M ${fromX} ${startY} L ${fromX} ${dropY} L ${routeX} ${dropY} L ${routeX} ${toY} L ${toX} ${toY}`;
+  /**
+   * The box a `loop` aims at: `loop @id` names a block, a bare `loop` goes
+   * back to the question of its enclosing `if` (or a fork's gateway circle).
+   */
+  function loopTargetBox(plan, frame) {
+    if (plan?.targetIdx >= 0) return stepTargetBox(plan.targetIdx);
+    const dCx = frameAnchorX(frame);
+    const dCy = branchDecisionCy(frame);
+    const dW = frame.parallel ? gatewayR * 2 : decisionDiamondWidth(frame.cond.length);
+    const dH = frame.parallel ? gatewayR * 2 : decisionDiamondH;
+    return { left: dCx - dW / 2, right: dCx + dW / 2, top: dCy - dH / 2, bottom: dCy + dH / 2 };
   }
   function splitPropsBySide(propIds) {
     const left = [];
@@ -2462,77 +2582,69 @@ function renderDiagramSvg({
               branchColorArrows && c.color ? resolveBranchStyle(c.color).stroke : theme.stroke;
             const cMarker =
               branchColorArrows && c.color ? `url(#arrowhead-${c.color})` : "url(#arrowhead)";
-            const mergeJump = mergeAnchorInCase(c.rowIndices, f.id);
-            if (mergeJump) {
+            // A `goto` / `loop` in this case replaces the edge to the join:
+            // the jump is the case's single outgoing edge.
+            const jumpAnchor =
+              mergeAnchorInCase(c.rowIndices, f.id) ?? loopAnchorInCase(c.rowIndices, f.id);
+            if (jumpAnchor) {
+              const { plan } = jumpAnchor;
+              const jumpIdx = jumpAnchor.mergeIdx ?? jumpAnchor.loopIdx;
+              const sourceStepIdx = jumpAnchor.prevStepIdx;
+              const sourceFrame = plan.sourceFrameId
+                ? frames.find((fr) => fr.id === plan.sourceFrameId)
+                : null;
               let fromX2;
               let fromBottomY;
-              if (mergeJump.prevStepIdx != null) {
-                const r = rows[mergeJump.prevStepIdx];
+              let fromStub = false;
+              if (sourceStepIdx != null) {
+                const r = rows[sourceStepIdx];
                 const li = laneIndex(r.role);
-                fromX2 = li >= 0 ? nodeCenterX(mergeJump.prevStepIdx, r.role) : c.x;
-                fromBottomY = stepBlockBottomY(mergeJump.prevStepIdx);
+                fromX2 = li >= 0 ? nodeCenterX(sourceStepIdx, r.role) : c.x;
+                fromBottomY = stepBlockBottomY(sourceStepIdx);
+              } else if (sourceFrame) {
+                // The case ends with a complete nested `if` / `fork`: the jump
+                // is that block's outgoing edge, so it leaves its join.
+                fromX2 = mergeAnchorX(sourceFrame);
+                fromBottomY = joinBottomY(sourceFrame);
               } else {
+                // Nothing but the jump in this case: the rail from the decision
+                // ends just under the case label (see caseFanOutTarget), so the
+                // jump continues from there rather than from the jump row's
+                // position in the document — which is below every row of every
+                // case before it, and drew a line down the whole diagram.
                 fromX2 = caseAnchorX(c);
-                const mIdxY = rowMeta[mergeJump.mergeIdx]?.y ?? f.yDecision;
-                fromBottomY = mIdxY + branchMergeH;
+                fromBottomY = caseStubOriginY(caseRailY);
+                fromStub = true;
               }
-              const d2 = buildMergeForwardPath({
+              const target =
+                plan.kind === "loop" ? loopTargetBox(plan, f) : stepTargetBox(plan.targetIdx);
+              const d2 = buildJumpPath({
+                plan,
                 fromX: fromX2,
                 fromBottomY,
-                targetIdx: mergeJump.targetIdx,
+                target,
+                leaveSideways: fromStub,
               });
-              const mergeLineType =
-                mergeJump.prevStepIdx != null
-                  ? stepOutgoingArrowLine(rows[mergeJump.prevStepIdx])
-                  : "solid";
-              return /* @__PURE__ */ h("path", {
-                key: `merge-${f.id}-${ci}`,
-                d: d2,
-                fill: "none",
-                stroke: cStroke,
-                strokeWidth: "1.6",
-                markerEnd: cMarker,
-                ...arrowLineStrokeProps(mergeLineType),
-              });
-            }
-            const anchor = loopAnchorInCase(c.rowIndices, f.id);
-            if (anchor) {
-              let fromX2;
-              let fromBottomY;
-              let sourceStepIdx = null;
-              if (anchor.prevStepIdx != null) {
-                sourceStepIdx = anchor.prevStepIdx;
-                const r = rows[anchor.prevStepIdx];
-                const li = laneIndex(r.role);
-                fromX2 = li >= 0 ? nodeCenterX(anchor.prevStepIdx, r.role) : c.x;
-                fromBottomY = stepBlockBottomY(anchor.prevStepIdx);
-              } else {
-                // No step before the loop: the rail from the decision ends
-                // just under the label (see caseFanOutTarget), so turn back
-                // from there rather than from the loop row's document position.
-                fromX2 = caseAnchorX(c);
-                fromBottomY = loopOnlyOriginY(caseRailY);
-              }
-              const d2 = buildLoopBackPath({
-                fromX: fromX2,
-                fromBottomY,
-                dCx,
-                dCy,
-                dW,
-                frame: f,
-                sourceStepIdx,
-                caseOffset: c.offset || 0,
-              });
-              const loopLineType =
+              const jumpLineType =
                 sourceStepIdx != null ? stepOutgoingArrowLine(rows[sourceStepIdx]) : "solid";
               return /* @__PURE__ */ h("path", {
-                key: `loop-${f.id}-${ci}`,
+                key: `jump-${f.id}-${ci}`,
+                className: "jump-arrow",
+                "data-jump": plan.kind,
+                "data-jump-row": String(jumpIdx),
+                "data-jump-from":
+                  sourceStepIdx != null
+                    ? String(sourceStepIdx)
+                    : sourceFrame
+                      ? `join:${sourceFrame.id}`
+                      : "",
+                "data-jump-to": plan.targetIdx >= 0 ? String(plan.targetIdx) : `gateway:${f.id}`,
                 d: d2,
                 fill: "none",
                 stroke: cStroke,
                 strokeWidth: "1.6",
                 markerEnd: cMarker,
-                ...arrowLineStrokeProps(loopLineType),
+                ...arrowLineStrokeProps(jumpLineType),
               });
             }
             const mergeFrom = caseMergeAnchor(c);

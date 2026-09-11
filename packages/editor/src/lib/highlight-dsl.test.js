@@ -24,8 +24,9 @@ describe("tokenizeDslLine", () => {
       "/role/",
       "<lane>: Do the thing and wait;",
       "section (Intake) #S1",
-      "goto @target",
-      "merge @done",
+      "loop @target",
+      "[goto: done]",
+      "  id: done;",
       "[]",
       "level: 2;",
       "résumé: 日本語のテキスト;",
@@ -47,11 +48,29 @@ describe("tokenizeDslLine", () => {
     expect(types("[]")).toEqual(["keyword:[]"]);
   });
 
-  it("colours goto and merge, with or without an @id", () => {
-    expect(types("goto")).toEqual(["keyword:goto"]);
-    expect(types("goto @done")).toEqual(["keyword:goto", "plain:@done"]);
-    expect(types("merge")).toEqual(["keyword:merge"]);
-    expect(types("merge @done")).toEqual(["keyword:merge", "plain:@done"]);
+  it("colours loop, bare and with an @id", () => {
+    expect(types("loop")).toEqual(["keyword:loop"]);
+    expect(types("loop @done")).toEqual(["keyword:loop", "plain:@done"]);
+  });
+
+  // `[goto: id]` looks exactly like a step at a glance, so `goto` has to read
+  // as control flow rather than as a role called "goto".
+  it("colours the goto in a `[goto: id]` jump as a keyword", () => {
+    expect(types("[goto: done]")).toEqual([
+      "plain:[",
+      "keyword:goto",
+      "punct::",
+      "plain:done",
+      "plain:]",
+    ]);
+    expect(types("  [goto: done]")).toContain("keyword:goto");
+  });
+
+  // ...but only there: a real role may not be named `goto`, yet a step whose
+  // text merely mentions it must not light up.
+  it("leaves the word goto alone outside the jump statement", () => {
+    expect(types("<lane>: goto the desk;")).not.toContain("keyword:goto");
+    expect(types("[a: goto the desk]")).not.toContain("keyword:goto");
   });
 
   it("recognises `level` and `skip` as property keys, like `id`", () => {

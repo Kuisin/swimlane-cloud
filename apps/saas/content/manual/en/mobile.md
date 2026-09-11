@@ -12,7 +12,8 @@ at any time, and your choice is remembered for next time.
 - Add a step, edit or delete an existing one.
 - Add, edit or delete a branch, a parallel split, or a group — including its
   condition, case labels, and highlight color.
-- Edit the merge point a side path rejoins at.
+- Retarget a jump: pick the step a case should continue from, from a
+  dropdown of every step in the diagram — there's nothing to name by hand.
 
 Everything you do here is the same underlying diagram as the desktop editor
 — there's no separate mobile-only format.

@@ -40,8 +40,10 @@ import {
   extractPartsCode,
   fetchImports,
   findAdjacentStepIndex,
+  makeStepId,
   missingImports,
   moveRow,
+  pruneUnreferencedStepIds,
   resolversFrom,
   serializeDSL,
   withEntries,
@@ -1302,14 +1304,36 @@ export function MobileView({
   const applyGroupPatch = (patch: Record<string, unknown>) => {
     if (editGroupRow == null) return;
     applyRawEdit((rows) => {
-      if (rows[editGroupRow]) rows[editGroupRow] = { ...rows[editGroupRow], ...patch };
+      if (!rows[editGroupRow]) return;
+      // A `[goto: id]` names no id directly here — the picker below only
+      // ever offers a step to point at, never a raw id (there is nowhere in
+      // this GUI to type one by hand). Release the old target's id first,
+      // sweep up anything now unreferenced, then give the new target an id
+      // if it doesn't already have one, mirroring the desktop editor's
+      // `pickMergeTarget` so a retarget never leaves an orphan `id:` line.
+      if (typeof patch.gotoStepIndex === "number") {
+        rows[editGroupRow] = { ...rows[editGroupRow], mergeTarget: "" };
+        const next = pruneUnreferencedStepIds(rows);
+        const targetIdx = patch.gotoStepIndex;
+        const target = next[targetIdx];
+        let id = (target?.mergeId || "").trim();
+        if (!id) {
+          id = makeStepId(next);
+          next[targetIdx] = { ...target, mergeId: id };
+        }
+        next[editGroupRow] = { ...next[editGroupRow], mergeTarget: id };
+        return next;
+      }
+      rows[editGroupRow] = { ...rows[editGroupRow], ...patch };
     });
     setEditGroup(null);
   };
 
   const deleteGroupRow = () => {
     if (editGroupRow == null) return;
-    applyRawEdit((rows) => withoutBlock(rows, editGroupRow));
+    // The deleted row may itself have been a `[goto: id]` — sweep up its
+    // target's id if nothing else references it any more.
+    applyRawEdit((rows) => pruneUnreferencedStepIds(withoutBlock(rows, editGroupRow)));
     setEditGroup(null);
   };
 
@@ -1648,7 +1672,10 @@ function StepEditModal({
   const [name, setName] = useState(String(row.name ?? ""));
   const [description, setDescription] = useState(String(row.description ?? ""));
   const [remark, setRemark] = useState(String(row.remark ?? ""));
-  const [mergeId, setMergeId] = useState(String(row.mergeId ?? ""));
+  // No field for the step's `mergeId` (its `id:` line): a raw id is never
+  // shown or typed in the GUI. It is written and removed for you when a jump
+  // is pointed at this step or stops pointing at it. The patch below omits
+  // the key, so `applyPatch`'s spread leaves whatever the row already has.
   const [arrowLine, setArrowLine] = useState(String(row.arrowLine ?? "solid"));
   const [blockRef, setBlockRef] = useState(String(row.blockRef ?? ""));
   const [sel, setSel] = useState<Set<string>>(
@@ -1681,7 +1708,6 @@ function StepEditModal({
             name,
             description,
             remark,
-            mergeId,
             arrowLine,
             blockRef: blockRef || null,
             props: [...sel],
@@ -1759,13 +1785,6 @@ function StepEditModal({
         </Field>
         <Field label={t("stepEdit.arrow")}>
           <ArrowPicker value={arrowLine} onChange={setArrowLine} />
-        </Field>
-        <Field label={t("stepEdit.mergeId")}>
-          <input
-            value={mergeId}
-            onChange={(e) => setMergeId(e.target.value)}
-            className={FIELD_CLASS}
-          />
         </Field>
         {propList.length > 0 && (
           <Field label={t("stepEdit.props")}>
@@ -1881,7 +1900,7 @@ function AddBlockSheet({
  * Edit modal for every non-step row the mobile flow list shows: a fork/if
  * (`branchStart`), one clause of one (`branchCase`, or an `if`'s first clause
  * — which lives as `firstCase` on the branchStart, hence `firstCase`), a
- * section/sub-branch (`groupStart`), and a `goto` marker (`branchMerge`).
+ * section/sub-branch (`groupStart`), and a `[goto: id]` jump (`branchMerge`).
  * Between them these cover the same fields the desktop `BranchInspector`
  * does, plus add-case and delete.
  */
@@ -1896,7 +1915,7 @@ function GroupEditModal({
 }: {
   row: Record<string, unknown>;
   firstCase: boolean;
-  mergeTargets: Array<{ mergeId: string; label: string }>;
+  mergeTargets: Array<{ stepIndex: number; mergeId: string; label: string }>;
   onSave: (patch: Record<string, unknown>) => void;
   onAddCase: () => void;
   onDelete: () => void;
@@ -1912,7 +1931,13 @@ function GroupEditModal({
   const [cond, setCond] = useState(String(row.cond ?? ""));
   const [name, setName] = useState(String(row.sectionName ?? ""));
   const [label, setLabel] = useState(String((firstCase ? row.firstCase : row.label) ?? ""));
-  const [mergeTarget, setMergeTarget] = useState(String(row.mergeTarget ?? ""));
+  // The picker offers steps, never a raw id — resolve the row's current
+  // `mergeTarget` id back to the step that carries it, if any still does
+  // (a jump written in Text mode may name a step that doesn't exist).
+  const [gotoStepIndex, setGotoStepIndex] = useState(() => {
+    const current = String(row.mergeTarget ?? "");
+    return mergeTargets.find((o) => o.mergeId && o.mergeId === current)?.stepIndex ?? -1;
+  });
   const [color, setColor] = useState<string | null>(
     String((isGroup ? row.sectionColor : row.branchColor) ?? "") || null,
   );
@@ -1933,7 +1958,7 @@ function GroupEditModal({
           : t("mobile.editSubBranch");
 
   const patch = () => {
-    if (isMerge) return { mergeTarget };
+    if (isMerge) return { gotoStepIndex };
     if (firstCase) return { firstCase: label, branchColor: color };
     if (isCase) return { label, branchColor: color };
     if (isBranch) return { cond, branchColor: color };
@@ -1974,7 +1999,8 @@ function GroupEditModal({
           </button>
           <button
             onClick={() => onSave(patch())}
-            className="flex-1 rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
+            disabled={isMerge && gotoStepIndex < 0}
+            className="flex-1 rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {t("stepEdit.save")}
           </button>
@@ -2014,20 +2040,26 @@ function GroupEditModal({
         {isMerge && (
           <Field label={t("mobile.mergeTarget")}>
             <select
-              value={mergeTarget}
-              onChange={(e) => setMergeTarget(e.target.value)}
+              value={gotoStepIndex}
+              onChange={(e) => setGotoStepIndex(Number(e.target.value))}
               className={FIELD_CLASS}
             >
-              {/* Empty is a real, valid target now: a bare merge lands on
-                  the next landing marker after this if — not "unset". */}
-              <option value="">{t("mobile.mergeTargetNext")}</option>
-              {mergeTargets
-                .filter((o) => o.mergeId)
-                .map((o) => (
-                  <option key={o.mergeId} value={o.mergeId}>
-                    {o.label}
-                  </option>
-                ))}
+              {/* Every step is a valid destination — an id is never typed
+                  here, only assigned behind the scenes on save (see
+                  `applyGroupPatch`). This disabled option only renders when
+                  nothing is selected yet: the row's current target names no
+                  step at all (a dangling jump written in Text mode), so
+                  there is nothing to preselect. */}
+              {gotoStepIndex < 0 && (
+                <option value={-1} disabled>
+                  {t("mobile.mergeTargetUnset")}
+                </option>
+              )}
+              {mergeTargets.map((o) => (
+                <option key={o.stepIndex} value={o.stepIndex}>
+                  {o.label}
+                </option>
+              ))}
             </select>
             <span className="mt-1 block text-xs text-neutral-500">
               {t("mobile.mergeTargetHint")}

@@ -16,75 +16,49 @@ ${body}
 @end
 `;
 
-describe("a landing marker", () => {
-  it("parses `merge` / `merge @name` and a bare or named `goto`", () => {
+// There is no landing-marker row any more — every jump names a real step's
+// own `id:`, written as `[goto: id]`.
+describe("goto", () => {
+  it("parses `[goto: id]`, pointing at the step carrying that `id:`", () => {
     const model = parseDSL(
       doc(`[a: start]
 if (cancel?)
 case (yes)
   [a: accept]
-  goto
+  [goto: late]
 case ()
   [b: normal]
-  goto @late
 end-if
 [a: refund]
-merge
 [a: done]
-merge @late
+  id: late;
 [a: very late]`),
     );
     expect(model.errors).toEqual([]);
     const merges = model.rows.filter((r) => r.kind === "branchMerge").map((r) => r.mergeTarget);
-    expect(merges).toEqual([null, "late"]);
-    const markers = model.rows.filter((r) => r.kind === "mergeMarker").map((r) => r.name);
-    expect(markers).toEqual([null, "late"]);
+    expect(merges).toEqual(["late"]);
   });
 
-  it("rejects a bare goto with no marker after its if", () => {
+  it("rejects a `[goto: id]` naming an id that does not exist", () => {
     const model = parseDSL(
       doc(`if (x?)
 case (yes)
   [a: one]
-  goto
+  [goto: nowhere]
 end-if
 [a: after]`),
     );
-    expect(model.errors.map((e) => e.msg)).toContain("goto has no merge marker after this if");
+    expect(model.errors.map((e) => e.msg)).toContain('no node with id "nowhere"');
   });
 
-  it("rejects a marker name that is also a step id", () => {
+  it("rejects the same id given to two steps", () => {
     const model = parseDSL(
-      doc(`[a: one] @done
+      doc(`[a: one]
+  id: done;
 [a: two]
-merge @done`),
+  id: done;`),
     );
     expect(model.errors.filter((e) => e.msg === 'duplicate node id "done"')).toHaveLength(1);
-  });
-
-  it("renders exactly as the id-based form does, with the marker taking no space", () => {
-    const withMarker = doc(`[a: start]
-if (cancel?)
-case (yes)
-  [a: accept]
-  goto
-case ()
-  [b: normal]
-end-if
-[a: refund]
-merge
-[a: done]`);
-    const withId = doc(`[a: start]
-if (cancel?)
-case (yes)
-  [a: accept]
-  goto @done
-case ()
-  [b: normal]
-end-if
-[a: refund]
-[a: done] @done`);
-    expect(render(withMarker)).toBe(render(withId));
   });
 });
 
@@ -139,41 +113,41 @@ level: 2;
   });
 });
 
-// The earlier grammar's `[merge]` / `[merge: id]` bracket form was two
-// spellings collapsed onto one meaning depending on context — a marker
-// outside an if, a jump inside one. `legacy-migrate.test.js` covers that
-// ambiguity being converted away; the current grammar has no such thing to
-// assert here, since `goto` (jump) and `merge` (marker) are distinct
-// keywords regardless of nesting. What is still worth asserting on its own
-// is the renderer's routing geometry for a backward jump.
 describe("a backward goto's routing", () => {
   it("routes around the blocks between, not up the flow's spine", () => {
     const svg = render(
-      doc(`[a: start] @again
+      doc(`[a: start]
+  id: again;
 [a: middle]
 [a: check]
 if (ok?)
 case (no)
-  goto @again
+  [goto: again]
 case ()
   [a: done]
 end-if`),
     );
-    // The jump's path: down from the case, across to a route x, up to the
-    // target's centre y, then into the target's side. Its route x must sit
-    // outside every block it passes — here all blocks share one lane, so it
-    // must clear that lane's block width.
+    // The jump runs up a vertical rail and comes in to the target's side. That
+    // rail must sit outside every block it passes — here all blocks share one
+    // lane, so it must clear that lane's block width.
     const body = svg.slice(svg.indexOf("</defs>"));
-    const paths = [...body.matchAll(/<path[^>]*\sd="M ([^"]+)"/g)]
-      .map((m) => m[1].split(" L ").map((p) => p.trim().split(/\s+/).map(Number)))
-      .filter((pts) => pts.length === 5);
+    const jumpD = body.match(/<path[^>]*\bdata-jump="goto"[^>]*\sd="([^"]+)"/)?.[1];
+    expect(jumpD, "the goto is drawn as one tagged path").toBeTruthy();
+    const pts = [...jumpD.matchAll(/[ML]\s+(-?[\d.]+)\s+(-?[\d.]+)/g)].map(([, x, y]) => [
+      Number(x),
+      Number(y),
+    ]);
+    expect(pts.at(-1)[1], "it ends above where it started").toBeLessThan(pts[0][1]);
     const boxes = [...body.matchAll(/<rect[^>]*x="([\d.]+)"[^>]*width="188"/g)].map((m) => ({
       left: Number(m[1]),
       right: Number(m[1]) + 188,
     }));
-    const jump = paths.find((pts) => pts[4][1] < pts[0][1]); // ends above where it started
-    expect(jump).toBeDefined();
-    const routeX = jump[2][0];
+    const rail = pts
+      .slice(1)
+      .map((p, i) => [pts[i], p])
+      .filter(([p, q]) => p[0] === q[0])
+      .sort((a, b) => Math.abs(b[0][1] - b[1][1]) - Math.abs(a[0][1] - a[1][1]))[0];
+    const routeX = rail[0][0];
     const clear = boxes.every((b) => routeX < b.left || routeX > b.right);
     expect(clear).toBe(true);
   });

@@ -215,7 +215,6 @@ Written directly on the step's own line, in any order, right after the
 | Suffix    | What it does                                                                                                                        | Example             |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
 | `<block>` | Applies a `/block/` style                                                                                                           | `<gateway>`         |
-| `@id`     | Names the step so a jump can point at it                                                                                            | `@closed`           |
 | `+prop`   | Attaches a `/prop/` side-note chip. May repeat, once per chip                                                                       | `+RQ +LG`           |
 | Arrow     | The line style leaving this step: `~>` dashed, `..>` dotted, `-.>` dash-dot, `-->` long-dash. Solid is the default and has no glyph | `~>`                |
 | `=> path` | Opens another flow: a path relative to this file, or `/` from the diagrams root                                                     | `=> ../ops/pick.md` |
@@ -230,6 +229,7 @@ Each goes on its own line under the step it belongs to.
 | `desc:`        | The description column                                       | `desc: Check the requirements;`    |
 | `remark:`      | The remark column                                            | `remark: Approval above 1M;`       |
 | `remark-desc:` | A second paragraph appended to `remark:`. May repeat         | `remark-desc: Manager signs off.;` |
+| `id:`          | Names the step so a jump can point at it                     | `id: closed;`                      |
 | `skip;`        | Leaves this step out of the numbering                        | `skip;`                            |
 | `level:`       | How deep the step sits in the numbering, `1`–`9`             | `level: 2;`                        |
 
@@ -275,16 +275,21 @@ then draft the quote.
 The ten colour names are `blue`, `green`, `red`, `orange`, `purple`,
 `gray`, `black`, `pink`, `teal` and `yellow`.
 
-### Jumps and landing points
+### Jumps
 
-| Construct   | What it does                                                                        | Example        |
-| ----------- | ----------------------------------------------------------------------------------- | -------------- |
-| `merge`     | An anonymous landing marker in the flow                                             | `merge`        |
-| `merge @id` | A _named_ landing marker                                                            | `merge @join`  |
-| `goto`      | From inside a case: continue at the first landing marker after this `if`'s `end-if` | `goto`         |
-| `goto @id`  | From anywhere: jump to the step, decision or fork named `@id`                       | `goto @closed` |
-| `loop`      | From inside a case: go back to the question of the nearest enclosing `if`           | `loop`         |
-| `loop @id`  | Go back to the decision or fork named `@id`                                         | `loop @quote`  |
+There are no landing markers: a jump always names a node that is already
+there. A step is named by its `id:` line, and a decision, fork, section,
+branch or phase by the `@id` written on its opening line.
+
+| Construct    | What it does                                                              | Example          |
+| ------------ | ------------------------------------------------------------------------- | ---------------- |
+| `[goto: id]` | From inside a case: continue at the step, decision or fork named `id`     | `[goto: closed]` |
+| `loop`       | From inside a case: go back to the question of the nearest enclosing `if` | `loop`           |
+| `loop @id`   | Go back to the decision or fork named `@id`                               | `loop @quote`    |
+
+`[goto: id]` looks like a step but isn't one — `goto` is reserved, so you
+can't have a role called `goto`. It always needs a target; there is no bare
+`goto`.
 
 ```
 @kai-swimlane
@@ -300,7 +305,7 @@ label: Sales;
 if (Approved?)
 case (Yes)
   [sales: Ship it]
-  goto
+  [goto: closed]
 
 case (Needs changes)
   [sales: Revise it]
@@ -308,12 +313,11 @@ case (Needs changes)
 
 case ()
   [sales: Reject it]
-  goto @closed
+  [goto: closed]
 end-if
 
-merge @join
-
-[sales: Close the order] @closed
+[sales: Close the order]
+  id: closed;
 
 @end
 ```
@@ -328,18 +332,25 @@ Each of these is an error that names the replacement: `endif` → `end-if`,
 
 A file written before this grammar — the plain `@kai-swimlane-v2` (or `2`)
 header, `if (…) is (…) than` / `else-if … than` / `else`, `[loop]`, and a
-step's `id:` / `props:` / `arrow:` / `link:` property lines among them —
-is not read here: there is one reader and no compatibility layer, so it
-fails on the first old construct. The **Update DSL** action (under the
-project's edit view) rewrites every diagram on a branch across in one
-commit: the header becomes `@kai-swimlane`; `if (q) is (a) than` becomes
-`if (q)` followed by `case (a)`; `else-if (b) than` becomes `case (b)`;
-`else` becomes a blank `case ()`; `[loop]` becomes `loop`; `merge: id;` and
-`[merge: id]` in a case become `goto @id`; bare `merge;` and `[merge]` in a
-case become bare `goto`; a `[merge]` / `[merge: name]` marker in the flow
-becomes `merge` / `merge @name`; and a step's `id:` / `props:` / `arrow:` /
-`link:` lines become the suffixes `@id`, `+prop`, an arrow glyph and
-`=> path`. Nothing else in the file changes.
+step's `props:` / `arrow:` / `link:` property lines among them — is not read
+here: there is one reader and no compatibility layer, so it fails on the
+first old construct. The **Update DSL** action (under the project's edit
+view) rewrites every diagram on a branch across in one commit: the header
+becomes `@kai-swimlane`; `if (q) is (a) than` becomes `if (q)` followed by
+`case (a)`; `else-if (b) than` becomes `case (b)`; `else` becomes a blank
+`case ()`; `[loop]` becomes `loop`; `merge: id;` and `[merge: id]` become
+`[goto: id]`; and a step's `props:` / `arrow:` / `link:` lines become the
+suffixes `+prop`, an arrow glyph and `=> path`. A step's `id:` line is
+already current and is left exactly as it is. Nothing else in the file
+changes.
+
+**One old construct has no automatic replacement: a jump with no target.**
+A bare `merge;` or `[merge]` inside a case, and a `[merge]` / `[merge: name]`
+landing marker in the flow, name nothing — and there are no landing markers
+any more, so there is nothing to turn them into. Update DSL leaves those
+lines untouched and the file then reports an error on each one. Fix them by
+hand: give the step you wanted to land on an `id:` line, and write the jump
+as `[goto: id]`.
 
 ## What Visual mode can and can't do
 
@@ -358,7 +369,8 @@ unless this table says otherwise.
 | Lane order                                                                                                                                                              | **Text mode only**                | Lanes appear in the order they're defined, unless `/option/ lane-order:` overrides it                                               |
 | Add, edit, delete, reorder a step                                                                                                                                       | Editable                          | Up/down and **Move to…** stay inside the enclosing branch; drag can cross branches, and a drag that would break the file is refused |
 | `<block>` on a step                                                                                                                                                     | Editable                          | With a visual picker                                                                                                                |
-| `@id`, `label:`, `desc:`, `remark:`, `+prop`, arrow                                                                                                                     | Editable                          | Under **More options**                                                                                                              |
+| `label:`, `desc:`, `remark:`, `+prop`, arrow                                                                                                                            | Editable                          | Under **More options**                                                                                                              |
+| A step's `id:`                                                                                                                                                          | **Never typed**                   | Written and removed for you when a jump is pointed at the step or stops naming it; no field shows the raw id                        |
 | `level:`                                                                                                                                                                | Yes                               | Numbering level, 1–9                                                                                                                |
 | `=> path`                                                                                                                                                               | Yes                               | "Link to another flow" picks a file; the ↗ mark on the block opens it from the preview                                              |
 | `skip;`                                                                                                                                                                 | **Text mode only**                | Kept on save                                                                                                                        |
@@ -368,7 +380,7 @@ unless this table says otherwise.
 | `fork` / `and`                                                                                                                                                          | Insertable, colour editable       | A parallel path can carry a label in the grammar, but Visual mode doesn't expose a field for it yet — set one in Text mode          |
 | `section` / `branch` / `phase`, name and colour                                                                                                                         | Editable                          | No way to turn one into another; `phase` is shown as a group but can only be created as a `section` or `branch`                     |
 | `loop`, `loop @id`                                                                                                                                                      | Insertable only                   | Nothing to configure                                                                                                                |
-| `goto`, `goto @id`, `merge`, `merge @id`                                                                                                                                | Editable                          | The target is a dropdown of the ids that exist                                                                                      |
+| `[goto: id]`                                                                                                                                                            | Editable                          | The target is a dropdown of steps, not an id you type                                                                               |
 | Comments                                                                                                                                                                | **Text mode only**, and fragile   | Kept on save, but not shown anywhere in Visual mode, and deleting a step deletes the comments attached to it                        |
 | An unrecognised `/option/` key                                                                                                                                          | **Dropped**                       | It's reported as an error, and a Visual-mode save removes the line                                                                  |
 | Per-language values (`@lang`, inline `\|` segments, `field.lang:` lines)                                                                                                | **Text mode only**                | Editing a field in Visual mode changes the first language and leaves the others untouched                                           |

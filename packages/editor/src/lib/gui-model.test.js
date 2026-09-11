@@ -6,6 +6,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { applyModelEdit, parseGuiModel } from "./gui-model.js";
+import { makeStepId, pruneUnreferencedStepIds } from "./flow-rows.js";
 
 const doc = (body) => `@kai-swimlane\n${body}\n@end\n`;
 
@@ -87,5 +88,125 @@ describe("applyModelEdit definition sync", () => {
     expect(out).toContain("@use shared.txt;");
     expect(out).not.toContain("<shared>");
     expect(out).toContain("<b>");
+  });
+});
+
+/**
+ * A step's jump-target name is still the `mergeId` model field — only its
+ * spelling in the document moved, from an `@id` suffix to an `id: …;`
+ * follow-up line. So the shared serializer does all the work, and nothing in
+ * the GUI needs to know the difference; this pins that empirically rather
+ * than by inspection, because "the GUI still writes `@id`" would be a silent
+ * corruption (the suffix no longer parses at all).
+ */
+describe("a step's id through the GUI edit path", () => {
+  const SRC = doc("/role/\n<a>\nlabel: A;\n\n/line/\n[a: Send the invoice]");
+
+  it("writes mergeId as an `id: …;` line, never as an `@id` suffix", () => {
+    const out = applyModelEdit(SRC, (draft) => {
+      const i = draft.rows.findIndex((r) => r.kind === "step");
+      draft.rows[i] = { ...draft.rows[i], mergeId: "step-1" };
+    });
+    expect(out).toContain("  id: step-1;");
+    expect(out).not.toContain("@step-1");
+    // …and it reparses as the same field, so the model round-trips.
+    const m = parseGuiModel(out);
+    expect(m.errors).toEqual([]);
+    expect(m.rows.find((r) => r.kind === "step").mergeId).toBe("step-1");
+  });
+
+  it("clearing the id drops the line rather than leaving an empty one", () => {
+    const named = applyModelEdit(SRC, (draft) => {
+      const i = draft.rows.findIndex((r) => r.kind === "step");
+      draft.rows[i] = { ...draft.rows[i], mergeId: "step-1" };
+    });
+    const out = applyModelEdit(named, (draft) => {
+      const i = draft.rows.findIndex((r) => r.kind === "step");
+      draft.rows[i] = { ...draft.rows[i], mergeId: "" };
+    });
+    expect(out).not.toContain("id:");
+    expect(parseGuiModel(out).errors).toEqual([]);
+  });
+
+  it("a `[goto: id]` pointed at it round-trips through the same path", () => {
+    const src = doc(
+      "/role/\n<a>\nlabel: A;\n\n/line/\nif (q?)\ncase (yes)\n  [a: one]\n  [goto: done]\ncase ()\n  [a: two]\nend-if\n[a: finish]\n  id: done;",
+    );
+    const out = applyModelEdit(src, (draft) => {
+      const i = draft.rows.findIndex((r) => r.kind === "step" && r.text === "one");
+      draft.rows[i] = { ...draft.rows[i], text: "first" };
+    });
+    expect(out).toContain("[goto: done]");
+    expect(out).toContain("id: done;");
+    const m = parseGuiModel(out);
+    expect(m.errors).toEqual([]);
+    expect(m.rows.find((r) => r.kind === "branchMerge").mergeTarget).toBe("done");
+  });
+});
+
+/**
+ * The GUI never asks anyone to invent an id, and never shows the one it
+ * invents: a jump's destination picker names steps, and the `id:` line exists
+ * only for as long as some jump needs it. These exercise the two halves of
+ * gui-mode's `pickMergeTarget` / `deleteRow` against real DSL text, since the
+ * whole point is what ends up in the *saved document*.
+ */
+describe("ids are assigned and reclaimed around a jump, never typed", () => {
+  const SRC = doc(
+    "/role/\n<a>\nlabel: A;\n\n/line/\nif (q?)\ncase (yes)\n  [a: one]\n  [goto: step-1]\ncase ()\n  [a: two]\nend-if\n[a: finish]\n  id: step-1;\n[a: after]",
+  );
+
+  /** What gui-mode's `pickMergeTarget` does, minus the React plumbing. */
+  const retarget = (src, text) =>
+    applyModelEdit(src, (draft) => {
+      const at = draft.rows.findIndex((r) => r.kind === "step" && r.text === text);
+      const jumpAt = draft.rows.findIndex((r) => r.kind === "branchMerge");
+      draft.rows[jumpAt] = { ...draft.rows[jumpAt], mergeTarget: "" };
+      draft.rows = pruneUnreferencedStepIds(draft.rows);
+      const id = (draft.rows[at].mergeId || "").trim() || makeStepId(draft.rows);
+      draft.rows[at] = { ...draft.rows[at], mergeId: id };
+      draft.rows[jumpAt] = { ...draft.rows[jumpAt], mergeTarget: id };
+    });
+
+  it("picking a step with no id gives it one, in the saved DSL", () => {
+    const out = retarget(SRC, "after");
+    expect(parseGuiModel(out).errors).toEqual([]);
+    const after = parseGuiModel(out).rows.find((r) => r.kind === "step" && r.text === "after");
+    // Reuses `step-1`, freed from the previous target in the same edit, so
+    // repeated retargeting doesn't ratchet the counter up forever.
+    expect(after.mergeId).toBe("step-1");
+    expect(out).toContain("[goto: step-1]");
+  });
+
+  it("retargeting away from a step takes its id back with it", () => {
+    const out = retarget(SRC, "after");
+    const finish = parseGuiModel(out).rows.find((r) => r.kind === "step" && r.text === "finish");
+    // "finish" held step-1 before; nothing references it now, so the line is
+    // gone rather than orphaned in the document.
+    expect(finish.mergeId).toBeFalsy();
+    expect(out.match(/id: /g)).toHaveLength(1);
+  });
+
+  it("leaves an id alone while something still references it", () => {
+    // Two jumps at the same step: retargeting one must not strip the id the
+    // other is still using.
+    const src = doc(
+      "/role/\n<a>\nlabel: A;\n\n/line/\nif (q?)\ncase (yes)\n  [a: one]\n  [goto: prog_end]\ncase ()\n  [a: two]\n  loop @prog_end\nend-if\n[a: finish]\n  id: prog_end;\n[a: after]",
+    );
+    const out = retarget(src, "after");
+    const finish = parseGuiModel(out).rows.find((r) => r.kind === "step" && r.text === "finish");
+    expect(finish.mergeId).toBe("prog_end");
+    expect(out).toContain("loop @prog_end");
+  });
+
+  it("deleting the jump reclaims the id it was the last user of", () => {
+    const out = applyModelEdit(SRC, (draft) => {
+      const jumpAt = draft.rows.findIndex((r) => r.kind === "branchMerge");
+      draft.rows.splice(jumpAt, 1);
+      draft.rows = pruneUnreferencedStepIds(draft.rows);
+    });
+    expect(out).not.toContain("id:");
+    expect(out).not.toContain("goto");
+    expect(parseGuiModel(out).errors).toEqual([]);
   });
 });
