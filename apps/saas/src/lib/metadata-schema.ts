@@ -127,13 +127,29 @@ export function isEmptyValue(value: MetadataValue | undefined): boolean {
 /** The separator the engine flattens a sequence to, and the one we split on. */
 const LIST_SEP = ", ";
 
-/** A value as one line of text — what is shown in a list and searched over. */
+/**
+ * A value as one line of text — what is shown in a list and searched over.
+ *
+ * Lossy on purpose, and for display only. It is the deliberate opposite of the
+ * engine's `projectMeta`, which refuses any value it cannot flatten losslessly
+ * because what that produces gets written to a file. Never use this on a write
+ * path: a string to *store* comes from the engine, not from here.
+ *
+ * REPLACE WITH THE IMPORT when `feat/md-metadata-engine` merges —
+ * `import { metaText } from "@swimlane-cloud/diagram-converter/markdown-doc"`.
+ * The behaviour below is that function's, case for case, so the swap is a
+ * one-line import change with nothing to re-verify. Two implementations of
+ * "turn a list or a nested map into a line" would drift, and when they did the
+ * same document would read one way in the saas preview (flattened here) and
+ * another in a shared link (flattened in the renderer, since apps/share does
+ * not come through this file).
+ */
 export function metaText(value: MetadataValue | undefined): string {
   if (value === undefined || value === null) return "";
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map((v) => String(v)).join(LIST_SEP);
   return Object.entries(value)
-    .map(([k, v]) => `${k}: ${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`)
+    .map(([k, v]) => `${k}: ${metaText(v as MetadataValue)}`)
     .join(LIST_SEP);
 }
 
@@ -149,13 +165,26 @@ export function listItemsOf(value: MetadataValue | undefined): string[] {
   return [];
 }
 
-/** A map value's entries as strings, for the nested-map editor. */
-export function mapEntriesOf(value: MetadataValue | undefined): [string, string][] {
+/** One row of the nested-map editor. */
+export interface MapEntry {
+  key: string;
+  text: string;
+  /**
+   * False when the value is itself a list or a map, which this editor can show
+   * as a line but not take back as one. Typing over it would replace a
+   * structure with the text of that structure, so the control refuses.
+   */
+  editable: boolean;
+}
+
+/** A map value's entries, for the nested-map editor. */
+export function mapEntriesOf(value: MetadataValue | undefined): MapEntry[] {
   if (!isMapValue(value)) return [];
-  return Object.entries(value).map(([k, v]) => [
-    k,
-    typeof v === "object" && v !== null ? JSON.stringify(v) : String(v),
-  ]);
+  return Object.entries(value).map(([key, v]) => ({
+    key,
+    text: metaText(v as MetadataValue),
+    editable: typeof v === "string",
+  }));
 }
 
 /** `YYYY-MM-DD`, and a date that actually exists. */

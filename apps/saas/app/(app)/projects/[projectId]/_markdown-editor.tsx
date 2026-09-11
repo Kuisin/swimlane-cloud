@@ -33,6 +33,7 @@ import {
   mapEntriesOf,
   metaText,
   metadataRows,
+  type MapEntry,
   problemsByKey,
   removeMetaKey,
   validateMetadata,
@@ -267,39 +268,61 @@ function MapControl({
 }: {
   value: MetaValue;
   readOnly: boolean;
-  onChange: (value: Record<string, string>) => void;
+  onChange: (value: Record<string, MetaValue>) => void;
 }) {
   const { t } = useT();
+  const source = isMapValue(value) ? value : {};
   const entries = mapEntriesOf(value);
-  const set = (from: string, key: string, v: string) => {
-    const next: Record<string, string> = {};
-    for (const [k, existing] of entries) {
-      if (k === from) next[key] = v;
-      else next[k] = existing;
+
+  /**
+   * Rebuild the map from the rows, keeping the original value of any row this
+   * editor can only show. An entry that is itself a list or a map is rendered
+   * as one line of text; writing that text back would replace the structure
+   * with a description of it, so the structure is carried across untouched.
+   */
+  const rebuild = (change: (entry: MapEntry) => [string, MetaValue] | null) => {
+    const next: Record<string, MetaValue> = {};
+    for (const entry of entries) {
+      const kept = change(entry);
+      if (kept) next[kept[0]] = kept[1];
     }
     onChange(next);
   };
+  const valueOf = (entry: MapEntry): MetaValue =>
+    entry.editable ? entry.text : (source[entry.key] as MetaValue);
+
   return (
     <div className="space-y-1">
-      {entries.map(([key, v]) => (
-        <div key={key} className="flex items-center gap-1">
+      {entries.map((entry) => (
+        <div key={entry.key} className="flex items-center gap-1">
           <input
-            value={key}
+            value={entry.key}
             disabled={readOnly}
-            onChange={(e) => set(key, e.target.value, v)}
+            onChange={(e) =>
+              rebuild((row) =>
+                row.key === entry.key ? [e.target.value, valueOf(row)] : [row.key, valueOf(row)],
+              )
+            }
             className={`${INPUT} w-24 shrink-0 font-mono text-xs`}
           />
           <input
-            value={v}
-            disabled={readOnly}
-            onChange={(e) => set(key, key, e.target.value)}
+            value={entry.text}
+            disabled={readOnly || !entry.editable}
+            title={entry.editable ? undefined : t("md.field.nested")}
+            onChange={(e) =>
+              rebuild((row) =>
+                row.key === entry.key ? [row.key, e.target.value] : [row.key, valueOf(row)],
+              )
+            }
             className={INPUT}
           />
           {!readOnly && (
             <button
               type="button"
               title={t("common.delete")}
-              onClick={() => onChange(Object.fromEntries(entries.filter(([k]) => k !== key)))}
+              onClick={() =>
+                rebuild((row) => (row.key === entry.key ? null : [row.key, valueOf(row)]))
+              }
               className="rounded p-1 text-neutral-400 hover:bg-red-50 hover:text-red-600"
             >
               <Trash2 size={13} />
@@ -310,8 +333,8 @@ function MapControl({
       {!readOnly && (
         <button
           type="button"
-          onClick={() => onChange({ ...Object.fromEntries(entries), "": "" })}
-          disabled={entries.some(([k]) => k === "")}
+          onClick={() => onChange({ ...source, "": "" })}
+          disabled={entries.some((entry) => entry.key === "")}
           className="inline-flex items-center gap-1 rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-40"
         >
           <Plus size={12} /> {t("md.field.addPair")}

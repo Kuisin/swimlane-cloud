@@ -6,6 +6,7 @@ import {
   isIsoDate,
   isMetadataKey,
   listItemsOf,
+  mapEntriesOf,
   metaText,
   metadataRows,
   parseMetadataFields,
@@ -279,11 +280,31 @@ describe("defaults", () => {
 });
 
 describe("values", () => {
+  /**
+   * These cases are the engine's exported `metaText`, spelled out so the swap
+   * to that import when `feat/md-metadata-engine` merges is a one-line change
+   * that either keeps this green or tells us the two had drifted.
+   */
   it("flattens every shape to one line of text", () => {
-    expect(metaText("x")).toBe("x");
-    expect(metaText(["a", "b"])).toBe("a, b");
-    expect(metaText({ repo: "x", ref: "y" })).toBe("repo: x, ref: y");
+    expect(metaText("plain")).toBe("plain");
+    expect(metaText(["order", "credit"])).toBe("order, credit");
+    expect(metaText({ system: "SAP", module: "FI" })).toBe("system: SAP, module: FI");
+    expect(metaText({ repo: { name: "docs" } })).toBe("repo: name: docs");
+  });
+
+  it("is empty for everything with nothing in it, so a caller can skip the line", () => {
+    expect(metaText({})).toBe("");
+    expect(metaText([])).toBe("");
     expect(metaText(undefined)).toBe("");
+  });
+
+  it("shows a nested value in the map editor but refuses to take it back", () => {
+    const entries = mapEntriesOf({ repo: "acme/flows", tags: ["a", "b"] });
+    expect(entries).toEqual([
+      { key: "repo", text: "acme/flows", editable: true },
+      { key: "tags", text: "a, b", editable: false },
+    ]);
+    expect(mapEntriesOf("not a map")).toEqual([]);
   });
 
   it("reads list items from a sequence or a comma-joined scalar", () => {
