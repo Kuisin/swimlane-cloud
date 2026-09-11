@@ -3,8 +3,20 @@ import { createRoot } from "react-dom/client";
 import { Download, Upload, Workflow } from "lucide-react";
 import "@swimlane-cloud/editor/styles.css";
 import { DslEditor } from "@swimlane-cloud/editor";
-import { browserHost } from "./browser-host";
+import { browserHost, resetDemo } from "./browser-host";
 import "./app.css";
+
+// Demo mode. `?demo=reset` discards the browser's files and reseeds the
+// samples, so a walkthrough — or an end-to-end test — always starts from the
+// same place. Everything else about the app is already the demo: no backend,
+// no login, files in localStorage.
+if (new URLSearchParams(window.location.search).get("demo") === "reset") {
+  resetDemo();
+  // Clear the editor's own remembered state too (mode, open tabs, widths).
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("sw-editor:")) localStorage.removeItem(key);
+  }
+}
 
 // A compact top bar above <DslEditor> providing Import / Export affordances.
 // The editor owns its own actions; we add only what the browser host needs:

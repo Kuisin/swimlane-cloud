@@ -2920,7 +2920,6 @@ function renderDiagramSvg({
                   ),
                 ),
           ),
-          r.link && linkGlyph(r, cx, cy, boxW, boxH),
           showStepBlockCaptions &&
             r.blockRef &&
             /* @__PURE__ */ h(
@@ -3257,6 +3256,17 @@ function renderDiagramSvg({
           }
           return null;
         }),
+      // Link tiles last, above the interactive hit targets: a rect that
+      // covers the whole row would otherwise take the click meant for the ↗.
+      rows.map((r, i) => {
+        if (r.kind !== "step" || r.empty || !r.role || !r.link) return null;
+        if (laneIndex(r.role) < 0) return null;
+        return /* @__PURE__ */ h(
+          "g",
+          { key: `link-${i}` },
+          linkGlyph(r, nodeCenterX(i, r.role), stepBlockCenterY(i), nodeW, stepBoxHeight(r)),
+        );
+      }),
       /* @__PURE__ */ h(DocumentInfoPanel, {
         lines: infoLines,
         x: width - xPad,
