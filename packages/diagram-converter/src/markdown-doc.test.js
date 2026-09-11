@@ -248,6 +248,34 @@ body
     expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
   });
 
+  /**
+   * A key is author-supplied now that a metadata form can add one, so it needs
+   * the same care as a value. Writing `a:b: v` bare hands the next reader the
+   * key `a:b` — or, for our own reader, `a` — and the value is simply gone.
+   */
+  it("round-trips a key that cannot be written bare", () => {
+    for (const key of ["a: b", "a:b", "- x", "", "  padded  ", "#hash", 'has"quote', "a b"]) {
+      const meta = { [key]: "v" };
+      const text = serializeFrontmatter(meta);
+      expect(splitFrontmatter(`${text}body\n`).meta, key).toEqual(meta);
+    }
+  });
+
+  it("round-trips an awkward key nested inside a map", () => {
+    const meta = { sourceRef: { "a: b": "x", nested: { "c:d": ["one", "two"] } } };
+    const text = serializeFrontmatter(meta);
+    expect(text).toContain('"a: b": x');
+    expect(splitFrontmatter(`${text}body\n`).meta).toEqual(meta);
+  });
+
+  it("leaves a plainly-writable key plain, and keeps a quoted one quoted", () => {
+    expect(serializeFrontmatter({ owner: "x", "a b": "y" })).toBe("---\nowner: x\na b: y\n---\n");
+    const md = '---\n"owner": x\n---\n\nbody\n';
+    const { meta, shape } = splitFrontmatter(md);
+    expect(meta).toEqual({ owner: "x" });
+    expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
+  });
+
   it("keeps a bare `key:` bare rather than turning it into an empty string", () => {
     const md = "---\nowner:\nstatus: draft\n---\n\nbody\n";
     const { meta, shape } = splitFrontmatter(md);

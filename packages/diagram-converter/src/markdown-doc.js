@@ -161,14 +161,28 @@ function isPlainObject(value) {
 /* ───────────────────────────── writing YAML ────────────────────────────── */
 
 /**
+ * A key as it has to be written.
+ *
+ * A key is author-supplied now that a form can add one, so it gets the same
+ * care as a value. Any `:` at all has to be quoted, not just a `: ` — YAML
+ * reads `a:b: v` as the key `a:b`, and writing it bare would hand the next
+ * reader a different key and silently lose the value. A leading `-` would make
+ * the line a sequence entry, and an empty key is not a key at all.
+ */
+function emitMapKey(key, wasQuoted) {
+  return needsQuoting(key) || key.includes(":") || wasQuoted ? quote(key) : key;
+}
+
+/**
  * The lines for one key, at `indent`.
  *
  * `how` is the shape `splitFrontmatter` recorded for it; without one the value
  * decides — a string is a scalar, an array a block sequence, an object a
  * nested map.
  */
-function emitKey(key, value, how, indent) {
+function emitKey(rawKey, value, how, indent) {
   if (how?.kind === "verbatim") return how.lines;
+  const key = emitMapKey(String(rawKey), how?.quotedKey === true);
 
   // A caller that has not moved to the array model may still hand a list key
   // its old comma-joined string. Honour it, so nothing that worked before
@@ -399,6 +413,32 @@ function parseEntry(line, cut, owned, indent) {
 }
 
 /**
+ * The key a mapping line opens with, and the index of the `:` that ends it, or
+ * null when the line opens no key at all.
+ *
+ * A quoted key is read as one unit: `"a: b": v` names the key `a: b`, and
+ * cutting at the first `:` the way an unquoted line is cut would name `"a`
+ * instead and lose the value. It is the only form that can carry a key
+ * containing a colon, which is why `emitMapKey` writes one.
+ */
+function readMapKey(line, indent) {
+  const body = line.slice(indent.length);
+  if (body.startsWith('"')) {
+    let i = 1;
+    for (; i < body.length; i++) {
+      if (body[i] === "\\") i++;
+      else if (body[i] === '"') break;
+    }
+    if (i >= body.length || body[i + 1] !== ":") return null;
+    return { key: unquote(body.slice(0, i + 1)), cut: indent.length + i + 1, quoted: true };
+  }
+  const cut = line.indexOf(":");
+  if (cut < 0) return null;
+  const key = line.slice(0, cut).trim();
+  return key ? { key, cut, quoted: false } : null;
+}
+
+/**
  * Parse one mapping — the whole frontmatter block, or the body of a nested key.
  *
  * Every key is re-emitted and compared against the lines it came from. Anything
@@ -413,16 +453,16 @@ function parseMapBlock(lines, indent) {
     const line = lines[i];
     if (!line.trim()) continue;
     if (indentOf(line) !== indent) continue;
-    const cut = line.indexOf(":");
-    if (cut < 0) continue;
-    const key = line.slice(0, cut).trim();
-    if (!key) continue;
+    const found = readMapKey(line, indent);
+    if (!found) continue;
+    const { key, cut } = found;
 
     const owned = ownedLines(lines, i + 1, indent);
     i += owned.length;
 
     const source = [line, ...owned];
     const parsed = parseEntry(line, cut, owned, indent);
+    if (parsed !== VERBATIM && found.quoted) parsed.how.quotedKey = true;
     if (
       parsed !== VERBATIM &&
       emitKey(key, parsed.value, parsed.how, indent).join("\n") === source.join("\n")
