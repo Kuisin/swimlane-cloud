@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { extractTitle, render } from "@/lib/render";
+import { extractTitle, render, versionDiagramSettings } from "@/lib/render";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { ShareClient, type SharedFile } from "./share-client";
 
@@ -27,12 +27,13 @@ async function loadPublic(slug: string): Promise<PublicVersion | null> {
   const supabase = getServiceSupabase();
   const { data } = await supabase
     .from("versions")
-    .select("name, note, share_mode, version_files(filepath, dsl_text, sort_order)")
+    .select("name, note, share_mode, settings_json, version_files(filepath, dsl_text, sort_order)")
     .eq("public_slug", slug)
     .eq("public", true)
     .maybeSingle();
   if (!data) return null;
   const shareMode = (data.share_mode as PublicVersion["shareMode"] | null) ?? "svg_only";
+  const diagramSettings = versionDiagramSettings(data);
   const rows = (
     (data as { version_files?: { filepath: string; dsl_text: string; sort_order: number }[] })
       .version_files ?? []
@@ -46,7 +47,7 @@ async function loadPublic(slug: string): Promise<PublicVersion | null> {
     files: rows.map((f) => ({
       path: f.filepath,
       title: extractTitle(f.dsl_text),
-      svg: render(f.dsl_text, "basic").svg,
+      svg: render(f.dsl_text, "basic", diagramSettings).svg,
       dsl: shareMode === "svg_and_dsl" ? f.dsl_text : null,
     })),
   };

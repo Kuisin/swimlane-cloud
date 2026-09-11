@@ -1,7 +1,7 @@
 import { errorResponse, ApiError } from "@/lib/api";
 import { assertDiagramPath } from "@/lib/guard";
 import { requireProjectRole } from "@/lib/projects";
-import { render } from "@/lib/render";
+import { render, versionDiagramSettings } from "@/lib/render";
 import { getServiceSupabase } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -27,14 +27,14 @@ export async function GET(
     const supabase = getServiceSupabase();
     const { data } = await supabase
       .from("version_files")
-      .select("dsl_text, versions!inner(project_id)")
+      .select("dsl_text, versions!inner(project_id, settings_json)")
       .eq("version_id", versionId)
       .eq("filepath", path)
       .eq("versions.project_id", projectId)
       .maybeSingle();
     if (!data) throw new ApiError(404, "No such file in this version.");
 
-    const { svg } = render(data.dsl_text as string, "basic");
+    const { svg } = render(data.dsl_text as string, "basic", versionDiagramSettings(data));
     if (!svg) throw new ApiError(422, "This file could not be rendered.");
     return new Response(svg, {
       headers: {

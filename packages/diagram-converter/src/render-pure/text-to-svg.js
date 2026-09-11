@@ -12,20 +12,23 @@ import { renderDiagramSvg } from "./diagram.js";
  * `resolveAsset` the `data:` URI of an `@use` image. All three are ignored by
  * the version 1 reader.
  *
+ * `diagramDefaults` are render options the document inherits — a
+ * repository-wide setting — which its own `/option/` section overrides.
+ *
  * @param {string} src
  * @param {{ theme?: object, themeKey?: string, lang?: string,
  *   resolveImport?: (path: string) => string | null,
  *   resolveAsset?: (path: string) => string | null,
- *   filename?: string }} [options]
+ *   filename?: string, diagramDefaults?: object }} [options]
  * @returns {{ svg: string | null, model: object, errors: Array }}
  */
 export function textToSvg(
   src,
-  { theme, themeKey, lang, resolveImport, resolveAsset, filename } = {},
+  { theme, themeKey, lang, resolveImport, resolveAsset, filename, diagramDefaults } = {},
 ) {
   const model = parseDSL(src, { lang, resolveImport, resolveAsset, filename });
   const resolvedTheme = theme ?? (themeKey ? THEMES[themeKey] : null) ?? THEMES.basic;
-  const opts = resolveDiagramOptions(model.options);
+  const opts = resolveDiagramOptions(model.options, diagramDefaults);
   try {
     const svg = renderDiagramSvg({ model, theme: resolvedTheme, ...opts });
     return { svg, model, errors: model.errors };

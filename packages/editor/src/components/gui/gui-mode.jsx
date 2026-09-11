@@ -45,6 +45,7 @@ export function GuiMode({
   svg,
   errors,
   parseOptions,
+  diagramDefaults,
   onSwitchToText,
 }) {
   const { t } = useT();
@@ -78,7 +79,7 @@ export function GuiMode({
   const interactiveSvg = useMemo(() => {
     if (!guiModel) return null;
     try {
-      const opts = resolveDiagramOptions(guiModel.options);
+      const opts = resolveDiagramOptions(guiModel.options, diagramDefaults);
       return renderDiagramSvg({
         model: guiModel,
         theme: theme ?? THEMES.basic,
@@ -89,7 +90,7 @@ export function GuiMode({
     } catch {
       return null;
     }
-  }, [guiModel, theme, selectedIndex]);
+  }, [guiModel, theme, selectedIndex, diagramDefaults]);
 
   const target = resolveInspectorTarget(rows, selectedIndex);
   const inspectorRow = target.inspectorRow;

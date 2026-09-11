@@ -113,6 +113,7 @@ function DslEditorInner({ options }) {
     resolveImport: parseOptions.resolveImport,
     resolveAsset: parseOptions.resolveAsset,
     filename: parseOptions.filename,
+    diagramDefaults: options?.diagramDefaults,
   });
   const { leftPct, containerRef, onDividerMouseDown } = useSplitPane(options?.initialSplit ?? 52, {
     storageKey: "sw-editor:split-pct",
@@ -438,6 +439,7 @@ function DslEditorInner({ options }) {
             svg={svg}
             errors={errors}
             parseOptions={parseOptions}
+            diagramDefaults={options?.diagramDefaults}
             onSwitchToText={() => setMode("text")}
           />
         ) : (

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SETTINGS,
   isCurrentRepoSettings,
+  normalizeRepoSettingsText,
   parseRepoSettings,
   repoSettingsJson,
 } from "./repo-settings.ts";
@@ -62,5 +63,60 @@ describe("a malformed settings file never weakens the rules", () => {
     expect(parseRepoSettings(text).rules.allowedPublishedSources).toEqual(
       DEFAULT_SETTINGS.rules.allowedPublishedSources,
     );
+  });
+});
+
+describe("diagram settings and template modes", () => {
+  it("default to drawing everything and forcing nothing", () => {
+    expect(DEFAULT_SETTINGS.diagram).toEqual({
+      showGatewayIcons: true,
+      blockMargin: 0,
+      blockText: "truncate",
+    });
+    expect(DEFAULT_SETTINGS.templates).toEqual({});
+  });
+
+  it("keeps what the owner chose", () => {
+    const text = JSON.stringify({
+      diagram: { showGatewayIcons: false, blockMargin: 24, blockText: "wrap" },
+      templates: { role: "template-only", block: "base", prop: "none" },
+    });
+    const parsed = parseRepoSettings(text);
+    expect(parsed.diagram).toEqual({ showGatewayIcons: false, blockMargin: 24, blockText: "wrap" });
+    expect(parsed.templates).toEqual({ role: "template-only", block: "base", prop: "none" });
+  });
+
+  it("drops a value the renderer could not honour rather than guessing", () => {
+    const text = JSON.stringify({
+      diagram: { showGatewayIcons: "no", blockMargin: 500, blockText: "sideways" },
+      templates: { role: "forced", page: 1, title: "none" },
+    });
+    const parsed = parseRepoSettings(text);
+    expect(parsed.diagram).toEqual(DEFAULT_SETTINGS.diagram);
+    expect(parsed.templates).toEqual({});
+  });
+});
+
+/**
+ * Connecting a repository rewrites this file when it is not "current". That
+ * must mean "missing a key a newer app added", never "differs from the
+ * defaults" — or every reconnect would reset what the owner configured.
+ */
+describe("normalizeRepoSettingsText", () => {
+  it("fills in keys an older file lacks and keeps its values", () => {
+    const older = JSON.stringify({ rules: { allowedPublishedSources: ["preview"] } }, null, 2);
+    expect(isCurrentRepoSettings(older)).toBe(false);
+    const upgraded = parseRepoSettings(normalizeRepoSettingsText(older));
+    expect(upgraded.rules.allowedPublishedSources).toEqual(["preview"]);
+    expect(upgraded.diagram).toEqual(DEFAULT_SETTINGS.diagram);
+  });
+
+  it("leaves a customised, complete file alone", () => {
+    const custom = repoSettingsJson({
+      ...DEFAULT_SETTINGS,
+      diagram: { ...DEFAULT_SETTINGS.diagram, blockText: "wrap" },
+    });
+    expect(isCurrentRepoSettings(custom)).toBe(true);
+    expect(normalizeRepoSettingsText(custom)).toBe(custom);
   });
 });

@@ -221,7 +221,10 @@ export function ProjectNav({
     { key: "versions", label: t("nav.versions"), href: "versions" },
     { key: "activity", label: t("nav.activity"), href: "activity" },
     ...(state?.me.role === "owner"
-      ? [{ key: "templates", label: t("nav.templates"), href: "settings/templates" }]
+      ? [
+          { key: "templates", label: t("nav.templates"), href: "settings/templates" },
+          { key: "settings", label: t("nav.settings"), href: "settings/diagram" },
+        ]
       : []),
   ];
   return (

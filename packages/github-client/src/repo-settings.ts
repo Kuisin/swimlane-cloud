@@ -4,8 +4,10 @@
  *
  * Distinct from `.swimlane.json`, which answers "where are the diagrams and
  * what do they look like" and is read on every page load. This file answers
- * "what is allowed to happen here": the branch model, and which sources may
- * reach the published branch.
+ * "what is allowed to happen here, and how is every diagram drawn": the
+ * branch model, which sources may reach the published branch, the render
+ * settings a diagram inherits unless its own `/option/` says otherwise, and
+ * which DSL sections must come from a template.
  *
  * It is deliberately data rather than code, because the guard workflow reads
  * it too (`main-guard.ts`). Editing the allowed sources here changes what
@@ -16,6 +18,32 @@
 import { INTEGRATION_BRANCH, PROD_BRANCH } from "./branch-model.ts";
 
 export { REPO_SETTINGS_PATH } from "./repo-paths.ts";
+
+export const TEMPLATE_SECTIONS = ["page", "option", "role", "block", "prop"] as const;
+export type TemplateSection = (typeof TEMPLATE_SECTIONS)[number];
+
+/**
+ * How strictly a section must follow the project's template:
+ * `none` — free; `base` — new files start from the template, authors may
+ * change it; `template-only` — every file must match the template exactly.
+ */
+export const TEMPLATE_MODES = ["none", "base", "template-only"] as const;
+export type TemplateMode = (typeof TEMPLATE_MODES)[number];
+
+export const BLOCK_TEXT_MODES = ["truncate", "wrap"] as const;
+export type BlockTextMode = (typeof BLOCK_TEXT_MODES)[number];
+/** Mirrors `BLOCK_MARGIN_MAX` in the diagram engine's `diagram-options.js`. */
+export const BLOCK_MARGIN_MAX = 80;
+
+/** Render settings every diagram inherits; a file's own `/option/` wins. */
+export interface DiagramSettings {
+  /** The fork circles and join diamonds. Off, the rails simply meet. */
+  showGatewayIcons: boolean;
+  /** Extra pixels of height on every step row. */
+  blockMargin: number;
+  /** A step's box text: cut to one line with an ellipsis, or wrapped. */
+  blockText: BlockTextMode;
+}
 
 export interface SwimlaneSettings {
   /** Bumped when a later version of the app must migrate this file. */
@@ -38,7 +66,19 @@ export interface SwimlaneSettings {
     forbidDirectPush: boolean;
     forbidForcePush: boolean;
   };
+  diagram: DiagramSettings;
+  /**
+   * Per section. A section that is absent here leaves the project's own
+   * policy alone, so an older file changes nothing.
+   */
+  templates: Partial<Record<TemplateSection, TemplateMode>>;
 }
+
+export const DEFAULT_DIAGRAM_SETTINGS: DiagramSettings = {
+  showGatewayIcons: true,
+  blockMargin: 0,
+  blockText: "truncate",
+};
 
 export const DEFAULT_SETTINGS: SwimlaneSettings = {
   version: 1,
@@ -55,6 +95,8 @@ export const DEFAULT_SETTINGS: SwimlaneSettings = {
     forbidDirectPush: true,
     forbidForcePush: true,
   },
+  diagram: DEFAULT_DIAGRAM_SETTINGS,
+  templates: {},
 };
 
 export function repoSettingsJson(settings: SwimlaneSettings = DEFAULT_SETTINGS): string {
@@ -102,10 +144,54 @@ export function parseRepoSettings(text: string | null): SwimlaneSettings {
       forbidDirectPush: bool(rules.forbidDirectPush, DEFAULT_SETTINGS.rules.forbidDirectPush),
       forbidForcePush: bool(rules.forbidForcePush, DEFAULT_SETTINGS.rules.forbidForcePush),
     },
+    diagram: parseDiagramSettings(obj.diagram),
+    templates: parseTemplateModes(obj.templates),
   };
 }
 
-/** True when `text` already parses to exactly the settings given. */
-export function isCurrentRepoSettings(text: string | null, settings = DEFAULT_SETTINGS): boolean {
-  return text !== null && JSON.stringify(parseRepoSettings(text)) === JSON.stringify(settings);
+export function parseDiagramSettings(raw: unknown): DiagramSettings {
+  const d = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const margin = d.blockMargin;
+  return {
+    showGatewayIcons:
+      typeof d.showGatewayIcons === "boolean"
+        ? d.showGatewayIcons
+        : DEFAULT_DIAGRAM_SETTINGS.showGatewayIcons,
+    blockMargin:
+      typeof margin === "number" &&
+      Number.isInteger(margin) &&
+      margin >= 0 &&
+      margin <= BLOCK_MARGIN_MAX
+        ? margin
+        : DEFAULT_DIAGRAM_SETTINGS.blockMargin,
+    blockText: (BLOCK_TEXT_MODES as readonly unknown[]).includes(d.blockText)
+      ? (d.blockText as BlockTextMode)
+      : DEFAULT_DIAGRAM_SETTINGS.blockText,
+  };
+}
+
+export function parseTemplateModes(raw: unknown): Partial<Record<TemplateSection, TemplateMode>> {
+  const out: Partial<Record<TemplateSection, TemplateMode>> = {};
+  if (!raw || typeof raw !== "object") return out;
+  const t = raw as Record<string, unknown>;
+  for (const section of TEMPLATE_SECTIONS) {
+    const mode = t[section];
+    if ((TEMPLATE_MODES as readonly unknown[]).includes(mode)) out[section] = mode as TemplateMode;
+  }
+  return out;
+}
+
+/**
+ * The canonical text for what `text` holds: parsed, every missing field
+ * filled with its default, formatted. What a connect writes back — so a
+ * repository keeps the values it chose and still gains any key a newer
+ * version of the app added.
+ */
+export function normalizeRepoSettingsText(text: string | null): string {
+  return repoSettingsJson(parseRepoSettings(text));
+}
+
+/** True when `text` is already canonical: nothing to add or reformat. */
+export function isCurrentRepoSettings(text: string | null): boolean {
+  return text !== null && normalizeRepoSettingsText(text) === text;
 }
