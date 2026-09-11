@@ -387,3 +387,36 @@ end-if
     expect(next).toContain("end-section");
   });
 });
+
+/**
+ * The GUI colours an else case by writing `else than #red`; the reader used
+ * to accept only a bare `else`, so one colour swatch broke the file on save.
+ */
+describe("a coloured else case", () => {
+  it("survives Format and reparses with its colour", () => {
+    const src = `@kai-swimlane
+
+/role/
+
+<a>
+label: A;
+
+/line/
+
+if (ok?) is (yes) than #green
+[a: go]
+else than #red
+[a: stop]
+end-if
+
+@end
+`;
+    const once = formatDsl(src);
+    expect(once.ok, JSON.stringify(once.errors)).toBe(true);
+    expect(once.value).toContain("else than #red");
+    const model = parseDSL(once.value);
+    expect(model.errors).toEqual([]);
+    const elseCase = model.rows.find((r) => r.kind === "branchCase" && r.label === "else");
+    expect(elseCase.branchColor).toBe("red");
+  });
+});

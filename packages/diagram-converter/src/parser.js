@@ -705,7 +705,11 @@ export function parseDSL(src, parseOptions = {}) {
       );
       continue;
     }
-    if (/^else$/i.test(u)) {
+    // `else`, or `else than #color` — the form the editor writes for a
+    // coloured else case, so it must read back.
+    m = u.match(/^else(?:\s+than)?(?:\s+#([A-Za-z]+))?$/i);
+    if (m) {
+      checkColorToken(m[1], line, text);
       const top = stack[stack.length - 1];
       if (!top || top.type !== "if") {
         errors.push({ line, text, msg: "else without if" });
@@ -715,6 +719,7 @@ export function parseDSL(src, parseOptions = {}) {
         {
           kind: "branchCase",
           label: "else",
+          branchColor: m[1] ? m[1].trim().toLowerCase() : null,
           id: top.id,
           depth: branchControlDepth(),
         },
