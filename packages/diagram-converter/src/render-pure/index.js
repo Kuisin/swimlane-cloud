@@ -20,6 +20,7 @@ export { LUCIDE_ICON_NODES, getLucideIconNode } from "./icon-paths.js";
 export { renderPartsPreviewHtml } from "./parts-preview-static.js";
 export { renderTemplatePartsPreviewHtml } from "./template-parts-preview.js";
 export { textToSvg } from "./text-to-svg.js";
+export { relativeLinkPath, resolveLinkPath } from "../link-path.js";
 export {
   ARROW_LINE_TYPES,
   normalizeArrowLine,

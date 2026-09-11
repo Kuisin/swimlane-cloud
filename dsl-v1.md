@@ -188,17 +188,18 @@ Each is its own line after the step. Every one of them attaches to the **nearest
 which means a property written after an `if` or a `case` closer still lands on the step above it.
 A property with no step anywhere before it is an error naming the key.
 
-| line                   | meaning                                                                                                                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id: <name>;`          | names the step so `merge: <name>;` can target it. Must be unique across step ids and `[merge: name]` names; a collision reports `duplicate step id "<name>"` twice, once at each site |
-| `label: <text>;`       | the step's left-gutter caption, separate from the box text                                                                                                                            |
-| `desc: <text>;`        | the description column; takes the fenced form                                                                                                                                         |
-| `remark: <text>;`      | the remark column; takes the fenced form                                                                                                                                              |
-| `remark-desc: <text>;` | **appends** to `remark` with one blank line between paragraphs; may repeat. The serializer never writes it — it folds into `remark:` on the next save                                 |
-| `skip;`                | drops the step from the gutter numbering. Exactly this spelling: `skip: true;` is the error `skip must be written as skip;`                                                           |
-| `level: <1-9>;`        | the step's depth in the numbering tree (see below). `level: 1;` is the default and is not written back                                                                                |
-| `props: <id>, <id>;`   | the side-note chips on this step, in order. An id with no `/prop/` definition is created from itself                                                                                  |
-| `arrow: <type>;`       | the line style of this step's single outgoing edge: `solid`, `dashed`, `dotted`, `long-dash` or `dash-dot`. `solid` is the default and is not written back                            |
+| line                   | meaning                                                                                                                                                                                                                                                         |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id: <name>;`          | names the step so `merge: <name>;` can target it. Must be unique across step ids and `[merge: name]` names; a collision reports `duplicate step id "<name>"` twice, once at each site                                                                           |
+| `label: <text>;`       | the step's left-gutter caption, separate from the box text                                                                                                                                                                                                      |
+| `desc: <text>;`        | the description column; takes the fenced form                                                                                                                                                                                                                   |
+| `remark: <text>;`      | the remark column; takes the fenced form                                                                                                                                                                                                                        |
+| `remark-desc: <text>;` | **appends** to `remark` with one blank line between paragraphs; may repeat. The serializer never writes it — it folds into `remark:` on the next save                                                                                                           |
+| `skip;`                | drops the step from the gutter numbering. Exactly this spelling: `skip: true;` is the error `skip must be written as skip;`                                                                                                                                     |
+| `level: <1-9>;`        | the step's depth in the numbering tree (see below). `level: 1;` is the default and is not written back                                                                                                                                                          |
+| `link: <path>;`        | this step opens another flow. Relative to this file's folder (`../ops/pick.md`) or from the diagrams root with a leading `/`. The box takes the `subroutine` shape unless its `<block>` sets one, and carries a ↗ mark that opens the target in the web preview |
+| `props: <id>, <id>;`   | the side-note chips on this step, in order. An id with no `/prop/` definition is created from itself                                                                                                                                                            |
+| `arrow: <type>;`       | the line style of this step's single outgoing edge: `solid`, `dashed`, `dotted`, `long-dash` or `dash-dot`. `solid` is the default and is not written back                                                                                                      |
 
 `desc:`, `remark:` and `remark-desc:` take the same fence as `/page/`:
 
@@ -267,9 +268,8 @@ box: its first row receives no inbound edge and its last row merges back into th
 the closer. Both take an optional name — without one the display name is the constant `Section` or
 `Branch` — and an optional palette colour.
 
-The two share **one** stack and **one** closer check: `end-section`, `end-branch` and `end-point`
-are three spellings of "close the innermost open group", so `end-branch` silently closes a
-`section`. Only the count is checked; an unclosed group reports `unclosed section (missing
+The two share **one** stack and **one** closer check: `end-section` and `end-branch` both mean
+"close the innermost open group", so `end-branch` silently closes a `section`. Only the count is checked; an unclosed group reports `unclosed section (missing
 end-section)` whichever keyword opened it, and a closer with nothing open is `end-section without
 section`.
 
@@ -298,20 +298,19 @@ merge: <id>; instead of merge <id>;`.
 `[loop]` (trailing `;` tolerated) is the back-edge to the question of the enclosing `if`; outside
 one it is `[loop] outside if`. There is no way to name a loop target in version 1.
 
-### Legacy spellings
+### Spellings this grammar no longer has
 
-All of these still read. None is ever written back: the serializer emits the canonical spelling in
-the right-hand column on the next Format or save.
+These are refused, each with an error naming the spelling to write instead — one spelling per
+construct, no compatibility layer. (`***` comment rows are still read as comments.)
 
-| accepted               | written as                                    |
-| ---------------------- | --------------------------------------------- |
-| `endif`                | `end-if`                                      |
-| `endfork`              | `end-fork`                                    |
-| `elseif (x) than`      | `else-if (x) than`                            |
-| `section-start (name)` | `section (name)`                              |
-| `start-point`          | `section` (a group named `Section`)           |
-| `end-point`            | `end-section` / `end-branch`, by what is open |
-| `***` comment rows     | `//` comment rows                             |
+| refused                | write instead                |
+| ---------------------- | ---------------------------- |
+| `endif`                | `end-if`                     |
+| `endfork`              | `end-fork`                   |
+| `elseif (x) than`      | `else-if (x) than`           |
+| `section-start (name)` | `section (name)`             |
+| `start-point`          | `section`                    |
+| `end-point`            | `end-section` / `end-branch` |
 
 ## Diagnostics
 
@@ -347,6 +346,7 @@ still renders what it could read.
 | `duplicate step id "…"`                                                                                              | two step `id:` values, or a step `id:` and a `[merge: name]`, that agree |
 | `skip must be written as skip;`                                                                                      | `skip`, `skip: true;`, `skip-reason:`                                    |
 | `level must be written as level: <1-9>;`                                                                             | `level: 0;`, `level: 10;`, a missing `;`                                 |
+| `link must be written as link: <path>;`                                                                              | `link: ;`, a path containing spaces, a missing `;`                       |
 | `arrow: must be one of solid, dashed, dotted, long-dash, dash-dot`                                                   | any other line type                                                      |
 | `merge outside if`                                                                                                   | `merge;` or `merge: x;` at the top level or inside a fork path or group  |
 | `use merge: <id>; instead of merge <id>;`                                                                            | the colon was left out                                                   |

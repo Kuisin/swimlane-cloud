@@ -15,7 +15,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronRight, FileText, Folder, Search } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, FileText, Folder, Pencil, Search } from "lucide-react";
 import { buildFolderTree, type FolderTreeNode } from "@swimlane-cloud/editor";
 import { useT } from "@/i18n";
 
@@ -26,10 +26,13 @@ export function MobileFilePicker({
   paths,
   active,
   onPick,
+  onRename,
 }: {
   paths: string[];
   active: string;
   onPick: (path: string) => void;
+  /** Offered on the active file only — a phone has no hover to reveal it on the rest. */
+  onRename?: (path: string) => void;
 }) {
   const { t } = useT();
   const [query, setQuery] = useState("");
@@ -90,6 +93,7 @@ export function MobileFilePicker({
                   name={p.split("/").pop() ?? p}
                   active={active}
                   onPick={onPick}
+                  onRename={onRename}
                   showDir
                 />
               </li>
@@ -103,6 +107,7 @@ export function MobileFilePicker({
           isRoot
           active={active}
           onPick={onPick}
+          onRename={onRename}
           closed={closed}
           onToggle={toggle}
         />
@@ -117,6 +122,7 @@ function Branch({
   isRoot,
   active,
   onPick,
+  onRename,
   closed,
   onToggle,
 }: {
@@ -125,6 +131,7 @@ function Branch({
   isRoot?: boolean;
   active: string;
   onPick: (path: string) => void;
+  onRename?: (path: string) => void;
   closed: Set<string>;
   onToggle: (path: string) => void;
 }) {
@@ -159,6 +166,7 @@ function Branch({
               depth={isRoot ? 0 : depth + 1}
               active={active}
               onPick={onPick}
+              onRename={onRename}
               closed={closed}
               onToggle={onToggle}
             />
@@ -170,6 +178,7 @@ function Branch({
               name={f.name}
               active={active}
               onPick={onPick}
+              onRename={onRename}
               indent={isRoot ? 0 : indent + 14}
             />
           ))}
@@ -184,6 +193,7 @@ function FileRow({
   name,
   active,
   onPick,
+  onRename,
   indent = 0,
   showDir = false,
 }: {
@@ -191,34 +201,49 @@ function FileRow({
   name: string;
   active: string;
   onPick: (path: string) => void;
+  onRename?: (path: string) => void;
   indent?: number;
   /** Search results are flat, so the name alone does not say which file it is. */
   showDir?: boolean;
 }) {
+  const { t } = useT();
   const isActive = path === active;
   const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
   return (
-    <button
-      type="button"
-      onClick={() => onPick(path)}
-      style={{ paddingLeft: indent + 8 }}
-      className={`flex w-full items-center gap-2 rounded-md py-2.5 pr-2 text-left ${
-        isActive ? "bg-indigo-50 text-indigo-700" : "hover:bg-neutral-50"
-      }`}
-    >
-      <FileText size={15} className={`shrink-0 ${isActive ? "" : "text-neutral-400"}`} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-mono text-sm">{name}</span>
-        {showDir && dir && (
-          <span
-            className={`block truncate text-xs ${isActive ? "text-indigo-400" : "text-neutral-400"}`}
-          >
-            {dir}/
-          </span>
-        )}
-      </span>
-      {isActive && <Check size={16} className="shrink-0 text-indigo-600" />}
-    </button>
+    <div className="flex items-center">
+      <button
+        type="button"
+        onClick={() => onPick(path)}
+        style={{ paddingLeft: indent + 8 }}
+        className={`flex min-w-0 flex-1 items-center gap-2 rounded-md py-2.5 pr-2 text-left ${
+          isActive ? "bg-indigo-50 text-indigo-700" : "hover:bg-neutral-50"
+        }`}
+      >
+        <FileText size={15} className={`shrink-0 ${isActive ? "" : "text-neutral-400"}`} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-mono text-sm">{name}</span>
+          {showDir && dir && (
+            <span
+              className={`block truncate text-xs ${isActive ? "text-indigo-400" : "text-neutral-400"}`}
+            >
+              {dir}/
+            </span>
+          )}
+        </span>
+        {isActive && <Check size={16} className="shrink-0 text-indigo-600" />}
+      </button>
+      {isActive && onRename && (
+        <button
+          type="button"
+          onClick={() => onRename(path)}
+          aria-label={t("mobile.renameFile")}
+          title={t("mobile.renameFile")}
+          className="ml-1 shrink-0 rounded-md p-2.5 text-indigo-600 hover:bg-indigo-50"
+        >
+          <Pencil size={16} />
+        </button>
+      )}
+    </div>
   );
 }
 

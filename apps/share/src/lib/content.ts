@@ -1,7 +1,11 @@
 import { createHmac } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { dslFromMarkdown, isMarkdownDiagram } from "@swimlane-cloud/diagram-converter/markdown-doc";
+import {
+  dslFromMarkdown,
+  isMarkdownDiagram,
+  splitFrontmatter,
+} from "@swimlane-cloud/diagram-converter/markdown-doc";
 
 /**
  * Content registry. Diagrams are kai-swimlane files dropped into
@@ -118,6 +122,25 @@ export function readDiagram(relPath: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * What a printed image should say about the file: its shared path and, for
+ * a `.md`, the frontmatter — which `readDiagram` strips along with the prose.
+ */
+export function readDocumentInfo(relPath: string): {
+  path: string;
+  meta: Record<string, string>;
+} {
+  let meta: Record<string, string> = {};
+  if (relPath.endsWith(".md")) {
+    try {
+      meta = splitFrontmatter(fs.readFileSync(path.join(CONTENT_DIR, relPath), "utf8")).meta;
+    } catch {
+      meta = {};
+    }
+  }
+  return { path: relPath, meta };
 }
 
 export function folderName(folderRel: string): string {

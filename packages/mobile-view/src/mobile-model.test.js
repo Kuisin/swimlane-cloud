@@ -13,7 +13,7 @@ if (ok?) is (yes) than
 [b: Approve]
 else
 [a: Reject]
-endif
+end-if
 [a: Done]
 @end
 `;
@@ -57,7 +57,7 @@ if (cancel?) is (yes) than
 merge: fin;
 else
 [a: Continue]
-endif
+end-if
 [a: Finish]
 id: fin;
 @end
@@ -188,7 +188,7 @@ if (cancel?) is (yes) than
 merge;
 else
 [a: Continue]
-endif
+end-if
 [merge: done]
 [a: End]
 @end

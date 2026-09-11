@@ -34,10 +34,9 @@ end-if
 - `/line/` is the flow itself: steps in `[role: text]` form, plus `if`,
   `fork`, `section` and a handful of other flow keywords.
 
-The editor writes `end-if`, `end-fork` and `else-if`. Existing files that still
-use the older `endif`, `endfork` or `elseif` spellings keep reading and
-working exactly as before — only newly formatted or saved files switch to
-the new spelling.
+Closers are spelled `end-if`, `end-fork`, `end-section` and `end-branch`, and
+an extra case is `else-if`. The older `endif`, `endfork` and `elseif` are no
+longer read: the editor reports the line and the spelling to use instead.
 
 ## The full syntax reference is one click away
 
@@ -204,6 +203,7 @@ Each goes on its own line under the step it belongs to.
 | `remark-desc:` | A second paragraph appended to `remark:`                                               | `remark-desc: Manager signs off.;` |
 | `skip;`        | Leaves this step out of the numbering                                                  | `skip;`                            |
 | `level:`       | How deep the step sits in the numbering, `1`–`9`                                       | `level: 2;`                        |
+| `link:`        | Opens another flow: a path relative to this file, or `/` from the diagrams root        | `link: ../ops/pick.md;`            |
 | `props:`       | The side-note chips on this step                                                       | `props: RQ, LG;`                   |
 | `arrow:`       | The line style leaving this step: `solid`, `dashed`, `dotted`, `long-dash`, `dash-dot` | `arrow: dashed;`                   |
 
@@ -291,12 +291,11 @@ id: closed;
 @end
 ```
 
-### Older spellings
+### Spellings no longer read
 
-These still read, and are rewritten the next time the file is formatted or
-saved: `endif` → `end-if`, `endfork` → `end-fork`, `elseif` → `else-if`,
-`section-start (n)` → `section (n)`, `start-point` → `section`,
-`end-point` → `end-section`, `***` comments → `//` comments.
+Each of these is an error that names the replacement: `endif` → `end-if`,
+`endfork` → `end-fork`, `elseif` → `else-if`, `section-start (n)` → `section (n)`,
+`start-point` → `section`, `end-point` → `end-section`.
 
 ### What version 2 changes
 
@@ -329,7 +328,8 @@ unless this table says otherwise.
 | Add, edit, delete, reorder a step                                                                                                                                       | Editable                          | Up/down and **Move to…** stay inside the enclosing branch; drag can cross branches, and a drag that would break the file is refused |
 | `<block>` on a step                                                                                                                                                     | Editable                          | With a visual picker                                                                                                                |
 | `id:`, `label:`, `desc:`, `remark:`, `props:`, `arrow:`                                                                                                                 | Editable                          | Under **More options**                                                                                                              |
-| `level:`                                                                                                                                                                | Partly                            | The dropdown offers 1–4; 5–9 are read and kept, but choosing from the dropdown lowers them                                          |
+| `level:`                                                                                                                                                                | Yes                               | Numbering level, 1–9                                                                                                                |
+| `link:`                                                                                                                                                                 | Yes                               | "Link to another flow" picks a file; the ↗ mark on the block opens it from the preview                                              |
 | `skip;`                                                                                                                                                                 | **Text mode only**                | Kept on save                                                                                                                        |
 | `remark-desc:`                                                                                                                                                          | **Text mode only**, and rewritten | Saving folds it into a single `remark:` — the text survives, the two-line form doesn't                                              |
 | The empty `:` row                                                                                                                                                       | Visible, deletable                | Can't be created or edited in Visual mode                                                                                           |

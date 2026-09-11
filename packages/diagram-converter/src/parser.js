@@ -579,7 +579,8 @@ export function parseDSL(src, parseOptions = {}) {
    *                                   not connected; merges to main after close)
    * `stack` tracks open branch frames so nested blocks get the right depth and
    * so each closer (`end-if`/`end-fork`) matches the frame type it closes.
-   * The old spellings `endif`/`endfork`/`elseif` are still accepted on read.
+   * The older spellings (`endif`, `endfork`, `elseif`, `start-point`, `end-point`,
+   * `section-start`) are refused with an error that names the spelling to use.
    */
   const rows = [];
   const stack = [];
@@ -665,6 +666,22 @@ export function parseDSL(src, parseOptions = {}) {
     const u = unescapeDslLine(trimmed);
     if (!u) continue;
 
+    // Spellings this grammar no longer has. Refused by name rather than
+    // falling through to "unrecognized line", so the fix is in the message.
+    const legacy = u.match(/^(endif|endfork|elseif|section-start|start-point|end-point)\b/i);
+    if (legacy) {
+      const now = {
+        endif: "end-if",
+        endfork: "end-fork",
+        elseif: "else-if (…) than",
+        "section-start": "section (…)",
+        "start-point": "section",
+        "end-point": "end-section",
+      }[legacy[1].toLowerCase()];
+      errors.push({ line, text, msg: `"${legacy[1]}" is no longer read; write ${now}` });
+      continue;
+    }
+
     let m = u.match(/^if\s*\((.+?)\)\s*is\s*\((.+?)\)\s*than(?:\s+#([A-Za-z]+))?$/i);
     if (m) {
       checkColorToken(m[3], line, text);
@@ -685,7 +702,7 @@ export function parseDSL(src, parseOptions = {}) {
       );
       continue;
     }
-    m = u.match(/^else-?if\s*\((.+?)\)\s*than(?:\s+#([A-Za-z]+))?$/i);
+    m = u.match(/^else-if\s*\((.+?)\)\s*than(?:\s+#([A-Za-z]+))?$/i);
     if (m) {
       checkColorToken(m[2], line, text);
       const top = stack[stack.length - 1];
@@ -727,7 +744,7 @@ export function parseDSL(src, parseOptions = {}) {
       );
       continue;
     }
-    if (/^end-?if$/i.test(u)) {
+    if (/^end-if$/i.test(u)) {
       const top = stack[stack.length - 1];
       if (!top || top.type !== "if") {
         errors.push({ line, text, msg: "end-if without if" });
@@ -781,7 +798,7 @@ export function parseDSL(src, parseOptions = {}) {
       );
       continue;
     }
-    if (/^end-?fork$/i.test(u)) {
+    if (/^end-fork$/i.test(u)) {
       const top = stack[stack.length - 1];
       if (!top || top.type !== "fork") {
         errors.push({ line, text, msg: "end-fork without fork" });
@@ -818,8 +835,8 @@ export function parseDSL(src, parseOptions = {}) {
       );
     };
 
-    // Visual box: section (name) / section / legacy section-start / start-point.
-    m = u.match(/^(?:section|section-start)\s*\((.+?)\)(?:\s+#([A-Za-z]+))?$/i);
+    // Visual box: section (name) / section.
+    m = u.match(/^section\s*\((.+?)\)(?:\s+#([A-Za-z]+))?$/i);
     if (m) {
       openGroup("section", m[1].trim(), m[2]);
       continue;
@@ -827,10 +844,6 @@ export function parseDSL(src, parseOptions = {}) {
     m = u.match(/^section(?:\s+#([A-Za-z]+))?$/i);
     if (m) {
       openGroup("section", "Section", m[1]);
-      continue;
-    }
-    if (/^start-point$/i.test(u)) {
-      openGroup("section", "Section", null);
       continue;
     }
 
@@ -846,7 +859,7 @@ export function parseDSL(src, parseOptions = {}) {
       continue;
     }
 
-    if (/^end-section$/i.test(u) || /^end-point$/i.test(u) || /^end-branch$/i.test(u)) {
+    if (/^end-section$/i.test(u) || /^end-branch$/i.test(u)) {
       const top = groupStack.pop();
       if (!top) {
         errors.push({ line, text, msg: "end-section without section" });
@@ -993,6 +1006,21 @@ export function parseDSL(src, parseOptions = {}) {
       }
       const level = Number(m[1]);
       if (level > 1) rows[lastRealStepIndex].level = level;
+      continue;
+    }
+    /** `link: <path>;` — this step opens another flow. Relative to this file, or `/` from the root. */
+    if (/^link:\s*/i.test(u)) {
+      if (lastRealStepIndex >= 0) appendLineToRow(lastRealStepIndex, line);
+      m = u.match(/^link:\s*(\S+?)\s*;\s*$/i);
+      if (!m) {
+        errors.push({ line, text, msg: "link must be written as link: <path>;" });
+        continue;
+      }
+      if (lastRealStepIndex < 0) {
+        errors.push({ line, text, msg: "link has no preceding step" });
+        continue;
+      }
+      rows[lastRealStepIndex].link = m[1];
       continue;
     }
     if (/^props:\s*/i.test(u)) {

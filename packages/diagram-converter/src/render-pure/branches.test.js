@@ -66,10 +66,10 @@ describe("a case that opens with a nested fork or if", () => {
     [ops: a]
   and
     [sales: b]
-  endfork
+  end-fork
 else
   [ops: c]
-endif`),
+end-if`),
     );
     const [split] = circles(svg)
       .filter((c) => c.r === FORK_GATEWAY_RADIUS)
@@ -88,10 +88,10 @@ endif`),
     [ops: a]
   else
     [ops: b]
-  endif
+  end-if
 else
   [ops: c]
-endif`),
+end-if`),
     );
     const [, nested] = diamonds(svg).sort((a, b) => a[0][1] - b[0][1]);
     const topX = nested[0][0];
@@ -110,10 +110,10 @@ endif`),
     [ops: a]
   and
     [sales: b]
-  endfork
+  end-fork
 else
   [ops: c]
-endif`),
+end-if`),
     );
     const [split] = circles(svg)
       .filter((c) => c.r === FORK_GATEWAY_RADIUS)
@@ -129,7 +129,7 @@ describe("a blank case", () => {
       doc(`if (q?) is (yes) than
   [ops: work]
 else
-endif`),
+end-if`),
     );
     const [diamond] = diamonds(svg);
     const bottom = diamond.reduce((a, p) => (p[1] > a[1] ? p : a));
@@ -146,11 +146,41 @@ endif`),
   it("does not stack on a second blank case", () => {
     const svg = render(
       doc(`if (q?) is (yes) than
-elseif (no) than
-endif`),
+else-if (no) than
+end-if`),
     );
     const labels = caseLabels(svg).filter((l) => l.text === "yes" || l.text === "no");
     expect(labels).toHaveLength(2);
     expect(labels[0].cx).not.toBe(labels[1].cx);
+  });
+});
+
+describe("a case that holds only [loop]", () => {
+  const svg = render(
+    doc(`[ops: confirm]
+if (approved?) is (yes) than
+  fork
+    [sales: a]
+  and
+    [ops: b]
+  end-fork
+else-if (no) than
+  [loop]
+end-if`),
+  );
+
+  it("turns back just under its label instead of running to the bottom", () => {
+    const no = caseLabels(svg).find((l) => l.text === "no");
+    const rail = polylines(svg).find((pts) => pts.length === 4 && pts[3][0] === no.cx);
+    expect(rail).toBeDefined();
+    const [diamond] = diamonds(svg);
+    const diamondBottom = Math.max(...diamond.map((p) => p[1]));
+    // Ends within a label's height or two of the decision — not at the join.
+    expect(rail[3][1] - diamondBottom).toBeLessThan(80);
+    // The loop-back leaves from exactly where the rail stopped.
+    const loop = polylines(svg).find(
+      (pts) => pts.length >= 4 && pts[0][0] === rail[3][0] && pts[0][1] === rail[3][1],
+    );
+    expect(loop).toBeDefined();
   });
 });

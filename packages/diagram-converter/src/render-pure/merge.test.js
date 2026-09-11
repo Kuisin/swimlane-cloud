@@ -22,7 +22,7 @@ if (キャンセル?) is (あり) than #red
 merge: done;
 else
 [b: 通常処理]
-endif
+end-if
 [a: 取引完了]
 id: done;
 label: 完了;
@@ -57,7 +57,7 @@ label: A;
 if (x) is (y) than
 [a: step]
 merge: nowhere;
-endif
+end-if
 @end`);
     expect(model.errors.map((e) => e.msg)).toContain('merge: no step with id "nowhere"');
   });
@@ -85,7 +85,7 @@ label: A;
 if (x) is (y) than
 [a: step]
 merge legacy;
-endif
+end-if
 @end`);
     expect(model.errors.map((e) => e.msg)).toContain("use merge: <id>; instead of merge <id>;");
   });

@@ -18,8 +18,16 @@ declare module "@swimlane-cloud/diagram-converter" {
       resolveAsset?: (path: string) => string | null;
       /** Render options the file inherits; its own `/option/` wins. */
       diagramDefaults?: object;
+      /** Drawn top-right for a printed image: the file's path and metadata. */
+      documentInfo?: { path?: string; meta?: Record<string, string> | null } | null;
+      /** A linked step's ↗ becomes an <a href> when this names a URL for it. */
+      linkHref?: ((link: string, row: unknown) => string | null) | null;
     },
   ): TextToSvgResult;
+  /** The repository id a step's link points at from `fromFile`; null when it leaves the repo. */
+  export function resolveLinkPath(link: string, fromFile: string): string | null;
+  /** The shortest relative link from `fromFile` to `targetFile`. */
+  export function relativeLinkPath(targetFile: string, fromFile: string): string;
   export function renderPartsPreviewHtml(
     code: string,
     theme: unknown,

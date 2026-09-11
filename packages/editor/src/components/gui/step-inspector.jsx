@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Eye, ListOrdered, Trash2 } from "lucide-react";
-import { ARROW_LINE_TYPES } from "@swimlane-cloud/diagram-converter";
+import {
+  ARROW_LINE_TYPES,
+  relativeLinkPath,
+  resolveLinkPath,
+} from "@swimlane-cloud/diagram-converter";
 import { useT } from "../../i18n.jsx";
 import { usePersistentState } from "../../hooks/use-persistent-state.js";
 import { PartsPreviewPopup } from "./parts-preview-popup.jsx";
@@ -36,6 +40,8 @@ export function StepInspector({
   onOpenMove,
   onDelete,
   readOnly,
+  linkTargets,
+  currentFileId,
 }) {
   const { t } = useT();
   const [preview, setPreview] = useState(null); // "block" | "prop" | null
@@ -253,6 +259,31 @@ export function StepInspector({
             disabled={fieldDisabled}
             onChange={(e) => set("mergeId")(e.target.value || "")}
           />
+        </label>
+
+        <label className="sw-field">
+          <span className="sw-field-label">{t("step.link")}</span>
+          <select
+            className="sw-input"
+            value={row.link || ""}
+            disabled={fieldDisabled}
+            onChange={(e) => {
+              const id = e.target.value;
+              set("link")(id ? relativeLinkPath(id, currentFileId) || undefined : undefined);
+            }}
+          >
+            <option value="">{t("step.linkNone")}</option>
+            {(linkTargets || []).map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+          <p className="sw-field-hint">{t("step.linkHint")}</p>
+          {row.link &&
+            !(linkTargets || []).some((f) => f.id === resolveLinkPath(row.link, currentFileId)) && (
+              <p className="sw-field-hint">{t("step.linkMissing", { path: row.link })}</p>
+            )}
         </label>
 
         <label className="sw-field">

@@ -215,8 +215,8 @@ else
     [role_program: 伝票登録処理へ進む] <block_approve>
     label: アップロード完了;
     remark: G_FLG_ERR が未設定のまま次工程へ;
-  endif
-endif
+  end-if
+end-if
 end-section
 section (会計伝票登録) #purple
   [role_program: アップロード明細を伝票キー順にソートする] <block_neutral>
@@ -277,9 +277,9 @@ else
       label: 成功カウント;
       desc: 文書履歴登録が成功した伝票を成功件数として計上する;
       props: AUDIT;
-    endif
-  endif
-endif
+    end-if
+  end-if
+end-if
   [role_program: 次の伝票へ進む] <block_neutral>
   id: next_document;
   label: 次伝票へ;
@@ -309,7 +309,7 @@ else
   id: finish_success;
   label: 正常終了;
   desc: 会計伝票登録と履歴登録が完了し、一覧出力まで終了した状態;
-endif
+end-if
 end-section
 
 @end

@@ -29,9 +29,9 @@ end-if
 - `/title/`、`/role/`、`/block/`、`/prop/` で図のタイトル、関わる人、共有の見た目のスタイルを設定します。
 - `/line/` がフローそのものです。`[role: text]` 形式のステップに加え、`if`・`fork`・`section` などいくつかのフロー用キーワードがあります。
 
-エディタが書き出すのは `end-if`・`end-fork`・`else-if` です。既存のファイルで使われている古い表記
-`endif`・`endfork`・`elseif` も引き続き問題なく読み込め、動作します——新しい表記に変わるのは
-フォーマットまたは保存し直したファイルだけです。
+閉じ記号は `end-if`・`end-fork`・`end-section`・`end-branch`、追加の分岐は `else-if` と書きます。
+古い表記の `endif`・`endfork`・`elseif` は読み込まれません。エディタが該当行と、代わりに使う表記を
+報告します。
 
 ## 完全な構文リファレンスはワンクリック
 
@@ -169,6 +169,7 @@ props: RQ;
 | `remark-desc:` | `remark:` に段落を 1 つ追加する                                                    | `remark-desc: 上長が承認する。;` |
 | `skip;`        | このステップを採番から外す                                                         | `skip;`                          |
 | `level:`       | 採番上の深さ。`1`〜`9`                                                             | `level: 2;`                      |
+| `link:`        | 別のフローを開く。このファイルからの相対パス、または `/` で図のルートから          | `link: ../ops/pick.md;`          |
 | `props:`       | このステップに付ける付箋                                                           | `props: RQ, LG;`                 |
 | `arrow:`       | このステップから出る線の種類：`solid`・`dashed`・`dotted`・`long-dash`・`dash-dot` | `arrow: dashed;`                 |
 
@@ -253,9 +254,9 @@ id: closed;
 @end
 ```
 
-### 古い表記
+### 読み込まれなくなった表記
 
-以下も引き続き読み込めますが、フォーマットまたは保存のときに書き換わります。`endif` → `end-if`、`endfork` → `end-fork`、`elseif` → `else-if`、`section-start (n)` → `section (n)`、`start-point` → `section`、`end-point` → `end-section`、`***` のコメント → `//` のコメント。
+以下はそれぞれエラーになり、代わりの表記が示されます。`endif` → `end-if`、`endfork` → `end-fork`、`elseif` → `else-if`、`section-start (n)` → `section (n)`、`start-point` → `section`、`end-point` → `end-section`。
 
 ### バージョン 2 で変わるところ
 
@@ -277,7 +278,8 @@ id: closed;
 | ステップの追加・編集・削除・並べ替え                                                                                                                                    | 編集できる                             | 上下移動と**移動先**は同じ分岐の中に限られる。ドラッグでは分岐をまたげるが、ファイルが壊れる移動は拒否される |
 | ステップの `<block>`                                                                                                                                                    | 編集できる                             | 見た目で選べる                                                                                               |
 | `id:`・`label:`・`desc:`・`remark:`・`props:`・`arrow:`                                                                                                                 | 編集できる                             | **詳細オプション**の中                                                                                       |
-| `level:`                                                                                                                                                                | 一部のみ                               | 選択肢は 1〜4。5〜9 も読み込まれ保持されるが、選び直すと下がってしまう                                       |
+| `level:`                                                                                                                                                                | 対応                                   | 採番の階層 1〜9                                                                                              |
+| `link:`                                                                                                                                                                 | 対応                                   | 「別のフローへリンク」でファイルを選ぶ。ブロックの ↗ をプレビューでクリックすると開く                        |
 | `skip;`                                                                                                                                                                 | **テキストモードのみ**                 | 保存しても保持される                                                                                         |
 | `remark-desc:`                                                                                                                                                          | **テキストモードのみ**、かつ書き換わる | 保存すると `remark:` 1 つにまとめられる。文章は残るが 2 行の形は残らない                                     |
 | 空の `:` 行                                                                                                                                                             | 表示・削除のみ                         | ビジュアルモードでは作成も編集もできない                                                                     |

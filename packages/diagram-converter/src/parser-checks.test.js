@@ -58,39 +58,57 @@ max-chars: 12;
 props: p1;
 if (承認) is (yes) than #green
   [a: 登録]
-endif
+end-if
 @end`;
     expect(parseDSL(src).errors).toEqual([]);
   });
 });
 
-describe("parser — end-if/end-fork/else-if closer spellings", () => {
-  const stripLines = (rows) => rows.map(({ dslLines, ...rest }) => rest);
+describe("parser — the older closer spellings are refused by name", () => {
+  const doc = (body) => `@kai-swimlane
+/role/
+<a>
+label: A;
+/line/
+${body}
+@end`;
 
-  it("parses old and new closer spellings to identical rows", () => {
-    const oldSrc = DOC(
-      `if (確認) is (OK) than\n  [a: 手順]\nelseif (no) than\n  [a: 別手順]\nendif\nfork\n  [a: 並行1]\nand\n  [a: 並行2]\nendfork`,
-    );
-    const newSrc = DOC(
-      `if (確認) is (OK) than\n  [a: 手順]\nelse-if (no) than\n  [a: 別手順]\nend-if\nfork\n  [a: 並行1]\nand\n  [a: 並行2]\nend-fork`,
-    );
-    const oldModel = parseDSL(oldSrc);
-    const newModel = parseDSL(newSrc);
-    expect(oldModel.errors).toEqual([]);
-    expect(newModel.errors).toEqual([]);
-    expect(stripLines(oldModel.rows)).toEqual(stripLines(newModel.rows));
+  it("names the spelling to use for each old one", () => {
+    const cases = [
+      [`if (x) is (y) than\n[a: 1]\nendif`, '"endif" is no longer read; write end-if'],
+      [`fork\n[a: 1]\nendfork`, '"endfork" is no longer read; write end-fork'],
+      [
+        `if (x) is (y) than\n[a: 1]\nelseif (z) than\n[a: 2]\nend-if`,
+        '"elseif" is no longer read; write else-if (…) than',
+      ],
+      [`start-point\n[a: 1]\nend-point`, '"start-point" is no longer read; write section'],
+      [
+        `section-start (S)\n[a: 1]\nend-section`,
+        '"section-start" is no longer read; write section (…)',
+      ],
+    ];
+    for (const [body, msg] of cases) {
+      expect(
+        parseDSL(doc(body)).errors.map((e) => e.msg),
+        body,
+      ).toContain(msg);
+    }
   });
 
   it("errors on end-if without an open if, mentioning end-if", () => {
-    expect(msgs(DOC(`end-if`))).toContain("end-if without if");
+    expect(parseDSL(doc(`[a: 1]\nend-if`)).errors.map((e) => e.msg)).toContain("end-if without if");
   });
 
   it("errors on end-fork without an open fork, mentioning end-fork", () => {
-    expect(msgs(DOC(`end-fork`))).toContain("end-fork without fork");
+    expect(parseDSL(doc(`[a: 1]\nend-fork`)).errors.map((e) => e.msg)).toContain(
+      "end-fork without fork",
+    );
   });
 
   it("errors on else-if without an open if, mentioning else-if", () => {
-    expect(msgs(DOC(`else-if (x) than\n  [a: y]`))).toContain("else-if without if");
+    expect(parseDSL(doc(`[a: 1]\nelse-if (z) than`)).errors.map((e) => e.msg)).toContain(
+      "else-if without if",
+    );
   });
 });
 
@@ -174,10 +192,10 @@ describe("parser validation — branch colors", () => {
     }
   });
 
-  it("errors on unknown #color tokens on if/elseif/fork/and/section", () => {
+  it("errors on unknown #color tokens on if/else-if/fork/and/section", () => {
     const m = msgs(
       DOC(
-        `if (確認) is (OK) than #salmon\n  [a: 手順]\nelseif (NG) than #magenta\n  [a: 差戻]\nendif\nfork #cyan\n  [a: p1]\nand #indigo\n  [a: p2]\nendfork\nsection (S) #ivory\n  [a: s1]\nend-section`,
+        `if (確認) is (OK) than #salmon\n  [a: 手順]\nelse-if (NG) than #magenta\n  [a: 差戻]\nend-if\nfork #cyan\n  [a: p1]\nand #indigo\n  [a: p2]\nend-fork\nsection (S) #ivory\n  [a: s1]\nend-section`,
       ),
     );
     for (const bad of ["#salmon", "#magenta", "#cyan", "#indigo", "#ivory"]) {
@@ -188,7 +206,7 @@ describe("parser validation — branch colors", () => {
   it("accepts all palette colors", () => {
     const m = msgs(
       DOC(
-        `if (c) is (y) than #blue\n  [a: 1]\nelseif (n) than #green\n  [a: 2]\nendif\nfork #purple\n  [a: 3]\nand #gray\n  [a: 4]\nendfork\nsection (S) #orange\n  [a: 5]\nend-section`,
+        `if (c) is (y) than #blue\n  [a: 1]\nelse-if (n) than #green\n  [a: 2]\nend-if\nfork #purple\n  [a: 3]\nand #gray\n  [a: 4]\nend-fork\nsection (S) #orange\n  [a: 5]\nend-section`,
       ),
     );
     expect(m.filter((x) => x.includes("unknown color"))).toEqual([]);

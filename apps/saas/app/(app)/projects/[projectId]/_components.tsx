@@ -1162,6 +1162,7 @@ export function MobileView({
   files,
   editable = false,
   onSave,
+  onRename,
   path: pathProp,
   onPath,
   onPathNotFound,
@@ -1173,6 +1174,8 @@ export function MobileView({
   files: Files;
   editable?: boolean;
   onSave?: (path: string, dsl: string) => void;
+  /** Rename `from` to `to` (same folder); rejects with a message on failure. */
+  onRename?: (from: string, to: string) => Promise<void>;
   path?: string;
   onPath?: (p: string) => void;
   /** Fired when `path` doesn't match any loaded file, just before falling
@@ -1203,6 +1206,11 @@ export function MobileView({
   const editStep = editStepProp !== undefined ? editStepProp : stepState;
   const setEditStep = (i: number | null) => (onEditStep ? onEditStep(i) : setStepState(i));
   const [showFiles, setShowFiles] = useState(false);
+  // The file being renamed, and the name typed for it so far.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameTo, setRenameTo] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const [showAddBlock, setShowAddBlock] = useState(false);
   // What non-step row the edit sheet is open on. `row` is a raw `model.rows`
@@ -1521,7 +1529,71 @@ export function MobileView({
               setPath(p);
               setShowFiles(false);
             }}
+            onRename={
+              editable && onRename
+                ? (p) => {
+                    setRenaming(p);
+                    setRenameTo(p.split("/").pop() ?? p);
+                    setRenameError(null);
+                  }
+                : undefined
+            }
           />
+        </Modal>
+      )}
+      {renaming != null && onRename && (
+        <Modal
+          title={t("mobile.renameFile")}
+          z="z-[60]"
+          onClose={() => setRenaming(null)}
+          footer={
+            <ModalFooter
+              onCancel={() => setRenaming(null)}
+              confirmLabel={t("mobile.renameConfirm")}
+              busy={renameBusy}
+              disabled={!renameTo.trim()}
+              onConfirm={() => {
+                const from = renaming;
+                const name = renameTo.trim().replace(/^\/+|\/+$/g, "");
+                const dir = from.includes("/") ? from.slice(0, from.lastIndexOf("/")) : "";
+                const to = dir ? `${dir}/${name}` : name;
+                if (!name) return;
+                if (name.includes("/")) {
+                  setRenameError(t("mobile.renameNoSlash"));
+                  return;
+                }
+                if (to === from) {
+                  setRenaming(null);
+                  return;
+                }
+                if (files[to] !== undefined) {
+                  setRenameError(t("mobile.renameExists"));
+                  return;
+                }
+                setRenameBusy(true);
+                setRenameError(null);
+                onRename(from, to)
+                  .then(() => {
+                    setRenaming(null);
+                    setShowFiles(false);
+                    setPath(to);
+                  })
+                  .catch((e) => setRenameError(describeError(e, t)))
+                  .finally(() => setRenameBusy(false));
+              }}
+            />
+          }
+        >
+          <label className="block text-sm text-neutral-600">
+            {t("mobile.renameFileName")}
+            <input
+              autoFocus
+              value={renameTo}
+              onChange={(e) => setRenameTo(e.target.value)}
+              className={`${FIELD_CLASS} mt-1 font-mono`}
+            />
+          </label>
+          {renameError && <p className="mt-2 text-sm text-red-600">{renameError}</p>}
         </Modal>
       )}
     </div>

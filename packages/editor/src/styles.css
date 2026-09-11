@@ -259,8 +259,12 @@
   color: var(--sw-danger);
   background: var(--sw-bg-sunken);
 }
+/* Hover reveals the rename/delete actions; a touch screen has no hover, so
+   the selected and the open file always show theirs. */
 .sw-tree-folder:hover .sw-tree-item-del,
-.sw-tree-file:hover .sw-tree-item-del {
+.sw-tree-file:hover .sw-tree-item-del,
+.sw-tree-selected .sw-tree-item-del,
+.sw-tree-active .sw-tree-item-del {
   display: inline-flex;
   align-items: center;
 }
@@ -1089,6 +1093,10 @@
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--sw-border);
+}
+/* The theme scope around the dialog: variables only, no box of its own. */
+.sw-dialog-root {
+  display: contents;
 }
 .sw-dialog {
   max-width: 420px;

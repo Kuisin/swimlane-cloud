@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { resolveLinkPath } from "@swimlane-cloud/diagram-converter";
 import { extractTitle, render, versionDiagramSettings } from "@/lib/render";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { ShareClient, type SharedFile } from "./share-client";
@@ -40,6 +41,15 @@ async function loadPublic(slug: string): Promise<PublicVersion | null> {
   )
     .slice()
     .sort((a, b) => a.sort_order - b.sort_order || a.filepath.localeCompare(b.filepath));
+  const paths = new Set(rows.map((f) => f.filepath));
+  /** A step's link becomes a real link when it points at a file in this version. */
+  const extrasFor = (filepath: string) => ({
+    documentInfo: { path: filepath },
+    linkHref: (link: string) => {
+      const target = resolveLinkPath(link, filepath);
+      return target && paths.has(target) ? `?file=${encodeURIComponent(target)}` : null;
+    },
+  });
   return {
     name: data.name as string,
     note: (data.note as string | null) ?? null,
@@ -47,7 +57,7 @@ async function loadPublic(slug: string): Promise<PublicVersion | null> {
     files: rows.map((f) => ({
       path: f.filepath,
       title: extractTitle(f.dsl_text),
-      svg: render(f.dsl_text, "basic", diagramSettings).svg,
+      svg: render(f.dsl_text, "basic", diagramSettings, extrasFor(f.filepath)).svg,
       dsl: shareMode === "svg_and_dsl" ? f.dsl_text : null,
     })),
   };

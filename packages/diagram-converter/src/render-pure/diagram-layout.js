@@ -191,6 +191,12 @@ export const DIAGRAM_LAYOUT = {
   // Page description typography
   pageDescLineHeight: 16,
 
+  // Document info panel (path + metadata, top-right, for printed images)
+  infoFontSize: 10,
+  infoLineH: 13,
+  infoMaxCols: 44,
+  infoMaxLines: 8,
+
   // Text width estimation (lane header sizing)
   estimateTextWidthBase: 28,
   estimateTextWidthHalfWidth: 8,
