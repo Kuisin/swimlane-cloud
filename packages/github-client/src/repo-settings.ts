@@ -16,8 +16,30 @@
  */
 
 import { INTEGRATION_BRANCH, PROD_BRANCH } from "./branch-model.ts";
+import { DEFAULT_METADATA_SCHEMA, parseMetadataSchema } from "./metadata-schema.ts";
+import type { MetadataSchema } from "./metadata-schema.ts";
 
 export { REPO_SETTINGS_PATH } from "./repo-paths.ts";
+
+// The metadata schema is one more section of this file, so it is reachable from
+// here as well as from its own module — callers should not have to know which
+// of the two it lives in.
+export {
+  DEFAULT_METADATA_SCHEMA,
+  METADATA_FIELD_TYPES,
+  METADATA_PROBLEM_CODES,
+  metadataDefaults,
+  parseMetadataSchema,
+  validateMetadata,
+} from "./metadata-schema.ts";
+export type {
+  MetadataField,
+  MetadataFieldType,
+  MetadataProblem,
+  MetadataProblemCode,
+  MetadataSchema,
+  MetadataValue,
+} from "./metadata-schema.ts";
 
 export const TEMPLATE_SECTIONS = ["page", "option", "role", "block", "prop"] as const;
 export type TemplateSection = (typeof TEMPLATE_SECTIONS)[number];
@@ -72,6 +94,12 @@ export interface SwimlaneSettings {
    * policy alone, so an older file changes nothing.
    */
   templates: Partial<Record<TemplateSection, TemplateMode>>;
+  /**
+   * The metadata fields a diagram in this repository should carry. Declaration
+   * only: a document with extra keys is fine, and an empty schema — the
+   * default — leaves every `.md`'s frontmatter exactly as free-form as it was.
+   */
+  metadata: MetadataSchema;
 }
 
 export const DEFAULT_DIAGRAM_SETTINGS: DiagramSettings = {
@@ -97,6 +125,7 @@ export const DEFAULT_SETTINGS: SwimlaneSettings = {
   },
   diagram: DEFAULT_DIAGRAM_SETTINGS,
   templates: {},
+  metadata: DEFAULT_METADATA_SCHEMA,
 };
 
 export function repoSettingsJson(settings: SwimlaneSettings = DEFAULT_SETTINGS): string {
@@ -146,6 +175,7 @@ export function parseRepoSettings(text: string | null): SwimlaneSettings {
     },
     diagram: parseDiagramSettings(obj.diagram),
     templates: parseTemplateModes(obj.templates),
+    metadata: parseMetadataSchema(obj.metadata),
   };
 }
 

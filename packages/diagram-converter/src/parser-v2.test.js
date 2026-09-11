@@ -6,6 +6,43 @@ import { THEMES } from "./themes.js";
 
 const doc = (body) => `@kai-swimlane\n${body}\n@end\n`;
 
+/**
+ * dsl-rule.md's translatable set is closed and `/meta/` is outside it, `tags`
+ * included — so the tokenizer's language-separator marker (a NUL byte) must
+ * never be inserted in a `/meta/` value. It used to be, and since `/meta/`
+ * stores `prop.value` raw rather than running it through `seg()`, the NUL ended
+ * up in `model.meta` and from there in whatever the app wrote next.
+ */
+describe("/meta/ is not a translatable position", () => {
+  const NUL = String.fromCharCode(0);
+  const meta = (value) => parseDSL(doc(`/meta/\ntags: ${value};\n\n/line/\n[a: x]`)).meta.tags;
+
+  it("reads a bar as ordinary content", () => {
+    expect(meta("a | b")).toBe("a | b");
+    expect(meta("a ｜ b")).toBe("a ｜ b");
+    expect(meta("|")).toBe("|");
+  });
+
+  it("still honours an escape, unnecessary though it is there", () => {
+    expect(meta("a \\| b")).toBe("a | b");
+    expect(meta("\\|")).toBe("|");
+  });
+
+  it("never puts the segment marker in the model", () => {
+    for (const value of ["a | b", "a ｜ b", "|", "a \\| b", "a, b"]) {
+      expect(meta(value), value).not.toContain(NUL);
+    }
+  });
+
+  it("leaves a genuinely translatable position splitting as before", () => {
+    const m = parseDSL(doc("@lang ja, en;\n\n/title/\n受注 | Order;\n\n/line/\n[a: x]"), {
+      lang: "en",
+    });
+    expect(m.errors).toEqual([]);
+    expect(m.title).toBe("Order");
+  });
+});
+
 describe("version dispatch", () => {
   it("routes a bare header to the one reader", () => {
     const m = parseDSL("@kai-swimlane\n/title/\nT;\n/line/\n[a: x]\n@end\n");

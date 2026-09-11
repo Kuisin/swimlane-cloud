@@ -186,6 +186,42 @@ describe("serializeDSLv2: meta and i18n catalog passthrough", () => {
     expect(m2.meta).toMatchObject({ owner: "sales-ops", tags: "a, b" });
   });
 
+  /**
+   * dsl-rule.md closes the translatable set and puts `/meta/` outside it,
+   * `tags` included — so a bar there is ordinary content, not a language
+   * separator. The tokenizer used to mark it anyway, which put the internal
+   * segment marker (a NUL byte) into `model.meta`; the next save wrote a
+   * *different* value back out, and an escaped `\|` was corrupted into a NUL
+   * on the very first round trip.
+   */
+  it("treats a bar in /meta/ as content, never as a language separator", () => {
+    const NUL = String.fromCharCode(0);
+    const cases = {
+      "a | b": "a | b",
+      // An escape is always allowed; it is simply unnecessary here, so it
+      // normalises away to the bare bar the section actually writes.
+      "a \\| b": "a | b",
+      // The fullwidth bar is content too, and stays fullwidth.
+      "a ｜ b": "a ｜ b",
+      "|": "|",
+      "\\|": "|",
+    };
+    for (const [written, value] of Object.entries(cases)) {
+      const src = doc(`/meta/\ntags: ${written};\n\n/line/\n[a: x]`);
+      const { m1, m2, once } = assertStableRoundTrip(src);
+      expect(m1.meta.tags, written).toBe(value);
+      expect(m2.meta.tags, written).toBe(value);
+      expect(once.includes(NUL), written).toBe(false);
+      expect(JSON.stringify(m1.meta), written).not.toContain("\\u0000");
+    }
+  });
+
+  it("still splits on a bar where the value really is translatable", () => {
+    const src = doc("@lang ja, en;\n\n/title/\n受注 | Order;\n\n/line/\n[a: x]");
+    const { m2 } = assertStableRoundTrip(src, { lang: "en" });
+    expect(m2.title).toBe("Order");
+  });
+
   it("passes an /i18n/ entry through unchanged even though nothing resolves it yet", () => {
     const src = doc("@lang ja, en;\n\n/i18n/\nquote.remark.en: Store audit log;\n\n/line/\n[a: x]");
     const { m2 } = assertStableRoundTrip(src);
