@@ -363,16 +363,18 @@ function serializeLineRows(rows, languages) {
       } else {
         const lane = row.lane ? `[${row.lane}] ` : "";
         const cond = joinLangs(row.cond, row.cond$langs, languages.length);
-        out.push(indent(controlDepth, `if ${lane}(${cond})${idSuffix}${color}`));
         // A GUI-normalized model already pulled a non-blank firstCase out
-        // into its own row — fold it back into the case() line here either
-        // way, so this works on both a raw parse and an edited/normalized
-        // one (see isExtractedFirstCase).
+        // into its own row — fold it back into the fused is (...) than
+        // clause here either way, so this works on both a raw parse and an
+        // edited/normalized one (see isExtractedFirstCase). The first case
+        // is fused onto the if's own line — there is no bare `if (q)`.
         const extracted = isExtractedFirstCase(rows, i + 1) ? rows[i + 1] : null;
         const firstCase = extracted
           ? joinLangs(extracted.label, extracted.label$langs, languages.length)
           : joinLangs(row.firstCase, row.firstCase$langs, languages.length);
-        out.push(indent(controlDepth, `case (${firstCase})`));
+        out.push(
+          indent(controlDepth, `if ${lane}(${cond}) is (${firstCase}) than${idSuffix}${color}`),
+        );
       }
       prevKind = "branchStart";
       continue;
@@ -391,7 +393,10 @@ function serializeLineRows(rows, languages) {
       const color = serializeBranchColor(row.branchColor);
       const label = joinLangs(row.label, row.label$langs, languages.length);
       out.push(
-        indent(controlDepth, row.parallel ? `and (${label})${color}` : `case (${label})${color}`),
+        indent(
+          controlDepth,
+          row.parallel ? `case (${label})${color}` : `else-if (${label}) than${color}`,
+        ),
       );
       prevKind = "branchCase";
       continue;

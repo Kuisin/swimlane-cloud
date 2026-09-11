@@ -69,10 +69,9 @@ right-title: 備考 | Remarks;
 
 /line/
 phase (検知 | Detection) @detect #gray
-  if [support] (検知経路は？ | Detected by?) @source
-  case (監視アラート | Monitoring alert) #blue
+  if [support] (検知経路は？ | Detected by?) is (監視アラート | Monitoring alert) than @source #blue
     [system: アラートをチケット化 | Open a ticket from the alert] <external> +TICKET
-  case (顧客報告 | Customer report) #orange
+  else-if (顧客報告 | Customer report) than #orange
     [support: 事象を聞き取り | Take the report] +TICKET
       desc: 発生時刻・影響範囲・再現手順;
       desc.en: Time, blast radius and reproduction steps;
@@ -84,28 +83,26 @@ phase (検知 | Detection) @detect #gray
 end-phase
 
 phase (対応 | Response) @respond #red
-  if [support] (重大度は？ | Severity?) @severity
-  case (Sev1) #red
+  if [support] (重大度は？ | Severity?) is (Sev1) than @severity #red
     fork (顧客連絡 | Customer notice) #purple
       [support: ステータスページ更新 | Update the status page]
-    and (暫定対処 | Mitigation) #orange
+    case (暫定対処 | Mitigation) #orange
       [engineer: ロールバック | Roll back] => ./rollback.txt
-    and (経営報告 | Escalation) #gray
+    case (経営報告 | Escalation) #gray
       [exec: 経営会議へ報告 | Report to the executive meeting]
         remark: 30 分以内;
         remark.en: Within 30 minutes;
     end-fork
-  case (Sev2) #orange
+  else-if (Sev2) than #orange
     [engineer: 暫定対処 | Mitigate]
       id: mitigate;
-    if [engineer] (収束した？ | Contained?)
-    case (はい | Yes) #green
+    if [engineer] (収束した？ | Contained?) is (はい | Yes) than #green
       [support: 顧客へ経過連絡 | Send a progress update]
-    case (いいえ | No) #red
+    else-if (いいえ | No) than #red
       [engineer: 原因調査を継続 | Keep investigating] ~>
       loop @mitigate
     end-if
-  case (Sev3+) #green
+  else-if (Sev3+) than #green
     [support: 通常サポートで対応 | Handle as regular support]
     [goto: close]
   end-if
@@ -122,10 +119,9 @@ section (振り返り | Retrospective) @retro #blue
     時系列、根本原因、再発防止策。
     非難しないことを原則とする。
     ```;
-  if [manager] (再発防止策は十分？ | Prevention sufficient?)
-  case (はい | Yes) #green
+  if [manager] (再発防止策は十分？ | Prevention sufficient?) is (はい | Yes) than #green
     [manager: 承認 | Approve]
-  case (いいえ | No) #red
+  else-if (いいえ | No) than #red
     [engineer: 対策を見直す | Revise the actions]
     loop
   end-if

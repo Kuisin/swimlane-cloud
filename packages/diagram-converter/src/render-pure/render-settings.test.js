@@ -21,13 +21,12 @@ ${body}
 const FLOW = `[a: start]
 fork
   [a: one]
-and
+case
   [b: two]
 end-fork
-if (ok?)
-case (yes)
+if (ok?) is (yes) than
   [a: yes]
-case ()
+else-if () than
   [b: no]
 end-if
 [a: end]`;

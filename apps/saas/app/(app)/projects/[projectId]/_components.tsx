@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import {
   textToSvg,
+  textDiffToSvg,
   renderPartsPreviewHtml,
   ARROW_LINE_TYPES,
   arrowLineDasharray,
@@ -565,6 +566,12 @@ type FileStatus = "added" | "removed" | "changed" | "same";
  * against `baseRef` (a parent commit, or a pull request's base) and raw Text.
  * The body of `CommitDetailModal`, factored out so the Push, Request-review,
  * Approve and Publish flows can each drop it into their own modal shell.
+ *
+ * Diff draws the change **on the diagram**: the head revision rendered with
+ * added/changed rows outlined and badged, a reworded caption shown as inline
+ * tracked changes, and a deleted step left in as a struck-through ghost
+ * (`textDiffToSvg`). The side-by-side line diff is still one click away, for
+ * an edit the picture can't show — a `/option/` change, or a `.md`'s prose.
  */
 export function ChangeBrowser({
   projectId,
@@ -584,6 +591,10 @@ export function ChangeBrowser({
   const [error, setError] = useState<string | null>(null);
   const [path, setPath] = useState("");
   const [mode, setMode] = useState<"preview" | "diff" | "text">("preview");
+  /** Within Diff: fall back to the side-by-side line diff. */
+  const [diffAsText, setDiffAsText] = useState(false);
+  /** Within Diff: `.diff-hidden` reverts the overlay to a plain "after" render. */
+  const [showMarks, setShowMarks] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -635,14 +646,33 @@ export function ChangeBrowser({
   const status = statusOf(path);
   const changed = status !== "same";
 
+  // The DSL each side holds — a `.md` keeps its diagram in a fence, and a
+  // `.md` that is only prose holds none at all (`null`).
+  const afterDsl = useMemo(() => dslOf(path, after), [path, after]);
+  const beforeDsl = useMemo(() => dslOf(path, before), [path, before]);
+
   const svg = useMemo(() => {
-    if (mode !== "preview" || !after) return null;
+    if (mode !== "preview" || !afterDsl) return null;
     try {
-      return textToSvg(after, { themeKey: "basic" }).svg;
+      return textToSvg(afterDsl, { themeKey: "basic" }).svg;
     } catch {
       return null;
     }
-  }, [after, mode]);
+  }, [afterDsl, mode]);
+
+  /**
+   * The change drawn on the diagram itself. `null` when neither side holds a
+   * diagram (prose-only `.md`) or the head revision won't parse — the
+   * side-by-side line diff below is then the only thing to show.
+   */
+  const diffSvg = useMemo(() => {
+    if (mode !== "diff" || (!afterDsl && !beforeDsl)) return null;
+    try {
+      return textDiffToSvg(beforeDsl ?? "", afterDsl ?? "", { themeKey: "basic" }).svg;
+    } catch {
+      return null;
+    }
+  }, [beforeDsl, afterDsl, mode]);
 
   const statusBadge =
     status === "added"
@@ -692,10 +722,47 @@ export function ChangeBrowser({
             <Empty>{t("commit.renderError")}</Empty>
           ))}
         {mode === "diff" &&
-          (changed ? (
-            <Diff path={path} before={before} after={after} />
-          ) : (
+          (!changed ? (
             <Empty>{t("commit.noChange")}</Empty>
+          ) : diffSvg && !diffAsText ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 text-xs text-neutral-500">
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={showMarks}
+                    onChange={(e) => setShowMarks(e.target.checked)}
+                  />
+                  {t("commit.diff.marks")}
+                </label>
+                <button
+                  onClick={() => setDiffAsText(true)}
+                  className="ml-auto underline hover:text-neutral-800"
+                >
+                  {t("commit.diff.asText")}
+                </button>
+              </div>
+              <div
+                className={`[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full ${
+                  showMarks ? "" : "diff-hidden"
+                }`}
+                dangerouslySetInnerHTML={{ __html: diffSvg }}
+              />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {diffSvg && (
+                <div className="flex text-xs text-neutral-500">
+                  <button
+                    onClick={() => setDiffAsText(false)}
+                    className="ml-auto underline hover:text-neutral-800"
+                  >
+                    {t("commit.diff.asDiagram")}
+                  </button>
+                </div>
+              )}
+              <Diff path={path} before={before} after={after} />
+            </div>
           ))}
         {mode === "text" && (
           <pre className="overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-3 font-mono text-xs">

@@ -279,8 +279,9 @@ export function GuiMode({
    * `normalizeBranchRows` lifts an `if`'s first case out of the `branchStart`
    * row into a `branchCase` of its own, and the serializer recognises it only
    * by that adjacency. Inserting between the two therefore does not just land
-   * in an odd place — it invents an empty `case ()`, demotes the real first
-   * case into it, and reparses without an error, so the corruption is silent.
+   * in an odd place — it invents a blank `is () than` on the opener, demotes
+   * the real first case into an `else-if`, and reparses without an error, so
+   * the corruption is silent.
    */
   function insertIndexAfter(rows, index) {
     if (index < 0) return rows.length;

@@ -23,9 +23,11 @@ const MIGRATE_LIMIT = 300;
 
 /**
  * POST /api/projects/[projectId]/migrate-dsl — rewrite every diagram on a
- * branch from the earlier grammar into the current one (the header, the
- * `if`/`else-if`/`else` clauses into `if`/`case`, `[loop]` into `loop`,
- * `merge: id;` and `[merge: id]` into `[goto: id]`, and a step's
+ * branch from the earlier grammar into the current one (the header; a bare
+ * `if (q)` and the `case (a)` line under it fused into `if (q) is (a) than`,
+ * a later `case (b)` into `else-if (b) than`, a bare `else` into
+ * `else-if () than` and a fork's `and (b)` into `case (b)`; `[loop]` into
+ * `loop`; `merge: id;` and `[merge: id]` into `[goto: id]`; and a step's
  * `props:`/`arrow:`/`link:` lines into suffixes — a step's `id:` line is
  * already current and is left alone), in **one commit**, so a repository
  * written before the change opens again.
@@ -81,7 +83,7 @@ export const POST = withApi(async (req, ctx: { params: Promise<{ projectId: stri
 
   const result = await project.write.commitFiles({
     branch: body.branch,
-    message: `Update DSL to the current grammar (${writes.length} file${writes.length === 1 ? "" : "s"})\n\nThe header, if/else-if/else into if/case, [loop] into loop,\nmerge: id; and [merge: id] into [goto: id], and a step's\nprops:/arrow:/link: lines into suffixes — the constructs the earlier\ngrammar used that this reader no longer accepts. A step's id: line is\nalready current and is left alone; a jump with no target is left for a\nhand edit.`,
+    message: `Update DSL to the current grammar (${writes.length} file${writes.length === 1 ? "" : "s"})\n\nThe header; if (q) + case (a) fused into if (q) is (a) than, a later\ncase (b) into else-if (b) than, a bare else into else-if () than, and a\nfork's and (b) into case (b); [loop] into loop; merge: id; and\n[merge: id] into [goto: id]; and a step's props:/arrow:/link: lines into\nsuffixes — the constructs the earlier grammar used that this reader no\nlonger accepts. A step's id: line is already current and is left alone;\na jump with no target is left for a hand edit.`,
     files: writes,
     deletions: [],
     expectedHeadSha: sha,

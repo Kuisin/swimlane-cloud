@@ -32,11 +32,10 @@ label: A;
 
 [a: start]
 level: 2;
-if (x?)
-case (yes)
+if (x?) is (yes) than
 [a: one]
 [goto: after]
-case ()
+else-if () than
 [a: two]
 [goto: late]
 end-if

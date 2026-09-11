@@ -8,8 +8,13 @@
  * that changed, leaving fenced values and definitions alone:
  *
  * - the header: `@kai-swimlane-v2` and `@kai-swimlane 2` → `@kai-swimlane`
- * - `if (q) is (a) than #c` → `if (q) #c` + `case (a)`; `else-if (b) than` →
- *   `case (b)`; `else` → `case ()`; the un-hyphenated closers → `end-if` …
+ * - a bare, un-hyphenated `else` (no `than`, no parens — the oldest spelling)
+ *   → `else-if () than`; the un-hyphenated closers `endif`/`endfork` →
+ *   `end-if`/`end-fork`
+ * - the previous grammar's `if (q)` + a `case (a)` line right after it →
+ *   fused onto one line, `if (q) is (a) than`; a later, bare `case (b)` →
+ *   `else-if (b) than`; a fork's `and (b)` → `case (b)` (already-current
+ *   `is (a) than` / `else-if (b) than` input passes through unchanged)
  * - `[loop]` → `loop`; `merge: id;` / `[merge: id]` in a case → `[goto: id]`.
  *   A bare `merge;` / `[merge]` in a case, and a `[merge]` / `[merge: n]`
  *   landing marker in the flow, have no automatic mapping — there is no
@@ -58,7 +63,8 @@ export function migrateLegacyDsl(text) {
     return true;
   };
 
-  for (const line of lines) {
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
     const t = line.trim();
     const indent = line.match(/^\s*/)[0];
     let m;
@@ -97,20 +103,42 @@ export function migrateLegacyDsl(text) {
 
     // --- flow section -----------------------------------------------------
     const color = (c) => (c ? ` #${c}` : "");
-    if ((m = t.match(/^if\s*\((.+?)\)\s*is\s*\((.+?)\)\s*than(?:\s+#([A-Za-z]+))?\s*$/i))) {
-      frames.push("if");
-      push(indent, `if (${m[1].trim()})${color(m[3])}`);
-      out.push(`${indent}case (${m[2].trim()})`);
-      lastStep = -1;
-      continue;
-    }
-    if ((m = t.match(/^else-?if\s*\((.+?)\)\s*than(?:\s+#([A-Za-z]+))?\s*$/i))) {
-      push(indent, `case (${m[1].trim()})${color(m[2])}`);
-      lastStep = -1;
-      continue;
-    }
+    // The oldest spelling: a bare `else`, no `than`, no parens. An already-
+    // current `if (q) is (a) than` / `else-if (b) than` line falls through
+    // every rule below unmatched and reaches the final `out.push(line)`.
     if ((m = t.match(/^else(?:\s+than)?(?:\s+#([A-Za-z]+))?\s*$/i))) {
-      push(indent, `case ()${color(m[1])}`);
+      push(indent, `else-if () than${color(m[1])}`);
+      lastStep = -1;
+      continue;
+    }
+    // The previous grammar's bare `if (q)`, with its first case as the very
+    // next line — fuse them onto one, `if (q) is (a) than`. Anything else
+    // right after (a comment, a blank line) means the first case is missing
+    // and this if is already broken; left alone for the reader to say so.
+    if ((m = t.match(/^if(\s*\[[^\]]*\])?\s*\((.+?)\)(\s*@[\w-]+)?(\s*#[A-Za-z]+)?\s*$/i))) {
+      const next = lines[li + 1];
+      const nm = next && /^\s*case\s*\((.*?)\)(\s*#[A-Za-z]+)?\s*$/i.exec(next.trim());
+      if (nm) {
+        frames.push("if");
+        const [, lane, cond, id, ifColor] = m;
+        const caseColor = nm[2] ?? "";
+        push(
+          indent,
+          `if${lane ?? ""} (${cond.trim()}) is (${nm[1].trim()}) than${id ?? ""}${ifColor ?? caseColor}`,
+        );
+        li++; // consumed the fused case line too
+        lastStep = -1;
+        continue;
+      }
+    }
+    // A later, bare `if`-case — not the first (already fused above) —
+    // including the blank `case ()` catch-all. `case` inside a `fork` is
+    // already the current spelling for a path, not this construct.
+    if (
+      frames[frames.length - 1] !== "fork" &&
+      (m = t.match(/^case\s*\((.*?)\)(?:\s+#([A-Za-z]+))?\s*$/i))
+    ) {
+      push(indent, `else-if (${m[1].trim()}) than${color(m[2])}`);
       lastStep = -1;
       continue;
     }
@@ -124,6 +152,14 @@ export function migrateLegacyDsl(text) {
     if (/^fork\b/i.test(t)) {
       frames.push("fork");
       out.push(line);
+      lastStep = -1;
+      continue;
+    }
+    // A fork path after the first — `and` is the only spelling this ever
+    // had; the new grammar reuses `case` for it instead (fork's own opener
+    // line, which still names path one, is unchanged).
+    if ((m = t.match(/^and\s*\((.*?)\)(?:\s+#([A-Za-z]+))?\s*$/i))) {
+      push(indent, `case (${m[1].trim()})${color(m[2])}`);
       lastStep = -1;
       continue;
     }

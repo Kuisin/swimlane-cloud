@@ -111,29 +111,31 @@ describe("serializeDSLv2: structure that needs its own model field to survive", 
   });
 
   it("keeps a loop's own @target", () => {
-    const src = doc("/line/\nif (q)\ncase (a)\n  [x: y]\n    id: start;\n  loop @start\nend-if");
+    const src = doc("/line/\nif (q) is (a) than\n  [x: y]\n    id: start;\n  loop @start\nend-if");
     const { m2, once } = assertStableRoundTrip(src);
     expect(m2.rows.find((r) => r.kind === "branchLoop").loopTarget).toBe("start");
     expect(once).toContain("loop @start");
   });
 
   it("keeps a bare loop with no target bare", () => {
-    const src = doc("/line/\nif (q)\ncase (a)\n  [x: y]\n  loop\nend-if");
+    const src = doc("/line/\nif (q) is (a) than\n  [x: y]\n  loop\nend-if");
     const { once } = assertStableRoundTrip(src);
     expect(once).toMatch(/^\s*loop\s*$/m);
   });
 
   it("folds a fork's first path label back into the fork line itself", () => {
-    const src = doc("/line/\nfork (Shipping) #purple\n  [a: x]\nand (Billing)\n  [a: y]\nend-fork");
+    const src = doc(
+      "/line/\nfork (Shipping) #purple\n  [a: x]\ncase (Billing)\n  [a: y]\nend-fork",
+    );
     const { m2, once } = assertStableRoundTrip(src);
     const firstCase = m2.rows.find((r) => r.kind === "branchCase" && r.parallel);
     expect(firstCase.label).toBe("Shipping");
     expect(once).toContain("fork (Shipping) #purple");
-    expect(once).toContain("and (Billing)");
+    expect(once).toContain("case (Billing)");
   });
 
-  it("keeps a blank case () as the catch-all clause", () => {
-    const src = doc("/line/\nif (q)\ncase (a)\n  [x: y]\ncase ()\n  [x: z]\nend-if");
+  it("keeps a blank else-if () than as the catch-all clause", () => {
+    const src = doc("/line/\nif (q) is (a) than\n  [x: y]\nelse-if () than\n  [x: z]\nend-if");
     const { m2 } = assertStableRoundTrip(src);
     const cases = m2.rows.filter((r) => r.kind === "branchCase");
     expect(cases.map((c) => c.label)).toEqual([""]);

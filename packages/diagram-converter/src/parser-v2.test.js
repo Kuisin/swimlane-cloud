@@ -48,8 +48,8 @@ describe("kai-swimlane", () => {
   });
 
   it("is whitespace-insensitive: the squashed form parses identically", () => {
-    const expanded = doc("/title/\nT;\n\n/line/\nif (q?)\ncase (a) #green\n  [sales: x]\nend-if");
-    const squashed = "@kai-swimlane/title/T;/line/if(q?)case(a)#green[sales:x]end-if@end";
+    const expanded = doc("/title/\nT;\n\n/line/\nif (q?) is (a) than #green\n  [sales: x]\nend-if");
+    const squashed = "@kai-swimlane/title/T;/line/if(q?)is(a)than#green[sales:x]end-if@end";
     const a = parseDSL(expanded);
     const b = parseDSL(squashed);
     expect(a.errors).toEqual([]);
@@ -120,14 +120,14 @@ describe("kai-swimlane", () => {
 
   it("keeps a loop's own target so it can round-trip", () => {
     const m = parseDSL(
-      doc("/line/\nif (q)\ncase (a)\n  [x: y]\n    id: start;\n  loop @start\nend-if"),
+      doc("/line/\nif (q) is (a) than\n  [x: y]\n    id: start;\n  loop @start\nend-if"),
     );
     expect(m.errors).toEqual([]);
     expect(m.rows.find((r) => r.kind === "branchLoop")).toMatchObject({ loopTarget: "start" });
   });
 
   it("leaves loopTarget null for a bare loop with no target", () => {
-    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  [x: y]\n  loop\nend-if"));
+    const m = parseDSL(doc("/line/\nif (q) is (a) than\n  [x: y]\n  loop\nend-if"));
     expect(m.errors).toEqual([]);
     expect(m.rows.find((r) => r.kind === "branchLoop")).toMatchObject({ loopTarget: null });
   });
@@ -138,21 +138,21 @@ describe("kai-swimlane", () => {
   });
 });
 
-describe("case is the only if clause — else was dropped", () => {
-  it("rejects else as an unknown statement instead of reading it as a clause", () => {
-    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  [sales: x]\nelse\n  [sales: y]\nend-if"));
+describe("else-if is the only later clause — bare else was dropped", () => {
+  it("rejects a bare else as an unknown statement instead of reading it as a clause", () => {
+    const m = parseDSL(doc("/line/\nif (q) is (a) than\n  [sales: x]\nelse\n  [sales: y]\nend-if"));
     expect(m.errors.map((e) => e.msg)).toContain('unknown statement "else"');
-    // `case (a)` is the if's first case, carried on branchStart (not a row of
-    // its own — same as an if's first case has always worked); "else" isn't
-    // read as a second case at all, so no branchCase row is produced here.
+    // The first case is fused onto the if's own line (branchStart.firstCase),
+    // not a row of its own; a bare "else" isn't read as a second case at
+    // all, so no branchCase row is produced here.
     const start = m.rows.find((r) => r.kind === "branchStart");
     expect(start.firstCase).toBe("a");
     expect(m.rows.filter((r) => r.kind === "branchCase")).toHaveLength(0);
   });
 
-  it("allows a blank case () as the unlabelled, catch-all clause", () => {
+  it("allows a blank else-if () than as the unlabelled, catch-all clause", () => {
     const m = parseDSL(
-      doc("/line/\nif (q)\ncase (a)\n  [sales: x]\ncase ()\n  [sales: y]\nend-if"),
+      doc("/line/\nif (q) is (a) than\n  [sales: x]\nelse-if () than\n  [sales: y]\nend-if"),
     );
     expect(m.errors).toEqual([]);
     const start = m.rows.find((r) => r.kind === "branchStart");
@@ -161,8 +161,10 @@ describe("case is the only if clause — else was dropped", () => {
     expect(cases.map((c) => c.label)).toEqual([""]);
   });
 
-  it("allows a bare case with no parens at all, same as a labelled one", () => {
-    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  [sales: x]\ncase\n  [sales: y]\nend-if"));
+  it("allows else-if with no parens at all, same as a labelled one — but than is still required", () => {
+    const m = parseDSL(
+      doc("/line/\nif (q) is (a) than\n  [sales: x]\nelse-if than\n  [sales: y]\nend-if"),
+    );
     expect(m.errors).toEqual([]);
     const start = m.rows.find((r) => r.kind === "branchStart");
     expect(start.firstCase).toBe("a");
@@ -170,9 +172,16 @@ describe("case is the only if clause — else was dropped", () => {
     expect(cases.map((c) => c.label)).toEqual([""]);
   });
 
-  it("allows a blank case in the first-case (branchStart) slot too", () => {
+  it("requires than even with no parens", () => {
     const m = parseDSL(
-      doc("/line/\nif (q)\ncase ()\n  [sales: x]\ncase (b)\n  [sales: y]\nend-if"),
+      doc("/line/\nif (q) is (a) than\n  [sales: x]\nelse-if\n  [sales: y]\nend-if"),
+    );
+    expect(m.errors.map((e) => e.msg)).toContain('else-if must end with "than"');
+  });
+
+  it("allows a blank is () than in the first-case (branchStart) slot too", () => {
+    const m = parseDSL(
+      doc("/line/\nif (q) is () than\n  [sales: x]\nelse-if (b) than\n  [sales: y]\nend-if"),
     );
     expect(m.errors).toEqual([]);
     const start = m.rows.find((r) => r.kind === "branchStart");
@@ -190,10 +199,9 @@ describe("multi-language retention ($langs)", () => {
       "",
       "/line/",
       "section (総務 | General) #gray",
-      "if (承認する？ | Approve?)",
-      "case (はい | Yes)",
+      "if (承認する？ | Approve?) is (はい | Yes) than",
       "  [sales: 完了 | Done]",
-      "case (いいえ | No)",
+      "else-if (いいえ | No) than",
       "  [sales: 却下 | Rejected]",
       "end-if",
       "end-section",
@@ -219,7 +227,7 @@ describe("multi-language retention ($langs)", () => {
       "/line/",
       "fork (出荷 | Shipping)",
       "  [warehouse: 出荷]",
-      "and (請求 | Billing)",
+      "case (請求 | Billing)",
       "  [sales: 請求]",
       "end-fork",
     ].join("\n");
@@ -288,7 +296,7 @@ describe("multi-language retention ($langs)", () => {
   });
 
   it("leaves openerId null when an opener has no @id", () => {
-    const m = parseDSL(doc("/line/\nif (q)\ncase (a)\n  [x: y]\nend-if"));
+    const m = parseDSL(doc("/line/\nif (q) is (a) than\n  [x: y]\nend-if"));
     expect(m.errors).toEqual([]);
     expect(m.rows.find((r) => r.kind === "branchStart").openerId).toBeNull();
   });

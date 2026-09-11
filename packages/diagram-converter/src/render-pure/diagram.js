@@ -27,7 +27,6 @@ import {
   DIFF_STYLES,
   FORK_GATEWAY_RADIUS,
   blockMaxTextCols,
-  decisionDiamondWidth,
   gutterTextCols,
 } from "./diagram-layout.js";
 /**
@@ -1821,7 +1820,7 @@ function renderDiagramSvg({
     if (plan?.targetIdx >= 0) return stepTargetBox(plan.targetIdx);
     const dCx = frameAnchorX(frame);
     const dCy = branchDecisionCy(frame);
-    const dW = frame.parallel ? gatewayR * 2 : decisionDiamondWidth(frame.cond.length);
+    const dW = frame.parallel ? gatewayR * 2 : DIAGRAM_LAYOUT.decisionDiamondW;
     const dH = frame.parallel ? gatewayR * 2 : decisionDiamondH;
     return { left: dCx - dW / 2, right: dCx + dW / 2, top: dCy - dH / 2, bottom: dCy + dH / 2 };
   }
@@ -2507,7 +2506,7 @@ function renderDiagramSvg({
         const isParallel = f.parallel;
         const dCx = frameAnchorX(f);
         const dCy = branchDecisionCy(f);
-        const dW = isParallel ? 0 : decisionDiamondWidth(f.cond.length);
+        const dW = isParallel ? 0 : DIAGRAM_LAYOUT.decisionDiamondW;
         const dH = decisionDiamondH;
         const decisionStyle = resolveBranchStyle(f.decisionColor);
         const parallelGatewayStyle = resolveBranchStyle(f.decisionColor || "purple");
@@ -3291,7 +3290,7 @@ function renderDiagramSvg({
                 onSelect: onRowSelect,
               });
             }
-            const dW = decisionDiamondWidth(f.cond.length);
+            const dW = DIAGRAM_LAYOUT.decisionDiamondW;
             const dH = decisionDiamondH;
             return /* @__PURE__ */ h(RowHitTarget, {
               key: `hit-${i}`,

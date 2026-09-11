@@ -1,0 +1,384 @@
+// Row alignment for `renderDiagramSvg`'s `diffRows` overlay.
+//
+// `renderDiagramSvg({ model, diffRows })` draws the overlay but deliberately
+// knows nothing about *how* two models line up: it takes a
+// `rowIndex -> { status, oldText? }` map against the model it is already
+// rendering. This module is the missing other half — the alignment that turns
+// an old and a new model into exactly that map.
+//
+// The shape of the algorithm is a classic LCS diff run twice:
+//
+//   1. LCS over a *strict* key (kind + identity + caption + the few fields
+//      that change how a row looks). Rows that survive this pass are anchors:
+//      they are byte-identical on both sides, so the diagram redraws unmarked.
+//   2. Inside each remaining gap, pair a leftover old row with a leftover new
+//      row that shares the *loose* key (kind + identity, caption excluded).
+//      Those are the same row reworded — "changed", not "removed"+"added",
+//      which is the whole reason to show a diff instead of a replace. When a
+//      gap offers several candidates, the pairing takes the most similar
+//      caption so a reworded step doesn't latch onto an unrelated one.
+//
+// Two deliberate calls, both visible in row-diff.test.js:
+//
+//   * **A step whose role changed is removed + added, not changed.** `role` is
+//     part of the loose key. On a swimlane diagram a role *is* the column the
+//     box sits in, so a role change moves the box somewhere else entirely;
+//     drawing "the same step, edited" across two lanes would claim a
+//     continuity the picture can't show, and an inline caption diff would be
+//     empty anyway (the text didn't change). Ghost in the old lane, fresh box
+//     in the new one reads correctly.
+//   * **Reordered but otherwise identical rows are never "changed".** A
+//     "changed" entry only ever comes from step 2, which requires the captions
+//     to differ; a row that merely moved keeps its caption, so the worst it can
+//     be called is removed-here + added-there — a move, honestly reported as
+//     one. It is never mislabelled as an edit.
+//
+// A removed row has no slot in the new model, so `diffModelRows` splices a
+// ghost copy of the old row into the row list it returns, and keys the map
+// against *that* list. Only `step` rows get a ghost: splicing a lone
+// `groupStart` or `branchEnd` back in would leave the frame unbalanced and the
+// layout would be nonsense. Removals of structural rows therefore show up as
+// the surrounding steps moving, not as a marked row.
+
+import { diffChars } from "../utils.js";
+
+/** The captionable field per row kind — what an inline text diff would read. */
+const CAPTION_FIELD = {
+  step: "text",
+  branchStart: "cond",
+  branchCase: "label",
+  groupStart: "sectionName",
+};
+
+/** The caption `row` shows, or "" for a row that carries none. */
+export function rowCaption(row) {
+  const field = CAPTION_FIELD[row?.kind];
+  if (!field) return "";
+  return row[field] ?? "";
+}
+
+const UNIT = "\0";
+
+/**
+ * What makes this row *that* row, caption excluded: two rows sharing a loose
+ * key are candidates for "the same row, edited".
+ */
+function looseKey(row) {
+  switch (row.kind) {
+    case "step":
+      // `empty` steps are the layout placeholder inside an empty case, not
+      // content — they must never pair with a real step.
+      return `step${UNIT}${row.role ?? ""}${UNIT}${row.empty ? "1" : "0"}`;
+    case "branchStart":
+    case "branchEnd":
+    case "branchCase":
+      return `${row.kind}${UNIT}${row.parallel ? "fork" : "if"}`;
+    case "groupStart":
+    case "groupEnd":
+      return `${row.kind}${UNIT}${row.groupMode ?? ""}`;
+    case "branchMerge":
+      return `branchMerge${UNIT}${row.mergeTarget ?? ""}`;
+    case "branchLoop":
+      return `branchLoop${UNIT}${row.loopTarget ?? ""}`;
+    default:
+      return String(row.kind);
+  }
+}
+
+/**
+ * The loose key plus everything that changes how the row is drawn. Equal
+ * strict keys means "redraw this row unchanged"; the LCS over strict keys is
+ * what anchors the alignment.
+ */
+function strictKey(row) {
+  const parts = [looseKey(row), rowCaption(row)];
+  if (row.kind === "step") {
+    parts.push(
+      row.blockRef ?? "",
+      row.link ?? "",
+      row.arrowLine ?? "",
+      (row.props ?? []).join(","),
+    );
+  } else if (row.kind === "branchStart") {
+    parts.push(row.firstCase ?? "", row.branchColor ?? "");
+  } else if (row.kind === "branchCase") {
+    parts.push(row.branchColor ?? "");
+  } else if (row.kind === "groupStart") {
+    parts.push(row.sectionColor ?? "", row.openerKeyword ?? "");
+  }
+  return parts.join(UNIT);
+}
+
+/** 0..1 — how much of the longer caption the two share, by code point. */
+function captionSimilarity(a, b) {
+  if (a === b) return 1;
+  if (!a || !b) return 0;
+  let same = 0;
+  for (const seg of diffChars(a, b)) {
+    if (seg.type === "equal") same += Array.from(seg.text).length;
+  }
+  const longest = Math.max(Array.from(a).length, Array.from(b).length);
+  return longest === 0 ? 1 : same / longest;
+}
+
+/**
+ * Longest common subsequence over two key arrays → matched index pairs.
+ * Quadratic, which is fine at diagram scale (tens of rows) and kept honest by
+ * the common prefix/suffix trim in `alignRows`, so the usual "one step edited"
+ * case never builds a table at all.
+ */
+function lcsPairs(aKeys, bKeys) {
+  const n = aKeys.length;
+  const m = bKeys.length;
+  if (n === 0 || m === 0) return [];
+  const width = m + 1;
+  const dp = new Int32Array((n + 1) * width);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i * width + j] =
+        aKeys[i] === bKeys[j]
+          ? dp[(i + 1) * width + j + 1] + 1
+          : Math.max(dp[(i + 1) * width + j], dp[i * width + j + 1]);
+    }
+  }
+  const pairs = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (aKeys[i] === bKeys[j]) {
+      pairs.push([i, j]);
+      i++;
+      j++;
+    } else if (dp[(i + 1) * width + j] >= dp[i * width + j + 1]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return pairs;
+}
+
+/**
+ * Step 1: the raw edit script, as ops in reading order.
+ * @returns {{ type: "equal" | "delete" | "insert", oldIndex: number, newIndex: number }[]}
+ */
+function alignRows(oldRows, newRows) {
+  const oldKeys = oldRows.map(strictKey);
+  const newKeys = newRows.map(strictKey);
+  let head = 0;
+  while (head < oldKeys.length && head < newKeys.length && oldKeys[head] === newKeys[head]) head++;
+  let tail = 0;
+  while (
+    tail < oldKeys.length - head &&
+    tail < newKeys.length - head &&
+    oldKeys[oldKeys.length - 1 - tail] === newKeys[newKeys.length - 1 - tail]
+  ) {
+    tail++;
+  }
+  const ops = [];
+  for (let i = 0; i < head; i++) ops.push({ type: "equal", oldIndex: i, newIndex: i });
+
+  const midOld = oldKeys.slice(head, oldKeys.length - tail);
+  const midNew = newKeys.slice(head, newKeys.length - tail);
+  const pairs = lcsPairs(midOld, midNew);
+  let oi = 0;
+  let ni = 0;
+  const emitGap = (untilOld, untilNew) => {
+    while (oi < untilOld) ops.push({ type: "delete", oldIndex: head + oi++, newIndex: -1 });
+    while (ni < untilNew) ops.push({ type: "insert", oldIndex: -1, newIndex: head + ni++ });
+  };
+  for (const [a, b] of pairs) {
+    emitGap(a, b);
+    ops.push({ type: "equal", oldIndex: head + oi++, newIndex: head + ni++ });
+  }
+  emitGap(midOld.length, midNew.length);
+
+  for (let k = 0; k < tail; k++) {
+    ops.push({
+      type: "equal",
+      oldIndex: oldKeys.length - tail + k,
+      newIndex: newKeys.length - tail + k,
+    });
+  }
+  return ops;
+}
+
+/**
+ * Step 2: inside each run of non-equal ops, marry a deleted row to an inserted
+ * row with the same loose key — the same row, reworded.
+ * @returns {Map<number, number>} old row index -> new row index
+ */
+function pairRewordedRows(ops, oldRows, newRows) {
+  /** @type {Map<number, number>} */
+  const paired = new Map();
+  let block = 0;
+  while (block < ops.length) {
+    if (ops[block].type === "equal") {
+      block++;
+      continue;
+    }
+    let end = block;
+    while (end < ops.length && ops[end].type !== "equal") end++;
+    const deletes = [];
+    const inserts = [];
+    for (let k = block; k < end; k++) {
+      if (ops[k].type === "delete") deletes.push(ops[k].oldIndex);
+      else inserts.push(ops[k].newIndex);
+    }
+    const taken = new Set();
+    for (const oldIndex of deletes) {
+      const oldRow = oldRows[oldIndex];
+      const key = looseKey(oldRow);
+      let best = -1;
+      let bestScore = -1;
+      for (const newIndex of inserts) {
+        if (taken.has(newIndex)) continue;
+        if (looseKey(newRows[newIndex]) !== key) continue;
+        const score = captionSimilarity(rowCaption(oldRow), rowCaption(newRows[newIndex]));
+        if (score > bestScore) {
+          bestScore = score;
+          best = newIndex;
+        }
+      }
+      if (best >= 0) {
+        taken.add(best);
+        paired.set(oldIndex, best);
+      }
+    }
+    block = end;
+  }
+  return paired;
+}
+
+/** A removed step's stand-in row: the old row, stripped of anything addressable. */
+function ghostRow(oldRow) {
+  const ghost = { ...oldRow, diffRemovedGhost: true };
+  // A ghost is not a jump target and not a real step: `[goto: id]` resolves by
+  // scanning rows for `mergeId`, and a duplicate would steal the arrow from
+  // the live step that still carries that id.
+  delete ghost.stepId;
+  delete ghost.mergeId;
+  return ghost;
+}
+
+/**
+ * Align two models' row lists and produce the `diffRows` map
+ * `renderDiagramSvg` takes, plus the row list it must be given alongside it.
+ *
+ * The returned `rows` is `newRows` with a ghost copy of every removed *step*
+ * spliced back in at the place it used to sit, because the renderer draws a
+ * removed row by fading the row at that index — a row that, by definition, the
+ * new model no longer has.
+ *
+ * @param {object[]} oldRows rows of the model being compared against ("before")
+ * @param {object[]} newRows rows of the model being rendered ("after")
+ * @returns {{ rows: object[], diffRows: Map<number, { status: "added" | "changed" | "removed", oldRow?: object, oldText?: string }> }}
+ */
+export function diffModelRows(oldRows, newRows) {
+  const before = oldRows ?? [];
+  const after = newRows ?? [];
+  const ops = alignRows(before, after);
+  const paired = pairRewordedRows(ops, before, after);
+  /** @type {Map<number, number>} new row index -> old row index */
+  const pairedBack = new Map();
+  for (const [oldIndex, newIndex] of paired) pairedBack.set(newIndex, oldIndex);
+
+  const rows = [];
+  const diffRows = new Map();
+
+  const pushGhost = (oldIndex) => {
+    const oldRow = before[oldIndex];
+    // Only a step can stand in for itself; see the note at the top of the file.
+    if (oldRow.kind !== "step" || oldRow.empty) return;
+    diffRows.set(rows.length, { status: "removed", oldRow });
+    rows.push(ghostRow(oldRow));
+  };
+  const pushNew = (newIndex) => {
+    const oldIndex = pairedBack.get(newIndex);
+    if (oldIndex != null) {
+      diffRows.set(rows.length, {
+        status: "changed",
+        oldRow: before[oldIndex],
+        oldText: rowCaption(before[oldIndex]),
+      });
+    } else {
+      diffRows.set(rows.length, { status: "added" });
+    }
+    rows.push(after[newIndex]);
+  };
+
+  let k = 0;
+  while (k < ops.length) {
+    if (ops[k].type === "equal") {
+      rows.push(after[ops[k].newIndex]);
+      k++;
+      continue;
+    }
+    let end = k;
+    while (end < ops.length && ops[end].type !== "equal") end++;
+    const deletes = [];
+    const inserts = [];
+    for (let z = k; z < end; z++) {
+      if (ops[z].type === "delete") deletes.push(ops[z].oldIndex);
+      else inserts.push(ops[z].newIndex);
+    }
+    // A ghost belongs where its row used to sit *relative to the rows that
+    // survived the edit*, so it goes out just before the first reworded row
+    // that used to follow it — not lumped in front of the whole block.
+    const ghosts = deletes.filter((oldIndex) => !paired.has(oldIndex));
+    let g = 0;
+    for (const newIndex of inserts) {
+      const partner = pairedBack.get(newIndex);
+      if (partner != null) while (g < ghosts.length && ghosts[g] < partner) pushGhost(ghosts[g++]);
+      pushNew(newIndex);
+    }
+    while (g < ghosts.length) pushGhost(ghosts[g++]);
+    k = end;
+  }
+  return { rows, diffRows };
+}
+
+/** Merge the entries of `extra` that `base` has no key for (ghost blocks, props). */
+function withMissingEntries(base, extra) {
+  const out = { ...(base ?? {}) };
+  for (const [key, value] of Object.entries(extra ?? {})) {
+    if (!(key in out)) out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * `diffModelRows` at the model level: the model to render (the new one, with
+ * removed steps spliced back in as ghosts) and the map to render it with.
+ *
+ * A ghost's lane, block and prop definitions are borrowed from the old model
+ * when the new one dropped them — a step removed *along with its role* would
+ * otherwise be silently undrawable, since the renderer skips a step whose role
+ * has no lane.
+ *
+ * @param {object} oldModel parsed "before"
+ * @param {object} newModel parsed "after" — the one being rendered
+ */
+export function diffModels(oldModel, newModel) {
+  const { rows, diffRows } = diffModelRows(oldModel?.rows, newModel?.rows);
+  const lanes = [...(newModel?.lanes ?? [])];
+  const known = new Set(lanes.map((lane) => lane.id));
+  for (const [index, entry] of diffRows) {
+    if (entry.status !== "removed") continue;
+    const role = rows[index]?.role;
+    if (!role || known.has(role)) continue;
+    const lane = (oldModel?.lanes ?? []).find((l) => l.id === role);
+    known.add(role);
+    lanes.push(lane ? { ...lane, used: true } : { id: role, label: role, used: true });
+  }
+  return {
+    model: {
+      ...newModel,
+      lanes,
+      rows,
+      blocks: withMissingEntries(newModel?.blocks, oldModel?.blocks),
+      props: withMissingEntries(newModel?.props, oldModel?.props),
+    },
+    diffRows,
+  };
+}

@@ -279,10 +279,12 @@ export function DiscardEditModal({
 
 /**
  * Rewrite every diagram on this branch from the earlier grammar into the
- * current one — the header, `if`/`else-if`/`else` into `if`/`case`, `[loop]`
- * into `loop`, `merge: id;` and `[merge: id]` into `[goto: id]`, and a step's
- * `props:`/`arrow:`/`link:` lines into suffixes (a step's `id:` line is
- * already current and is left alone) — in one commit. The grammar has no
+ * current one — the header; a bare `if (q)` and the `case (a)` line under it
+ * fused into `if (q) is (a) than`, a later `case (b)` into `else-if (b) than`,
+ * a bare `else` into `else-if () than` and a fork's `and (b)` into `case (b)`;
+ * `[loop]` into `loop`; `merge: id;` and `[merge: id]` into `[goto: id]`; and
+ * a step's `props:`/`arrow:`/`link:` lines into suffixes (a step's `id:` line
+ * is already current and is left alone) — in one commit. The grammar has no
  * compatibility layer, so a repository written before the change fails on
  * every file until this runs. A jump with no target — a bare `merge;` /
  * `[merge]`, or a `[merge]` / `[merge: name]` landing marker — has no

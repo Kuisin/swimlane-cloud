@@ -52,8 +52,7 @@ side: left;
 max-chars: 12;
 /line/
 [a: 提出] <b1> +p1
-if (承認) #green
-case (yes)
+if (承認) is (yes) than #green
   [a: 登録]
 end-if
 @end`;
@@ -91,8 +90,16 @@ ${body}
     );
   });
 
-  it("errors on case without an open if", () => {
-    expect(parseDSL(doc(`[a: 1]\ncase (z)`)).errors.map((e) => e.msg)).toContain("case outside if");
+  it("errors on case without an open fork — case is always a fork path now", () => {
+    expect(parseDSL(doc(`[a: 1]\ncase (z)`)).errors.map((e) => e.msg)).toContain(
+      "case outside fork",
+    );
+  });
+
+  it("errors on else-if without an open if", () => {
+    expect(parseDSL(doc(`[a: 1]\nelse-if (z) than`)).errors.map((e) => e.msg)).toContain(
+      "else-if outside if",
+    );
   });
 });
 
@@ -177,10 +184,10 @@ describe("parser validation — branch colors", () => {
     }
   });
 
-  it("errors on unknown #color tokens on if/case/fork/and/section", () => {
+  it("errors on unknown #color tokens on if/else-if/fork/case/section", () => {
     const m = msgs(
       DOC(
-        `if (確認) #salmon\ncase (OK)\n  [a: 手順]\ncase () #magenta\n  [a: 差戻]\nend-if\nfork #cyan\n  [a: p1]\nand #indigo\n  [a: p2]\nend-fork\nsection (S) #ivory\n  [a: s1]\nend-section`,
+        `if (確認) is (OK) than #salmon\n  [a: 手順]\nelse-if () than #magenta\n  [a: 差戻]\nend-if\nfork #cyan\n  [a: p1]\ncase #indigo\n  [a: p2]\nend-fork\nsection (S) #ivory\n  [a: s1]\nend-section`,
       ),
     );
     for (const bad of ["#salmon", "#magenta", "#cyan", "#indigo", "#ivory"]) {
@@ -191,7 +198,7 @@ describe("parser validation — branch colors", () => {
   it("accepts all palette colors", () => {
     const m = msgs(
       DOC(
-        `if (c) #blue\ncase (y)\n  [a: 1]\ncase () #green\n  [a: 2]\nend-if\nfork #purple\n  [a: 3]\nand #gray\n  [a: 4]\nend-fork\nsection (S) #orange\n  [a: 5]\nend-section`,
+        `if (c) is (y) than #blue\n  [a: 1]\nelse-if () than #green\n  [a: 2]\nend-if\nfork #purple\n  [a: 3]\ncase #gray\n  [a: 4]\nend-fork\nsection (S) #orange\n  [a: 5]\nend-section`,
       ),
     );
     expect(m.filter((x) => x.includes("unknown color"))).toEqual([]);

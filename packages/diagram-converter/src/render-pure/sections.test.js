@@ -101,12 +101,11 @@ end-section
 
   it("parses a section inside an if case", () => {
     const model = parseDSL(`${BASE_DSL}
-if (x)
-case (yes)
+if (x) is (yes) than
   section (inner)
     [a: step]
   end-section
-case ()
+else-if () than
   [b: no]
 end-if
 @end`);
@@ -200,7 +199,7 @@ end-section
     const withSection = render(`${BASE_DSL}
 if (x) is (yes) than
   [a: yes]
-else
+else-if () than
   [b: no]
 end-if
 section (after)
@@ -210,7 +209,7 @@ end-section
     const withoutSection = render(`${BASE_DSL}
 if (x) is (yes) than
   [a: yes]
-else
+else-if () than
   [b: no]
 end-if
 [a: after-step]
@@ -295,7 +294,7 @@ end-branch
     const model = parseDSL(`${BASE_DSL}
 fork
   [a: path1]
-and
+case
   section (fork-section)
     [b: section-step]
   end-section
@@ -306,7 +305,7 @@ end-fork
     const svg = render(`${BASE_DSL}
 fork
   [a: path1]
-and
+case
   section (fork-section)
     [b: section-step]
   end-section

@@ -41,7 +41,7 @@ label: B;
 /line/
 if (x) is (yes) than
 [a: yes]
-else
+else-if () than
 [b: no]
 end-if
 [a: After]

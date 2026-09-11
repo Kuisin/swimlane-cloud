@@ -12,10 +12,11 @@ in `parser-v2.js`, which implements this document, and the header line is the pl
 the earlier grammar fails on its first old construct until it is brought across, once, by the
 migration described under _Migrating older files_ — never silently, and never by this reader.
 
-**Goal.** Keep the shape of the current file, remove the three biggest sources of syntax errors
-(`;`, `than`, the asymmetric `if … is … than` / `elseif`), and add the roadmap features. There is
-one spelling per construct: no legacy production is part of this grammar, and the formatter
-re-spells what it read and never repairs. Every rule below is stated once, for one reader.
+**Goal.** Keep the shape of the current file, give every construct exactly one spelling, and add the
+roadmap features. A conditional is written `if (q) is (a) than` … `else-if (b) than` … `end-if`:
+two clause forms, no bare `if`, no bare `else` and no `elseif`. No legacy production is part of this
+grammar, and the formatter re-spells what it read and never repairs. Every rule below is stated
+once, for one reader.
 
 ## Design invariants
 
@@ -82,11 +83,10 @@ phase (見積) #gray
     desc: 顧客要件を確認して見積を作成;
     remark: 金額が 100 万円超なら本部承認;
     id: quote;
-  if [manager] (承認する？)
-  // 上長の一次判断のみ
-  case (はい) #green
+  if [manager] (承認する？) is (はい) than #green
+    // 上長の一次判断のみ
     [system: 受注登録]
-  case (いいえ) #red
+  else-if (いいえ) than #red
     [sales: 見積を修正] ..>
     loop @quote
   end-if
@@ -94,7 +94,7 @@ end-phase
 
 fork (通知) #purple
   [system: メール送信]
-and (出荷)
+case (出荷)
   [warehouse: 出荷準備] => ./shipping-prep.swim
 end-fork
 
@@ -104,11 +104,10 @@ section (監査) @audit #blue
     note-side: left;
 end-section
 
-if (キャンセル要求は？)
-case (あり) #red
+if (キャンセル要求は？) is (あり) than #red
   [sales: キャンセル受付]
   [goto: done]
-case (なし) #gray
+else-if (なし) than #gray
   [manager: 通常クローズ処理]
 end-if
 
@@ -119,7 +118,7 @@ end-if
 ```
 
 ```
-@kai-swimlane@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;id:quote;if[manager](承認する？)/* 上長の一次判断のみ */case(はい)#green[system:受注登録]case(いいえ)#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]and(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)case(あり)#red[sales:キャンセル受付][goto:done]case(なし)#gray[manager:通常クローズ処理]end-if[sales:完了]id:done;@end
+@kai-swimlane@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;id:quote;if[manager](承認する？)is(はい)than#green/* 上長の一次判断のみ */[system:受注登録]else-if(いいえ)than#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]case(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)is(あり)than#red[sales:キャンセル受付][goto:done]else-if(なし)than#gray[manager:通常クローズ処理]end-if[sales:完了]id:done;@end
 ```
 
 Nine of the surviving spaces are separators. Eight are invariant 2's fusion case — the left token
@@ -128,10 +127,10 @@ desc:`, `@quote end-if`, `end-if end-phase`, `end-phase fork`, `end-fork section
 `end-section if`. The ninth is a path's side of the same rule: a bare `=>` path
 ends only at structural whitespace, `;`, `]` or another suffix token. Two more are comment padding,
 and four are bytes inside a run, `金額が 100 万円` and `保存期間は 7 年`. What looks like a separator and is
-not: `loop@quote`, `<hex>+RQ`, `@audit#blue`, `]and(`, `]id:done;`, `[goto:done]case(` and
-`#gray[sales:` — `@`, `+`, `#`, `(` and `[` cannot continue the word to their left, `]` and `>`
-close a run rather than continuing one, and a colour token ends at the first character outside
-`[A-Za-z0-9-]`.
+not: `loop@quote`, `<hex>+RQ`, `@audit#blue`, `]case(`, `]id:done;`, `[goto:done]else-if(`,
+`#gray[sales:`, and the if opener's own three joints, `)is(`, `)than` and `than#green` — `@`, `+`,
+`#`, `(` and `[` cannot continue the word to their left, `]`, `)` and `>` close a run rather than
+continuing one, and a colour token ends at the first character outside `[A-Za-z0-9-]`.
 
 ## Lexical rules
 
@@ -154,11 +153,19 @@ four-entry directive table `kai-swimlane`, `use`, `lang`, `end`, so `@endpoint` 
 `unknownDirective` at statement position, one `@id` in suffix position, never `@end` then `point`.
 Those four names are **never read as an opener's `@id` slot or a `loop` target**: there an `@`
 followed by one of them ends the suffix run and starts a new statement, so `section (監査) @end` is
-a section opener and then the file marker. Keyword table: `if case end-if fork and end-fork section
-end-section branch end-branch phase end-phase loop`; nothing else is a keyword. `goto` is not in it
-— `[goto: id]` is a bracket statement, recognised by the literal word `goto` immediately after the
-`[` and before the run is read as a step head — but it is still a **reserved id**: `/role/ <goto>`
-is refused, because otherwise `[goto: …]` would be ambiguous with a step in a lane called `goto`.
+a section opener and then the file marker. Keyword table, i.e. the words looked up at a statement
+boundary: `if else-if end-if fork case end-fork section end-section branch end-branch phase
+end-phase loop`; nothing else is a keyword. `and` is not one — it was the fork's path separator in
+the older grammar and `case` is that word now — and `is` and `than` are not in it either: they are
+**contextual words inside the `if` opener statement**, read only after that opener's condition and
+never at a statement boundary, so an `is` or a `than` at row start is `unknownStatement` like any
+other bare word. `goto` is not in the table either — `[goto: id]` is a bracket statement,
+recognised by the literal word `goto` immediately after the `[` and before the run is read as a step
+head — but it is the one **reserved id**: `/role/ <goto>` is refused, because otherwise `[goto: …]`
+would be ambiguous with a step in a lane called `goto`. Nothing else is reserved: a lane, block or
+prop called `case`, `is`, `than` or `else-if` is legal, because a step is always written `[role:
+text]` and a bracket run is never looked up in the keyword table. One that is also a keyword is
+reported `idIsKeyword`, a warning, and keeps working.
 
 **Structural whitespace** is exactly U+0009, U+000A, U+000D, U+0020, U+00A0 and U+3000, outside
 runs, fences, strings and comments; inside those all six are content. The last two are included because Japanese input produces them in delimiter position, and the
@@ -336,9 +343,12 @@ is part of key identity, so `label:` and `label.en:` may coexist. The accumulati
 the only exceptions: `+prop`, and `remark-desc:`, which appends to `remark` with one blank line
 between paragraphs, may repeat, is never emitted, and must follow its block's `remark:`. **A key
 legal on two candidates at once** — one in the key set of _both_ the immediately preceding control
-statement and the nearest preceding step, such as `note:` under a `case` — attaches to the control
-statement, as invariant 9 says; there is no other candidate. `desc:` under an `if` lands on the
-`if`, while `desc:` under a `case` is `keyNotAllowedHere`.
+statement and the nearest preceding step, such as `note:` under an `else-if` — attaches to the
+control statement, as invariant 9 says; there is no other candidate. `desc:` under an `if` lands on
+the `if`, while `desc:` under an `else-if` is `keyNotAllowedHere`. An `if`'s first clause, being
+fused onto the `if`'s own line, has **no property block of its own**: a property row after
+`if (q) is (a) than` is the `if`'s, so a `note:` meant for that first clause has nowhere to go and is
+written on the `if` instead.
 
 **Per-statement key sets** are closed, and `keyNotAllowedHere` lists the allowed set verbatim from
 this table.
@@ -346,8 +356,8 @@ this table.
 | statement                           | suffixes                       | keys                                                                                                                                                     |
 | ----------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | step                                | `<block> +prop* glyph => path` | `label desc remark remark-desc note note-side id skip level`                                                                                             |
-| `if`                                | `[lane] @id #color`            | `question` _(the parenthesised run)_, `lane`, `desc`, `note`, `note-side`                                                                                |
-| `case` / `and` / `fork`             | `@id #color`                   | `label` _(the parenthesised run, optional — a blank or absent one is the unlabelled, catch-all case; on `fork` it names path 1)_, `note`, `note-side`    |
+| `if`                                | `[lane] @id #color`            | `question` _(the first parenthesised run, required)_, `firstCase` _(the run after `is`, optional)_, `lane`, `desc`, `note`, `note-side`                  |
+| `else-if` / `case` / `fork`         | `@id #color`                   | `label` _(the parenthesised run, optional — a blank or absent one is the unlabelled, catch-all clause; on `fork` it names path 1)_, `note`, `note-side`  |
 | `section` / `branch` / `phase`      | `@id #color`                   | `name` _(the parenthesised run)_, `desc`, `note`, `note-side`; with no name the display name is the translatable constant `Section` / `Branch` / `Phase` |
 | closers, `loop`, `[goto: id]`, `[]` | —                              | **none**                                                                                                                                                 |
 
@@ -362,7 +372,7 @@ body that carries it.
 | `/page/`, `/option/`          | `description` and the six header/footer slots; the display booleans, then `show-notes, auto-define, branch-color-arrows, i18n-strict, i18n-uniform-layout, i18n-storage, lang, lane-order`; then `block-margin, block-text`; then the four gutter titles |
 | `/role/`, `/block/`, `/prop/` | `label, text-color, background-color, icon`; `label, background-color, text-color, border-color, shape, icon`; `label, side, background-color, border-color, text-color, title, max-chars`                                                               |
 | step                          | `label, desc, remark, note, note-side, id, skip, level`                                                                                                                                                                                                  |
-| control statements            | `desc, note, note-side` on `if`, `section`, `branch` and `phase`; `note, note-side` on `case`, `and` and `fork`                                                                                                                                          |
+| control statements            | `desc, note, note-side` on `if`, `section`, `branch` and `phase`; `note, note-side` on `else-if`, `case` and `fork`                                                                                                                                      |
 | `/i18n/`                      | id-keyed subjects first, in the first-appearance order of the node they address in `/line/`; then quoted-source subjects by `keyForm` code point; within a subject, fields in the owning node's key order and languages in `@lang` order                 |
 
 `/option/` is a typed table. Booleans defaulting `true`, the eight display flags `show-left-gutter
@@ -438,27 +448,45 @@ subroutine · arrow-down`.
 
 A **row** is one flow item, and `rowIndex` is its position in the flattened `/line/` row list.
 **Every opener and every closer occupies a position in that list**, so `rowIndex` is total over the
-rows a jump can name or sit between. A **control frame** — an `if` case, a `fork` path, a `branch`
+rows a jump can name or sit between. A **control frame** — an `if` clause, a `fork` path, a `branch`
 — opens a flow scope; a **layout frame** — `section`, `phase` — opens a body but no scope and is
 transparent to every flow rule, so it never appears in `scopePath`, a row's chain of flow scopes
 from the root. A body **terminates** when its last row is a jump, or an `if` or `fork` all of whose
-bodies terminate. Every opener takes an optional id in the slot order `keyword [lane]? (text)?
-@id? #color?`, `@id` and `#color` read in either order; the parenthesised run is optional on every
+bodies terminate. Every opener takes an optional id and an optional colour last, `@id` and `#color`
+read in either order. The slot order is `keyword [lane]? (text)? @id? #color?` for `fork`,
+`section`, `branch` and `phase`, and `if [lane]? (question) is (label)? than @id? #color?` for
+`if`, whose first clause is fused onto its own line; the parenthesised run is optional on every
 opener but `if`, and an opener without one takes the display constant named in _Per-statement key
-sets_. `if`, `fork`, `section` and `phase` ids are jump targets; `case`, `and` and `branch`
+sets_. `if`, `fork`, `section` and `phase` ids are jump targets; `else-if`, `case` and `branch`
 ids exist only for translation overrides and GUI and diff stability.
 
-### `if` / `case`
+### `if` / `else-if`
 
 `if` takes an optional lane, written `[roleId]` immediately after the keyword; it is an ordinary
 role reference populating the IR's `if.lane`, and when it is omitted the renderer keeps today's
 derived placement and the formatter never materialises one. A bracket run containing an unescaped
 `:` is a step head and one without is a lane reference, and an opener's bracket always follows a
-keyword. Between the `if` opener and its first `case` only comments and the `if`'s own property
-block may appear. An `if` has one or more `case` rows; a `case`'s parenthesised run is optional,
-exactly like every other opener's — a blank or absent one is the unlabelled, catch-all case, there
-being no second keyword for it, any number of cases may be unlabelled, and none is positionally
-special; an empty case **body** is legal and renders as a bare edge to the join. An unlabelled case's chip is simply not drawn, the same as an unlabelled `and` path's.
+keyword.
+
+**There is no bare `if`.** An `if` names its own first clause on its own line, `if (question) is
+(label) than`, so the opener and the first clause are one statement and the first clause's body
+begins on the very next row. The question is **required** — `if` with no parenthesised run is
+`malformedIf` — while the label after `is` is optional exactly like every other clause's: `is ()
+than` and `is than`, with the parens dropped altogether, are the same blank first clause. `than`
+closes the clause and is **required**; an `if` whose `is` run is not followed by it is `malformedIf`,
+and so is a word other than `is` where `is` is expected.
+
+**Every later clause is `else-if (label) than`.** There is no bare `else` and no `elseif`: the
+catch-all is written `else-if () than`, the blank run standing in for "otherwise", and `else-if
+than` with no parens at all means the same thing. As with `is`, the parens are optional and `than`
+is not. Any number of clauses may be unlabelled and none is positionally special — a blank clause
+in the middle is legal, and there is no rule that the last one be the catch-all.
+
+An empty clause **body** is legal and renders as a bare edge to the join, and an unlabelled clause's
+chip is simply not drawn, the same as an unlabelled fork `case` path's. An `if` has one clause or
+more by construction, the first being part of the opener, so the older "`if` with no case" input is
+now unwritable; what `malformedIf` reports instead is a missing `is`, a missing `than` or a missing
+question. An `else-if` outside an `if` — after `fork`, or at the root — is an error.
 
 ### `loop` and `[goto: id]`
 
@@ -485,8 +513,9 @@ of either width wins there, so it is an ordinary step head — write the ASCII c
 `loop` and `[goto: id]` are ordinary rows, legal in **every** body and taking no suffixes and no
 properties. Two static clauses govern a jump `G` and the row `T` defining its target.
 
-- **Containment.** `scopePath(T)` must be a prefix of `scopePath(G)`. A target inside a case, fork
-  path or branch body that does not contain the jump is an **error**, whatever the row index.
+- **Containment.** `scopePath(T)` must be a prefix of `scopePath(G)`. A target inside an `if`
+  clause, fork path or branch body that does not contain the jump is an **error**, whatever the row
+  index.
 - **Direction.** `rowIndex(T) > rowIndex(G)` for `[goto: id]`, `<` for `loop` — an integer
   comparison, not graph reachability. It is a **warning**.
 
@@ -496,21 +525,20 @@ scan from the first row of the body: a step, a spacer or an `if` or `fork` gatew
 row and stops the scan; a `section` or `phase` opener is descended into, resuming after its closer
 if that body has no landing row; a `branch` opener is skipped whole, closer included; a jump, a
 comment or a property row is skipped; and reaching the frame's own closer is `unknownId`, an error.
-A `case`, `and` or `branch` id is not a target at all. A jump contributes exactly one edge,
+An `else-if`, `case` or `branch` id is not a target at all. A jump contributes exactly one edge,
 so its body terminates there, and anything not reachable from the flow entry is `unreachableRow`,
 computed in one worklist pass.
 
 **A step's `id:` line** declares that id in the one flat flow-node namespace, so `duplicate node
 id` applies across steps and openers alike. It is what a `[goto: id]` or a `loop @id` names, and
-the way a case leaves an `if` is to name the step it should continue at:
+the way a clause leaves an `if` is to name the step it should continue at:
 
 ```
 [role: text]
   id: mystep;
-if (q)
-case (yes)
+if (q) is (yes) than
   [goto: mystep]
-case (no)
+else-if (no) than
   [role: other]
   loop @mystep
 end-if
@@ -521,14 +549,16 @@ Where the enclosing `if` is what a jump is written against, this reader requires
 rather than drawn, even though the rules above license it — a known gap between this specification
 and `parser-v2.js`, not a second rule.
 
-### `fork` / `and`
+### `fork` / `case`
 
-`fork` takes the same optional label as `and`, naming path 1 exactly as `and (出荷)` names path 2;
-there is no name for the block as a whole, and the rows immediately after `fork` are path 1. **The
-split gateway is always drawn**, one out-edge per path; **the join is drawn iff at least one path
-reaches it**, with arity equal to the number that do; if none does, the whole `fork` terminates its
-enclosing body. A single-path `fork` is legal and keeps both gateways, and an empty `and` renders
-as a bare edge.
+`fork` takes the same optional label as `case`, naming path 1 exactly as `case (出荷)` names path 2;
+there is no name for the block as a whole, and the rows immediately after `fork` are path 1. A
+fork's path separator is the plain `case (label)` — it takes **no** `than`, that word belonging to
+the `if` clauses alone, and `case` is legal only inside a `fork`, an `if` clause being an `else-if`.
+**The split gateway is always drawn**, one out-edge per path; **the join is drawn iff at least one
+path reaches it**, with arity equal to the number that do; if none does, the whole `fork` terminates
+its enclosing body. A single-path `fork` is legal and keeps both gateways, and an empty `case`
+renders as a bare edge.
 
 ### `section`, `branch` and `phase`
 
@@ -539,7 +569,7 @@ A `branch` head receives no inbound edge, and its tail merges into the first of 
 searched forward from the closer **in the same flow scope**: a step → that step; an `if` or `fork`
 opener → its gateway; a `section` or `phase` opener → continue inside it; another `branch` → skip
 the whole block; a jump → that row's target; the scope's closer → that scope's join. The scan
-**stops at the enclosing flow scope's closer**, so a branch at the end of a case merges into the
+**stops at the enclosing flow scope's closer**, so a branch at the end of an `if` clause merges into the
 `end-if` join rather than escaping past it. A branch body that terminates in a jump contributes no
 merge edge; if the search reaches the end of the root body the tail is drawn as a terminal, and a
 branch that is the first flow row of its scope draws a start terminal, both warnings; and `@end` is
@@ -550,7 +580,7 @@ appear inside one.
 A **phase** is a horizontal band with its label in the left gutter. `phase` and `end-phase` must
 sit in the same body, and a phase may contain complete `if`, `fork`, `section` and `branch` blocks.
 A phase may open only where its flow scope is the **root body**, which makes one inside a
-root-level `section` legal, one inside a `section` nested in a case illegal, and — since a phase is
+root-level `section` legal, one inside a `section` nested in an `if` clause illegal, and — since a phase is
 open at every row of its own body — one phase inside another illegal. A phase is a layout region
 over a row range, not a scope: jumps cross bands freely, a back-edge into an earlier band does not
 reopen it, and a band whose rows are all skipped is still drawn at full height.
@@ -559,9 +589,10 @@ reopen it, and a band whose rows are all skipped is still drawn at full height.
 
 `if`, `fork`, `section`, `branch` and `phase` push onto **one** block stack. A closer must name the
 kind of the innermost open frame; any other closer is `closerMismatch`, an **error**, and the frame
-is closed anyway so nothing cascades. `case` and `and` do not push: they close the current
-alternative and open the next inside the top frame, and are errors when that frame is not an `if`,
-or not a `fork`. Every closer is spelled `"end-" + openerKeyword` and nothing else closes a frame.
+is closed anyway so nothing cascades. `else-if` and `case` do not push: they close the current
+alternative and open the next inside the top frame, `else-if` erroring when that frame is not an
+`if` and `case` when it is not a `fork`. Every closer is spelled `"end-" + openerKeyword` and
+nothing else closes a frame; `end-if` and `end-fork` are unchanged by the clause spellings.
 
 The trailing glyph sets `step.arrow` and styles that step's **single outgoing edge**, whatever it
 connects to — the next row, a following gateway, the entry row of a following frame, the enclosing
@@ -704,8 +735,7 @@ it.
   desc.en: Check the customer requirements and draft the quote;
   remark: 金額が 100 万円超なら本部承認;
   id: quote;
-if (承認する？ | Approve?)
-case (はい | Yes) #green
+if (承認する？ | Approve?) is (はい | Yes) than #green
   [system: 監査ログ保存]
 end-if
 
@@ -733,8 +763,8 @@ content.
 The translatable set is closed: `/title/` the title; `/page/` `description`, the six header and
 footer slots and the four gutter titles; `/option/` the four gutter titles **only**; `/role/`
 `label`; `/block/` `label`; `/prop/` `label` and `title`; a step's bracket text and its `label`,
-`desc`, `remark`, `remark-desc` and `note`; `if` `question`, `case`, `and` and `fork` `label`,
-`section`, `branch` and `phase` `name`; `/meta/` **none**, `tags` included. Every other key is a
+`desc`, `remark`, `remark-desc` and `note`; `if` `question` and `firstCase`, `else-if`, `case` and
+`fork` `label`, `section`, `branch` and `phase` `name`; `/meta/` **none**, `tags` included. Every other key is a
 token value and a `.lang` suffix on it is an error. For `K` segments and `M` declared languages,
 `K > M` is an error; `K < M` leaves the remaining languages with no value _at this level_, falling
 through the chain, as does an empty segment at any position > 1; an empty **first** segment is an
@@ -744,7 +774,8 @@ error.
 split at the **last** `.` — unambiguous because neither ids nor tags contain `.`. A key beginning
 with `"` is a quoted source string; `id.field` addresses a flow node, and `field` is the **IR field
 name**, not the DSL key that writes it: a step's left-gutter caption is `label` and its box text is
-`text`; an `if`'s question is `question`; a `case`'s or `and`'s label is `label`; a `section`'s,
+`text`; an `if`'s question is `question` and the label fused onto its own line after `is` is
+`firstCase`; an `else-if`'s or a fork `case`'s label is `label`; a `section`'s,
 `branch`'s or `phase`'s name is `name`; every other translatable field's IR name is its key. Both
 sides of a lookup are reduced to `keyForm` — edge-trimmed and NFC — and compared byte-exactly: no
 case, width, kana or punctuation folding and no markup stripping. Only quoted-source entries are
@@ -780,7 +811,7 @@ renderHash(compact(x))`.
 every block body, section and the file carries trailing comments, storing text without delimiters.
 Attachment is one buffer-and-flush rule: a comment joins the buffer of the body it appears in, and
 the buffer drains either into the next statement pushed into that same body or, when the body ends
-— at its closer _or_ at a sibling `case` or `and` — into that body's trailing comments.
+— at its closer _or_ at a sibling `else-if` or `case` — into that body's trailing comments.
 
 **Ids are never invented.** A node's id is set only by an explicit id in the source — a step's
 `id: <id>;` line, an opener's `@id` slot — or by the explicit, idempotent `assignIds` transform,
@@ -850,13 +881,20 @@ suffixStart  := "<" | "@" | "+" | glyph
 glyph        := "->" | "~>" | "..>" | "-.>" | "-->"  -- longest match; "->" is never emitted
 
 block        := ifBlock | forkBlock | sectionBlock | branchBlock | phaseBlock
-ifBlock      := ifOpen comment* caseClause+ "end-if"
-ifOpen       := "if" lane? lparen text rparen idSlot? color? property*
-caseClause   := "case" (lparen text rparen)? idSlot? color? property* row*
-                -- a blank or absent run is the unlabelled, catch-all case
-forkBlock    := forkOpen row* andClause* "end-fork"
+ifBlock      := ifOpen row* elseIfClause* "end-if"
+ifOpen       := "if" lane? lparen text rparen
+                "is" (lparen text rparen)? "than" idSlot? color? property*
+                -- the first clause is fused onto the opener: there is no bare `if`.
+                -- The question is required, the label after "is" is not, and "than"
+                -- closes the clause; the rows after it are the first clause's body,
+                -- so a property row there is the if's, not that clause's.
+elseIfClause := "else-if" (lparen text rparen)? "than" idSlot? color? property* row*
+                -- a blank or absent run is the unlabelled, catch-all clause; there
+                -- is no bare "else" and no "elseif"
+forkBlock    := forkOpen row* forkCase* "end-fork"
 forkOpen     := "fork" (lparen text rparen)? idSlot? color? property*
-andClause    := "and" (lparen text rparen)? idSlot? color? property* row*
+forkCase     := "case" (lparen text rparen)? idSlot? color? property* row*
+                -- a fork path after the first; no "than", and legal only in a fork
 sectionBlock := "section" (lparen text rparen)?
                 idSlot? color? property* row* groupClose
 branchBlock  := "branch" (lparen text rparen)? idSlot? color? property* row* groupClose
@@ -903,7 +941,7 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | **Lexing.** A run beginning with `"` that does not end with one (L01); `;` inside a value (L02)                                                    | literal text, as in `[sales: "完了" を押す]`; a bare value ends at the first unescaped `;`, its canonical spelling being quoted                                                                                    | `quoteNotDelimiter`; `unknownStatement` on the remainder                                     |
 | `（承認する？)`; `desc: 条件A；条件B;` (L03)                                                                                                       | the closer must match the kind that opened the run; `；` is content and the value ends at the ASCII `;`                                                                                                            | `unbalancedParen`; `fullWidthPunctuation` where such a value reaches its bound with no `;`   |
 | `[sales: 予算[確定] を承認]` (L04); `if (金額 (税込) は 100 万超？)` (L12)                                                                         | matching-kind depth counting from 1; the other bracket kind is content; text after the closer that is not a colour is an error                                                                                     | `unbalancedBracket`, `unbalancedParen`                                                       |
-| `case (はい) #greenish`, `icon: #Circle-Chek;` (L05)                                                                                               | theme default, icon omitted; the token is re-emitted verbatim, case included                                                                                                                                       | `unknownColor`                                                                               |
+| `else-if (はい) than #greenish`, `icon: #Circle-Chek;` (L05)                                                                                               | theme default, icon omitted; the token is re-emitted verbatim, case included                                                                                                                                       | `unknownColor`                                                                               |
 | `/title/ 受注処理 2026/09 版;` (L06)                                                                                                               | `/09 版` is content: a marker is recognised only at a statement boundary                                                                                                                                           | none                                                                                         |
 | `<営業 01>`, `@end` written as an id (L07); `<HEX>` where only `<hex>` exists (L08)                                                                | ids are Unicode but hold no space and may not spell a directive name; ids are case-sensitive and there is no retry                                                                                                 | `invalidId`; `undefinedReference`                                                            |
 | `end-ifx` (L09)                                                                                                                                    | one maximal word, exact lookup, never a prefix match                                                                                                                                                               | `unknownStatement` with a did-you-mean                                                       |
@@ -911,18 +949,18 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | `quote.remark en: …;` (L11)                                                                                                                        | a space is not a tag separator; squashed the row is `quote.remarken:`                                                                                                                                              | `i18nEntryMalformed`                                                                         |
 | `<hex> shape: hex; <terminal> shape: rounded;` on one line (L13); `@use "./role/sales standard.swim";` (L14)                                       | one definition ends at the next `<` at a statement boundary; a path is an ordinary value, bare to `;` or quoted, never folded                                                                                      | none                                                                                         |
 | **Control flow.** `[goto: top]` where `top` is upstream (C01); `loop @c` where `@c` is downstream (C06)                                            | accepted and drawn; direction is a warning and no tool substitutes one jump for the other                                                                                                                          | `jumpDirection`                                                                              |
-| `[goto: x]` from `case (a)` into `case (b)` (C02); `[goto: side]` naming a `branch` (C17)                                                          | rejected: the row can never reach the target; a branch head has no inbound edge                                                                                                                                    | `unreachableRow`, `unknownId`                                                                |
+| `[goto: x]` from `is (a) than` into `else-if (b) than` (C02); `[goto: side]` naming a `branch` (C17)                                                          | rejected: the row can never reach the target; a branch head has no inbound edge                                                                                                                                    | `unreachableRow`, `unknownId`                                                                |
 | A fork path ending in `[goto: id]` (C03); a `fork` with one path (C13)                                                                             | the split is always drawn, the join iff ≥ 1 path reaches it, with that arity; one path keeps both gateways                                                                                                         | `forkArity`                                                                                  |
 | `[goto: id]` at the root, in a `section` or in a `phase` (C04); a row after `loop @quote` (C05)                                                    | jumps are legal in every body; nothing is deleted, so the diagnostic survives format-on-save                                                                                                                       | none; `unreachableRow`                                                                       |
 | `loop @retry` where `@retry` names an `if` (C07)                                                                                                   | legal — every opener takes an optional `@id`, which is also what makes control text addressable                                                                                                                    | none                                                                                         |
-| Bare `loop` inside a `section` inside a case; with no enclosing `if` (C08)                                                                         | searches outward through every frame kind; the fix offers each upstream node that already has an id                                                                                                                | `unknownId`                                                                                  |
-| `if [manager] (承認する？)`, `if []` (C09)                                                                                                         | the lane populates the IR's `if.lane`; omitted means "keep today's derived placement"                                                                                                                              | `emptyValue`                                                                                 |
-| A step between `if` and its first `case` (C10); an `if` with no case (C11)                                                                         | both rejected; an empty case _body_, and a blank `case ()`, are legal and draw a bare edge                                                                                                                         | `malformedIf`                                                                                |
-| `fork (通知)` (C12)                                                                                                                                | names path 1 exactly as `and (出荷)` names path 2; there is no name for the block                                                                                                                                  | none                                                                                         |
+| Bare `loop` inside a `section` inside an `if` clause; with no enclosing `if` (C08)                                                                         | searches outward through every frame kind; the fix offers each upstream node that already has an id                                                                                                                | `unknownId`                                                                                  |
+| `if [manager] (承認する？) is (はい) than`, `if [] (q) is () than` (C09)                                                                                                         | the lane populates the IR's `if.lane`; omitted means "keep today's derived placement"                                                                                                                              | `emptyValue`                                                                                 |
+| A bare `if (q)`, an `if (q) is (a)` with no `than` (C10); an `if` with no clause (C11)                                                             | the first two are rejected; the third is unwritable, the first clause being part of the opener. An empty clause _body_, a blank `is () than` and a blank `else-if () than` are all legal and draw a bare edge      | `malformedIf`                                                                                |
+| `fork (通知)` (C12)                                                                                                                                | names path 1 exactly as `case (出荷)` names path 2; there is no name for the block                                                                                                                                 | none                                                                                         |
 | `end-if` while a `section` is open; `end-branch` closing a `section` (C14)                                                                         | refused, the frame closed anyway so nothing cascades                                                                                                                                                               | `closerMismatch`                                                                             |
-| A `branch` followed only by `@end`; a `branch` at the end of a case (C15, C16)                                                                     | the tail is drawn as a terminal; inside a case it merges into the `end-if` join and the escaping edge is unconstructible                                                                                           | `branchNoNeighbour`; none                                                                    |
+| A `branch` followed only by `@end`; a `branch` at the end of an `if` clause (C15, C16)                                                             | the tail is drawn as a terminal; inside a clause it merges into the `end-if` join and the escaping edge is unconstructible                                                                                         | `branchNoNeighbour`; none                                                                    |
 | A `phase` containing a complete `if` (C18); a `phase` in a fork path, or nested (C19); `loop` across `end-phase` (C20)                             | legal; rejected, since a band covers a contiguous range of root-level rows; legal, a phase being a region and not a scope                                                                                          | none; `frameNotAllowedHere`; none                                                            |
-| `[sales: X] ~>` last in a case (C21); two glyphs on one step                                                                                       | styles the edge into the `end-if` join; the arrow slot is single-valued                                                                                                                                            | `arrowNoEdge` where there is no edge; `badSuffix`                                            |
+| `[sales: X] ~>` last in an `if` clause (C21); two glyphs on one step                                                                                       | styles the edge into the `end-if` join; the arrow slot is single-valued                                                                                                                                            | `arrowNoEdge` where there is no edge; `badSuffix`                                            |
 | `[warehouse: 出荷準備] @ship`, two `=>` on one step (C22); a `[…]` row in `/page/`, a `/line/` with zero rows (C23)                                | a step's id is a property line, so a trailing `@ship` is not a suffix but the next statement; a step links to at most one diagram; the first is rejected, the second legal                                         | `unknownDirective`, `badSuffix`; `flowRowOutsideLine`                                        |
 | **Properties.** `skip;`, `skip: true;`, `skip-reason:`; `[]`, `[sales:]` (P01)                                                                     | the first two are one fact and the third an unknown key; `[]` is never numbered while `[sales:]` is                                                                                                                | `unknownKey`; none                                                                           |
 | `+RQ +RQ`, two `id:` lines on one step (P02); `+RQ` written after a property row                                                                   | `+prop` accumulates and dedupes; the glyph is single-valued and a step's id is set once; suffixes precede the property block                                                                                       | `badSuffix`, `duplicateKey`                                                                  |
@@ -930,7 +968,7 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | `lang: fr;` with `@lang ja, en;`; a gutter title in both `/page/` and `/option/` (P05)                                                             | rejected, since it selects what renders; `/option/` wins                                                                                                                                                           | `unknownLanguage`; `titleInBothSections`                                                     |
 | `colour:` in `/role/`, `x-figma-node: 12:345;` (P06); `status: wip;`, `updated: 2026/09/05;`, `max-chars: 十;` (P07)                               | kept verbatim in an ordered `unknown` bag and re-emitted after the known keys; `x-` is opaque; each falls back to its default                                                                                      | `unknownKey`; none; `badValue`                                                               |
 | `icon: ;` vs `icon: "";` vs `icon: none;` (P08)                                                                                                    | error, explicitly empty, clears an inherited value and is always re-emitted                                                                                                                                        | `emptyValue`                                                                                 |
-| `[sales: 見積作成] +RQ` with no definitions (P09); `desc:` under a `case`, `note:` after `end-if` (P10)                                            | stubbed from the id and flagged provisional; closers, jumps and `[]` take no properties                                                                                                                            | `undefinedReference`; `keyNotAllowedHere`                                                    |
+| `[sales: 見積作成] +RQ` with no definitions (P09); `desc:` under an `else-if`, `note:` after `end-if` (P10)                                            | stubbed from the id and flagged provisional; closers, jumps and `[]` take no properties                                                                                                                            | `undefinedReference`; `keyNotAllowedHere`                                                    |
 | `shape: arrow-down;`, `shape: hexagon;` (P11); two `note:`, `note-side:` with no `note:` (P12)                                                     | documented and parses; falls back to `rounded`; a note is single assignment, the default side the constant `right`                                                                                                 | `badValue`; `duplicateKey`, `noteSideWithoutNote`                                            |
 | **Imports.** `@use assets/logo.png;` then `icon: @logo;`                                                                                           | the stem binds the id; the image is embedded as a `data:` URI in an `<image>`, never inlined as markup                                                                                                             | none                                                                                         |
 | Two imports whose stems agree; `@use a/logo.png as brand;`                                                                                         | refused rather than one silently winning; `as` names it                                                                                                                                                            | `duplicateAsset`                                                                             |
@@ -954,7 +992,7 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | A local `"完了".en:` and a glossary `"完了".en:` (N05); a glossary declaring `ja, en, zh` imported by a `ja, en` diagram (N06)                     | local beats imported silently; two imports disagreeing is reported; the importer's `@lang` is authoritative and the extra entry is inert, while a glossary whose source language differs is an error at the `@use` | `importConflict`; `redundantOverride`, `notAFragment`                                        |
 | `"監査ログ保存 ".en:`; a decorated and an undecorated occurrence of one sentence (N07, N15)                                                        | keys compare byte-exactly after edge-trim and NFC — no folding of any kind, no markup stripping                                                                                                                    | `staleCatalogEntry`                                                                          |
 | `見積 \| \| Angebot` with three languages; `\| Done` (N09)                                                                                         | an interior empty segment falls through to the catalog; an empty _first_ segment is an error                                                                                                                       | `segmentCount`                                                                               |
-| `case (あり) @need-yes` plus `/i18n/ need-yes.label.en:` (N10); a step's `id: done;` reached only by `/i18n/ done.label.en:` (N11)                 | control heads take `@id`, with reserved field names per kind; a catalog key and a `field.lang:` line both count as references, so the id survives every format                                                     | `badKeySuffix`; `unknownId` on a positional id                                               |
+| `else-if (あり) than @need-yes` plus `/i18n/ need-yes.label.en:` (N10); a step's `id: done;` reached only by `/i18n/ done.label.en:` (N11)                 | control heads take `@id`, with reserved field names per kind; a catalog key and a `field.lang:` line both count as references, so the id survives every format                                                     | `badKeySuffix`; `unknownId` on a positional id                                               |
 | An inline `\| Create quote` plus `quote.text.en:` (N12); `desc:` plus `desc.ja:` (N13); `label.fr:` with `@lang ja, en;` (N14)                     | node-local wins, so the catalog entry can never render; `key.<source>:` is exactly the bare key; an undeclared tag is a reference failure and stays an error                                                       | `unusedCatalogEntry`; `duplicateKey`; `unknownLanguage`                                      |
 | A fenced `desc:` containing a Markdown table (N16); a two-line `/title/` (N17)                                                                     | nothing is structural inside a fence; a newline inside the title is one structural space, so it segments as its one-line form                                                                                      | `i18nEntryMalformed` on a multi-line quoted key; `segmentCount` quoting the joined text      |
 | Two occurrences of `確認` translated differently under `i18n-storage: catalog;` (N18); a hand edit of a step whose text keys a catalog entry (N19) | nothing is hoisted, hoisting running only when it changes no rendered string; the entry is never rekeyed or deleted by the formatter                                                                               | `unusedCatalogEntry`; `staleCatalogEntry`, `missingTranslation`                              |
@@ -964,7 +1002,7 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | `if　(q)` with U+3000; `[sales: 見積​作成]` with U+200B (S04)                                                                                      | a separator outside a run and content inside one, so it parses today and keeps parsing; the invisible character is kept, deleting one not being a formatter's job                                                  | none; `invisibleCharacter`                                                                   |
 | `fmt --compact` on a file with an unresolvable `@use` (S05)                                                                                        | writes nothing rather than emitting a viewer-dependent one-liner                                                                                                                                                   | `importNotFound`                                                                             |
 | `***重要***` at row start or inside a `desc:` (S06)                                                                                                | decoration in both positions, never a comment                                                                                                                                                                      | none                                                                                         |
-| A fenced value at indent 4 inside `if`/`case` (S07); a comment alone in an empty `case` body (S08)                                                 | parse dedents by `min(N, own indent)` and emit adds exactly the statement's indent; the comment becomes that body's trailing comments                                                                              | none                                                                                         |
+| A fenced value at indent 4 inside `if`/`else-if` (S07); a comment alone in an empty `else-if` body (S08)                                                 | parse dedents by `min(N, own indent)` and emit adds exactly the statement's indent; the comment becomes that body's trailing comments                                                                              | none                                                                                         |
 | `desc: "引用";` versus `desc: "引用" のこと;` (S09)                                                                                                | a whole extent wrapped in `"` is a quoted string; a run that does not also end in `"` keeps the quotes as content                                                                                                  | none; `quoteNotDelimiter`                                                                    |
 | A file with no `/page/` content (S10); blank lines anywhere in the source (S11)                                                                    | no `/page/` header is emitted; one separator, never significant, output blank lines being a function of kind and depth                                                                                             | none                                                                                         |
 | The same diagram as a file, a Markdown fence or an API body (S12)                                                                                  | identical bytes and identical `sourceHash`; `@end` is optional and emitted iff it was present                                                                                                                      | `textOutsideDiagram`                                                                         |
@@ -975,7 +1013,8 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | `&lt;hex&gt;` in step text or in suffix position (V02)                                                                                             | the migration decodes entities in the positions the older grammar left unescaped, so a `&lt;hex&gt;` suffix becomes `<hex>`; the reader decodes nothing                                                            | migration report                                                                             |
 | `end-branch` closing a `section`; `end-point` (V04)                                                                                                | the migration writes the opener's closer for a same-family mismatch and `end-section` for `end-point`; a cross-family mismatch is refused                                                                          | migration report; `closerMismatch`                                                           |
 | `label.en:`, `/i18n/`, `/option/ lang:` (V05)                                                                                                      | the migration carries nothing multilingual, so adding them is an edit afterwards                                                                                                                                   | none                                                                                         |
-| `if (q) is (a) than #blue` (V07); `else than #gray` (V18)                                                                                          | the migration writes `if (q) #blue` plus `case (a)`, and a blank `case () #gray`; the old one token coloured the diamond, and the case inherits it                                                                 | migration report                                                                             |
+| `if (q) #blue` + `case (a)` (V07); a bare `else #gray`, `and (b)` (V18)                                                                            | the migration fuses the pair into `if (q) is (a) than #blue`, keeping the `if`'s own colour where both carried one; a bare `else` becomes `else-if () than #gray` and a fork's `and (b)` becomes `case (b)`        | migration report                                                                             |
+| An already-current `if (q) is (a) than` or `else-if (b) than` put through Update DSL (V20)                                                         | passes through unchanged: the migration is line-based and matches only the older spellings, so running it twice is the same as running it once                                                                     | none                                                                                         |
 | Format-on-save (V11); `desc: ``` … @end … ```;` (V12)                                                                                              | never writes an older spelling back; the fence-aware scan keeps a fenced `@end` as content                                                                                                                         | none; `missingEnd`                                                                           |
 | Two headers in one file (V13); `/meta/` after `/role/` (V14)                                                                                       | the first header wins and the trailer is an error; a marker always closes the current section                                                                                                                      | `textOutsideDiagram`; none                                                                   |
 | A `/role/` fragment posted for validation (V15)                                                                                                    | validated in fragment mode, never by string-wrapping it in a synthetic document                                                                                                                                    | none                                                                                         |
@@ -983,7 +1022,7 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | **Tooling.** Two steps sharing one `<block>` (T01)                                                                                                 | a step's id comes only from its `id:` line or the explicit transform, never from its `<block>` reference                                                                                                           | `duplicateId` on a real collision                                                            |
 | A diagnostic in a squashed file (T02); a `/meta/ status:` edit (T03)                                                                               | anchored by offset and node path, the GUI lock being a path-prefix test; `sourceHash` changes and `renderHash` does not                                                                                            | none                                                                                         |
 | A host rendering the IR as something other than the diagram (T04)                                                                                  | it walks the same node kinds, and a jump resolves through an index built over every kind and not steps only, so a target that is an `if` or a frame shows a label                                                  | none                                                                                         |
-| `if (承認する？) case (はい` … (T05)                                                                                                               | one diagnostic, recovery to the next sync token, and the bracketed step still lands in the はい case                                                                                                               | `unbalancedParen`, `unclosedBlock`                                                           |
+| `if (承認する？) is (はい` … (T05)                                                                                                                 | one diagnostic, recovery to the next sync token, and the bracketed step still lands in the はい clause                                                                                                             | `unbalancedParen`, `unclosedBlock`                                                           |
 | A GUI reorder saved while a `desc:` is broken (T06); `section (監査) #turquoise` with `max-chars: 10;` (T07)                                       | the reorder is written and the broken statement survives character for character; both are warnings and both tokens round-trip                                                                                     | none; `unknownColor`, `badValue`                                                             |
 | The compact form used as transport (T08); a squashed one-liner posted to a host that stores it (T09)                                               | it inlines the import closure by default, `--keep-use` opting out; the host normalises but never repairs                                                                                                           | `importNotFound`; `missingSemicolon` with an offset-anchored insert                          |
 
@@ -1016,12 +1055,12 @@ delimiter or a key — exactly the value-level codes listed below as errors.
 | `duplicateKey`           | error    | format | "…" is already set on …                                                                                                                                                                            | Remove one / Swap the lines / Merge               |
 | `duplicateId`            | error    | format | duplicate id or `<…>` definition                                                                                                                                                                   | Rename to `…-2` (updates N references)            |
 | `invalidId`              | error    | format | invalid, empty or reserved id "…"; `<goto>` is reserved for the `[goto: id]` statement                                                                                                             | Rename to `…` (updates N references)              |
-| `unknownId`              | error    | format | no node with id "…"; a jump needs a target; `case`, `and` and `branch` heads and empty frames are not targets; bare `loop` needs an enclosing `if`, and `[goto: id]` needs a node carrying that id | did-you-mean / Add an `id:` line                  |
+| `unknownId`              | error    | format | no node with id "…"; a jump needs a target; `else-if`, `case` and `branch` heads and empty frames are not targets; bare `loop` needs an enclosing `if`, and `[goto: id]` needs a node carrying that id | did-you-mean / Add an `id:` line                  |
 | `unreachableRow`         | error    | format | nothing reaches this statement, or the target is in a scope this row cannot reach                                                                                                                  | Move above the jump / Delete                      |
 | `badSuffix`              | error    | format | "…" is given twice, or after the first property row                                                                                                                                                | Remove the second / Move it                       |
 | `keyNotAllowedHere`      | error    | format | "…" is not a property of "…" (allowed: …); `unset:` needs a mergeable section                                                                                                                      | Change to `note:` / Move under the step           |
 | `flowRowOutsideLine`     | error    | format | flow row outside `/line/`                                                                                                                                                                          | Move into `/line/`                                |
-| `malformedIf`            | error    | format | row before the first `case`; `if` with no case                                                                                                                                                     | Insert `case (…)`                                 |
+| `malformedIf`            | error    | format | `if` requires `is (…) than`; an `is (…)` clause must end with `than`; `else-if` must end with `than`; `if` requires a question; `else-if` outside an `if`, `case` outside a `fork`                  | Insert `is (…) than` / Insert `than`              |
 | `closerMismatch`         | error    | format | "…" closes "…", or closes nothing, while "…" is still open                                                                                                                                         | Insert the missing closer / Delete                |
 | `unclosedBlock`          | error    | format | "…" is not closed (missing "…")                                                                                                                                                                    | Insert the closer at the closure point            |
 | `frameNotAllowedHere`    | error    | format | `phase` must be at the top level and phases do not nest; `branch` may not nest inside `branch`                                                                                                     | Replace with `section (…)` / Move it out          |
@@ -1056,7 +1095,7 @@ delimiter or a key — exactly the value-level codes listed below as errors.
 | `laneOrderUnknown`       | warning  | none   | `lane-order` names "…", which is not a role                                                                                                                                                        | did-you-mean (edit distance 1 only)               |
 | `jumpDirection`          | warning  | none   | target "…" is upstream of a `goto`, or downstream of a `loop`                                                                                                                                      | Replace with `loop @…` / `[goto: …]`              |
 | `idIsKeyword`            | warning  | none   | id "…" is also a control keyword                                                                                                                                                                   | Rename                                            |
-| `forkArity`              | warning  | none   | the join has K of N incoming paths; a `fork` with one path                                                                                                                                         | Add `and` / Remove the frame                      |
+| `forkArity`              | warning  | none   | the join has K of N incoming paths; a `fork` with one path                                                                                                                                         | Add `case (…)` / Remove the frame                 |
 | `branchNoNeighbour`      | warning  | none   | the branch tail is drawn as a terminal, or its head as a start terminal                                                                                                                            | Add a step / End with `[goto: id]`                |
 | `arrowNoEdge`            | warning  | none   | arrow glyph on a step with no outgoing edge                                                                                                                                                        | Delete the glyph                                  |
 | `noteSideWithoutNote`    | warning  | none   | `note-side:` with no `note:`                                                                                                                                                                       | Delete the line                                   |
@@ -1087,8 +1126,11 @@ diff — never silently, and never as part of a save. Spelling rewrites:
 | older construct                                                                              | written as                                                                                  |
 | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `@kai-swimlane-v2`, `@kai-swimlane 2`                                                        | `@kai-swimlane` — the one header                                                            |
-| `if (q) is (a) than #c`                                                                      | `if (q) #c` + `case (a)` — the old one token coloured the diamond, and the case inherits it |
-| `else-if (b) than #c`; `else than #c`                                                        | `case (b) #c`; a blank `case () #c` — there is no `else`                                    |
+| a bare `if (q) #c` whose very next line is `case (a) #d`                                     | the two fused onto one line, `if (q) is (a) than #c` — the `if`'s own colour wins, the case's being used only when the `if` carried none. A bare `if` whose next line is anything else (a comment, a blank line) is left alone: its first case is missing and the reader says so |
+| a later `case (b) #c`, not the first, outside a `fork`; a blank `case ()`                    | `else-if (b) than #c`; `else-if () than`                                                    |
+| a bare `else #c`, `else than #c` — the oldest spelling, no parens                            | `else-if () than #c` — there is no bare `else` and no `elseif`                              |
+| a fork's `and (b) #c` (the `fork (a)` opener line itself is unchanged)                       | `case (b) #c` — `and` is gone and `case` is the fork's path separator now                   |
+| an already-current `if (q) is (a) than` / `else-if (b) than` / fork `case (b)`               | unchanged — the rewrite matches only the older spellings, so it is idempotent                |
 | `[loop]`, `[loop];`; `merge: id;` and `[merge: id]`                                          | `loop`; `[goto: id]`                                                                        |
 | bare `merge;` and `[merge]`; a `[merge]` / `[merge: name]` landing marker in the flow        | **nothing** — left untouched, so the reader errors on the line (see below)                  |
 | `props: A,B;`, `arrow: dashed;`, `link: path;`                                               | the suffixes `+A +B`, `~>` (`solid` → nothing), `=> path`                                   |
@@ -1102,7 +1144,7 @@ diff — never silently, and never as part of a save. Spelling rewrites:
 | a `/title/` with no `;`                                                                      | the lines joined with one space, then `;`                                                   |
 
 **The one construct with no automatic mapping is a jump with no target.** The older grammar's bare
-`merge;` / `[merge]` in a case landed on the next landing marker, and a `[merge]` / `[merge: name]`
+`merge;` / `[merge]` in a clause landed on the next landing marker, and a `[merge]` / `[merge: name]`
 row in the flow _was_ that marker. Neither has an equivalent here: there is no marker concept any
 more, and every jump names a real node. Rather than guess which node was meant, the migration
 leaves those lines exactly as written; the reader then errors on them, pointing at the line to fix
@@ -1115,15 +1157,15 @@ doubled; a value containing its own terminator, a bare `none`, and a run whose w
 wrapped in `"` are quoted; `key: ;` becomes `key: "";`; a Unicode space outside the six structural
 ones in delimiter position becomes U+0020; a missing `;` is inserted at the end of the statement's
 last token; the earlier of two rows writing one key is deleted, keeping the older reader's winner;
-every `else` becomes a blank `case ()`, there being no positional or uniqueness constraint on an
-unlabelled case; out-of-charset ids are slugified and every reference rewritten
+every `else` becomes a blank `else-if () than`, there being no positional or uniqueness constraint
+on an unlabelled clause; out-of-charset ids are slugified and every reference rewritten
 (`slug()`: NFKC and trim, every run outside the id charset to one `-`, collapse and strip `-`, the
 literal `id` when empty, `-2`, `-3` on collision in declaration order); a property row the older
 reader attached to the last step across a control row is moved under that step; fenced bodies are
 re-indented, the older reader having trimmed the join once and never dedented; text outside the
 diagram is moved into a comment; the lanes and props it invented silently are materialised; and the
 header is set last. Four inputs are refused rather than guessed — a closer crossing the
-group/control boundary, a `merge:` into a sibling case, a row after a jump, and a nested `branch` —
+group/control boundary, a `merge:` into a sibling clause, a row after a jump, and a nested `branch` —
 and the file is left untouched with the offending rows named.
 
 ## Trade-offs
@@ -1133,9 +1175,11 @@ and the file is left untouched with the offending rows named.
   `note` a step field, `@use` a pre-pass.
 - **Pro:** one spelling per construct. No legacy production is part of this grammar and no reader
   accepts one, so there is no second way to write anything and nothing to keep in sync.
-- **Pro:** the `than` / `elseif` error class is gone, and value-level problems no longer hard-lock
-  a diagram: an unknown colour today blocks formatting and can lose the token on save, where here
-  it is a warning that renders, formats and round-trips byte for byte.
+- **Pro:** one clause spelling. `if … is … than` and `else-if … than` are the only two, there is no
+  bare `if`, no bare `else` and no `elseif`, so "which of the four spellings does this reader take"
+  is not a question any more; and value-level problems no longer hard-lock a diagram: an unknown
+  colour today blocks formatting and can lose the token on save, where here it is a warning that
+  renders, formats and round-trips byte for byte.
 - **Pro:** whitespace-insensitive under a token-stream squash, so it meets the squash rule of [dsl-proposals.md](dsl-proposals.md) §2 while still
   looking like the current syntax, and path-anchored diagnostics keep working where line-keyed ones
   break.

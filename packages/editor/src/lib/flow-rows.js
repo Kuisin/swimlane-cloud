@@ -93,47 +93,109 @@ export function normalizeBranchDepths(rows) {
   return out;
 }
 
-function findBranchStartForId(rows, rowIndex) {
-  const row = rows[rowIndex];
-  if (!row?.id) return -1;
-  if (row.kind === "branchStart") return rowIndex;
-  for (let j = rowIndex; j >= 0; j--) {
-    if (rows[j].kind === "branchStart" && rows[j].id === row.id) return j;
+/** A branch spends two indent steps (opener → case chip → case body). */
+const BRANCH_INDENT = 2;
+/** A group spends one: it has no chip row between its marker and its body. */
+const GROUP_INDENT = 1;
+
+/**
+ * GUI step list indent for every row, in the 16px units `FlowStepList` turns
+ * into `padding-left` — derived from how the rows actually nest, not from the
+ * `depth` a parser stamped on each one.
+ *
+ * An `if`/`fork` costs two steps: its opener, its cases and its closer share
+ * one column (2n), each case chip sits one in (2n+1) and a case body two
+ * (2n+2), so the chips read as headings over the steps they own. A
+ * `section`/`branch` group costs one, because nothing sits between its marker
+ * and its body.
+ *
+ * The important part is that branches and groups are walked on ONE stack, the
+ * same way `computeRowDepths` (row-depths.js) does it for the serializer. The
+ * previous version tracked branches only and fell back to `row.depth` outside
+ * them, which meant a group contributed nothing: a `branch (Side)` inside a
+ * case rendered flush with its own contents, and an `if` inside a `section`
+ * jumped back to column 0 as though it were top-level.
+ */
+export function computeRowListIndents(rows) {
+  const out = new Array(rows?.length ?? 0).fill(0);
+  const frames = [];
+  let body = 0;
+
+  const popTo = (kind, id) => {
+    for (let k = frames.length - 1; k >= 0; k--) {
+      if (frames[k].kind === kind && frames[k].id === id) {
+        const frame = frames[k];
+        frames.length = k;
+        return frame;
+      }
+    }
+    return null;
+  };
+  // A case closes anything its previous case left open — a group that ran off
+  // the end of one case cannot go on nesting the next one.
+  const findBranch = (id) => {
+    for (let k = frames.length - 1; k >= 0; k--) {
+      if (frames[k].kind === "branch" && frames[k].id === id) {
+        frames.length = k + 1;
+        return frames[k];
+      }
+    }
+    return null;
+  };
+
+  for (let i = 0; i < out.length; i++) {
+    const row = rows[i];
+    switch (row?.kind) {
+      case "branchStart": {
+        out[i] = body;
+        frames.push({ kind: "branch", id: row.id, base: body });
+        body += BRANCH_INDENT;
+        break;
+      }
+      case "branchCase": {
+        const frame = findBranch(row.id);
+        const base = frame ? frame.base : Math.max(0, body - BRANCH_INDENT);
+        out[i] = base + 1;
+        body = base + BRANCH_INDENT;
+        break;
+      }
+      case "branchEnd": {
+        const frame = popTo("branch", row.id);
+        const base = frame ? frame.base : Math.max(0, body - BRANCH_INDENT);
+        out[i] = base;
+        body = base;
+        break;
+      }
+      case "groupStart": {
+        out[i] = body;
+        frames.push({ kind: "group", id: row.id, base: body });
+        body += GROUP_INDENT;
+        break;
+      }
+      case "groupEnd": {
+        const frame = popTo("group", row.id);
+        const base = frame ? frame.base : Math.max(0, body - GROUP_INDENT);
+        out[i] = base;
+        body = base;
+        break;
+      }
+      // Steps, blanks, `loop` and `[goto: …]` all sit at the current body
+      // column — including the ones a stray closer would otherwise pull
+      // negative, which `Math.max` above already prevents.
+      default:
+        out[i] = body;
+    }
   }
-  return -1;
+  return out;
 }
 
 /**
- * GUI step list indent from branch nesting (not DSL export depth):
- * if/end-if at 2n, cases at 2n+1, case body at 2n+2.
+ * One row's indent. `FlowStepList` renders a whole list, so it calls
+ * `computeRowListIndents` once instead; this is the convenience wrapper for
+ * callers (and tests) that only want a single row.
  */
 export function rowListIndentDepth(rows, rowIndex) {
-  const row = rows[rowIndex];
-  if (row.kind === "branchStart") {
-    return branchNestLevel(rows, rowIndex) * 2;
-  }
-  if (row.kind === "branchEnd") {
-    const startIdx = findBranchStartForId(rows, rowIndex);
-    if (startIdx < 0) return row.depth ?? 0;
-    return branchNestLevel(rows, startIdx) * 2;
-  }
-  if (row.kind === "branchCase") {
-    const startIdx = findBranchStartForId(rows, rowIndex);
-    if (startIdx < 0) return row.depth ?? 0;
-    return branchNestLevel(rows, startIdx) * 2 + 1;
-  }
-  if (
-    row.kind === "step" ||
-    row.kind === "branchLoop" ||
-    row.kind === "branchMerge" ||
-    row.kind === "groupStart" ||
-    row.kind === "groupEnd"
-  ) {
-    const enclosing = findEnclosingBranchStart(rows, rowIndex);
-    if (enclosing < 0) return row.depth ?? 0;
-    return branchNestLevel(rows, enclosing) * 2 + 2;
-  }
-  return row.depth ?? 0;
+  return computeRowListIndents(rows)[rowIndex] ?? 0;
 }
 
 /** Inclusive frame bounds for step reorder (between branch markers). */
@@ -354,8 +416,26 @@ export function rowLaneInfo(row, lanes, t = defaultT) {
   };
 }
 
-/** Localized type tag shown in the list badge. */
-export function rowBadgeLabel(row, t = defaultT) {
+/**
+ * True for the `branchCase` an `if`'s first clause was lifted into by
+ * `normalizeBranchRows` — the one whose text lives fused on the `if` line as
+ * `is (…) than` rather than on an `else-if (…) than` line of its own.
+ * Same adjacency test the serializer uses (`isExtractedFirstCase`).
+ */
+function isFusedFirstCase(rows, index) {
+  const row = rows?.[index];
+  if (!row || row.kind !== "branchCase" || row.parallel) return false;
+  const prev = rows[index - 1];
+  return !!prev && prev.kind === "branchStart" && !prev.parallel && prev.id === row.id;
+}
+
+/**
+ * Localized type tag shown in the list badge. `rows`/`rowIndex` are optional
+ * and only sharpen an if clause's badge: with them, the clause fused onto the
+ * `if` line reads `is` and every later one reads `else-if`, matching exactly
+ * what the document says.
+ */
+export function rowBadgeLabel(row, t = defaultT, rows = null, rowIndex = -1) {
   if (!row) return "";
   switch (row.kind) {
     case "step":
@@ -363,8 +443,9 @@ export function rowBadgeLabel(row, t = defaultT) {
     case "branchStart":
       return row.parallel ? t("badge.fork") : t("badge.if");
     case "branchCase":
-      if (row.parallel) return t("badge.and");
-      return (row.label || "").trim() === "" ? t("badge.otherwise") : t("badge.case");
+      if (row.parallel) return t("badge.forkCase");
+      if ((row.label || "").trim() === "") return t("badge.otherwise");
+      return isFusedFirstCase(rows, rowIndex) ? t("badge.firstCase") : t("badge.case");
     case "branchEnd":
       return row.parallel ? t("badge.endfork") : t("badge.endif");
     case "branchLoop":

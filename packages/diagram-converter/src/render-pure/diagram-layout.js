@@ -147,9 +147,10 @@ export const DIAGRAM_LAYOUT = {
   caseCollisionShift: 40,
   diamondH: 90,
   decisionDiamondH: 50,
-  decisionMinWidth: 140,
-  decisionWidthCharFactor: 9,
-  decisionWidthPadding: 4,
+  // Fixed — every if diamond is the same width regardless of its condition's
+  // length; a long condition truncates (see decisionFontSize's blockMaxCols
+  // budget) instead of growing the shape.
+  decisionDiamondW: 140,
   decisionTextOffsetY: 4,
   mergeH: 60,
   mergeNodeW: 40,
@@ -251,9 +252,4 @@ export function gutterTextCols(gutterWidth, fontSize) {
 export function blockMaxTextCols(shape, hasIcon) {
   const factor = BLOCK_SHAPE_WIDTH_FACTOR[shape] ?? 1;
   return Math.max(BLOCK_MIN_TEXT_COLS, Math.round(factor) - (hasIcon ? BLOCK_ICON_COLS : 0));
-}
-
-export function decisionDiamondWidth(condLength) {
-  const { decisionMinWidth, decisionWidthPadding, decisionWidthCharFactor } = DIAGRAM_LAYOUT;
-  return Math.max(decisionMinWidth, (condLength + decisionWidthPadding) * decisionWidthCharFactor);
 }
