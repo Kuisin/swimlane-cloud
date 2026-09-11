@@ -1,4 +1,5 @@
 .vercel
-# Synced from the repo-root dsl-rule.md by scripts/sync-dsl-rule.mjs; edit
-# the root file, not this copy.
+# Synced from the repo-root dsl-rule.md and examples/kai-swimlane/diagrams/
+# by scripts/sync-dsl-rule.mjs; edit the originals, not these copies.
 content/dsl-rule.md
+content/examples/
