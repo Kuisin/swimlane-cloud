@@ -405,7 +405,9 @@ function MetadataForm({
   const problems = problemsByKey(
     withoutCarried(validateMetadata(meta, fields), [...carried.keys()]),
   );
-  const unwritable = new Set(unwritableKeys(meta, undefined, { rewritable: !frozen }));
+  // Per-key only. When the whole block is frozen the banner above says so once,
+  // and repeating it on every row would bury the fields' own problems.
+  const unwritable = new Set(frozen ? [] : unwritableKeys(meta));
 
   const setValue = (key: string, value: MetaValue) => onChange({ ...meta, [key]: value });
 

@@ -93,8 +93,17 @@ function roundTripFailures(meta: MetaRecord, shape?: FrontmatterShape): string[]
  * becomes strictly redundant with the engine's inner one and can never fire.
  * Left standing it would read like a guard while guarding nothing; the engine
  * author confirmed the direct call is supported and covered by tests.
- * `unwritableKeys` goes with it (it only ever answers `[]` from then on), along
- * with the `md.notWritable` string the form shows for it.
+ * `md.notWritable` goes with it — that string exists only to explain a value
+ * this rejected.
+ *
+ * `unwritableKeys` and `rewritable` DO NOT go with it. `rewritable` compares
+ * re-emitted bytes against the file's own bytes, which is upstream of the
+ * engine's model rather than inside it: the engine's parse-time verification
+ * catches anything its *model* mangles, but neither it nor this could catch a
+ * value flattened before serialization ever ran — which is exactly the bug that
+ * put the check here. Two checks at two layers, not one check twice. After the
+ * merge `unwritableKeys` keeps only its `parts.rewritable` branch and drops the
+ * `forEngine` call.
  *
  * Before deleting it, know what it did once, and why that is not a reason to
  * keep it. `MapControl` used to write a nested value back as the *text* of
