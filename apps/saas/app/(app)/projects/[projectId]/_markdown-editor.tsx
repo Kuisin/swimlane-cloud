@@ -33,6 +33,7 @@ import {
   booleanValueOf,
   hasFillableDefaults,
   isMapValue,
+  isMetadataKey,
   labelOf,
   listItemsOf,
   mapEntriesOf,
@@ -373,10 +374,16 @@ function MetadataForm({
   const unwritable = new Set(unwritableKeys(meta));
 
   const setValue = (key: string, value: MetaValue) => onChange({ ...meta, [key]: value });
+
+  // The same rule the settings page holds a declared key to. The engine can
+  // write a key holding a `:` or a space — it quotes it — but nobody wants to
+  // read `"a: b": v` in their own file, and a key with a colon in it is a key
+  // every other YAML reader will disagree with us about. Refused at the input.
+  const typedKey = newKey.trim();
+  const canAdd = isMetadataKey(typedKey) && !(typedKey in meta) && !carried.has(typedKey);
   const add = () => {
-    const key = newKey.trim();
-    if (!key || key in meta) return;
-    onChange({ ...meta, [key]: "" });
+    if (!canAdd) return;
+    onChange({ ...meta, [typedKey]: "" });
     setNewKey("");
   };
 
@@ -462,22 +469,35 @@ function MetadataForm({
       })}
 
       {!readOnly && (
-        <div className="flex items-center gap-2 pt-1">
-          <input
-            value={newKey}
-            placeholder={t("md.newKey")}
-            onChange={(e) => setNewKey(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && add()}
-            className="w-24 shrink-0 rounded-md border border-neutral-300 px-2 py-1 font-mono text-xs focus:border-indigo-500 focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={add}
-            disabled={!newKey.trim()}
-            className="inline-flex items-center gap-1 rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-40"
-          >
-            <Plus size={13} /> {t("md.addKey")}
-          </button>
+        <div className="space-y-1 pt-1">
+          <div className="flex items-center gap-2">
+            <input
+              value={newKey}
+              placeholder={t("md.newKey")}
+              onChange={(e) => setNewKey(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && add()}
+              className={`w-24 shrink-0 rounded-md border px-2 py-1 font-mono text-xs focus:outline-none ${
+                typedKey && !canAdd
+                  ? "border-red-400"
+                  : "border-neutral-300 focus:border-indigo-500"
+              }`}
+            />
+            <button
+              type="button"
+              onClick={add}
+              disabled={!canAdd}
+              className="inline-flex items-center gap-1 rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-40"
+            >
+              <Plus size={13} /> {t("md.addKey")}
+            </button>
+          </div>
+          {typedKey && !canAdd && (
+            <p className="text-[11px] text-red-600">
+              {typedKey in meta || carried.has(typedKey)
+                ? t("md.keyExists")
+                : t("md.keyNotAllowed")}
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -409,6 +409,8 @@ export const EN: Record<string, string> = {
   "md.problem.enum": "Must be one of: {values}.",
   "md.problem.date": "Must be a date, as YYYY-MM-DD.",
   "md.problem.type": "Must be a {type}.",
+  "md.keyExists": "This document already has that key.",
+  "md.keyNotAllowed": "A key cannot contain a space, a colon or a #.",
   "nav.metadata": "Metadata",
   "metadata.title": "Document metadata",
   "metadata.description":
@@ -1012,6 +1014,8 @@ export const JA: Record<string, string> = {
   "md.problem.enum": "次のいずれかにしてください: {values}",
   "md.problem.date": "YYYY-MM-DD 形式の日付にしてください。",
   "md.problem.type": "{type}を入力してください。",
+  "md.keyExists": "このドキュメントには既に同じキーがあります。",
+  "md.keyNotAllowed": "キーに空白・コロン・# は使えません。",
   "nav.metadata": "メタデータ",
   "metadata.title": "ドキュメントのメタデータ",
   "metadata.description":
