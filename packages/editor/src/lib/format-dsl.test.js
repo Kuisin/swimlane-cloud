@@ -55,11 +55,10 @@ describe("Format keeps every jump statement in the form it was written", () => {
     const flow = flowOf(
       formatted(
         doc(`[a: start]
-if (q?)
-case (yes)
+if (q?) is (yes) than
 [a: one]
 [goto: late]
-case (no)
+else-if (no) than
 [a: two]
 end-if
 [a: late]
@@ -78,10 +77,9 @@ id: late;`),
       formatted(
         doc(`[a: start]
 id: top;
-if (q?)
-case (yes)
+if (q?) is (yes) than
 [a: one]
-case (no)
+else-if (no) than
 loop
 end-if
 [a: done]`),
@@ -96,10 +94,9 @@ end-if
       formatted(
         doc(`[a: start]
 id: top;
-if (q?)
-case (yes)
+if (q?) is (yes) than
 [a: one]
-case (no)
+else-if (no) than
 loop @top
 end-if
 [a: done]`),
@@ -114,20 +111,18 @@ end-if
   it("all four forms in one document, each still itself after two passes", () => {
     const src = doc(`[a: start]
 id: top;
-if (first?)
-case (yes)
+if (first?) is (yes) than
 [a: one]
 [goto: late]
-case (no)
+else-if (no) than
 [a: two]
 end-if
 
 [a: middle]
-if (second?)
-case (yes)
+if (second?) is (yes) than
 [a: three]
 loop @top
-case (no)
+else-if (no) than
 [b: four]
 loop
 end-if
@@ -147,11 +142,10 @@ id: late;`);
   it("a jump to the very last step of the flow leaves `@end` alone", () => {
     const out = formatted(
       doc(`[a: start]
-if (q?)
-case (yes)
+if (q?) is (yes) than
 [a: one]
 [goto: after]
-case (no)
+else-if (no) than
 [a: two]
 end-if
 [a: after]

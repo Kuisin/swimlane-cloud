@@ -73,8 +73,7 @@ label: A;
 /line/
 
 section (Audit)
-if (x?)
-case (yes)
+if (x?) is (yes) than
 [a: inside]
 end-if
 end-section
@@ -86,8 +85,7 @@ end-section
     const flow = result.value.split("/line/")[1].split("@end")[0].trim().split("\n");
     expect(flow).toEqual([
       "section (Audit)",
-      "  if (x?)",
-      "  case (yes)",
+      "  if (x?) is (yes) than",
       "    [a: inside]",
       "  end-if",
       "end-section",
@@ -104,12 +102,11 @@ label: A;
 
 /line/
 
-if (x?)
-case (yes)
+if (x?) is (yes) than
 section (Audit)
 [a: inside]
 end-section
-case ()
+else-if () than
 [a: other]
 end-if
 
@@ -119,12 +116,11 @@ end-if
     expect(result.ok, JSON.stringify(result.errors)).toBe(true);
     const flow = result.value.split("/line/")[1].split("@end")[0].trim().split("\n");
     expect(flow.filter((l) => l.trim())).toEqual([
-      "if (x?)",
-      "case (yes)",
+      "if (x?) is (yes) than",
       "  section (Audit)",
       "    [a: inside]",
       "  end-section",
-      "case ()",
+      "else-if () than",
       "  [a: other]",
       "end-if",
     ]);

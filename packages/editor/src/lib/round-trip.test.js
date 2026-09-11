@@ -25,10 +25,9 @@ label: System;
 
 [user: Submit request]
 
-if (approved?)
-case (yes)
+if (approved?) is (yes) than
   [system: Provision account]
-case ()
+else-if () than
   [system: Send rejection]
 end-if
 
@@ -70,6 +69,10 @@ describe("serialize/parse round-trip", () => {
 });
 
 describe("a document in the older grammar", () => {
+  // The previous spelling: a bare `if (q)` opener whose first path was its own
+  // `case (…)` line, and a fork whose later paths were `and (…)`. Both words
+  // moved — an if's clauses are `is (…) than` / `else-if (…) than` now, and
+  // `case` belongs to fork.
   const OLD = `@kai-swimlane
 
 /role/
@@ -79,27 +82,37 @@ label: User;
 
 /line/
 
-if (approved?) is (yes) than
+if (approved?)
+case (yes)
   [user: Provision]
-elseif (maybe) than
+case (maybe)
   [user: Hold]
-endif
+end-if
+
+fork (Ship)
+  [user: Ship]
+and (Bill)
+  [user: Bill]
+end-fork
 
 @end
 `;
 
-  it("is refused by Format, reporting the old constructs as unknown statements", () => {
+  it("is refused by Format, reporting the old constructs rather than guessing", () => {
     const result = formatDsl(OLD);
     expect(result.ok).toBe(false);
     const messages = result.errors.map((e) => e.msg);
-    expect(messages).toContain('unknown statement "is"');
-    expect(messages).toContain('unknown statement "elseif"');
-    expect(messages).toContain('unknown statement "endif"');
+    expect(messages).toContain("if requires is (...) than");
+    expect(messages).toContain("case outside fork");
+    expect(messages).toContain('unknown statement "and"');
   });
 
   it("round-trips cleanly through migrateLegacyDsl + Format", () => {
     const { text: migrated, changed } = migrateLegacyDsl(OLD);
     expect(changed).toBeGreaterThan(0);
+    expect(migrated).toContain("if (approved?) is (yes) than");
+    expect(migrated).toContain("else-if (maybe) than");
+    expect(migrated).toContain("case (Bill)");
     const first = formatDsl(migrated);
     expect(first.ok, JSON.stringify(first.errors)).toBe(true);
     const second = formatDsl(first.value);
@@ -241,13 +254,12 @@ const V2_MULTILANG_SAMPLE = `@kai-swimlane
   label.en: Sales;
 
 /line/
-if (承認する？ | Approve?)
-case (はい | Yes)
+if (承認する？ | Approve?) is (はい | Yes) than
   [sales: 完了 | Done]
     desc: 詳細;
     desc.en: Detail;
     id: done;
-case (いいえ | No)
+else-if (いいえ | No) than
   [sales: 却下 | Rejected]
 end-if
 @end
@@ -309,8 +321,8 @@ describe("GUI-mode edit path preserves every language it doesn't touch", () => {
  * Adding a block with an `if` row selected used to splice it between the
  * `branchStart` and the `branchCase` that `normalizeBranchRows` lifted out of
  * it. The serializer recognises that first case only by its adjacency to the
- * opener, so the insert invented an empty `case ()`, demoted the real first
- * case into it, and reparsed with zero errors — silent corruption.
+ * opener, so the insert invented an empty `is () than`, demoted the real first
+ * case into an `else-if`, and reparsed with zero errors — silent corruption.
  */
 describe("inserting a block next to an if", () => {
   const SRC = `@kai-swimlane
@@ -320,10 +332,9 @@ describe("inserting a block next to an if", () => {
   label: A;
 
 /line/
-if (Ok?)
-case (Yes)
+if (Ok?) is (Yes) than
   [a: yes]
-case (No)
+else-if (No) than
   [a: no]
 end-if
 @end
@@ -348,7 +359,8 @@ end-if
       );
     });
 
-    expect(next).not.toMatch(/case \(\)/);
+    expect(next).not.toMatch(/is \(\) than/);
+    expect(next).not.toMatch(/else-if \(\) than/);
     const after = parseDSL(next);
     expect(after.errors).toEqual([]);
 
@@ -357,9 +369,9 @@ end-if
     const start = after.rows.find((r) => r.kind === "branchStart");
     expect(start.firstCase).toBe("Yes");
     expect(after.rows.filter((r) => r.kind === "branchCase").map((r) => r.label)).toEqual(["No"]);
-    expect(next.match(/^\s*case \(.*\)$/gm).map((l) => l.trim())).toEqual([
-      "case (Yes)",
-      "case (No)",
+    expect(next.match(/^\s*(?:if .*|else-if .*) than$/gm).map((l) => l.trim())).toEqual([
+      "if (Ok?) is (Yes) than",
+      "else-if (No) than",
     ]);
     expect(next).toContain("section");
     expect(next).toContain("end-section");
@@ -367,8 +379,8 @@ end-if
 });
 
 /**
- * The GUI colours the catch-all case by writing `case () #red`; that blank
- * label is what makes it the catch-all, and the colour has to survive a
+ * The GUI colours the catch-all case by writing `else-if () than #red`; that
+ * blank label is what makes it the catch-all, and the colour has to survive a
  * Format cycle the same as any labelled case's does.
  */
 describe("a coloured catch-all case", () => {
@@ -382,10 +394,9 @@ label: A;
 
 /line/
 
-if (ok?) #green
-case (yes) #green
+if (ok?) is (yes) than #green
 [a: go]
-case () #red
+else-if () than #red
 [a: stop]
 end-if
 
@@ -393,7 +404,7 @@ end-if
 `;
     const once = formatDsl(src);
     expect(once.ok, JSON.stringify(once.errors)).toBe(true);
-    expect(once.value).toContain("case () #red");
+    expect(once.value).toContain("else-if () than #red");
     const model = parseDSL(once.value);
     expect(model.errors).toEqual([]);
     const catchAll = model.rows.find((r) => r.kind === "branchCase" && r.label === "");

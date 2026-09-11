@@ -16,7 +16,8 @@ describe("tokenizeDslLine", () => {
       "",
       "   ",
       "  arrow: dashed;",
-      "if (status) #Done",
+      "if (status) is (ok) than #Done",
+      "else-if () than",
       "case (ok)",
       "// a comment",
       "/* another comment */",
@@ -79,14 +80,63 @@ describe("tokenizeDslLine", () => {
   });
 
   it("colours inline keywords only on control-flow lines", () => {
-    // `and` highlights inside a `fork` line...
-    expect(types("fork (Shipping)")).toContain("keyword:fork");
-    expect(types("and (Billing)")).toContain("keyword:and");
-    // ...but a bare "and" inside step text stays plain.
-    expect(types("<lane>: review and approve;")).not.toContain("keyword:and");
+    // `is` / `than` highlight inside an `if` line...
+    expect(types("if (q?) is (yes) than")).toEqual([
+      "keyword:if",
+      "punct:(",
+      "plain:q?",
+      "punct:)",
+      "keyword:is",
+      "punct:(",
+      "plain:yes",
+      "punct:)",
+      "keyword:than",
+    ]);
+    // ...but the same words inside step text stay plain.
+    expect(types("<lane>: is this better than that;")).not.toContain("keyword:is");
+    expect(types("<lane>: is this better than that;")).not.toContain("keyword:than");
   });
 
-  it("colours a blank case () as a keyword, same as a labelled one", () => {
+  // `is`/`than`/`if` are ordinary English words, so a condition or a case
+  // label that happens to contain one must not light up mid-sentence.
+  it("never colours a keyword inside the author's own (…) text", () => {
+    expect(types("if (Is the form signed?) is (yes) than")).toEqual([
+      "keyword:if",
+      "punct:(",
+      "plain:Is",
+      "plain:the",
+      "plain:form",
+      "plain:signed?",
+      "punct:)",
+      "keyword:is",
+      "punct:(",
+      "plain:yes",
+      "punct:)",
+      "keyword:than",
+    ]);
+    expect(types("else-if (more than three) than")).toEqual([
+      "keyword:else-if",
+      "punct:(",
+      "plain:more",
+      "plain:than",
+      "plain:three",
+      "punct:)",
+      "keyword:than",
+    ]);
+  });
+
+  it("colours else-if as one keyword, not `else` plus `if`", () => {
+    expect(types("else-if (no) than")).toContain("keyword:else-if");
+    expect(types("else-if than")).toEqual(["keyword:else-if", "keyword:than"]);
+  });
+
+  it("colours a fork's `case (label)` path", () => {
+    expect(types("fork (Shipping)")).toContain("keyword:fork");
+    expect(types("case (Billing)")).toContain("keyword:case");
+  });
+
+  it("colours a blank else-if () as a keyword, same as a labelled one", () => {
+    expect(types("else-if () than")).toContain("keyword:else-if");
     expect(types("case ()")).toContain("keyword:case");
   });
 });

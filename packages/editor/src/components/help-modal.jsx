@@ -16,7 +16,12 @@ const GUI_GUIDE_SECTIONS = [
   "help.guideModeToggle",
 ];
 
-const HELP_SECTIONS = [
+/**
+ * `[term, i18nKey, codeSample]`. Exported so `help-modal.test.js` can hold the
+ * control-flow samples to the real grammar — a syntax reference that no longer
+ * parses is worse than none.
+ */
+export const HELP_SECTIONS = [
   ["@kai-swimlane … @end", "help.markers", "@kai-swimlane\n\n/title/\n…\n\n@end"],
   ["/title/", "help.title2", "/title/\nDiagram title here"],
   ["/page/", "help.page", "/page/\ndescription: …;\nheader-left: …;\nheader-right: …;"],
@@ -40,22 +45,22 @@ const HELP_SECTIONS = [
   [
     "// … / /* … */",
     "help.comment",
-    "// note about this branch\nif (channel?) #blue\ncase (web)\n  [role: web form]\nend-if",
+    "// note about this branch\nif (channel?) is (web) than #blue\n  [role: web form]\nend-if",
   ],
   [
-    "if (q) … case (a) … end-if",
+    "if (q) is (a) than … else-if (b) than … end-if",
     "help.ifCase",
-    "if (condition?)\ncase (yes)\n  [role: Branch A]\ncase ()\n  [role: Branch B]\nend-if",
+    "if (condition?) is (yes) than\n  [role: Branch A]\nelse-if () than\n  [role: Branch B]\nend-if",
   ],
   [
     "/line/",
     "help.line",
-    "/line/\n\n[role: Step text] <block> +propId\nlabel: …;\n\nif (condition?)\ncase (yes)\n  [role: Branch A]\ncase ()\n  [role: Branch B]\nend-if\n\nfork\n  [role: Parallel A]\nand\n  [role: Parallel B]\nend-fork",
+    "/line/\n\n[role: Step text] <block> +propId\nlabel: …;\n\nif (condition?) is (yes) than\n  [role: Branch A]\nelse-if () than\n  [role: Branch B]\nend-if\n\nfork (Parallel A)\n  [role: Parallel A]\ncase (Parallel B)\n  [role: Parallel B]\nend-fork",
   ],
   [
     "loop / loop @id",
     "help.loop",
-    "if (retry?)\ncase (yes)\n  [role: process item]\n  loop\ncase ()\n  [role: done]\nend-if",
+    "if (retry?) is (yes) than\n  [role: process item]\n  loop\nelse-if () than\n  [role: done]\nend-if",
   ],
   [
     "section (name) #color … end-section",
@@ -70,7 +75,7 @@ const HELP_SECTIONS = [
   [
     "[goto: id] / id: …;",
     "help.merge",
-    "if (cancel?) #red\ncase (yes)\n  [role: accept cancellation]\n  [goto: done]\ncase ()\n  [role: normal close]\nend-if\n\n[role: transaction complete]\n  id: done;",
+    "if (cancel?) is (yes) than #red\n  [role: accept cancellation]\n  [goto: done]\nelse-if () than\n  [role: normal close]\nend-if\n\n[role: transaction complete]\n  id: done;",
   ],
   ["=> path", "help.link", "[role: hand off to shipping] => ./shipping-prep.txt"],
   ["arrow: solid|dashed|dotted;", "help.arrow", "[role: step]\narrow: dashed;\n[role: next step]"],

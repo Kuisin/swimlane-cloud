@@ -61,7 +61,6 @@ const MESSAGES = {
     parseWarnings: (n) =>
       `${n} note${n === 1 ? "" : "s"} — the diagram is fine; unknown values were kept.`,
     path: (n) => `path ${n}`,
-    caseN: (n) => `case ${n}`,
   },
   ja: {
     expand: "展開",
@@ -94,7 +93,6 @@ const MESSAGES = {
     parseWarnings: (n) =>
       `${n} 件の注意 — 図に問題はありません。認識できない値はそのまま保持しました。`,
     path: (n) => `経路 ${n}`,
-    caseN: (n) => `ケース ${n}`,
   },
 };
 
@@ -780,8 +778,10 @@ function BranchCard({ node, ctx }) {
 
 function caseLabel(branch, c, i, t) {
   if (branch.parallel) return c.label || t("path", i + 1);
-  if (/^else$/i.test(c.label)) return t("otherwise");
-  return c.label || (i === 0 ? t("case") : t("caseN", i + 1));
+  // An unlabelled clause after the first is the catch-all — `else-if () than`.
+  // There is no `else` spelling to match on any more.
+  if (!c.label) return i === 0 ? t("case") : t("otherwise");
+  return c.label;
 }
 
 function GroupCard({ node, ctx }) {

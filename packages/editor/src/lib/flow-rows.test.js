@@ -5,9 +5,12 @@ import {
   sameReorderFrame,
   rowBadgeLabel,
   collectMergeTargetOptions,
+  computeRowListIndents,
   makeStepId,
+  normalizeBranchRows,
   pruneUnreferencedStepIds,
 } from "./flow-rows.js";
+import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import { EN, JA, tr } from "../i18n.jsx";
 
 const steps = (...texts) => texts.map((text) => ({ kind: "step", role: "r", text }));
@@ -70,6 +73,156 @@ describe("rowBadgeLabel localization", () => {
     expect(rowBadgeLabel(ifRow, jaT)).toBe("分岐");
     const step = { kind: "step", role: "r", text: "x" };
     expect(rowBadgeLabel(step, jaT)).toBe("ステップ");
+  });
+
+  // The keyword an if's clause is actually spelled with depends on whether it
+  // is the one fused onto the `if` line (`is (…) than`) or a later
+  // `else-if (…) than`; a fork's non-first path is `case (…)`.
+  it("names an if clause by the keyword the document really uses", () => {
+    const rows = [
+      { kind: "branchStart", id: "x", cond: "q?" },
+      { kind: "branchCase", id: "x", label: "yes" },
+      { kind: "branchCase", id: "x", label: "no" },
+      { kind: "branchCase", id: "x", label: "" },
+      { kind: "branchEnd", id: "x" },
+    ];
+    expect(rowBadgeLabel(rows[1], enT, rows, 1)).toBe("is");
+    expect(rowBadgeLabel(rows[2], enT, rows, 2)).toBe("else-if");
+    expect(rowBadgeLabel(rows[3], enT, rows, 3)).toBe("otherwise");
+    // No keyword the grammar dropped survives anywhere in the badges.
+    const fork = [
+      { kind: "branchStart", id: "f", parallel: true },
+      { kind: "branchCase", id: "f", parallel: true, label: "Billing" },
+    ];
+    expect(rowBadgeLabel(fork[1], enT, fork, 1)).toBe("case");
+  });
+});
+
+/**
+ * The GUI list's indent is the only structure the list shows — it draws no
+ * connecting lines — so a row on the wrong level makes the document read as
+ * flat. The old computation walked branches only and fell back to the parser's
+ * `depth` outside them, which meant groups counted for nothing.
+ */
+describe("computeRowListIndents", () => {
+  /** Indent every row of `body` (a `/line/` body) and pair it with its label. */
+  const indentMap = (body) => {
+    const model = parseDSL(
+      `@kai-swimlane\n\n/role/\n\n<a>\nlabel: A;\n\n/line/\n${body}\n\n@end\n`,
+    );
+    expect(model.errors).toEqual([]);
+    const rows = normalizeBranchRows(model.rows);
+    const indents = computeRowListIndents(rows);
+    return rows.map((r, i) => [r.text ?? r.label ?? r.cond ?? r.sectionName ?? r.kind, indents[i]]);
+  };
+
+  it("puts an if's opener and closer on one level, its cases one in, bodies two", () => {
+    expect(
+      indentMap("if (q?) is (yes) than\n  [a: one]\nelse-if () than\n  [a: two]\nend-if"),
+    ).toEqual([
+      ["q?", 0],
+      ["yes", 1],
+      ["one", 2],
+      ["", 1],
+      ["two", 2],
+      ["branchEnd", 0],
+    ]);
+  });
+
+  // A `section`/`branch` group has no chip row between its marker and its
+  // body, so it is worth one level — but it used to be worth none at all.
+  it("counts a group inside a case as a level of its own", () => {
+    expect(
+      indentMap(
+        "if (q?) is (yes) than\n  branch (Side)\n    [a: inner]\n  end-branch\n  [a: after]\nend-if",
+      ),
+    ).toEqual([
+      ["q?", 0],
+      ["yes", 1],
+      ["Side", 2],
+      ["inner", 3],
+      ["groupEnd", 2],
+      ["after", 2],
+      ["branchEnd", 0],
+    ]);
+  });
+
+  // …and the other way round: a branch inside a group used to restart at 0,
+  // level with the top-level flow outside the group entirely.
+  it("keeps an if inside a section under that section", () => {
+    expect(
+      indentMap(
+        "[a: top]\nsection (Box)\n  [a: in-box]\n  if (q?) is (y) than\n    [a: deep]\n  end-if\nend-section\n[a: after]",
+      ),
+    ).toEqual([
+      ["top", 0],
+      ["Box", 0],
+      ["in-box", 1],
+      ["q?", 1],
+      ["y", 2],
+      ["deep", 3],
+      ["branchEnd", 1],
+      ["groupEnd", 0],
+      ["after", 0],
+    ]);
+  });
+
+  it("nests groups inside groups", () => {
+    expect(
+      indentMap(
+        "section (Outer)\n  branch (Inner)\n    [a: deep]\n  end-branch\nend-section\n[a: after]",
+      ),
+    ).toEqual([
+      ["Outer", 0],
+      ["Inner", 1],
+      ["deep", 2],
+      ["groupEnd", 1],
+      ["groupEnd", 0],
+      ["after", 0],
+    ]);
+  });
+
+  it("sits a blank step, a loop and a goto with the steps they stand among", () => {
+    expect(
+      indentMap(
+        "[a: t]\n  id: t;\nif (q?) is (yes) than\n  []\n  loop\nelse-if () than\n  [goto: t]\nend-if",
+      ),
+    ).toEqual([
+      ["t", 0],
+      ["q?", 0],
+      ["yes", 1],
+      ["", 2], // the blank `[]` spacer
+      ["branchLoop", 2],
+      ["", 1],
+      ["branchMerge", 2],
+      ["branchEnd", 0],
+    ]);
+  });
+
+  // The GUI shows a document mid-edit, so the walk must not go negative or
+  // throw on rows whose opener is missing.
+  it("never goes negative on a stray closer", () => {
+    const rows = [
+      { kind: "branchEnd", id: 9 },
+      { kind: "groupEnd", id: 9 },
+      { kind: "step", role: "r", text: "x" },
+    ];
+    expect(computeRowListIndents(rows)).toEqual([0, 0, 0]);
+    expect(computeRowListIndents([])).toEqual([]);
+  });
+
+  // A group left unclosed inside one case must not go on nesting the next.
+  it("closes a case's leftovers when the next case starts", () => {
+    const rows = [
+      { kind: "branchStart", id: 1 },
+      { kind: "branchCase", id: 1, label: "a" },
+      { kind: "groupStart", id: "g" },
+      { kind: "step", role: "r", text: "inner" },
+      { kind: "branchCase", id: 1, label: "b" },
+      { kind: "step", role: "r", text: "next" },
+      { kind: "branchEnd", id: 1 },
+    ];
+    expect(computeRowListIndents(rows)).toEqual([0, 1, 2, 3, 1, 2, 0]);
   });
 });
 

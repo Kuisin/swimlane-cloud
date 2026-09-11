@@ -15,10 +15,9 @@ background-color: #16a34a;
 
 /line/
 [a: Start]
-if (ok?)
-case (yes)
+if (ok?) is (yes) than
 [b: Approve]
-case ()
+else-if () than
 [a: Reject]
 end-if
 [a: Done]
@@ -40,7 +39,7 @@ describe("buildMobileTree", () => {
     // first case = "yes" with Bob's Approve step
     expect(branch.cases[0].label).toBe("yes");
     expect(branch.cases[0].children[0]).toMatchObject({ type: "step", role: "b", text: "Approve" });
-    // the blank case () is the catch-all — no "else" spelling any more
+    // the blank else-if () than is the catch-all — no "else" spelling any more
     expect(branch.cases[1].label).toBe("");
     expect(branch.cases[1].children[0]).toMatchObject({ role: "a", text: "Reject" });
   });
@@ -61,11 +60,10 @@ label: Alice;
 
 /line/
 [a: Start]
-if (cancel?)
-case (yes)
+if (cancel?) is (yes) than
 [a: Stop]
 [goto: fin]
-case ()
+else-if () than
 [a: Continue]
 end-if
 [a: Finish]
@@ -162,7 +160,7 @@ const V2 = (body) => `@kai-swimlane\n/line/\n${body}\n@end\n`;
 describe("case nodes carry what a host needs to edit them", () => {
   it("gives a fork exactly one case per real path, with no phantom leading one", () => {
     const { tree } = dslToMobile(
-      V2("fork (Shipping)\n  [a: ship]\nand (Billing)\n  [a: bill]\nend-fork"),
+      V2("fork (Shipping)\n  [a: ship]\ncase (Billing)\n  [a: bill]\nend-fork"),
     );
     const fork = tree.nodes.find((n) => n.type === "branch");
     // The reader emits a real branchCase row for a fork's first path, so the
@@ -173,7 +171,7 @@ describe("case nodes carry what a host needs to edit them", () => {
 
   it("points a fork's cases at their own branchCase rows", () => {
     const { tree } = dslToMobile(
-      V2("fork (Shipping)\n  [a: ship]\nand (Billing)\n  [a: bill]\nend-fork"),
+      V2("fork (Shipping)\n  [a: ship]\ncase (Billing)\n  [a: bill]\nend-fork"),
     );
     const fork = tree.nodes.find((n) => n.type === "branch");
     expect(fork.cases[0]).toMatchObject({ rowIndex: 1, branchRow: 0, isFirst: false });
@@ -181,7 +179,9 @@ describe("case nodes carry what a host needs to edit them", () => {
   });
 
   it("marks an if's first case as living on the branchStart row", () => {
-    const { tree } = dslToMobile(V2("if (q)\ncase (Yes)\n  [a: y]\ncase (No)\n  [a: n]\nend-if"));
+    const { tree } = dslToMobile(
+      V2("if (q) is (Yes) than\n  [a: y]\nelse-if (No) than\n  [a: n]\nend-if"),
+    );
     const branch = tree.nodes.find((n) => n.type === "branch");
     expect(branch.cases.map((c) => c.label)).toEqual(["Yes", "No"]);
     // first case has no row of its own — it's `firstCase` on the branchStart
@@ -199,11 +199,10 @@ label: Alice;
 
 /line/
 [a: Start]
-if (cancel?)
-case (yes)
+if (cancel?) is (yes) than
 [a: Stop]
 [goto: done]
-case ()
+else-if () than
 [a: Continue]
 end-if
 [a: End]

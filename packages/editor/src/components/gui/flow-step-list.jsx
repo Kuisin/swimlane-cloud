@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   rowBadgeLabel,
   rowBadgeKind,
   rowLaneInfo,
   rowSummaryText,
   rowStepMeta,
-  rowListIndentDepth,
+  computeRowListIndents,
   branchCaseBadgeStyle,
   isStepRow,
 } from "../../lib/flow-rows.js";
@@ -30,6 +30,9 @@ export function FlowStepList({
   const { t } = useT();
   const [dragIndex, setDragIndex] = useState(-1);
   const [overIndex, setOverIndex] = useState(-1);
+  // One walk of the whole list, not one per row: the indent of any row depends
+  // on every branch and group still open above it.
+  const indents = useMemo(() => computeRowListIndents(rows || []), [rows]);
 
   if (!rows?.length) {
     return <div className="sw-gui-empty">{t("gui.noRows")}</div>;
@@ -61,7 +64,8 @@ export function FlowStepList({
             } ${locked ? "sw-flow-row-locked" : ""} ${isDragging ? "sw-flow-row-dragging" : ""} ${
               isOver ? "sw-flow-row-over" : ""
             }`}
-            style={{ paddingLeft: 10 + rowListIndentDepth(rows, index) * 16 }}
+            style={{ paddingLeft: 10 + (indents[index] ?? 0) * 16 }}
+            data-indent={indents[index] ?? 0}
             onClick={() => onSelect(index)}
             title={locked ? t("errors.rowLocked") : undefined}
             draggable={draggable(index)}
@@ -91,7 +95,7 @@ export function FlowStepList({
               className={`sw-flow-badge sw-badge-${rowBadgeKind(row)}`}
               style={branchCaseBadgeStyle(row)}
             >
-              {rowBadgeLabel(row, t)}
+              {rowBadgeLabel(row, t, rows, index)}
             </span>
             {lane && (
               <span
