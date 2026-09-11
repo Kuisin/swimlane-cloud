@@ -370,3 +370,53 @@ end-section
     expect(+sectionBox.x + +sectionBox.width).toBe(+gridBox.x + +gridBox.width - sectionEdgeInset);
   });
 });
+
+/**
+ * "The add-section button does nothing" turned out to be a rendering problem,
+ * not a lost row: the button inserts a correct, empty `section`/`end-section`
+ * pair, but the two group markers sit 16px apart, so after `sectionInset` on
+ * both sides the box came out 6px tall — a dashed sliver with its caption
+ * floating below it, which reads as debris rather than as a new section.
+ */
+describe("an empty section is still visibly a section", () => {
+  const EMPTY = `@kai-swimlane
+/title/
+T
+/role/
+<a>
+label: A;
+/line/
+[a: step]
+section (Audit)
+end-section
+@end`;
+
+  function sectionBoxAndLabel(dsl) {
+    const svg = render(dsl);
+    const box = [...svg.matchAll(/<rect ([^>]*?)\/?>/g)]
+      .map((m) => {
+        const a = {};
+        for (const kv of m[1].matchAll(/([a-zA-Z-]+)="([^"]*)"/g)) a[kv[1]] = kv[2];
+        return a;
+      })
+      .find((r) => r["stroke-dasharray"] === "6 4");
+    const label = /<text[^>]*?y="([\d.]+)"[^>]*>Audit<\/text>/.exec(svg);
+    return { box, labelY: label ? Number(label[1]) : null };
+  }
+
+  it("is tall enough to contain its own caption", () => {
+    const { box, labelY } = sectionBoxAndLabel(EMPTY);
+    expect(box).toBeTruthy();
+    expect(Number(box.height)).toBeGreaterThanOrEqual(DIAGRAM_LAYOUT.sectionMinH);
+    expect(labelY).not.toBeNull();
+    expect(labelY).toBeGreaterThan(Number(box.y));
+    expect(labelY).toBeLessThan(Number(box.y) + Number(box.height));
+  });
+
+  it("still grows to fit its contents", () => {
+    const withStep = EMPTY.replace("section (Audit)\n", "section (Audit)\n  [a: inside]\n");
+    const empty = sectionBoxAndLabel(EMPTY);
+    const full = sectionBoxAndLabel(withStep);
+    expect(Number(full.box.height)).toBeGreaterThan(Number(empty.box.height));
+  });
+});

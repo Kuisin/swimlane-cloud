@@ -263,3 +263,64 @@ describe("GUI-mode edit path preserves every language it doesn't touch", () => {
     expect(allLangs(afterRejected, "text", n)).toEqual(allLangs(beforeRejected, "text", n));
   });
 });
+
+/**
+ * Adding a block with an `if` row selected used to splice it between the
+ * `branchStart` and the `branchCase` that `normalizeBranchRows` lifted out of
+ * it. The serializer recognises that first case only by its adjacency to the
+ * opener, so the insert invented an empty `case ()`, demoted the real first
+ * case into it, and reparsed with zero errors — silent corruption.
+ */
+describe("inserting a block next to an if", () => {
+  const SRC = `@kai-swimlane-v2
+
+/role/
+<a>
+  label: A;
+
+/line/
+if (Ok?)
+case (Yes)
+  [a: yes]
+case (No)
+  [a: no]
+end-if
+@end
+`;
+
+  /** The same rule `gui-mode.jsx`'s `insertIndexAfter` applies. */
+  function insertIndexAfter(rows, index) {
+    if (index < 0) return rows.length;
+    let at = index + 1;
+    if (rows[index]?.kind === "branchStart" && rows[at]?.kind === "branchCase") at++;
+    return at;
+  }
+
+  it("keeps both real cases and invents none", () => {
+    const next = applyModelEdit(SRC, (draft) => {
+      const bi = draft.rows.findIndex((r) => r.kind === "branchStart");
+      draft.rows.splice(
+        insertIndexAfter(draft.rows, bi),
+        0,
+        { kind: "groupStart", id: "s1", groupMode: "section", sectionName: "", depth: 0 },
+        { kind: "groupEnd", id: "s1", groupMode: "section", depth: 0 },
+      );
+    });
+
+    expect(next).not.toMatch(/case \(\)/);
+    const after = parseDSL(next);
+    expect(after.errors).toEqual([]);
+
+    // In a raw parse the first case lives on the opener, not as its own row,
+    // so check both halves rather than just the `branchCase` list.
+    const start = after.rows.find((r) => r.kind === "branchStart");
+    expect(start.firstCase).toBe("Yes");
+    expect(after.rows.filter((r) => r.kind === "branchCase").map((r) => r.label)).toEqual(["No"]);
+    expect(next.match(/^\s*case \(.*\)$/gm).map((l) => l.trim())).toEqual([
+      "case (Yes)",
+      "case (No)",
+    ]);
+    expect(next).toContain("section");
+    expect(next).toContain("end-section");
+  });
+});
