@@ -46,7 +46,7 @@
  *   renders; its imported definitions simply do not resolve.
  * @property {(path: string) => Promise<string|null>} [readAsset] An `@use`
  *   image as a base64 `data:` URI. Same degradation: no image, no error.
- * @property {(id: string) => Record<string, string>|null} [metaOf] The
+ * @property {(id: string) => Record<string, string|string[]|object>|null} [metaOf] The
  *   document's metadata for display (a `.md` file's frontmatter), synchronous
  *   from what the host has already read; null when it has nothing to say. The
  *   editor falls back to the document's own `/meta/` section.

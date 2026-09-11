@@ -10,167 +10,51 @@
  * scalar projection of it. This module never parses or writes frontmatter
  * itself — it only describes what the keys are allowed to look like.
  *
- * ─────────────────────────────────────────────────────────────────────────
- * NOTE while `feat/md-metadata-engine` is unmerged
- * ─────────────────────────────────────────────────────────────────────────
- * The types, `parseMetadataSchema` and `validateMetadata` below are written to
- * the signatures `packages/github-client/src/metadata-schema.ts` confirmed on
- * that branch — same names, same argument order, same problem shape, same
- * rules — and `readMetadataFields` reads `metadata.fields` straight out of the
- * settings JSON because the `SwimlaneSettings` this app builds against does not
- * carry that key yet. When the engine branch lands, everything above the "form
- * state" heading becomes a re-export of the package's own; the form and search
- * helpers below it stay here either way. Nothing else in `apps/saas` may
- * hand-roll any of it — everything goes through this module, so that swap is
- * one diff in one file.
+ * The schema type, its parser and its validator live in
+ * `@swimlane-cloud/github-client` (`metadata-schema.ts`) — the same module the
+ * settings file itself is parsed by — and are re-exported here. Everything
+ * below the "form state" heading is this app's own: turning a schema into form
+ * rows, and matching a document against a search query. Nothing else in
+ * `apps/saas` may hand-roll any of it; it all goes through this module.
  */
 
 import {
+  isMetadataKey,
+  METADATA_FIELD_TYPES,
+  METADATA_PROBLEM_CODES,
+  metadataDefaults,
+  parseMetadataSchema,
   parseRepoSettings,
   repoSettingsJson,
+  validateMetadata,
+  type MetadataField,
+  type MetadataFieldType,
+  type MetadataProblem,
+  type MetadataProblemCode,
+  type MetadataSchema,
+  type MetadataValue,
   type SwimlaneSettings,
 } from "@swimlane-cloud/github-client";
 
-export const METADATA_FIELD_TYPES = [
-  "string",
-  "text",
-  "enum",
-  "list",
-  "date",
-  "number",
-  "boolean",
-  "map",
-] as const;
-
-export type MetadataFieldType = (typeof METADATA_FIELD_TYPES)[number];
-
-/** A frontmatter value as the engine models it: a scalar, a sequence, or a map. */
-export type MetadataValue = string | string[] | { [key: string]: MetadataValue };
-
-/** One declared key. `values` is only meaningful for `enum`. */
-export interface MetadataField {
-  key: string;
-  type: MetadataFieldType;
-  values?: string[];
-  label?: string;
-  required?: boolean;
-  default?: MetadataValue;
-  help?: string;
-}
-
-export interface MetadataSchema {
-  fields: MetadataField[];
-}
+export {
+  isMetadataKey,
+  METADATA_FIELD_TYPES,
+  METADATA_PROBLEM_CODES,
+  metadataDefaults,
+  parseMetadataSchema,
+  validateMetadata,
+  type MetadataField,
+  type MetadataFieldType,
+  type MetadataProblem,
+  type MetadataProblemCode,
+  type MetadataSchema,
+  type MetadataValue,
+};
 
 export type MetaValue = MetadataValue;
 export type MetaRecord = Record<string, MetadataValue>;
 
-export const METADATA_PROBLEM_CODES = ["required", "enum", "type", "date"] as const;
-export type MetadataProblemCode = (typeof METADATA_PROBLEM_CODES)[number];
-
-/**
- * One thing wrong with one key. Deliberately machine-readable: the message a
- * person reads is built from `code` and `type` in `i18n.tsx`, in their
- * language, rather than being baked in English here.
- */
-export interface MetadataProblem {
-  key: string;
-  code: MetadataProblemCode;
-  /** The type the field was declared as — what the message says it must be. */
-  type: MetadataFieldType;
-  /** For `enum`, the values it may take. */
-  values?: string[];
-}
-
 /* ─────────────────────────────── the schema ────────────────────────────── */
-
-function isFieldType(value: unknown): value is MetadataFieldType {
-  return (METADATA_FIELD_TYPES as readonly unknown[]).includes(value);
-}
-
-function stringsOf(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  const seen = new Set<string>();
-  for (const v of raw) {
-    if (typeof v !== "string") continue;
-    const s = v.trim();
-    if (s) seen.add(s);
-  }
-  return [...seen];
-}
-
-/**
- * A key that can be written as a plain YAML key and matched in a query.
- * Whitespace, `:` and `#` are what the engine refuses, for the same reason: a
- * key holding one of those cannot be written back and read as itself.
- */
-export function isMetadataKey(key: string): boolean {
-  return key !== "" && !/[\s:#]/.test(key);
-}
-
-/**
- * The declared fields in `raw`, skipping anything malformed.
- *
- * A settings file is edited by hand as often as through the app, so a broken
- * entry must cost only itself: an unusable field is dropped, not fatal. An
- * `enum` with no values would be a dropdown with nothing in it, so it degrades
- * to a plain string rather than trapping the author.
- */
-export function parseMetadataFields(raw: unknown): MetadataField[] {
-  if (!Array.isArray(raw)) return [];
-  const out: MetadataField[] = [];
-  const seen = new Set<string>();
-  for (const entry of raw) {
-    if (!entry || typeof entry !== "object") continue;
-    const e = entry as Record<string, unknown>;
-    const key = typeof e.key === "string" ? e.key.trim() : "";
-    if (!key || !isMetadataKey(key) || seen.has(key)) continue;
-    const values = stringsOf(e.values);
-    let type: MetadataFieldType = isFieldType(e.type) ? e.type : "string";
-    if (type === "enum" && values.length === 0) type = "string";
-    const field: MetadataField = { key, type };
-    if (type === "enum") field.values = values;
-    if (typeof e.label === "string" && e.label.trim()) field.label = e.label.trim();
-    if (e.required === true) field.required = true;
-    const fallback = normalizeDefault(e.default);
-    // A default the field would itself reject is worse than no default: it
-    // would offer a value that then fails validation the moment it is used.
-    if (fallback !== undefined && !validateValue(field, fallback)) field.default = fallback;
-    if (typeof e.help === "string" && e.help.trim()) field.help = e.help.trim();
-    seen.add(key);
-    out.push(field);
-  }
-  return out;
-}
-
-/** A JSON number or boolean default written as the string the file will hold. */
-function normalizeDefault(raw: unknown): MetadataValue | undefined {
-  if (typeof raw === "string") return raw === "" ? undefined : raw;
-  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
-  if (Array.isArray(raw)) return stringsOf(raw);
-  if (raw && typeof raw === "object") return raw as { [key: string]: MetadataValue };
-  return undefined;
-}
-
-/** `{ fields: [...] }`, or the bare array a hand-edited file may hold. */
-export function parseMetadataSchema(raw: unknown): MetadataSchema {
-  if (Array.isArray(raw)) return { fields: parseMetadataFields(raw) };
-  if (!raw || typeof raw !== "object") return { fields: [] };
-  return { fields: parseMetadataFields((raw as Record<string, unknown>).fields) };
-}
-
-/** The values a new document should be prefilled with. */
-export function metadataDefaults(schema: MetadataSchema | readonly MetadataField[]): MetaRecord {
-  const out: MetaRecord = {};
-  for (const field of fieldsOf(schema)) {
-    if (field.default !== undefined) out[field.key] = field.default;
-  }
-  return out;
-}
-
-function fieldsOf(schema: MetadataSchema | readonly MetadataField[]): readonly MetadataField[] {
-  return Array.isArray(schema) ? schema : (schema as MetadataSchema).fields;
-}
 
 /**
  * The fields declared in a settings file's text.
@@ -178,45 +62,38 @@ function fieldsOf(schema: MetadataSchema | readonly MetadataField[]): readonly M
  * Reads the raw JSON rather than `parseRepoSettings`, which does not carry the
  * `metadata` key yet — see the note at the top of this file.
  */
+/**
+ * The declared fields in `raw`, skipping anything malformed — the fields-only
+ * view of `parseMetadataSchema`, which is the shape the settings route works
+ * in (it receives and stores a bare array).
+ */
+export function parseMetadataFields(raw: unknown): MetadataField[] {
+  return parseMetadataSchema(raw).fields;
+}
+
+/** The fields declared in a settings file's text. */
 export function readMetadataFields(text: string | null): MetadataField[] {
-  if (!text) return [];
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    return [];
-  }
-  if (!raw || typeof raw !== "object") return [];
-  return parseMetadataSchema((raw as Record<string, unknown>).metadata).fields;
+  return parseRepoSettings(text).metadata.fields;
 }
 
 /**
  * The settings file as the app reads it: everything `parseRepoSettings` knows
  * about, plus the metadata schema it does not carry yet.
  */
-export type ProjectSettings = SwimlaneSettings & {
-  metadata?: { fields: MetadataField[] };
-};
+/**
+ * The settings file as the app reads it. `SwimlaneSettings` carries the
+ * metadata schema itself, so this is now just an alias — kept as a name so
+ * call sites read as being about a project rather than a repository.
+ */
+export type ProjectSettings = SwimlaneSettings;
 
 export function parseProjectSettings(text: string | null): ProjectSettings {
-  const fields = readMetadataFields(text);
-  const settings = parseRepoSettings(text);
-  return fields.length ? { ...settings, metadata: { fields } } : settings;
+  return parseRepoSettings(text);
 }
 
-/**
- * The file's canonical text for `settings`.
- *
- * `repoSettingsJson` only serialises the keys `SwimlaneSettings` declares, so
- * the metadata block is appended here rather than being dropped on the first
- * save from any other settings page. One more thing that collapses to nothing
- * once the package's own type carries `metadata`.
- */
+/** The file's canonical text for `settings`. */
 export function projectSettingsJson(settings: ProjectSettings): string {
-  const base = JSON.parse(repoSettingsJson(settings)) as Record<string, unknown>;
-  const fields = settings.metadata?.fields ?? [];
-  if (fields.length) base.metadata = { fields };
-  return `${JSON.stringify(base, null, 2)}\n`;
+  return repoSettingsJson(settings);
 }
 
 export function fieldFor(fields: MetadataField[], key: string): MetadataField | null {
@@ -309,73 +186,6 @@ export function isNumberText(text: string): boolean {
 }
 
 /* ─────────────────────────────── validation ────────────────────────────── */
-
-/**
- * What is wrong with one value for one field, or `null` when nothing is.
- *
- * Shared by the validator and by `parseMetadataFields`, which uses it to refuse
- * a default the field would then reject.
- */
-function validateValue(
-  field: MetadataField,
-  value: MetadataValue,
-): Omit<MetadataProblem, "key"> | null {
-  const problem = (code: MetadataProblemCode): Omit<MetadataProblem, "key"> =>
-    field.type === "enum"
-      ? { code, type: field.type, values: field.values ?? [] }
-      : { code, type: field.type };
-  const isText = typeof value === "string";
-  switch (field.type) {
-    case "enum":
-      return isText && (field.values ?? []).includes(value) ? null : problem("enum");
-    case "date":
-      if (!isText) return problem("type");
-      return isIsoDate(value) ? null : problem("date");
-    case "number":
-      return isText && isNumberText(value) ? null : problem("type");
-    case "boolean":
-      return isText && isBooleanText(value) ? null : problem("type");
-    case "map":
-      return isMapValue(value) ? null : problem("type");
-    case "list":
-      // A sequence, or the comma-joined scalar `/meta/` projects one to —
-      // flagging the projection would light up every diagram in the project.
-      return Array.isArray(value) || isText ? null : problem("type");
-    case "string":
-      // A newline is what `text` is for; a `string` holding one cannot be
-      // written back as the plain scalar it claims to be.
-      return isText && !value.includes("\n") ? null : problem("type");
-    case "text":
-      return isText ? null : problem("type");
-  }
-}
-
-/**
- * What is wrong with `meta` against a schema, at most one problem per field.
- *
- * Only declared keys are judged: a key someone wrote by hand that the schema
- * says nothing about is theirs to keep, not an error. An empty value is
- * "absent", and suppresses every other check on that field — telling somebody
- * their blank date is not a date helps nobody.
- */
-export function validateMetadata(
-  meta: unknown,
-  schema: MetadataSchema | readonly MetadataField[],
-): MetadataProblem[] {
-  const values: MetaRecord =
-    meta && typeof meta === "object" && !Array.isArray(meta) ? (meta as MetaRecord) : {};
-  const problems: MetadataProblem[] = [];
-  for (const field of fieldsOf(schema)) {
-    const value = values[field.key];
-    if (isEmptyValue(value)) {
-      if (field.required) problems.push({ key: field.key, code: "required", type: field.type });
-      continue;
-    }
-    const problem = validateValue(field, value as MetadataValue);
-    if (problem) problems.push({ key: field.key, ...problem });
-  }
-  return problems;
-}
 
 /** Problems grouped by key, which is how the form asks for them. */
 export function problemsByKey(problems: MetadataProblem[]): Record<string, MetadataProblem[]> {

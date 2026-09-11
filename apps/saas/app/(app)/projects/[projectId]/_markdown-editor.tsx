@@ -22,13 +22,7 @@ import { gfm } from "@milkdown/kit/preset/gfm";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
 import { AlertTriangle, Lock, Plus, Trash2, X } from "lucide-react";
 import { useT } from "@/i18n";
-import {
-  carriedValues,
-  fromProse,
-  toProse,
-  unwritableKeys,
-  type MarkdownParts,
-} from "@/lib/markdown-prose";
+import { carriedValues, fromProse, toProse, type MarkdownParts } from "@/lib/markdown-prose";
 import {
   booleanValueOf,
   hasFillableDefaults,
@@ -371,7 +365,6 @@ function MetadataForm({
   const problems = problemsByKey(
     withoutCarried(validateMetadata(meta, fields), [...carried.keys()]),
   );
-  const unwritable = new Set(unwritableKeys(meta));
 
   const setValue = (key: string, value: MetaValue) => onChange({ ...meta, [key]: value });
 
@@ -458,12 +451,6 @@ function MetadataForm({
                 {problemText(problem, t)}
               </p>
             ))}
-            {unwritable.has(row.key) && (
-              <p className="flex items-start gap-1 text-[11px] text-amber-700">
-                <AlertTriangle size={11} className="mt-0.5 shrink-0" />
-                {t("md.notWritable")}
-              </p>
-            )}
           </div>
         );
       })}

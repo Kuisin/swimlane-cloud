@@ -66,13 +66,19 @@ describe("metadataOf", () => {
     expect(metadataOf("flow.md", MD.slice(MD.indexOf("# Flow")))).toEqual({});
   });
 
-  it("names the keys the engine can only carry verbatim", () => {
+  it("models a nested map rather than carrying it verbatim", () => {
     const rich = "---\nowner: a\nsourceRef:\n  repo: x\n---\n\nNotes.\n";
     expect(metadataEntryOf("doc.md", rich)).toEqual({
-      meta: { owner: "a" },
-      carried: ["sourceRef"],
+      meta: { owner: "a", sourceRef: { repo: "x" } },
+      carried: [],
     });
     expect(metadataEntryOf("dir/.gitkeep", "")).toBeNull();
+  });
+
+  it("still names a key it genuinely cannot model, such as a block scalar", () => {
+    const block = "---\nowner: a\nnote: |\n  one\n  two\n---\n\nNotes.\n";
+    const entry = metadataEntryOf("doc.md", block);
+    expect(entry?.carried).toEqual(["note"]);
   });
 });
 

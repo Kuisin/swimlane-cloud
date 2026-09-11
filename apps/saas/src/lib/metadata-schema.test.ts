@@ -53,13 +53,14 @@ describe("parseMetadataFields", () => {
       { key: "owner", type: "list" },
       { key: "note", type: "nonsense" },
     ]);
-    expect(fields.map((f) => f.key)).toEqual(["owner", "note"]);
-    // An unknown type still gives a usable text box.
-    expect(fields[1].type).toBe("string");
+    // An entry with no usable key, a duplicate, or a type the schema does not
+    // know is dropped rather than guessed at: a field the form cannot render
+    // correctly is worse than one that is visibly absent from the settings.
+    expect(fields.map((f) => f.key)).toEqual(["owner"]);
   });
 
-  it("degrades a choice list with no choices to a plain string", () => {
-    expect(parseMetadataFields([{ key: "status", type: "enum" }])[0].type).toBe("string");
+  it("drops a choice list with no choices, which could never be satisfied", () => {
+    expect(parseMetadataFields([{ key: "status", type: "enum" }])).toEqual([]);
   });
 
   it("is empty for anything that is not a list of fields", () => {
@@ -77,12 +78,9 @@ describe("parseMetadataFields", () => {
   });
 
   it("takes a schema object or the bare array a hand-edited file may hold", () => {
-    expect(parseMetadataSchema({ fields: [{ key: "owner" }] }).fields).toEqual([
-      { key: "owner", type: "string" },
-    ]);
-    expect(parseMetadataSchema([{ key: "owner" }]).fields).toEqual([
-      { key: "owner", type: "string" },
-    ]);
+    const owner = [{ key: "owner", type: "string" }];
+    expect(parseMetadataSchema({ fields: owner }).fields).toEqual(owner);
+    expect(parseMetadataSchema(owner).fields).toEqual(owner);
     expect(parseMetadataSchema(null).fields).toEqual([]);
   });
 
@@ -94,7 +92,10 @@ describe("parseMetadataFields", () => {
 
 describe("readMetadataFields", () => {
   it("reads metadata.fields out of the settings file", () => {
-    const text = JSON.stringify({ version: 1, metadata: { fields: [{ key: "owner" }] } });
+    const text = JSON.stringify({
+      version: 1,
+      metadata: { fields: [{ key: "owner", type: "string" }] },
+    });
     expect(readMetadataFields(text)).toEqual([{ key: "owner", type: "string" }]);
   });
 
@@ -116,10 +117,10 @@ describe("project settings round trip", () => {
     expect(parseProjectSettings(text).branches.published).toBe("main");
   });
 
-  it("writes no metadata key when nothing is declared", () => {
+  it("writes an empty schema when nothing is declared", () => {
     const text = projectSettingsJson(parseProjectSettings(null));
-    expect(JSON.parse(text).metadata).toBeUndefined();
-    expect(parseProjectSettings(text).metadata).toBeUndefined();
+    expect(JSON.parse(text).metadata).toEqual({ fields: [] });
+    expect(parseProjectSettings(text).metadata).toEqual({ fields: [] });
   });
 });
 

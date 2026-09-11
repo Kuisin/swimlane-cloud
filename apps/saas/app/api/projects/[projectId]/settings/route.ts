@@ -159,7 +159,7 @@ export const PATCH = withApi(async (req, ctx: { params: Promise<{ projectId: str
 
   // Absent means "leave the schema alone"; an empty array means "declare
   // nothing", which is how the settings page removes the last field.
-  const fields = input.metadata ? checkedFields(input.metadata.fields) : current.metadata?.fields;
+  const fields = input.metadata ? checkedFields(input.metadata.fields) : current.metadata.fields;
 
   await syncTemplatePolicies(projectId, project.user.id, input.templates ?? {});
 
@@ -167,7 +167,7 @@ export const PATCH = withApi(async (req, ctx: { params: Promise<{ projectId: str
     ...current,
     diagram: checked,
     templates,
-    ...(fields?.length ? { metadata: { fields } } : { metadata: undefined }),
+    metadata: { fields },
   };
   await project.write.putFile(
     REPO_SETTINGS_PATH,

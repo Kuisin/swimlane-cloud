@@ -5,14 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { dslOf } from "./diagram-file";
-import {
-  DIAGRAM_PLACEHOLDER,
-  carriedValues,
-  fromProse,
-  metaOf,
-  toProse,
-  unwritableKeys,
-} from "./markdown-prose";
+import { DIAGRAM_PLACEHOLDER, carriedValues, fromProse, metaOf, toProse } from "./markdown-prose";
 import {
   listItemsOf,
   metadataRows,
@@ -120,12 +113,14 @@ Prose.
 `;
 
 describe("rich frontmatter", () => {
-  it("reads a block sequence, and lists a nested map as carried rather than editable", () => {
+  it("models a block sequence as a list and a nested map as a map — neither is carried", () => {
     const parts = toProse(RICH);
-    expect(parts.meta.tags).toBe("billing, urgent");
-    expect(parts.meta.sourceRef).toBeUndefined();
-    expect([...carriedValues(parts.shape).keys()]).toEqual(["sourceRef"]);
-    expect(metaOf(RICH).carried).toEqual(["sourceRef"]);
+    expect(parts.meta.tags).toEqual(["billing", "urgent"]);
+    expect(parts.meta.sourceRef).toEqual({ repo: "acme/flows", ref: "main" });
+    // Both shapes round-trip now, so nothing has to be carried through
+    // verbatim — which is what makes them editable in the form.
+    expect([...carriedValues(parts.shape).keys()]).toEqual([]);
+    expect(metaOf(RICH).carried).toEqual([]);
   });
 
   it("puts an untouched document back byte for byte", () => {
@@ -148,22 +143,21 @@ describe("rich frontmatter", () => {
       parts.prose,
     );
     expect(out).toContain("tags:\n  - billing\n  - q3");
-    expect(toProse(out).meta.tags).toBe("billing, q3");
+    expect(toProse(out).meta.tags).toEqual(["billing", "q3"]);
   });
 
   it("adds a brand-new list key without mangling its separator", () => {
     const parts = toProse("---\nowner: a\n---\n\nProse.\n");
     const out = fromProse({ ...parts, meta: { ...parts.meta, tags: ["x", "y"] } }, parts.prose);
-    expect(toProse(out).meta.tags).toBe("x, y");
+    expect(toProse(out).meta.tags).toEqual(["x", "y"]);
   });
 
-  it("names the keys whose value the engine cannot write, and leaves them alone", () => {
+  it("writes an edited nested map through, rather than dropping the edit", () => {
     const parts = toProse(RICH);
-    const edited = { ...parts.meta, sourceRef: { repo: "other" } };
-    expect(unwritableKeys(edited, parts.shape)).toEqual(["sourceRef"]);
-    // The rejected edit costs the file nothing: what was there is still there.
+    const edited = { ...parts.meta, sourceRef: { repo: "other", ref: "main" } };
     const out = fromProse({ ...parts, meta: edited }, parts.prose);
-    expect(out).toContain("sourceRef:\n  repo: acme/flows\n  ref: main");
+    expect(out).toContain("sourceRef:\n  repo: other\n  ref: main");
+    expect(toProse(out).meta.sourceRef).toEqual({ repo: "other", ref: "main" });
   });
 
   it("leaves a document with no frontmatter without any", () => {
@@ -193,7 +187,7 @@ describe("schema → form state → saved frontmatter", () => {
       ["owner", "declared"],
       ["status", "declared"],
       ["tags", "declared"],
-      ["sourceRef", "carried"],
+      ["sourceRef", "declared"],
     ]);
     expect(listItemsOf(rows[2].value)).toEqual(["billing", "urgent"]);
 
@@ -206,8 +200,9 @@ describe("schema → form state → saved frontmatter", () => {
     expect(back.meta.status).toBe("review");
     expect(listItemsOf(back.meta.tags)).toEqual(["billing", "q3"]);
     expect(back.meta.owner).toBe("sales-ops");
-    // The map the engine only carries is still exactly as the author wrote it.
-    expect([...carriedValues(back.shape).keys()]).toEqual(["sourceRef"]);
+    // The map is modelled rather than carried, and an edit that never touched
+    // it leaves it exactly as the author wrote it.
+    expect([...carriedValues(back.shape).keys()]).toEqual([]);
     expect(stored).toContain("sourceRef:\n  repo: acme/flows\n  ref: main");
   });
 

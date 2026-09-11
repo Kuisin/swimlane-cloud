@@ -53,67 +53,11 @@ export function carriedValues(shape: FrontmatterShape): Map<string, string[]> {
   return out;
 }
 
-/**
- * The engine's frontmatter API still types a value as a plain string, because
- * the ambient declaration in `apps/saas/types/diagram-converter.d.ts` has not
- * been widened to the `string | string[] | nested map` model the package now
- * has. This cast is the only place that gap lives.
- */
-function asEngineMeta(meta: MetaRecord): Record<string, string> {
-  return meta as unknown as Record<string, string>;
-}
-
-/** Keys whose value comes back different after one serialize/parse trip. */
-function roundTripFailures(meta: MetaRecord, shape?: FrontmatterShape): string[] {
-  const back = splitFrontmatter(serializeFrontmatter(asEngineMeta(meta), shape)).meta as MetaRecord;
-  return Object.keys(meta).filter((key) => metaText(meta[key]) !== metaText(back[key]));
-}
-
-/**
- * The metadata to hand the engine, and the keys it could not take at all.
- *
- * Asked of the engine rather than assumed: serialize, parse it back, and see
- * what changed. A sequence that does not survive as a sequence is retried as
- * the comma-joined scalar the engine flattens one to, which is how a list still
- * round-trips through a build of the engine that cannot yet write an array.
- * Whatever still fails is left out entirely, so `serializeFrontmatter` re-emits
- * it from `shape` exactly as the document already had it.
- *
- * DELETE THIS WHOLE FUNCTION when `feat/md-metadata-engine` merges, and call
- * `serializeFrontmatter(meta, shape)` directly with the structured values.
- * `splitFrontmatter` round-trip-verifies every key on that branch and keeps any
- * key it cannot re-emit byte-identically as `verbatim` — so this outer check
- * becomes strictly redundant with the engine's inner one and can never fire.
- * Left standing it would read like a guard while guarding nothing; the engine
- * author confirmed the direct call is supported and covered by tests.
- * `unwritableKeys` goes with it (it only ever answers `[]` from then on), along
- * with the `md.notWritable` string the form shows for it.
- */
-function forEngine(
-  meta: MetaRecord,
-  shape?: FrontmatterShape,
-): { engine: MetaRecord; rejected: string[] } {
-  let engine = meta;
-  let failing = roundTripFailures(engine, shape);
-  const flattenable = failing.filter((key) => Array.isArray(engine[key]));
-  if (flattenable.length) {
-    engine = { ...engine };
-    for (const key of flattenable) engine[key] = metaText(meta[key]);
-    failing = roundTripFailures(engine, shape);
-  }
-  if (!failing.length) return { engine, rejected: [] };
-  const kept: MetaRecord = {};
-  for (const [key, value] of Object.entries(engine)) {
-    if (!failing.includes(key)) kept[key] = value;
-  }
-  return { engine: kept, rejected: failing };
-}
-
 /** Split a stored document into metadata, prose, and the untouched fence. */
 export function toProse(stored: string): MarkdownParts {
   const { meta, body, shape } = splitFrontmatter(stored);
   const found = extractDiagramFence(body);
-  const parts = { meta: meta as MetaRecord, shape };
+  const parts = { meta, shape };
   if (!found) return { ...parts, prose: body, fence: null };
 
   const lines = body.split("\n");
@@ -127,14 +71,6 @@ export function toProse(stored: string): MarkdownParts {
 }
 
 /**
- * Keys whose value would not survive being written and read back — the ones
- * the form must show as "left unchanged" rather than pretend it saved.
- */
-export function unwritableKeys(meta: MetaRecord, shape?: FrontmatterShape): string[] {
-  return forEngine(meta, shape).rejected;
-}
-
-/**
  * Reassemble a stored document.
  *
  * If the placeholder is gone — the editor dropped the HTML comment, or the
@@ -143,10 +79,7 @@ export function unwritableKeys(meta: MetaRecord, shape?: FrontmatterShape): stri
  * here, so this fails towards keeping it.
  */
 export function fromProse(parts: MarkdownParts, prose: string): string {
-  const frontmatter = serializeFrontmatter(
-    asEngineMeta(forEngine(parts.meta, parts.shape).engine),
-    parts.shape,
-  );
+  const frontmatter = serializeFrontmatter(parts.meta, parts.shape);
   if (!parts.fence) return frontmatter + prose;
 
   if (prose.includes(DIAGRAM_PLACEHOLDER)) {

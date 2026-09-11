@@ -32,7 +32,7 @@ import type {
   TemplateSection,
   WatchEvent,
 } from "@swimlane-cloud/editor";
-import { splitFrontmatter } from "@swimlane-cloud/diagram-converter/markdown-doc";
+import { splitFrontmatter, type MetaRecord } from "@swimlane-cloud/diagram-converter/markdown-doc";
 import { api } from "./client";
 import { dslOf, isMarkdownFile, storedFrom } from "./diagram-file";
 import { fileVersionIn } from "./file-version";
@@ -88,8 +88,12 @@ export interface SaasEditorHost extends EditorHost {
   /** Save a whole stored document, already in its final on-disk form. */
   writeStored(id: string, stored: string): Promise<void>;
 
-  /** A `.md` file's frontmatter, for the preview's document panel; null otherwise. */
-  metaOf(id: string): Record<string, string> | null;
+  /**
+   * A `.md` file's frontmatter, for the preview's document panel; null
+   * otherwise. Values are the structured model — a list or a nested map, not
+   * only a string — which the panel flattens for display.
+   */
+  metaOf(id: string): MetaRecord | null;
 }
 
 /** How long a fresh listing is reused before being fetched again. */
@@ -256,6 +260,8 @@ export function createSaasHost(opts: SaasHostOptions): SaasEditorHost {
 
     // The frontmatter `read` strips along with the prose, for the preview's
     // document panel. Synchronous, from the markdown this session has read.
+    // Structured values are handed over as they are — the renderer's info
+    // panel flattens a list or a nested map itself (`metaValueText`).
     metaOf(id) {
       const stored = markdownSource.get(id);
       if (!stored || !isMarkdownFile(id)) return null;
