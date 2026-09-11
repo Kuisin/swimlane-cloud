@@ -88,6 +88,8 @@ function DslEditorInner({ options }) {
     deleteFile,
     deleteFolder,
     moveFile,
+    renameFile,
+    openingFileId,
     checkpoint,
     policies,
     dialog,
@@ -362,6 +364,8 @@ function DslEditorInner({ options }) {
         onDeleteFile={deleteFile}
         onDeleteFolder={deleteFolder}
         onMoveFile={moveFile}
+        onRenameFile={renameFile}
+        openingFileId={openingFileId}
         canCreate={!readOnly && hostHas(host, "create")}
         canMkdir={!readOnly && hostHas(host, "mkdir")}
         canDelete={!readOnly && hostHas(host, "delete")}

@@ -53,6 +53,8 @@ export const EN = {
   "tree.collapse": "Collapse files",
   "tree.expand": "Expand files",
   "tree.deleteFile": "Delete file",
+  "tree.renameFile": "Rename file",
+  "tree.opening": "Opening…",
   "tree.deleteFolder": "Delete folder",
   "tree.createFirst": "Create your first diagram",
   // file settings
@@ -365,6 +367,8 @@ export const JA = {
   "tree.collapse": "ツリーを折りたたむ",
   "tree.expand": "ツリーを展開",
   "tree.deleteFile": "ファイルを削除",
+  "tree.renameFile": "ファイル名を変更",
+  "tree.opening": "開いています…",
   "tree.deleteFolder": "フォルダを削除",
   "tree.createFirst": "最初の図を作成",
   // file settings
