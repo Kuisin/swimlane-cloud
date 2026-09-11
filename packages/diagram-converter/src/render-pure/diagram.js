@@ -329,6 +329,28 @@ function PrintLayer({
   );
 }
 /**
+ * One metadata value as a single line of text.
+ *
+ * A `.md` document's frontmatter is a structured model — a value may be a list
+ * or a nested map, not only a string (see `markdown-doc.js`). `String(value)`
+ * on one of those prints `[object Object]`, so each shape gets flattened to
+ * something a reader can actually use. The panel truncates afterwards.
+ */
+function metaValueText(value) {
+  if (Array.isArray(value)) return value.map(metaValueText).filter(Boolean).join(", ");
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .map(([key, inner]) => {
+        const text = metaValueText(inner);
+        return text ? `${key}: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+  return String(value ?? "");
+}
+
+/**
  * The lines of the document info panel: the path, then `key: value` for each
  * metadata entry, each cut to the panel's column budget. Nothing when there
  * is nothing to say.
@@ -339,9 +361,7 @@ function documentInfoLines(documentInfo, L) {
   const path = String(documentInfo.path ?? "").trim();
   if (path) lines.push(truncateToColumns(path, L.infoMaxCols));
   for (const [key, value] of Object.entries(documentInfo.meta ?? {})) {
-    const v = String(value ?? "")
-      .replace(/\s+/g, " ")
-      .trim();
+    const v = metaValueText(value).replace(/\s+/g, " ").trim();
     if (!key || !v) continue;
     lines.push(truncateToColumns(`${key}: ${v}`, L.infoMaxCols));
     if (lines.length >= L.infoMaxLines) break;

@@ -94,6 +94,29 @@ describe("the document info panel", () => {
     expect(svg).toMatch(/<text data-document-info="" x="[\d.]+" y="[\d.]+" text-anchor="end"/);
   });
 
+  /**
+   * A `.md` document's frontmatter is a structured model, so a host handing
+   * this panel its metadata may hand it a list or a nested map. `String(value)`
+   * printed `[object Object]` for the map — visible in every exported image.
+   */
+  it("reads a list and a nested map rather than printing [object Object]", () => {
+    const { svg } = textToSvg(dsl, {
+      documentInfo: {
+        path: "ops/pick.md",
+        meta: {
+          tags: ["order", "credit"],
+          sourceRef: { system: "SAP", module: "FI" },
+          empty: {},
+        },
+      },
+    });
+    expect(svg).not.toContain("object Object");
+    expect(svg).toContain(">tags: order, credit</tspan>");
+    expect(svg).toContain(">sourceRef: system: SAP, module: FI</tspan>");
+    // nothing to say about it, so it takes no line
+    expect(svg).not.toContain(">empty:");
+  });
+
   it("makes the title band taller when it would not fit", () => {
     const height = (svg) => Number(svg.match(/viewBox="0 0 [\d.]+ ([\d.]+)"/)[1]);
     const base = height(textToSvg(dsl).svg);
