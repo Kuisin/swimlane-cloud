@@ -4,7 +4,7 @@
  * Every error body has the shape `{ error, ...flags }` (see `errorResponse`
  * in api.ts); the flags are lifted onto the thrown error so UI code can
  * branch — `needsAuth` sends the user to /login, `conflict` asks them to
- * reload, `locked` / `dirty` explain why a branch action was refused.
+ * reload, `mergeConflict` that reloading will not help, `locked` / `dirty` explain why a branch action was refused.
  */
 
 import { localCache } from "./local-cache";
@@ -13,6 +13,8 @@ export class ApiClientError extends Error {
   status: number;
   needsAuth: boolean;
   conflict: boolean;
+  /** The branches genuinely diverged; reloading will not clear it. */
+  mergeConflict: boolean;
   locked: boolean;
   dirty: boolean;
   upgrade: boolean;
@@ -30,6 +32,7 @@ export class ApiClientError extends Error {
     this.body = body;
     this.needsAuth = Boolean(body.needsAuth) || status === 401;
     this.conflict = Boolean(body.conflict);
+    this.mergeConflict = Boolean(body.mergeConflict);
     this.locked = Boolean(body.locked);
     this.dirty = Boolean(body.dirty);
     this.upgrade = Boolean(body.upgrade);

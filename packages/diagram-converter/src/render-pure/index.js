@@ -22,6 +22,7 @@ export { textToSvg, textDiffToSvg } from "./text-to-svg.js";
 export { diffModelRows, diffModels, rowCaption } from "./row-diff.js";
 export { relativeLinkPath, resolveLinkPath } from "../link-path.js";
 export { migrateLegacyDsl, migrateLegacySpellings } from "../legacy-migrate.js";
+export { mergeDsl, conflictMarkers, splitDocument, joinDocument } from "../merge-dsl.js";
 export {
   ARROW_LINE_TYPES,
   normalizeArrowLine,

@@ -260,6 +260,8 @@ export const EN: Record<string, string> = {
   // errors
   "error.needsAuth": "Your GitHub sign-in has expired — sign in again.",
   "error.conflict": "This branch moved on GitHub while you were editing. Reload and try again.",
+  "error.mergeConflict":
+    "This edit and preview changed the same lines, so they cannot be combined automatically. Update this edit from preview, then try again.",
   "error.rateLimited": "GitHub is rate-limiting requests right now. Try again in a minute.",
   // edit page
   "edit.editor": "Editor",
@@ -808,6 +810,8 @@ export const JA: Record<string, string> = {
   "error.needsAuth": "GitHub のサインインが期限切れです。もう一度サインインしてください。",
   "error.conflict":
     "編集中にこのブランチが GitHub 上で更新されました。再読み込みしてやり直してください。",
+  "error.mergeConflict":
+    "この編集と preview が同じ箇所を変更しているため、自動では統合できません。preview の内容をこの編集に取り込んでから、もう一度お試しください。",
   "error.rateLimited": "GitHub のレート制限中です。1 分ほど待ってからお試しください。",
   // edit page
   "edit.editor": "エディタ",

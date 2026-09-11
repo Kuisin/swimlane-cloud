@@ -209,4 +209,44 @@ describe("migrateLegacyDsl", () => {
     expect(changed).toBe(0);
     expect(parseDSL(text).errors).toEqual([]);
   });
+
+  // A step's own id was an `@id` suffix in the grammar that `[goto: id]`
+  // replaced. Without this rule the reader stops at `unknown directive
+  // "@…"` and "Update DSL" reports nothing to do, which is what stranded
+  // the template-docs edit branch behind three files of merge conflicts.
+  describe("a step's retired `@id` suffix", () => {
+    it("becomes the `id: <id>;` property line", () => {
+      const { text, changed } = migrateLegacyDsl(doc("[a: Request] @ACT-001"));
+      expect(text).toBe(doc("[a: Request]\n  id: ACT-001;"));
+      expect(changed).toBeGreaterThan(0);
+      expect(parseDSL(text).errors).toEqual([]);
+    });
+
+    it("keeps the other suffixes, in order, when the id sits among them", () => {
+      const { text } = migrateLegacyDsl(doc("[a: Confirm] <block> @ACT-002 +VOUCHER ~>"));
+      expect(text).toBe(doc("[a: Confirm] <block> +VOUCHER ~>\n  id: ACT-002;"));
+      expect(parseDSL(text).errors).toEqual([]);
+    });
+
+    it("indents the property line under a nested step", () => {
+      const { text } = migrateLegacyDsl(doc("section (x)\n  [a: Deep] @ACT-003\nend-section"));
+      expect(text).toBe(doc("section (x)\n  [a: Deep]\n    id: ACT-003;\nend-section"));
+      expect(parseDSL(text).errors).toEqual([]);
+    });
+
+    it("leaves an opener's `@id` slot alone — that one is current", () => {
+      const src = doc("section (audit) @aud #blue\n  [a: Log]\nend-section");
+      const { text, changed } = migrateLegacyDsl(src);
+      expect(text).toBe(src);
+      expect(changed).toBe(0);
+      expect(parseDSL(text).errors).toEqual([]);
+    });
+
+    it("does not touch `[goto: id]`, which has no id suffix", () => {
+      const src = doc("[a: z]\n  id: done;\nif (q) is (a) than\n  [goto: done]\nend-if");
+      const { text, changed } = migrateLegacyDsl(src);
+      expect(text).toBe(src);
+      expect(changed).toBe(0);
+    });
+  });
 });

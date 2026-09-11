@@ -8,7 +8,7 @@
  */
 
 import { assertMergeTarget } from "./branch-model.ts";
-import { GitHubConflictError } from "./errors.ts";
+import { GitHubConflictError, GitHubMergeConflictError } from "./errors.ts";
 import type { RestClient } from "./rest.ts";
 import type { RepoRef } from "./types.ts";
 
@@ -194,9 +194,11 @@ export function createPullsApi(rest: RestClient, repo: RepoRef) {
         return res;
       } catch (err) {
         if (err instanceof GitHubConflictError) {
-          throw new GitHubConflictError(
+          throw new GitHubMergeConflictError(
             `Pull request #${number} cannot be merged automatically — ${pr.head} conflicts with ${pr.base}. ` +
-              "Resolve it on GitHub, or locally, and try again.",
+              `Update ${pr.head} from ${pr.base} and resolve the difference, then try again.`,
+            pr.head,
+            pr.base,
           );
         }
         throw err;
