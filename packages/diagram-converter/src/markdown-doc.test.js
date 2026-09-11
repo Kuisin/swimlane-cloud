@@ -14,11 +14,14 @@ import {
   extractDiagramFence,
   isMarkdownDiagram,
   markdownFromDsl,
+  mergeMetaProjection,
   orderedMetaKeys,
+  projectMeta,
   readMetaSection,
   serializeFrontmatter,
   splitFrontmatter,
   storedMarkdown,
+  verbatimKeys,
   writeMetaSection,
 } from "./markdown-doc.js";
 
@@ -96,9 +99,9 @@ status: active
 body
 `;
 
-  it("reads a block sequence instead of dropping its items", () => {
+  it("reads a block sequence as a list instead of dropping its items", () => {
     const { meta } = splitFrontmatter(AUTHORED);
-    expect(meta.activity_ids).toBe("ACT-AC-010-001-001, ACT-AC-010-001-002");
+    expect(meta.activity_ids).toEqual(["ACT-AC-010-001-001", "ACT-AC-010-001-002"]);
   });
 
   it("writes a block sequence back as a block sequence", () => {
@@ -131,9 +134,10 @@ body
     expect(serializeFrontmatter(rest, shape)).not.toContain("status:");
   });
 
-  it("carries a value it cannot model through verbatim", () => {
-    // A nested map and a block scalar have no flat-string form, so they are
-    // kept exactly as written rather than flattened into something lossy.
+  it("models a nested map, and keeps a block scalar verbatim", () => {
+    // A nested map is part of the value model now. A `|` block scalar is not —
+    // it has no form this module can rebuild, so it is carried through exactly
+    // as written rather than flattened into something lossy.
     const md = `---
 owner: x
 approvals:
@@ -147,11 +151,29 @@ notes: |
 body
 `;
     const { meta, shape } = splitFrontmatter(md);
-    expect(meta.approvals).toBeUndefined();
+    expect(meta.approvals).toEqual({ finance: "alice", legal: "bob" });
+    expect(meta.notes).toBeUndefined();
+    expect(verbatimKeys(shape)).toEqual(["notes"]);
     expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
   });
 
-  it("keeps a list whose items contain the separator verbatim", () => {
+  it("edits a nested map without disturbing the rest", () => {
+    const md = "---\nowner: x\napprovals:\n  finance: alice\n  legal: bob\n---\n\nbody\n";
+    const { meta, shape } = splitFrontmatter(md);
+    const edited = { ...meta, approvals: { ...meta.approvals, legal: "carol" } };
+    expect(serializeFrontmatter(edited, shape)).toBe(
+      "---\nowner: x\napprovals:\n  finance: alice\n  legal: carol\n---\n",
+    );
+  });
+
+  it("models a map nested two deep", () => {
+    const md = "---\nsourceRef:\n  repo:\n    name: docs\n    ref: main\n---\n\nbody\n";
+    const { meta, shape } = splitFrontmatter(md);
+    expect(meta.sourceRef).toEqual({ repo: { name: "docs", ref: "main" } });
+    expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
+  });
+
+  it("models a list whose items contain the separator", () => {
     const md = `---
 owners:
   - "Doe, Jane"
@@ -161,20 +183,76 @@ owners:
 body
 `;
     const { meta, shape } = splitFrontmatter(md);
-    // Flattening these would make the comma-join ambiguous, so it is refused.
-    expect(meta.owners).toBeUndefined();
+    // A list is a real array now, so a comma inside an item is no obstacle —
+    // and the quoting the author used comes back with it.
+    expect(meta.owners).toEqual(["Doe, Jane", "Roe, Rich"]);
+    expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
+  });
+
+  it("adds and removes block-sequence items, staying a block sequence", () => {
+    const { meta, shape } = splitFrontmatter(AUTHORED);
+    const added = serializeFrontmatter(
+      { ...meta, activity_ids: [...meta.activity_ids, "ACT-AC-010-001-003"] },
+      shape,
+    );
+    expect(added).toContain("  - ACT-AC-010-001-002\n  - ACT-AC-010-001-003");
+    const removed = serializeFrontmatter({ ...meta, activity_ids: ["ACT-AC-010-001-002"] }, shape);
+    expect(removed).toContain("activity_ids:\n  - ACT-AC-010-001-002\ntitle:");
+    expect(removed).not.toContain("001-001");
+  });
+
+  it("reads a block sequence written at the key's own indentation", () => {
+    const md = "---\ntags:\n- order\n- credit\n---\n\nbody\n";
+    const { meta, shape } = splitFrontmatter(md);
+    expect(meta.tags).toEqual(["order", "credit"]);
     expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
   });
 
   it("reads an inline [a, b] list and writes it back inline", () => {
     const md = "---\ntags: [order, credit]\n---\n\nbody\n";
     const { meta, shape } = splitFrontmatter(md);
-    expect(meta.tags).toBe("order, credit");
+    expect(meta.tags).toEqual(["order", "credit"]);
     expect(serializeFrontmatter(meta, shape)).toBe("---\ntags: [order, credit]\n---\n");
-    // and it stays editable, unlike a shape that has to be kept verbatim
+    // a flow list stays flow when items are added or removed
+    expect(serializeFrontmatter({ tags: ["order", "credit", "new"] }, shape)).toContain(
+      "[order, credit, new]",
+    );
+    // and the old flat form a caller may still hand us is still understood
     expect(serializeFrontmatter({ tags: "order, credit, new" }, shape)).toContain(
       "[order, credit, new]",
     );
+  });
+
+  it("keeps the shapes it still cannot model verbatim", () => {
+    for (const line of [
+      "a: &anchor value",
+      "a: *alias",
+      "a: !!str value",
+      "a: { x: 1 }",
+      "a: >\n  folded",
+      "a:\n  - x: 1\n  - y: 2",
+      "a: value\n  stray continuation",
+    ]) {
+      const md = `---\n${line}\n---\n\nbody\n`;
+      const { meta, shape } = splitFrontmatter(md);
+      expect(verbatimKeys(shape), line).toEqual(["a"]);
+      expect(meta.a, line).toBeUndefined();
+      expect(serializeFrontmatter(meta, shape), line).toBe(md.slice(0, md.indexOf("\nbody")));
+    }
+  });
+
+  it("keeps quoting the author chose even where it is not required", () => {
+    const md = '---\nowner: "sales-ops"\ntags: ["order", credit]\n---\n\nbody\n';
+    const { meta, shape } = splitFrontmatter(md);
+    expect(meta).toEqual({ owner: "sales-ops", tags: ["order", "credit"] });
+    expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
+  });
+
+  it("keeps a bare `key:` bare rather than turning it into an empty string", () => {
+    const md = "---\nowner:\nstatus: draft\n---\n\nbody\n";
+    const { meta, shape } = splitFrontmatter(md);
+    expect(meta.owner).toBe("");
+    expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
   });
 
   it("keeps a | block scalar's content instead of reading the indicator as the value", () => {
@@ -187,6 +265,107 @@ body
   it("round-trips a whole authored document through the DSL and back", () => {
     const md = AUTHORED.replace("\nbody\n", `\n\`\`\`kai-swimlane\n${DSL}\n\`\`\`\n`);
     expect(markdownFromDsl(dslFromMarkdown(md), md)).toBe(md);
+  });
+});
+
+/**
+ * `/meta/` is `key: value;` lines, so it can only ever carry the scalar half of
+ * the metadata. Everything here pins the consequence: the fence is a
+ * projection, and what it cannot see it must never be able to destroy.
+ */
+describe("the /meta/ projection", () => {
+  const RICH = `---
+owner: fi.coe@example.com
+tags:
+  - order
+  - credit
+reviewers:
+  - "Doe, Jane"
+sourceRef:
+  system: SAP
+  module: FI
+notes: |
+  free text
+---
+
+\`\`\`kai-swimlane
+${DSL}
+\`\`\`
+`;
+
+  it("projects only the values a scalar section can hold", () => {
+    const { meta } = splitFrontmatter(RICH);
+    expect(projectMeta(meta)).toEqual({
+      owner: "fi.coe@example.com",
+      tags: "order, credit",
+    });
+    // `reviewers` has a comma inside an item, `sourceRef` is a map, `notes` is
+    // verbatim — none of them survives a comma-joined round trip.
+    expect(dslFromMarkdown(RICH)).toContain("tags: order, credit;");
+    expect(dslFromMarkdown(RICH)).not.toContain("sourceRef");
+    expect(dslFromMarkdown(RICH)).not.toContain("reviewers");
+  });
+
+  it("preserves every rich key across a /meta/-only edit", () => {
+    const edited = dslFromMarkdown(RICH).replace(
+      "owner: fi.coe@example.com;",
+      "owner: ap.coe@example.com;",
+    );
+    const out = markdownFromDsl(edited, RICH);
+    const { meta, shape } = splitFrontmatter(out);
+    expect(meta.owner).toBe("ap.coe@example.com");
+    expect(meta.sourceRef).toEqual({ system: "SAP", module: "FI" });
+    expect(meta.reviewers).toEqual(["Doe, Jane"]);
+    expect(verbatimKeys(shape)).toEqual(["notes"]);
+    // only the one line the author touched differs
+    expect(out).toBe(RICH.replace("fi.coe", "ap.coe"));
+  });
+
+  it("keeps a projected list a list rather than flattening it on the way back", () => {
+    const out = markdownFromDsl(dslFromMarkdown(RICH), RICH);
+    expect(splitFrontmatter(out).meta.tags).toEqual(["order", "credit"]);
+    expect(out).toContain("tags:\n  - order\n  - credit");
+  });
+
+  it("removes a key deleted from /meta/ only when it was projected in", () => {
+    // `owner` was in the fence, so deleting it there means what it says.
+    const withoutOwner = dslFromMarkdown(RICH).replace("owner: fi.coe@example.com;\n", "");
+    const { meta } = splitFrontmatter(markdownFromDsl(withoutOwner, RICH));
+    expect(meta.owner).toBeUndefined();
+    // `sourceRef` and `reviewers` were never there to delete.
+    expect(meta.sourceRef).toEqual({ system: "SAP", module: "FI" });
+    expect(meta.reviewers).toEqual(["Doe, Jane"]);
+  });
+
+  it("does not destroy a rich key when /meta/ is emptied entirely", () => {
+    const { dsl } = readMetaSection(dslFromMarkdown(RICH));
+    const { meta, shape } = splitFrontmatter(markdownFromDsl(dsl, RICH));
+    expect(meta).toEqual({ reviewers: ["Doe, Jane"], sourceRef: { system: "SAP", module: "FI" } });
+    expect(verbatimKeys(shape)).toEqual(["notes"]);
+  });
+
+  it("mergeMetaProjection is the rule on its own", () => {
+    const before = { owner: "a", tags: ["x", "y"], ref: { k: "v" }, wide: ["p, q"] };
+    expect(mergeMetaProjection(before, { owner: "b", tags: "x, y, z" })).toEqual({
+      ref: { k: "v" },
+      wide: ["p, q"],
+      owner: "b",
+      tags: ["x", "y", "z"],
+    });
+    expect(mergeMetaProjection(undefined, { owner: "b" })).toEqual({ owner: "b" });
+    expect(mergeMetaProjection(before, {})).toEqual({ ref: { k: "v" }, wide: ["p, q"] });
+  });
+
+  it("adds a brand new rich key as a block sequence", () => {
+    const { meta, shape } = splitFrontmatter(MD);
+    expect(serializeFrontmatter({ ...meta, reviewedBy: ["a", "b"] }, shape)).toContain(
+      "reviewedBy:\n  - a\n  - b",
+    );
+  });
+
+  it("round-trips the whole rich document byte for byte", () => {
+    expect(markdownFromDsl(dslFromMarkdown(RICH), RICH)).toBe(RICH);
+    expect(storedMarkdown(dslFromMarkdown(RICH), RICH)).toBe(RICH);
   });
 });
 
