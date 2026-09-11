@@ -25,6 +25,7 @@
 import {
   DEFAULT_COLUMN_TITLES,
   DIAGRAM_OPTION_DSL_MAP,
+  DIAGRAM_OPTION_VALUE_MAP,
   OPTION_COLUMN_TITLE_DSL_MAP,
 } from "@swimlane-cloud/diagram-converter/diagram-options";
 
@@ -161,6 +162,9 @@ function serializeOption(model, languages) {
   const out = [];
   const options = model.options || {};
   for (const [dslKey, field] of Object.entries(DIAGRAM_OPTION_DSL_MAP)) {
+    if (options[field] !== undefined) out.push(`${dslKey}: ${options[field]};`);
+  }
+  for (const [dslKey, { field }] of Object.entries(DIAGRAM_OPTION_VALUE_MAP)) {
     if (options[field] !== undefined) out.push(`${dslKey}: ${options[field]};`);
   }
   const page = model.page || {};
@@ -308,6 +312,7 @@ function serializeStepLines(out, row, depth, languages) {
   const remark = emitLocalizedTag("remark", row.remark, row.remark$langs, languages);
   for (const l of remark) out.push(indent(depth + 1, l));
   if (row.skipIndex) out.push(indent(depth + 1, "skip;"));
+  if (row.level > 1) out.push(indent(depth + 1, `level: ${row.level};`));
 }
 
 function serializeLineRows(rows, languages) {
@@ -404,8 +409,16 @@ function serializeLineRows(rows, languages) {
     }
 
     if (row.kind === "branchMerge") {
-      out.push(indent(depth, `goto @${row.mergeTarget}`));
+      const target = (row.mergeTarget || "").trim();
+      out.push(indent(depth, target ? `goto @${target}` : "goto"));
       prevKind = "branchMerge";
+      continue;
+    }
+
+    if (row.kind === "mergeMarker") {
+      const name = (row.name || "").trim();
+      out.push(indent(depth, name ? `merge @${name}` : "merge"));
+      prevKind = "mergeMarker";
       continue;
     }
 

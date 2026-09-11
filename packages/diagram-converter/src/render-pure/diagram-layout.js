@@ -125,6 +125,8 @@ export const DIAGRAM_LAYOUT = {
 
   // Step blocks & props
   stepBoxH: 44,
+  // Extra box height per wrapped text line (`block-text: wrap`).
+  stepTextLineH: 17,
   docW: 65,
   docH: 40,
   docGapX: 8,
