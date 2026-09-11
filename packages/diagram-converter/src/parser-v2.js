@@ -391,13 +391,25 @@ export function parseDSLv2(src, options = {}) {
   const stepIds = new Map();
   const jumps = [];
 
-  const branchMarkerDepth = () => (stack.length ? stack[stack.length - 1].depth + 1 : 0);
+  // Branches and groups live on two stacks; the body depth follows whichever
+  // frame was opened last, so a section inside a case and an if inside a
+  // section both nest one level deeper than their container.
+  let frameSeq = 0;
+  const innermostFrame = () => {
+    const b = stack.length ? stack[stack.length - 1] : null;
+    const g = groupStack.length ? groupStack[groupStack.length - 1] : null;
+    if (!b || !g) return b || g;
+    return b.seq > g.seq ? b : g;
+  };
+  const bodyDepth = () => {
+    const f = innermostFrame();
+    return f ? f.depth + 1 : 0;
+  };
+  const branchMarkerDepth = bodyDepth;
   const branchControlDepth = () => (stack.length ? stack[stack.length - 1].depth : 0);
-  const branchBodyDepth = () => (stack.length ? stack[stack.length - 1].depth + 1 : 0);
-  const groupMarkerDepth = () =>
-    groupStack.length ? groupStack[groupStack.length - 1].depth + 1 : branchBodyDepth();
-  const stepDepth = () =>
-    groupStack.length ? groupStack[groupStack.length - 1].depth + 1 : branchBodyDepth();
+  const branchBodyDepth = bodyDepth;
+  const groupMarkerDepth = bodyDepth;
+  const stepDepth = bodyDepth;
 
   const err = (pos, msg, text = "") => errors.push({ line: sc.lineAt(pos), text, msg });
   const push = (fields, pos) => {
@@ -1175,7 +1187,7 @@ export function parseDSLv2(src, options = {}) {
       branchCounter++;
       const branchId = branchCounter;
       const depth = branchMarkerDepth();
-      stack.push({ id: branchId, depth, type: kw, awaitingCase: kw === "if" });
+      stack.push({ id: branchId, depth, type: kw, awaitingCase: kw === "if", seq: ++frameSeq });
       const idx = push(
         {
           kind: "branchStart",
@@ -1215,7 +1227,7 @@ export function parseDSLv2(src, options = {}) {
     groupCounter++;
     const gid = groupCounter;
     const depth = groupMarkerDepth();
-    groupStack.push({ id: gid, depth, groupMode, kw });
+    groupStack.push({ id: gid, depth, groupMode, kw, seq: ++frameSeq });
     const idx = push(
       {
         kind: "groupStart",

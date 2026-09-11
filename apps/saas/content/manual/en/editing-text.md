@@ -23,7 +23,7 @@ if (approved?)
   [sales: Ship it]
 else
   [sales: Send a rejection]
-endif
+end-if
 @end
 ```
 
@@ -31,6 +31,11 @@ endif
   who's involved, and any shared visual styles.
 - `/line/` is the flow itself: steps in `[role: text]` form, plus `if`,
   `fork`, `section` and a handful of other flow keywords.
+
+The editor writes `end-if`, `end-fork` and `else-if`. Existing files that still
+use the older `endif`, `endfork` or `elseif` spellings keep reading and
+working exactly as before — only newly formatted or saved files switch to
+the new spelling.
 
 ## The full syntax reference is one click away
 

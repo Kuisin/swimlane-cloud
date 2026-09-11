@@ -496,6 +496,17 @@
   background: transparent;
   pointer-events: none;
 }
+/* Scroll-following content: translated by the textarea's scroll offset (set in
+   JS) instead of scrolled, so it can never clamp short of where the caret is. */
+.sw-code-shift,
+.sw-code-gutter-inner,
+.sw-code-error-layer-inner {
+  will-change: transform;
+}
+.sw-code-shift {
+  width: max-content;
+  min-width: 100%;
+}
 .sw-code-input {
   z-index: 0;
   overflow: auto;

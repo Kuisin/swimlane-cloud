@@ -40,17 +40,17 @@ const HELP_SECTIONS = [
   [
     "// … / *** …",
     "help.comment",
-    "// note about this branch\nif (channel?) is (web) than #blue\n  [role: web form]\nendif",
+    "// note about this branch\nif (channel?) is (web) than #blue\n  [role: web form]\nend-if",
   ],
   [
     "/line/",
     "help.line",
-    "/line/\n\n[role: Step text] <block>\nlabel: …;\nprops: propId;\n\nif (condition?) is (yes)\n  [role: Branch A]\nelse\n  [role: Branch B]\nendif\n\nfork\n  [role: Parallel A]\nand\n  [role: Parallel B]\nendfork",
+    "/line/\n\n[role: Step text] <block>\nlabel: …;\nprops: propId;\n\nif (condition?) is (yes)\n  [role: Branch A]\nelse\n  [role: Branch B]\nend-if\n\nfork\n  [role: Parallel A]\nand\n  [role: Parallel B]\nend-fork",
   ],
   [
     "[loop]",
     "help.loop",
-    "if (retry?) is (yes) than\n  [role: process item]\n  [loop]\nelseif (no) than\n  [role: done]\nendif",
+    "if (retry?) is (yes) than\n  [role: process item]\n  [loop]\nelse-if (no) than\n  [role: done]\nend-if",
   ],
   [
     "section (name) #color … end-section",
@@ -65,7 +65,7 @@ const HELP_SECTIONS = [
   [
     "merge: id;",
     "help.merge",
-    "if (cancel?) is (yes) than #red\n  [role: accept cancellation]\n  merge: done;\nelse\n  [role: normal close]\nendif\n\n[role: transaction complete]\nid: done;",
+    "if (cancel?) is (yes) than #red\n  [role: accept cancellation]\n  merge: done;\nelse\n  [role: normal close]\nend-if\n\n[role: transaction complete]\nid: done;",
   ],
   ["arrow: solid|dashed|dotted;", "help.arrow", "[role: step]\narrow: dashed;\n[role: next step]"],
 ];

@@ -86,8 +86,8 @@ elseif (y) than
 endif
 @end`);
     const msgs = mixed.errors.map((e) => e.msg);
-    expect(msgs).toContain("elseif without if");
-    expect(msgs).toContain("endif without if");
+    expect(msgs).toContain("else-if without if");
+    expect(msgs).toContain("end-if without if");
   });
 });
 

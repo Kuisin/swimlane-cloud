@@ -105,7 +105,7 @@ function findBranchStartForId(rows, rowIndex) {
 
 /**
  * GUI step list indent from branch nesting (not DSL export depth):
- * if/endif at 2n, cases at 2n+1, case body at 2n+2.
+ * if/end-if at 2n, cases at 2n+1, case body at 2n+2.
  */
 export function rowListIndentDepth(rows, rowIndex) {
   const row = rows[rowIndex];
