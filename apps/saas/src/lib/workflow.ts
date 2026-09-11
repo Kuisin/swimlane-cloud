@@ -143,6 +143,13 @@ export const convertToMarkdown = (pid: string, branch: string) =>
     renames?: { from: string; to: string }[];
   }>(`${base(pid)}/convert-markdown`, { branch });
 
+/** Rewrite the spellings the grammar no longer reads, in every diagram on a branch, in one commit. */
+export const migrateSpellings = (pid: string, branch: string) =>
+  postJson<{ updated: number; lines: number; commitSha: string | null; branch: string }>(
+    `${base(pid)}/migrate-spellings`,
+    { branch },
+  );
+
 /** Every uncommitted change on a branch, for the Push / Request-review modals. */
 export const listPendingChanges = (pid: string, branch: string) =>
   api<{ headSha: string; changes: PendingChange[] }>(`${base(pid)}/draft?${q({ branch })}`);
