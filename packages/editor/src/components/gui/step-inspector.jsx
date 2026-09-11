@@ -255,6 +255,27 @@ export function StepInspector({
           />
         </label>
 
+        <label className="sw-field">
+          <span className="sw-field-label">{t("step.level")}</span>
+          <select
+            className="sw-input"
+            value={row.level || 1}
+            disabled={fieldDisabled}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              // Absent means level 1 — never write it explicitly.
+              set("level")(n === 1 ? undefined : n);
+            }}
+          >
+            {[1, 2, 3, 4].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          <p className="sw-field-hint">{t("step.levelHint")}</p>
+        </label>
+
         {propList.length > 0 && (
           <div className="sw-field">
             <span className="sw-field-label sw-field-label-row">

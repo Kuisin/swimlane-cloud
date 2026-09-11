@@ -83,7 +83,10 @@ export function normalizeBranchDepths(rows) {
       if (row.kind === "branchCase" && row.id === branchId) {
         out[j] = { ...row, depth: caseDepth, parallel: isParallel };
       } else if (
-        (row.kind === "step" || row.kind === "branchLoop" || row.kind === "branchMerge") &&
+        (row.kind === "step" ||
+          row.kind === "branchLoop" ||
+          row.kind === "branchMerge" ||
+          row.kind === "mergeMarker") &&
         (row.depth ?? 0) < bodyDepth
       ) {
         out[j] = { ...row, depth: bodyDepth };
@@ -126,6 +129,7 @@ export function rowListIndentDepth(rows, rowIndex) {
     row.kind === "step" ||
     row.kind === "branchLoop" ||
     row.kind === "branchMerge" ||
+    row.kind === "mergeMarker" ||
     row.kind === "groupStart" ||
     row.kind === "groupEnd"
   ) {
@@ -360,6 +364,8 @@ export function rowBadgeLabel(row, t = defaultT) {
       return t("badge.loop");
     case "branchMerge":
       return t("badge.merge");
+    case "mergeMarker":
+      return t("badge.mergeMarker");
     case "groupStart":
       return (row.groupMode ?? "branch") === "branch" ? t("badge.branch") : t("badge.section");
     case "groupEnd":
@@ -391,6 +397,10 @@ export function rowBadgeKind(row) {
     case "branchLoop":
       return "loop";
     case "branchMerge":
+      return "merge";
+    case "mergeMarker":
+      // Same accent family as `branchMerge` — both are about where a branch
+      // rejoins the main flow, just from opposite ends.
       return "merge";
     case "groupStart":
     case "groupEnd":
@@ -425,6 +435,8 @@ export function rowSummaryText(row, lanes, t = defaultT) {
       return t("flow.loopInBranch");
     case "branchMerge":
       return t("flow.mergeTo", { id: (row.mergeTarget || "").trim() || t("flow.unset") });
+    case "mergeMarker":
+      return (row.name || "").trim();
     case "groupStart":
       return (row.groupMode ?? "branch") === "branch" ? t("flow.subbranch") : t("flow.sectionBox");
     case "groupEnd":
@@ -457,14 +469,35 @@ export function branchCaseBadgeStyle(row) {
   };
 }
 
+/**
+ * Every named landing point a `merge:`/`goto` row could target: steps with an
+ * `id:` (as before) plus `mergeMarker` landing markers that were given a
+ * name. Steps keep their original shape (`stepIndex`, `blockName`) with a
+ * `kind: "step"` tag added; markers are `{ kind: "marker", rowIndex, mergeId,
+ * label }`. An unnamed step/marker is still listed (mergeId === "") so a
+ * caller can tell "known but unnamed" from "not a candidate at all", but only
+ * named entries are ever selectable as an actual target.
+ */
 export function collectMergeTargetOptions(rows) {
   const options = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
+    if (row.kind === "mergeMarker") {
+      const mergeId = (row.name || "").trim();
+      if (!mergeId) continue;
+      options.push({
+        kind: "marker",
+        rowIndex: i,
+        mergeId,
+        label: `⤓ ${mergeId} (landing marker)`,
+      });
+      continue;
+    }
     if (row.kind !== "step" || row.empty || !row.role) continue;
     const mergeId = (row.mergeId || "").trim();
     const blockName = stepBlockDisplayName(row, i);
     options.push({
+      kind: "step",
       stepIndex: i,
       mergeId,
       blockName,

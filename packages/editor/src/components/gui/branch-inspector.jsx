@@ -12,6 +12,7 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
   const isCase = row.kind === "branchCase";
   const isGroup = row.kind === "groupStart";
   const isMerge = row.kind === "branchMerge";
+  const isMarker = row.kind === "mergeMarker";
   const canAddCase = (isStart || isCase) && !isGroup;
   const addCaseLabel = row.parallel ? t("branch.addPath") : t("branch.addCase");
   const mergeTargets = isMerge
@@ -29,7 +30,8 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
           {isCase && (row.parallel ? t("branch.parallelPath") : t("branch.case"))}
           {isGroup && (row.groupMode === "section" ? t("branch.section") : t("branch.subbranch"))}
           {isMerge && t("branch.merge")}
-          {!isStart && !isCase && !isGroup && !isMerge && t("branch.row")}
+          {isMarker && t("branch.landingMarker")}
+          {!isStart && !isCase && !isGroup && !isMerge && !isMarker && t("branch.row")}
         </h3>
         <div className="sw-inspector-tools">
           {!fieldDisabled && canAddCase && onAddCase && (
@@ -100,24 +102,36 @@ export function BranchInspector({ row, rows, onPatch, onDelete, onAddCase, readO
       {isMerge && (
         <label className="sw-field">
           <span className="sw-field-label">{t("branch.mergeTarget")}</span>
-          {mergeTargets.length === 0 ? (
-            <p className="sw-field-hint">{t("branch.mergeTargetEmpty")}</p>
-          ) : (
-            <select
-              className="sw-input"
-              value={row.mergeTarget || ""}
-              disabled={fieldDisabled}
-              onChange={(e) => onPatch({ mergeTarget: e.target.value || "" })}
-            >
-              <option value="">{t("branch.mergeTargetChoose")}</option>
-              {mergeTargets.map((opt) => (
-                <option key={opt.stepIndex} value={opt.mergeId}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          )}
+          <select
+            className="sw-input"
+            value={row.mergeTarget || ""}
+            disabled={fieldDisabled}
+            onChange={(e) => onPatch({ mergeTarget: e.target.value || "" })}
+          >
+            {/* Empty is a real value now, not a placeholder: a bare merge
+                lands on the next landing marker after this if. */}
+            <option value="">{t("branch.mergeTargetNext")}</option>
+            {mergeTargets.map((opt) => (
+              <option key={`${opt.kind}-${opt.rowIndex ?? opt.stepIndex}`} value={opt.mergeId}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
           <p className="sw-field-hint">{t("branch.mergeTargetHint")}</p>
+        </label>
+      )}
+
+      {isMarker && (
+        <label className="sw-field">
+          <span className="sw-field-label">{t("branch.markerName")}</span>
+          <input
+            type="text"
+            className="sw-input"
+            value={row.name || ""}
+            disabled={fieldDisabled}
+            onChange={(e) => onPatch({ name: e.target.value })}
+          />
+          <p className="sw-field-hint">{t("branch.markerNameHint")}</p>
         </label>
       )}
 

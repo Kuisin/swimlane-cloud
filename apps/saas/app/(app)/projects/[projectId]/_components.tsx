@@ -1943,7 +1943,9 @@ function GroupEditModal({
               onChange={(e) => setMergeTarget(e.target.value)}
               className={FIELD_CLASS}
             >
-              <option value="">{t("stepEdit.none")}</option>
+              {/* Empty is a real, valid target now: a bare merge lands on
+                  the next landing marker after this if — not "unset". */}
+              <option value="">{t("mobile.mergeTargetNext")}</option>
               {mergeTargets
                 .filter((o) => o.mergeId)
                 .map((o) => (
