@@ -1942,3 +1942,69 @@
   flex-direction: column;
   gap: 6px;
 }
+
+/* ---- narrow screens: one pane at a time ---- */
+/*
+ * Phones and upright tablets. The three-column layout needs roughly 620px for
+ * the step list and inspector alone, which leaves nothing for the drawn
+ * diagram — so below this the panes stop sharing the screen and `PaneSwitcher`
+ * chooses between them. The panes themselves are not styled here: `gui-mode`
+ * simply renders one of them and drops the saved pixel widths, so each is an
+ * ordinary flex child filling the row.
+ */
+.sw-gui-narrow > *,
+.sw-split-narrow > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* The list pane's right border belongs to a column that has a neighbour. */
+.sw-gui-narrow > .sw-gui-list-pane,
+.sw-gui-narrow > .sw-gui-inspector-pane {
+  border-right: none;
+}
+.sw-split-narrow > .sw-preview-pane,
+.sw-gui-narrow > .sw-preview-pane {
+  border-left: none;
+}
+
+/*
+ * The file tree overlays the editor instead of squeezing it. At these widths a
+ * 240px column beside the content leaves too little of either to use, and the
+ * tree is something you open, pick from, and dismiss.
+ *
+ * Only the open tree is `.sw-tree`: folded, `FolderTree` returns the
+ * `.sw-tree-collapsed` rail instead, which is a different element and stays in
+ * the flow as a normal column.
+ */
+.sw-editor-narrow .sw-tree {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 30;
+  box-shadow: 2px 0 8px rgb(0 0 0 / 18%);
+  max-width: 85%;
+}
+
+/*
+ * Touch targets. The editor's buttons are sized for a mouse; a finger needs
+ * about 40px, and the panes have the room now that only one is on screen.
+ */
+@media (max-width: 768px) {
+  .sw-flow-row,
+  .sw-tree-file,
+  .sw-tree-folder {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+  .sw-mode-btn,
+  .sw-btn {
+    min-height: 32px;
+  }
+  /* A tapped field under 16px makes iOS Safari zoom the page in and stay there. */
+  .sw-gui-inspector-pane input,
+  .sw-gui-inspector-pane select,
+  .sw-gui-inspector-pane textarea {
+    font-size: 16px;
+  }
+}

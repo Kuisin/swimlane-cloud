@@ -6,7 +6,10 @@ const rowCount = async (page: Page) =>
 
 test.describe("the Add menu", () => {
   test("opens above everything and inserts without a selection", async ({ page }) => {
-    test.skip(test.info().project.name === "phone", "no preview on a phone");
+    // Desktop only: this walks the menu (flow pane) and counts rows in the
+    // drawn diagram (preview pane) in turn. Both are reachable on a phone,
+    // one at a time, but the pane-switching would be most of the test.
+    test.skip(test.info().project.name === "phone", "interleaves two panes");
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("/?demo=reset");
@@ -42,7 +45,10 @@ test.describe("the Add menu", () => {
   });
 
   test("the Jumps group only appears inside an if, and its goto names a step", async ({ page }) => {
-    test.skip(test.info().project.name === "phone", "no preview on a phone");
+    // Desktop only: this walks the menu (flow pane) and counts rows in the
+    // drawn diagram (preview pane) in turn. Both are reachable on a phone,
+    // one at a time, but the pane-switching would be most of the test.
+    test.skip(test.info().project.name === "phone", "interleaves two panes");
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("/?demo=reset");

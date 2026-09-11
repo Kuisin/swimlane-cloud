@@ -308,8 +308,8 @@ export default function DiagramSettingsPage() {
                       </span>
                     </span>
                   </label>
-                  <label className="flex items-center gap-3">
-                    <span className="w-56 text-sm">{t("settings.blockMargin")}</span>
+                  <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                    <span className="text-sm sm:w-56">{t("settings.blockMargin")}</span>
                     <input
                       type="number"
                       min={0}
@@ -328,8 +328,8 @@ export default function DiagramSettingsPage() {
                       }
                     />
                   </label>
-                  <label className="flex items-center gap-3">
-                    <span className="w-56 text-sm">{t("settings.blockText")}</span>
+                  <label className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                    <span className="text-sm sm:w-56">{t("settings.blockText")}</span>
                     <select
                       className={field}
                       value={diagram.blockText}
@@ -389,8 +389,11 @@ export default function DiagramSettingsPage() {
               {templates && (
                 <fieldset disabled={disabled} className="space-y-2">
                   {SECTIONS.map((s) => (
-                    <label key={s} className="flex items-center gap-3">
-                      <code className="w-56 text-sm">/{s}/</code>
+                    <label
+                      key={s}
+                      className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3"
+                    >
+                      <code className="text-sm sm:w-56">/{s}/</code>
                       <select
                         className={field}
                         value={templates[s]}
@@ -468,7 +471,7 @@ function LayoutRow({
   const { t } = useT();
   const fallback = DIAGRAM_LAYOUT[setting.key];
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
       <span className="min-w-0 flex-1">
         <span className="block text-sm">{t(`settings.layoutField.${setting.key}`)}</span>
         <span className="block font-mono text-[11px] text-neutral-400">

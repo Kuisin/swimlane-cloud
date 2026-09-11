@@ -1068,8 +1068,15 @@ function Diff({ path, before, after }: { path: string; before: string; after: st
       <div className="border-b border-neutral-200 bg-neutral-50 px-2 py-1 font-mono text-xs">
         {path}
       </div>
-      <div className="grid grid-cols-2 font-mono text-[11px] leading-relaxed">
-        <pre className="overflow-auto border-r border-neutral-200 p-1">
+      {/*
+        Side by side only where there is room for two columns of code. Below
+        that they stack: half of a phone's width is about 25 monospace
+        characters, so a split view there is two independent horizontal
+        scrollbars showing almost nothing, which is worse than reading the two
+        versions one after the other.
+      */}
+      <div className="grid grid-cols-1 font-mono text-[11px] leading-relaxed sm:grid-cols-2">
+        <pre className="overflow-auto border-b border-neutral-200 p-1 sm:border-r sm:border-b-0">
           {rows.map((row, i) => (
             <div key={i} className={row.changed ? "bg-red-50" : ""}>
               {row.l || " "}

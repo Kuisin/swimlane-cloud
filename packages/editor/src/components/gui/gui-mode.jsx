@@ -54,6 +54,9 @@ export function GuiMode({
   documentInfo,
   onLinkClick,
   onSwitchToText,
+  /** One pane at a time; `pane` says which. See `use-media-query.js`. */
+  narrow = false,
+  pane = "flow",
 }) {
   const { t } = useT();
   const { files, activeDocumentId } = useEditor();
@@ -446,6 +449,11 @@ export function GuiMode({
   const reorder = isStep ? getReorderBounds(rows, saveIndex) : null;
   const isLocked = saveIndex >= 0 && lockedRows.has(saveIndex);
 
+  // Wide: every pane is on screen, so every pane renders. Narrow: exactly one.
+  // A hidden pane is not rendered rather than hidden with CSS, so its inputs
+  // cannot be reached by tabbing into a column nobody can see.
+  const showPane = (which) => !narrow || pane === which;
+
   // A brand-new file already seeds one step (see DEFAULT_TAB_TEMPLATE), so
   // zero rows here means the flow was emptied out (e.g. the last step was
   // deleted) rather than "never touched" — still exactly the moment a
@@ -482,135 +490,153 @@ export function GuiMode({
           )}
         </div>
       )}
-      <div className="sw-gui">
-        <div className="sw-gui-list-pane" style={{ width: stepList.width, flex: "0 0 auto" }}>
-          <div className="sw-gui-list-head">
-            <span>{t("gui.flow")}</span>
-            <div className="sw-gui-list-actions">
-              {!readOnly && (
-                <div className="sw-add-block-wrap">
-                  <button
-                    type="button"
-                    className="sw-btn sw-btn-sm sw-add-block-main"
-                    onClick={addStep}
-                  >
-                    <Plus size={13} /> {t("gui.addStep")}
-                  </button>
-                  <button
-                    type="button"
-                    ref={chevronRef}
-                    className="sw-add-block-chevron"
-                    title={t("gui.addBlock")}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openDrop();
-                    }}
-                  >
-                    <ChevronDown size={12} />
-                  </button>
-                  {dropOpen &&
-                    // Portaled to <body>: the menu is `position: fixed`, and
-                    // inside a host page whose ancestors transform, clip or
-                    // stack it would land off-screen or under something.
-                    createPortal(
-                      <div className="sw-editor sw-dialog-root">
-                        <AddStepMenu
-                          position={dropPos}
-                          onClose={() => setDropOpen(false)}
-                          onAddIf={addIfBranch}
-                          onAddSwitch={addSwitch}
-                          onAddFork={addFork}
-                          onAddSection={addSection}
-                          onAddBranch={addSubBranch}
-                          onAddLoop={addLoop}
-                          onAddMerge={addMerge}
-                          canJump={enclosingIfId(rows, selectedIndex) != null}
-                        />
-                      </div>,
-                      document.body,
-                    )}
-                </div>
-              )}
-              <button
-                type="button"
-                className="sw-icon-btn"
-                title={t("file.settings")}
-                onClick={() => setShowSettings(true)}
-              >
-                <Settings size={14} />
-              </button>
+      <div className={narrow ? "sw-gui sw-gui-narrow" : "sw-gui"}>
+        {showPane("flow") && (
+          <div
+            className="sw-gui-list-pane"
+            style={narrow ? undefined : { width: stepList.width, flex: "0 0 auto" }}
+          >
+            <div className="sw-gui-list-head">
+              <span>{t("gui.flow")}</span>
+              <div className="sw-gui-list-actions">
+                {!readOnly && (
+                  <div className="sw-add-block-wrap">
+                    <button
+                      type="button"
+                      className="sw-btn sw-btn-sm sw-add-block-main"
+                      onClick={addStep}
+                    >
+                      <Plus size={13} /> {t("gui.addStep")}
+                    </button>
+                    <button
+                      type="button"
+                      ref={chevronRef}
+                      className="sw-add-block-chevron"
+                      title={t("gui.addBlock")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDrop();
+                      }}
+                    >
+                      <ChevronDown size={12} />
+                    </button>
+                    {dropOpen &&
+                      // Portaled to <body>: the menu is `position: fixed`, and
+                      // inside a host page whose ancestors transform, clip or
+                      // stack it would land off-screen or under something.
+                      createPortal(
+                        <div className="sw-editor sw-dialog-root">
+                          <AddStepMenu
+                            position={dropPos}
+                            onClose={() => setDropOpen(false)}
+                            onAddIf={addIfBranch}
+                            onAddSwitch={addSwitch}
+                            onAddFork={addFork}
+                            onAddSection={addSection}
+                            onAddBranch={addSubBranch}
+                            onAddLoop={addLoop}
+                            onAddMerge={addMerge}
+                            canJump={enclosingIfId(rows, selectedIndex) != null}
+                          />
+                        </div>,
+                        document.body,
+                      )}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="sw-icon-btn"
+                  title={t("file.settings")}
+                  onClick={() => setShowSettings(true)}
+                >
+                  <Settings size={14} />
+                </button>
+              </div>
             </div>
-          </div>
-          <FlowStepList
-            rows={rows}
-            lanes={guiModel.lanes}
-            selectedIndex={selectedIndex}
-            lockedRows={lockedRows}
-            canReorder={!readOnly}
-            onReorder={moveStepTo}
-            onSelect={setSelectedIndex}
-          />
-        </div>
-        <div
-          className="sw-resizer"
-          role="separator"
-          aria-orientation="vertical"
-          onMouseDown={stepList.startDrag}
-          onTouchStart={stepList.startDrag}
-        />
-        <div className="sw-gui-inspector-pane" style={{ width: detail.width, flex: "0 0 auto" }}>
-          {isStep ? (
-            <StepInspector
-              row={inspectorRow}
-              lanes={guiModel.lanes}
-              blocks={guiModel.blocks}
-              props={guiModel.props}
-              src={src}
-              theme={theme}
-              reorder={reorder}
-              readOnly={readOnly}
-              locked={isLocked}
-              onPatch={patchRow}
-              onMove={moveStep}
-              onOpenMove={() => setShowMove(true)}
-              onDelete={deleteRow}
-              linkTargets={linkTargets}
-              currentFileId={activeDocumentId}
-            />
-          ) : inspectorRow ? (
-            <BranchInspector
-              row={inspectorRow}
+            <FlowStepList
               rows={rows}
-              readOnly={readOnly}
-              locked={isLocked}
-              onPatch={patchRow}
-              onPickMergeTarget={pickMergeTarget}
-              onDelete={deleteRow}
-              onAddCase={
-                !readOnly && !isLocked && ["branchStart", "branchCase"].includes(inspectorRow?.kind)
-                  ? addCaseToBranch
-                  : undefined
-              }
+              lanes={guiModel.lanes}
+              selectedIndex={selectedIndex}
+              lockedRows={lockedRows}
+              canReorder={!readOnly}
+              onReorder={moveStepTo}
+              onSelect={setSelectedIndex}
             />
-          ) : (
-            <div className="sw-gui-empty">{t("gui.selectRow")}</div>
-          )}
-        </div>
-        <div
-          className="sw-resizer"
-          role="separator"
-          aria-orientation="vertical"
-          onMouseDown={detail.startDrag}
-          onTouchStart={detail.startDrag}
-        />
-        <div className="sw-gui-preview-pane sw-preview-pane">
-          <PreviewPane
-            svg={interactiveSvg ?? svg}
-            hasErrors={errors?.length > 0}
-            onRowClick={!readOnly ? setSelectedIndex : undefined}
-            onLinkClick={onLinkClick}
+          </div>
+        )}
+        {!narrow && (
+          <div
+            className="sw-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={stepList.startDrag}
+            onTouchStart={stepList.startDrag}
           />
-        </div>
+        )}
+        {showPane("edit") && (
+          <div
+            className="sw-gui-inspector-pane"
+            style={narrow ? undefined : { width: detail.width, flex: "0 0 auto" }}
+          >
+            {isStep ? (
+              <StepInspector
+                row={inspectorRow}
+                lanes={guiModel.lanes}
+                blocks={guiModel.blocks}
+                props={guiModel.props}
+                src={src}
+                theme={theme}
+                reorder={reorder}
+                readOnly={readOnly}
+                locked={isLocked}
+                onPatch={patchRow}
+                onMove={moveStep}
+                onOpenMove={() => setShowMove(true)}
+                onDelete={deleteRow}
+                linkTargets={linkTargets}
+                currentFileId={activeDocumentId}
+              />
+            ) : inspectorRow ? (
+              <BranchInspector
+                row={inspectorRow}
+                rows={rows}
+                readOnly={readOnly}
+                locked={isLocked}
+                onPatch={patchRow}
+                onPickMergeTarget={pickMergeTarget}
+                onDelete={deleteRow}
+                onAddCase={
+                  !readOnly &&
+                  !isLocked &&
+                  ["branchStart", "branchCase"].includes(inspectorRow?.kind)
+                    ? addCaseToBranch
+                    : undefined
+                }
+              />
+            ) : (
+              <div className="sw-gui-empty">{t("gui.selectRow")}</div>
+            )}
+          </div>
+        )}
+        {!narrow && (
+          <div
+            className="sw-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={detail.startDrag}
+            onTouchStart={detail.startDrag}
+          />
+        )}
+        {showPane("preview") && (
+          <div className="sw-gui-preview-pane sw-preview-pane">
+            <PreviewPane
+              svg={interactiveSvg ?? svg}
+              hasErrors={errors?.length > 0}
+              onRowClick={!readOnly ? setSelectedIndex : undefined}
+              onLinkClick={onLinkClick}
+            />
+          </div>
+        )}
       </div>
 
       <ErrorList errors={errors} onSelectLine={() => {}} />

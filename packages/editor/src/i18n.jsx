@@ -115,6 +115,11 @@ export const EN = {
     "There's a syntax error outside the flow (e.g. in Roles, Blocks, or Settings).",
   "errors.fixInText": "Fix in Text mode",
   // gui
+  "pane.label": "Which pane to show",
+  "pane.flow": "Flow",
+  "pane.edit": "Edit",
+  "pane.preview": "Diagram",
+  "pane.text": "Text",
   "gui.flow": "Flow",
   "gui.addStep": "Add step",
   "gui.addBlock": "Add block",
@@ -447,6 +452,11 @@ export const JA = {
     "フロー以外の場所（ロール・ブロック・設定など）に構文エラーがあります。",
   "errors.fixInText": "テキストモードで修正",
   // gui
+  "pane.label": "表示するパネル",
+  "pane.flow": "フロー",
+  "pane.edit": "編集",
+  "pane.preview": "図",
+  "pane.text": "テキスト",
   "gui.flow": "フロー",
   "gui.addStep": "ステップを追加",
   "gui.addBlock": "ブロックを追加",
