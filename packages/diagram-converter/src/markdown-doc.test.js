@@ -397,6 +397,27 @@ ${DSL}
     expect(metaText(["Doe, Jane"])).toBe("Doe, Jane");
   });
 
+  /**
+   * The counterpart to the deletion rule, and the reason it is safe: a tool
+   * that rebuilds `/meta/` from the parsed model (GUI mode does exactly this)
+   * can only ever produce the projection, so it can never reach a rich value.
+   * A person typing the key in can — and should, since nothing but a person
+   * could have put it there.
+   */
+  it("lets a hand-typed /meta/ key win over a rich value, but only a hand-typed one", () => {
+    // regenerating the section without touching it leaves the map alone
+    const regenerated = dslFromMarkdown(RICH);
+    expect(regenerated).not.toContain("sourceRef");
+    expect(splitFrontmatter(markdownFromDsl(regenerated, RICH)).meta.sourceRef).toEqual({
+      system: "SAP",
+      module: "FI",
+    });
+
+    // typing the key in is an assignment, and it takes
+    const typed = regenerated.replace("owner: fi.coe@example.com;", "$&\nsourceRef: SAP;");
+    expect(splitFrontmatter(markdownFromDsl(typed, RICH)).meta.sourceRef).toBe("SAP");
+  });
+
   it("mergeMetaProjection is the rule on its own", () => {
     const before = { owner: "a", tags: ["x", "y"], ref: { k: "v" }, wide: ["p, q"] };
     expect(mergeMetaProjection(before, { owner: "b", tags: "x, y, z" })).toEqual({

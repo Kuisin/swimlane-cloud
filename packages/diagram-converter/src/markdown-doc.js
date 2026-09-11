@@ -33,6 +33,13 @@
  *   therefore delete `owner` (a scalar the fence could see) but can never
  *   delete `sourceRef` (a nested map the fence never saw), because its absence
  *   from `/meta/` carries no information about the author's intent.
+ * - **Presence, though, does.** A key written into `/meta/` by hand wins, even
+ *   over a rich value the fence could not have shown — `sourceRef: SAP;` typed
+ *   into the fence replaces the nested map with that string. The asymmetry is
+ *   deliberate: *absence* is what the projection produces on its own and so
+ *   says nothing, while *presence* is something only a person can have typed.
+ *   A tool regenerating `/meta/` (GUI mode rebuilding it from the parsed model)
+ *   therefore cannot destroy a rich value, which is the case that matters.
  *
  * Break that rule and every round trip through the DSL silently strips the rich
  * half of the metadata. It is the subtle part of this module.
