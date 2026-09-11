@@ -398,6 +398,8 @@ export const EN: Record<string, string> = {
   "md.undeclared": "extra",
   "md.applyDefaults": "Fill in the project's defaults",
   "md.carried": "Kept exactly as written. Edit this value in the file itself.",
+  "md.frozen":
+    "This file's metadata is written in a form the editor cannot rewrite without changing it, so it is kept exactly as it is. Your prose still saves; edit these values in the file itself.",
   "md.field.none": "— none —",
   "md.field.offList": "{value} (not a choice any more)",
   "md.field.addItem": "Add an item and press Enter",
@@ -1038,6 +1040,8 @@ export const JA: Record<string, string> = {
   "md.undeclared": "追加",
   "md.applyDefaults": "プロジェクトの初期値を入れる",
   "md.carried": "書かれたとおりに保持します。この値はファイル本体で編集してください。",
+  "md.frozen":
+    "このファイルのメタデータは、エディタが書き戻すと内容が変わってしまう形式で書かれているため、そのまま保持します。本文の変更は保存されます。値はファイル本体で編集してください。",
   "md.field.none": "— なし —",
   "md.field.offList": "{value}（現在は選択肢にありません）",
   "md.field.addItem": "項目を入力して Enter",

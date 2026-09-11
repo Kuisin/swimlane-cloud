@@ -296,6 +296,44 @@ body
     }
   });
 
+  /**
+   * The value-side twin of the key hazard: `: ` is what ends a key in YAML, so
+   * whether a sequence item is a *string* or a *mapping* turns on quoting and
+   * on the space after the colon. Getting it wrong either way is silent — a
+   * mapping read as a string is rewritten as one, and a string refused as a
+   * mapping becomes uneditable. On dev a sequence of mappings was classified
+   * as an ordinary list, so `- name: Jane` came back as the string
+   * `"name: Jane"` in a file whose author had only changed `owner`.
+   */
+  it("tells a string item apart from a mapping item", () => {
+    const cases = {
+      // quoted, so unambiguously strings however many colons they hold
+      'k:\n  - "time: 10am"\n  - "cost: 5"': ["time: 10am", "cost: 5"],
+      // YAML ends a key on `: `, not on `:`, so this really is a plain scalar
+      "k:\n  - name:Jane": ["name:Jane"],
+      'k:\n  - "trailing:"': ["trailing:"],
+      // genuine mappings and nested sequences: not a list of strings at all
+      "k:\n  - time: 10am": undefined,
+      "k:\n  - plain\n  - a: b": undefined,
+      "k:\n  - - a\n    - b": undefined,
+    };
+    for (const [block, expected] of Object.entries(cases)) {
+      const md = `---\n${block}\n---\n\nbody\n`;
+      const { meta, shape } = splitFrontmatter(md);
+      expect(meta.k, block).toEqual(expected);
+      // whichever way it was read, the bytes must survive untouched
+      expect(serializeFrontmatter(meta, shape), block).toBe(md.slice(0, md.indexOf("\nbody")));
+    }
+  });
+
+  it("quotes a newly added item that would otherwise read as a mapping", () => {
+    const md = '---\nk:\n  - "time: 10am"\n---\n\nbody\n';
+    const { meta, shape } = splitFrontmatter(md);
+    const out = serializeFrontmatter({ k: [...meta.k, "cost: 5", "plain"] }, shape);
+    expect(out).toBe('---\nk:\n  - "time: 10am"\n  - "cost: 5"\n  - plain\n---\n');
+    expect(splitFrontmatter(`${out}body\n`).meta.k).toEqual(["time: 10am", "cost: 5", "plain"]);
+  });
+
   it("keeps quoting the author chose even where it is not required", () => {
     const md = '---\nowner: "sales-ops"\ntags: ["order", credit]\n---\n\nbody\n';
     const { meta, shape } = splitFrontmatter(md);

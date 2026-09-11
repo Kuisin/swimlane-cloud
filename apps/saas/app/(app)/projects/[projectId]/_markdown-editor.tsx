@@ -260,7 +260,15 @@ function ListControl({
   );
 }
 
-/** A nested map: key/value pairs one level deep, which is what a schema `map` is. */
+/**
+ * A nested map, edited one level of key/value pairs at a time.
+ *
+ * That is a limit of this control, not of the type: a `map` is any plain object
+ * and `validateMetadata` accepts one nested to any depth. An entry that is
+ * itself a list or a map is therefore shown as a line and refused as an edit —
+ * `mapEntriesOf` marks which — rather than being flattened into text the box
+ * would then write back over the structure.
+ */
 function MapControl({
   value,
   readOnly,
@@ -372,6 +380,7 @@ function MetadataForm({
   meta,
   fields,
   carried,
+  frozen,
   readOnly,
   onChange,
 }: {
@@ -379,6 +388,8 @@ function MetadataForm({
   fields: MetadataField[];
   /** Keys the engine can only carry verbatim, with the lines it holds them on. */
   carried: Map<string, string[]>;
+  /** The whole block is unrewritable — see `rewritable` in markdown-prose.ts. */
+  frozen: boolean;
   readOnly: boolean;
   onChange: (next: MetaRecord) => void;
 }) {
@@ -410,7 +421,14 @@ function MetadataForm({
       </h2>
       {rows.length === 0 && <p className="text-xs text-neutral-400">{t("md.noMetadata")}</p>}
 
-      {!readOnly && hasFillableDefaults(meta, fields) && (
+      {frozen && (
+        <p className="flex items-start gap-1 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
+          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+          {t("md.frozen")}
+        </p>
+      )}
+
+      {!readOnly && !frozen && hasFillableDefaults(meta, fields) && (
         <button
           type="button"
           onClick={() => onChange(withDefaults(meta, fields))}
@@ -586,6 +604,7 @@ export default function MarkdownEditor({
           meta={meta}
           fields={fields}
           carried={carried}
+          frozen={!initial.rewritable}
           readOnly={readOnly}
           onChange={onMetaChange}
         />

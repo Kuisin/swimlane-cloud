@@ -102,14 +102,36 @@ export function describeProblem(
 /**
  * Throw a 422 when `text` breaks the project's metadata schema.
  *
- * Called from the routes that create a commit — checkpoint and the direct file
- * write — and pointedly **not** from the draft route, which the editor calls on
- * every autosave. Forced sections can be asserted that early because their
- * content is machine-inserted from a template and is therefore right from the
- * first keystroke; a required metadata key is typed by a person over minutes,
- * so asserting it per autosave would make a document with a required field
- * impossible to edit at all. The form flags it live instead, and this is where
- * it stops being only a warning.
+ * ONE caller today: the checkpoint route, which is the only path in this app
+ * that turns drafts into a commit. **That is a fact about the routes as they
+ * stand, not a property of the system** — anything new that writes a document
+ * into git (a bulk import, a second commit route) has to call this, or the
+ * project's metadata rules silently stop applying down that path while
+ * appearing to be enforced everywhere. Add the call with the route.
+ *
+ * The obligation follows the token, not the caller: a route that can reach a
+ * repository owes this check, and one that cannot is out of scope by
+ * construction. `/api/mcp` is the case worth knowing — its tools are pure
+ * functions of the text handed to them and it holds no token at all, so a model
+ * using it cannot write anywhere; its output reaches git only when a person
+ * saves it through the editor, which comes back through here. That route
+ * documents the invariant itself ("a tool that would need a token does not
+ * belong on this route"), so the day it stops being true is a change somebody
+ * has to argue for rather than one that quietly lands.
+ *
+ * Pointedly **not** the draft route, which the editor hits on every autosave.
+ * Forced sections can be asserted that early because their content is
+ * machine-inserted from a template and is right from the first keystroke; a
+ * required metadata key is typed by a person over minutes, so asserting it per
+ * autosave would make a document with a required field impossible to edit at
+ * all. The form flags it live instead, and this is where it stops being only a
+ * warning.
+ *
+ * Pointedly not the rename in `files/route.ts` either, which does assert forced
+ * sections. That check is there because a `.txt`↔`.md` rename rewrites the
+ * file and can change what sections it has; a rename never changes metadata, so
+ * judging it there would only block a move over a problem the move did not
+ * create.
  *
  * Only the files a request is actually writing are checked, exactly as
  * `assertForcedSectionsForFile` is: turning on a new required field must not
