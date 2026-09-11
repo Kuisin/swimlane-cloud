@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   GitHubConflictError,
+  GitHubMergeConflictError,
   GitHubNotAccessibleError,
   GitHubRateLimitError,
   GitHubSsoError,
@@ -16,7 +17,8 @@ import {
 /**
  * Typed HTTP error that route handlers may throw; mapped to a JSON response.
  * `extra` is merged into the body so the client can branch on flags such as
- * `needsAuth`, `conflict`, `locked`, `dirty` or `upgrade` without parsing text.
+ * `needsAuth`, `conflict`, `mergeConflict`, `locked`, `dirty` or `upgrade` without
+ * parsing text.
  */
 export class ApiError extends Error {
   status: number;
@@ -47,6 +49,14 @@ export function errorResponse(err: unknown): NextResponse {
     return NextResponse.json(
       { error: err.message, authorizeUrl: err.authorizeUrl, organizations: err.organizations },
       { status: 403 },
+    );
+  }
+  // Before the generic case: a real merge conflict is also a GitHubConflictError,
+  // but "reload and try again" is the wrong advice for it.
+  if (err instanceof GitHubMergeConflictError) {
+    return NextResponse.json(
+      { error: err.message, conflict: true, mergeConflict: true, head: err.head, base: err.base },
+      { status: 409 },
     );
   }
   if (err instanceof GitHubConflictError || err instanceof GitLabConflictError) {

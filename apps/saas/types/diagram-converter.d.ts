@@ -75,6 +75,31 @@ declare module "@swimlane-cloud/diagram-converter" {
   export function migrateLegacyDsl(text: string): { text: string; changed: number };
   /** @deprecated Alias of `migrateLegacyDsl`, kept for callers written before the rename. */
   export function migrateLegacySpellings(text: string): { text: string; changed: number };
+  /** One conflicted unit: a keyed definition, or a run of rows in an ordered section. */
+  export interface DslMergeConflict {
+    /** The section marker it sits in, or `"@"` for a preamble directive. */
+    section: string;
+    /** The definition or property key; null in an ordered section, where position is the key. */
+    key: string | null;
+    base: string | null;
+    ours: string | null;
+    theirs: string | null;
+  }
+  export interface DslMergeResult {
+    text: string;
+    clean: boolean;
+    conflicts: DslMergeConflict[];
+    /** Which inputs were only brought across a grammar change. */
+    migrated: { base: boolean; ours: boolean; theirs: boolean };
+  }
+  /** Three-way merge of two edits to one document, per section rather than per line. */
+  export function mergeDsl(base: string, ours: string, theirs: string): DslMergeResult;
+  /** Render conflicts as git-style markers, for a caller handing the user a text editor. */
+  export function conflictMarkers(
+    conflicts: DslMergeConflict[],
+    oursLabel?: string,
+    theirsLabel?: string,
+  ): string;
   export function renderPartsPreviewHtml(
     code: string,
     theme: unknown,

@@ -99,6 +99,9 @@ export function primaryPath(files: Files): string | null {
 export function describeError(err: unknown, t: (k: string) => string): string {
   if (err instanceof ApiClientError) {
     if (err.needsAuth) return t("error.needsAuth");
+    // Checked first: a merge conflict is also flagged `conflict`, but reloading
+    // is exactly what does not clear it.
+    if (err.mergeConflict) return t("error.mergeConflict");
     if (err.conflict) return t("error.conflict");
     if (err.rateLimited) return t("error.rateLimited");
     return err.message;

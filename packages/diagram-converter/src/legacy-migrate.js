@@ -27,8 +27,11 @@
  *   fix by hand (name the intended landing step with `id:` and change the
  *   jump to `[goto: id]`).
  * - a step's `props:` / `arrow:` / `link:` lines → the `+prop`, glyph and
- *   `=> path` suffixes on the step itself; a step's `id:` line is unchanged
- *   (it was never a suffix in this grammar); `:` → `[]`
+ *   `=> path` suffixes on the step itself; `:` → `[]`
+ * - a step's own id: the `@id` suffix → the property line `id: <id>;`. Only on
+ *   a step — the `@id` slot on an opener (`section (n) @audit`, `… than @id`)
+ *   is current and is left alone — and an `id:` line that is already there is
+ *   already current, so it passes through untouched.
  * - `section-start (n)` / `start-point` / `end-point` → `section` forms;
  *   `***` comments → `//`
  */
@@ -244,8 +247,28 @@ export function migrateLegacyDsl(text) {
     }
     if (/^\[.*\]/.test(t)) {
       // A step: `[role: text] <block>` with an optional trailing `;`.
-      const cleaned = t.replace(/\s*;\s*$/, "");
+      let cleaned = t.replace(/\s*;\s*$/, "");
       if (cleaned !== t) changed++;
+
+      // A step's own id used to be an `@id` suffix; it is the property line
+      // `id: <id>;` now (dsl-rule.md §"A step's own destination id is not a
+      // suffix"). The slot survives on *openers* — `section (n) @audit`, `if
+      // … than @id` — so this only fires on a line that starts with `[`, and
+      // the reader would otherwise stop at `unknown directive "@…"`. The
+      // suffix may sit among the others (`<block> @ID +PROP`), so it is cut
+      // out where it stands and the rest of the line keeps its order.
+      const id = cleaned.match(/\s@([^\s@+<>#]+)(?=\s|$)/);
+      if (id && section === "line") {
+        cleaned = `${cleaned.slice(0, id.index)}${cleaned.slice(id.index + id[0].length)}`.replace(
+          /\s+$/,
+          "",
+        );
+        out.push(indent + cleaned);
+        lastStep = out.length - 1;
+        push(`${indent}  `, `id: ${id[1]};`);
+        continue;
+      }
+
       out.push(indent + cleaned);
       lastStep = out.length - 1;
       continue;
