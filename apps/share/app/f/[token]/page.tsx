@@ -8,6 +8,7 @@ import {
   filesInFolder,
   folderName,
   readDiagram,
+  readDocumentInfo,
   resolveFolderToken,
 } from "@/lib/content";
 
@@ -47,7 +48,10 @@ export default async function SharedFolderPage({
   let svg: string | null = null;
   if (dsl != null) {
     try {
-      svg = textToSvg(dsl, { themeKey: "basic" }).svg;
+      svg = textToSvg(dsl, {
+        themeKey: "basic",
+        documentInfo: readDocumentInfo(`${folderRel}/${active}`),
+      }).svg;
     } catch {
       svg = null;
     }
