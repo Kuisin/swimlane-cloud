@@ -216,7 +216,8 @@ const handler = createMcpHandler((server) => {
         "document you did not write and `validate_dsl` complains about syntax that looks " +
         "plausible — `@kai-swimlane-v2` headers, a bare `else`, `endif`/`endfork`, a `case` " +
         "line under an `if`, a fork's `and`, `[loop]`, `merge:`/`[merge]`, `section-start`, " +
-        "`***` comments, or `props:`/`arrow:`/`link:` property lines. A few constructs have no " +
+        "an opener's lane selector (`if [sales] (q)`), `***` comments, or " +
+        "`props:`/`arrow:`/`link:` property lines. A few constructs have no " +
         "automatic mapping and are deliberately left alone for you to fix by hand; the " +
         "validation in the reply names them.",
       inputSchema: z.object({

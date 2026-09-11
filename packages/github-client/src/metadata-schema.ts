@@ -69,6 +69,18 @@ export const DEFAULT_METADATA_SCHEMA: MetadataSchema = { fields: [] };
 /** A key that would not survive being written back as `key: value`. */
 const BAD_KEY = /[\s:#]/;
 
+/**
+ * Whether `key` is one this schema can actually hold.
+ *
+ * Exported because an editor offering a key field has to refuse exactly what
+ * `parseField` refuses — otherwise it accepts a key that is silently dropped
+ * the next time the file is read, which looks like the save not working.
+ */
+export function isMetadataKey(key: string | null | undefined): boolean {
+  const value = typeof key === "string" ? key.trim() : "";
+  return value !== "" && !BAD_KEY.test(value);
+}
+
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const NUMBER = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/;
 
@@ -120,7 +132,7 @@ function enumValues(raw: unknown): string[] | null {
 function parseField(raw: unknown): MetadataField | null {
   if (!isPlainObject(raw)) return null;
   const key = trimmed(raw.key);
-  if (!key || BAD_KEY.test(key)) return null;
+  if (key === null || !isMetadataKey(key)) return null;
   const type = raw.type;
   if (!(METADATA_FIELD_TYPES as readonly unknown[]).includes(type)) return null;
 

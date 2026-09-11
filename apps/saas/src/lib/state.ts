@@ -13,6 +13,7 @@ import {
   REPO_SETTINGS_PATH,
 } from "@swimlane-cloud/github-client";
 import { branchLockReason, type ProjectCtx } from "./projects";
+import { parseProjectSettings } from "./metadata-schema";
 import { mapLimit, readConfigAt, readTextAt } from "./repo-files";
 import { getServiceSupabase } from "./supabase/server";
 import type { BranchKind, BranchState, ProjectState, PullState, VersionState } from "./types";
@@ -219,7 +220,10 @@ export async function buildProjectState(ctx: ProjectCtx): Promise<ProjectState> 
         }
       : null,
     plan: ctx.project.plan,
-    settings: parseRepoSettings(settingsText),
+    // The declared metadata schema rides along with the rest of the settings
+    // file, so every tab that already has `state` can drive a form from it
+    // without a second request.
+    settings: parseProjectSettings(settingsText),
     fetchedAt: new Date().toISOString(),
   };
 }

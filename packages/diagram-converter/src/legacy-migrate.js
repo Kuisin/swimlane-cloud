@@ -15,6 +15,10 @@
  *   fused onto one line, `if (q) is (a) than`; a later, bare `case (b)` →
  *   `else-if (b) than`; a fork's `and (b)` → `case (b)` (already-current
  *   `is (a) than` / `else-if (b) than` input passes through unchanged)
+ * - an opener's lane selector, `if [sales] (q) …` → `if (q) …`. The selector
+ *   was parsed and kept but never drawn from, and it is not in the grammar any
+ *   more; dropping it here is what keeps a file that still carries one from
+ *   simply starting to error.
  * - `[loop]` → `loop`; `merge: id;` / `[merge: id]` in a case → `[goto: id]`.
  *   A bare `merge;` / `[merge]` in a case, and a `[merge]` / `[merge: n]`
  *   landing marker in the flow, have no automatic mapping — there is no
@@ -106,6 +110,15 @@ export function migrateLegacyDsl(text) {
 
     // --- flow section -----------------------------------------------------
     const color = (c) => (c ? ` #${c}` : "");
+    // An opener's lane selector — `if [sales] (q) …`. Drop the bracket and
+    // re-read the line, so whichever rule below owns the rest of it still
+    // gets its turn (the fuse rule, most often).
+    if ((m = t.match(/^(if|fork|section|branch|phase)\s*\[[^\]]*\]\s*(.*)$/i))) {
+      lines[li] = `${indent}${m[1]}${m[2] ? ` ${m[2]}` : ""}`;
+      changed++;
+      li--;
+      continue;
+    }
     // The oldest spelling: a bare `else`, no `than`, no parens. An already-
     // current `if (q) is (a) than` / `else-if (b) than` line falls through
     // every rule below unmatched and reaches the final `out.push(line)`.
@@ -118,16 +131,16 @@ export function migrateLegacyDsl(text) {
     // next line — fuse them onto one, `if (q) is (a) than`. Anything else
     // right after (a comment, a blank line) means the first case is missing
     // and this if is already broken; left alone for the reader to say so.
-    if ((m = t.match(/^if(\s*\[[^\]]*\])?\s*\((.+?)\)(\s*@[\w-]+)?(\s*#[A-Za-z]+)?\s*$/i))) {
+    if ((m = t.match(/^if\s*\((.+?)\)(\s*@[\w-]+)?(\s*#[A-Za-z]+)?\s*$/i))) {
       const next = lines[li + 1];
       const nm = next && /^\s*case\s*\((.*?)\)(\s*#[A-Za-z]+)?\s*$/i.exec(next.trim());
       if (nm) {
         frames.push("if");
-        const [, lane, cond, id, ifColor] = m;
+        const [, cond, id, ifColor] = m;
         const caseColor = nm[2] ?? "";
         push(
           indent,
-          `if${lane ?? ""} (${cond.trim()}) is (${nm[1].trim()}) than${id ?? ""}${ifColor ?? caseColor}`,
+          `if (${cond.trim()}) is (${nm[1].trim()}) than${id ?? ""}${ifColor ?? caseColor}`,
         );
         li++; // consumed the fused case line too
         lastStep = -1;

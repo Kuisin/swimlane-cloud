@@ -140,6 +140,24 @@ describe("serializeDSLv2: structure that needs its own model field to survive", 
     const cases = m2.rows.filter((r) => r.kind === "branchCase");
     expect(cases.map((c) => c.label)).toEqual([""]);
   });
+
+  it("round-trips /option/ lane-order, which decides which lane is drawn first", () => {
+    const src = doc(
+      "/option/\nlane-order: system, sales;\n\n/role/\n<sales>\n  label: Sales;\n\n<system>\n  label: System;\n\n/line/\n[sales: x]\n[system: y]",
+    );
+    const { m1, m2, once } = assertStableRoundTrip(src);
+    expect(m1.options.laneOrder).toEqual(["system", "sales"]);
+    expect(once).toContain("lane-order: system, sales;");
+    // The reordering survives the save, not just the option's text.
+    expect(m2.lanes.map((l) => l.id)).toEqual(["system", "sales"]);
+  });
+
+  it("never writes back an if's lane selector — it is not grammar any more", () => {
+    const src = doc("/line/\n[a: before]\nif (q) is (yes) than\n  [a: x]\nend-if");
+    const { once } = assertStableRoundTrip(src);
+    expect(once).toContain("if (q) is (yes) than");
+    expect(once).not.toMatch(/if\s*\[/);
+  });
 });
 
 describe("serializeDSLv2: imports", () => {

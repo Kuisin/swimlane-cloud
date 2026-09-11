@@ -33,6 +33,13 @@
  *   therefore delete `owner` (a scalar the fence could see) but can never
  *   delete `sourceRef` (a nested map the fence never saw), because its absence
  *   from `/meta/` carries no information about the author's intent.
+ * - **Presence, though, does.** A key written into `/meta/` by hand wins, even
+ *   over a rich value the fence could not have shown — `sourceRef: SAP;` typed
+ *   into the fence replaces the nested map with that string. The asymmetry is
+ *   deliberate: *absence* is what the projection produces on its own and so
+ *   says nothing, while *presence* is something only a person can have typed.
+ *   A tool regenerating `/meta/` (GUI mode rebuilding it from the parsed model)
+ *   therefore cannot destroy a rich value, which is the case that matters.
  *
  * Break that rule and every round trip through the DSL silently strips the rich
  * half of the metadata. It is the subtle part of this module.
@@ -54,7 +61,12 @@
 
 const FENCE_LANG = "kai-swimlane";
 
-/** Every section marker, in the canonical order of dsl-rule.md:324. */
+/**
+ * Every section marker, in the canonical order dsl-rule.md gives under
+ * "Canonical order is `/meta/ /title/ /page/ …`". Named rather than cited by
+ * line: the two line numbers that used to be here had both drifted, and a
+ * stale reference is worse than none — it reads as though someone checked.
+ */
 const SECTION_MARKERS = [
   "/meta/",
   "/title/",
@@ -67,7 +79,11 @@ const SECTION_MARKERS = [
   "/i18n/",
 ];
 
-/** `/meta/`'s five reserved keys, in the order dsl-rule.md:376 serialises them. */
+/**
+ * `/meta/`'s five reserved keys, in the order dsl-rule.md's "Canonical key and
+ * entry order" table gives for `/meta/` — every other key follows by code
+ * point, which `orderedMetaKeys` does.
+ */
 const META_KEY_ORDER = ["owner", "status", "tags", "version", "updated"];
 
 const FRONTMATTER_DELIM = "---";
@@ -161,14 +177,28 @@ function isPlainObject(value) {
 /* ───────────────────────────── writing YAML ────────────────────────────── */
 
 /**
+ * A key as it has to be written.
+ *
+ * A key is author-supplied now that a form can add one, so it gets the same
+ * care as a value. Any `:` at all has to be quoted, not just a `: ` — YAML
+ * reads `a:b: v` as the key `a:b`, and writing it bare would hand the next
+ * reader a different key and silently lose the value. A leading `-` would make
+ * the line a sequence entry, and an empty key is not a key at all.
+ */
+function emitMapKey(key, wasQuoted) {
+  return needsQuoting(key) || key.includes(":") || wasQuoted ? quote(key) : key;
+}
+
+/**
  * The lines for one key, at `indent`.
  *
  * `how` is the shape `splitFrontmatter` recorded for it; without one the value
  * decides — a string is a scalar, an array a block sequence, an object a
  * nested map.
  */
-function emitKey(key, value, how, indent) {
+function emitKey(rawKey, value, how, indent) {
   if (how?.kind === "verbatim") return how.lines;
+  const key = emitMapKey(String(rawKey), how?.quotedKey === true);
 
   // A caller that has not moved to the array model may still hand a list key
   // its old comma-joined string. Honour it, so nothing that worked before
@@ -215,16 +245,27 @@ function emitKey(key, value, how, indent) {
  *
  * A `verbatim` key has no value to carry, so it is kept whenever its shape is —
  * dropping it would delete a line this module merely failed to understand.
+ *
+ * `how.before` and the `TRAILING` entry carry the lines that belong to no key
+ * at all — comments, blank lines. They are written back where they were found.
  */
 function emitMap(values, kept, indent) {
   const all = { ...values };
-  for (const [key, how] of kept) if (how.kind === "verbatim" && !(key in all)) all[key] = "";
-  const known = [...kept.keys()].filter((k) => k in all);
+  for (const [key, how] of kept) {
+    if (how.kind === "verbatim" && !(key in all)) all[key] = "";
+  }
+  const known = [...kept.keys()].filter((k) => typeof k === "string" && k in all);
   const added = Object.keys(all).filter((k) => !kept.has(k));
   const keys = [...known, ...orderedMetaKeys(Object.fromEntries(added.map((k) => [k, all[k]])))];
 
   const lines = [];
-  for (const key of keys) lines.push(...emitKey(key, values[key], kept.get(key), indent));
+  for (const key of keys) {
+    const how = kept.get(key);
+    if (how?.before) lines.push(...how.before);
+    lines.push(...emitKey(key, values[key], how, indent));
+  }
+  const trailing = kept.get(TRAILING);
+  if (trailing && lines.length) lines.push(...trailing.lines);
   return lines;
 }
 
@@ -363,6 +404,14 @@ function ownedLines(lines, from, indent) {
 
 const VERBATIM = Symbol("verbatim");
 
+/**
+ * Where a mapping's shape remembers the lines that follow its last key — a
+ * closing comment, a trailing blank. A symbol, so it can share the shape map
+ * with the real keys while never colliding with one or being mistaken for one
+ * by anything that walks the map looking for metadata.
+ */
+const TRAILING = Symbol("trailing");
+
 /** The value and shape for one key, or `VERBATIM` when it cannot be modelled. */
 function parseEntry(line, cut, owned, indent) {
   const inline = line.slice(cut + 1).trim();
@@ -393,9 +442,38 @@ function parseEntry(line, cut, owned, indent) {
   if (!nested.shape.size) return VERBATIM;
   // A sequence of mappings (`- x: 1`) re-reads as a mapping whose keys are
   // `- x`. It round-trips, but those are not keys anyone can edit, so the whole
-  // value goes through verbatim instead.
-  for (const key of nested.shape.keys()) if (SEQUENCE_ENTRY.test(key)) return VERBATIM;
+  // value goes through verbatim instead. Only real keys are tested: a shape map
+  // also holds symbol entries, which are this module's own, never the author's.
+  for (const key of nested.shape.keys()) {
+    if (typeof key === "string" && SEQUENCE_ENTRY.test(key)) return VERBATIM;
+  }
   return { value: nested.values, how: { kind: "map", indent: childIndent, shape: nested.shape } };
+}
+
+/**
+ * The key a mapping line opens with, and the index of the `:` that ends it, or
+ * null when the line opens no key at all.
+ *
+ * A quoted key is read as one unit: `"a: b": v` names the key `a: b`, and
+ * cutting at the first `:` the way an unquoted line is cut would name `"a`
+ * instead and lose the value. It is the only form that can carry a key
+ * containing a colon, which is why `emitMapKey` writes one.
+ */
+function readMapKey(line, indent) {
+  const body = line.slice(indent.length);
+  if (body.startsWith('"')) {
+    let i = 1;
+    for (; i < body.length; i++) {
+      if (body[i] === "\\") i++;
+      else if (body[i] === '"') break;
+    }
+    if (i >= body.length || body[i + 1] !== ":") return null;
+    return { key: unquote(body.slice(0, i + 1)), cut: indent.length + i + 1, quoted: true };
+  }
+  const cut = line.indexOf(":");
+  if (cut < 0) return null;
+  const key = line.slice(0, cut).trim();
+  return key ? { key, cut, quoted: false } : null;
 }
 
 /**
@@ -408,32 +486,37 @@ function parseEntry(line, cut, owned, indent) {
 function parseMapBlock(lines, indent) {
   const values = {};
   const shape = new Map();
+  // Lines that are not a key of this mapping — a comment, a blank line, an
+  // orphan this parser could not place. They belong to the next key that
+  // follows them, so an author's grouping and notes come back where they were.
+  let before = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!line.trim()) continue;
-    if (indentOf(line) !== indent) continue;
-    const cut = line.indexOf(":");
-    if (cut < 0) continue;
-    const key = line.slice(0, cut).trim();
-    if (!key) continue;
+    const found = line.trim() && indentOf(line) === indent ? readMapKey(line, indent) : null;
+    if (!found) {
+      before.push(line);
+      continue;
+    }
+    const { key, cut } = found;
 
     const owned = ownedLines(lines, i + 1, indent);
     i += owned.length;
 
     const source = [line, ...owned];
     const parsed = parseEntry(line, cut, owned, indent);
-    if (
+    if (parsed !== VERBATIM && found.quoted) parsed.how.quotedKey = true;
+    const modelled =
       parsed !== VERBATIM &&
-      emitKey(key, parsed.value, parsed.how, indent).join("\n") === source.join("\n")
-    ) {
-      values[key] = parsed.value;
-      shape.set(key, parsed.how);
-      continue;
-    }
-    shape.set(key, { kind: "verbatim", lines: source });
+      emitKey(key, parsed.value, parsed.how, indent).join("\n") === source.join("\n");
+    const how = modelled ? parsed.how : { kind: "verbatim", lines: source };
+    if (before.length) how.before = before;
+    before = [];
+    if (modelled) values[key] = parsed.value;
+    shape.set(key, how);
   }
 
+  if (before.length) shape.set(TRAILING, { kind: "trailing", lines: before });
   return { values, shape };
 }
 
@@ -518,6 +601,47 @@ export function isMarkdownDiagram(md) {
   return extractDiagramFence(splitFrontmatter(md).body) !== null;
 }
 
+/* ──────────────────────────── showing a value ──────────────────────────── */
+
+/**
+ * One metadata value as a single line of human-readable text.
+ *
+ * A value may be a list or a nested map, so `String(value)` prints
+ * `[object Object]` or loses a separator. This is the one flattening for
+ * *display* — distinct from `projectMeta`, which flattens for the `/meta/`
+ * section and refuses anything it cannot flatten losslessly. This one never
+ * refuses: it is for showing, not for storing, so it is lossy on purpose.
+ *
+ * It is exported, and lives here rather than in the renderer, because a host
+ * whose own contract is strings has to flatten at its boundary and must not
+ * reinvent this — two implementations drift, and the same document then reads
+ * differently in two products.
+ *
+ * In *this* tree it has exactly one caller: the diagram's document-info panel
+ * (`render-pure/diagram.js`). That is a fact about today's callers, not a
+ * design intent — the export exists precisely so the second and third caller
+ * use it instead of writing their own.
+ *
+ * Not for a write path. It is lossy by design, so a value that has been through
+ * it must never be stored: `{ repo: { name: "docs" } }` becomes the *string*
+ * `"repo: name: docs"`, which then serializes and reads back perfectly, so
+ * nothing downstream can tell the structure was destroyed. Use `projectMeta`
+ * when the result is going to be written.
+ */
+export function metaText(value) {
+  if (Array.isArray(value)) return value.map(metaText).filter(Boolean).join(LIST_SEP);
+  if (isPlainObject(value)) {
+    return Object.entries(value)
+      .map(([key, inner]) => {
+        const text = metaText(inner);
+        return text ? `${key}: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join(LIST_SEP);
+  }
+  return String(value ?? "");
+}
+
 /* ───────────────────────── the DSL's /meta/ section ────────────────────── */
 
 function markerAt(line) {
@@ -568,7 +692,7 @@ export function readMetaSection(dsl) {
 
 /**
  * Insert a `/meta/` section built from `meta`, ahead of the first other
- * section — `/meta/` sorts first in dsl-rule.md:324's order.
+ * section — `/meta/` sorts first in `SECTION_MARKERS`' canonical order.
  *
  * `/meta/` is scalar-only, so `meta` must already be the projection
  * `projectMeta` produces.

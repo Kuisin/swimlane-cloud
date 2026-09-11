@@ -3,7 +3,9 @@
  * a server module, so `workflow.ts` and the pages can use these directly.
  */
 
-import type { SwimlaneSettings } from "@swimlane-cloud/github-client";
+import type { MetaRecord, ProjectSettings } from "./metadata-schema";
+
+export type { ProjectSettings };
 
 export type Role = "owner" | "editor" | "viewer";
 export type ChangeStatus = "added" | "changed" | "removed";
@@ -86,7 +88,7 @@ export interface ProjectState {
   activeEdit: { id: string; branch: string; createdAt: string } | null;
   plan: "free" | "team" | "enterprise";
   /** `swimlane-settings.json` on `main`, defaults filled in. */
-  settings: SwimlaneSettings;
+  settings: ProjectSettings;
   fetchedAt: string;
 }
 
@@ -135,6 +137,24 @@ export interface FileResponse {
 export interface SnapshotResponse {
   sha: string;
   files: Record<string, string>;
+}
+
+/** One document as the metadata search sees it. */
+export interface MetadataDocumentEntry {
+  path: string;
+  meta: MetaRecord;
+  /** Keys the engine can only carry verbatim — listed, but not filterable by value. */
+  carried: string[];
+  /** Declared keys this document gets wrong, in `validateMetadata`'s shape. */
+  problems: { key: string; code: string; expected?: string }[];
+}
+
+export interface MetadataResponse {
+  ref: string;
+  sha: string;
+  documents: MetadataDocumentEntry[];
+  /** True when the ref holds more diagrams than one snapshot may read. */
+  truncated: boolean;
 }
 
 export interface CompareFile {

@@ -200,6 +200,39 @@ describe("migrateLegacyDsl", () => {
     expect(parseDSL(text).errors).toEqual([]);
   });
 
+  it("strips an opener's `[lane]` selector, which is no longer grammar", () => {
+    const src = doc("if [a] (q) is (yes) than\n[a: x]\nend-if");
+    const { text, changed } = migrateLegacyDsl(src);
+    expect(text).toBe(doc("if (q) is (yes) than\n[a: x]\nend-if"));
+    expect(changed).toBeGreaterThan(0);
+    expect(parseDSL(text).errors).toEqual([]);
+  });
+
+  it("strips the selector and still fuses the previous grammar's first case", () => {
+    const src = doc("if [a] (q) @gate #blue\ncase (yes)\n[a: x]\nendif");
+    const { text } = migrateLegacyDsl(src);
+    expect(text).toBe(doc("if (q) is (yes) than @gate #blue\n[a: x]\nend-if"));
+    expect(parseDSL(text).errors).toEqual([]);
+  });
+
+  it("strips it from a group opener too, keeping the name and the colour", () => {
+    const src = doc("section [a] (Audit) #blue\n[a: x]\nend-section");
+    const { text } = migrateLegacyDsl(src);
+    expect(text).toBe(doc("section (Audit) #blue\n[a: x]\nend-section"));
+    expect(parseDSL(text).errors).toEqual([]);
+  });
+
+  it("keeps its indentation, and leaves a step that merely follows an opener alone", () => {
+    const src = doc(
+      "fork\n[a: one]\ncase (two)\n  if [a] (q) is (yes) than\n    [a: x]\n  end-if\nend-fork",
+    );
+    const { text } = migrateLegacyDsl(src);
+    expect(text).toBe(
+      doc("fork\n[a: one]\ncase (two)\n  if (q) is (yes) than\n    [a: x]\n  end-if\nend-fork"),
+    );
+    expect(parseDSL(text).errors).toEqual([]);
+  });
+
   it("returns a current-grammar document unchanged", () => {
     const src = doc(
       "[a: z]\n  id: done;\nif (q) is (a) than\n  [goto: done]\nelse-if () than\n  [a: y]\nend-if",
@@ -208,6 +241,58 @@ describe("migrateLegacyDsl", () => {
     expect(text).toBe(src);
     expect(changed).toBe(0);
     expect(parseDSL(text).errors).toEqual([]);
+  });
+
+  /**
+   * The manual promises that "running Update DSL twice is the same as running
+   * it once", which is a claim about this function and nothing else. Every
+   * rule has to leave output no rule matches again — easy to break with a rule
+   * that rewrites a line and re-reads it, as the lane-selector strip does.
+   */
+  it("is idempotent — migrating its own output changes nothing", () => {
+    const legacy = `@kai-swimlane-v2
+/role/
+<a>
+label: A;
+/line/
+*** the whole zoo, one rule each
+section-start (受付)
+:
+[a: 見積作成];
+  id: quote;
+  props: RQ, LG;
+  arrow: dashed;
+  link: ./other.txt;
+if [a] (承認する？) #blue
+case (はい) #green
+  [a: 登録] @ACT-001
+case (いいえ)
+  [a: 修正]
+  merge: quote;
+case (保留)
+  [a: 待機]
+  [loop]
+endif
+end-point
+fork [a] (通知)
+  [a: メール]
+and (出荷)
+  [a: 出荷]
+endfork
+@end
+`;
+    const once = migrateLegacyDsl(legacy);
+    expect(once.changed).toBeGreaterThan(0);
+    // Everything it rewrote, it rewrote into the current grammar.
+    expect(parseDSL(once.text).errors).toEqual([]);
+    expect(once.text).not.toMatch(/if\s*\[/);
+    expect(once.text).not.toMatch(/fork\s*\[/);
+    expect(once.text).not.toMatch(/@ACT-001/);
+    expect(once.text).toContain("id: ACT-001;");
+
+    const twice = migrateLegacyDsl(once.text);
+    expect(twice.text).toBe(once.text);
+    expect(twice.changed).toBe(0);
   });
 
   // A step's own id was an `@id` suffix in the grammar that `[goto: id]`

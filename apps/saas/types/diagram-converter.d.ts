@@ -18,8 +18,15 @@ declare module "@swimlane-cloud/diagram-converter" {
       resolveAsset?: (path: string) => string | null;
       /** Render options the file inherits; its own `/option/` wins. */
       diagramDefaults?: object;
-      /** Drawn top-right for a printed image: the file's path and metadata. */
-      documentInfo?: { path?: string; meta?: Record<string, string> | null } | null;
+      /**
+       * Drawn top-right for a printed image: the file's path and metadata.
+       * A `.md` file's frontmatter is structured — a value may be a list or a
+       * nested map — and the panel flattens each for display (`metaText`).
+       */
+      documentInfo?: {
+        path?: string;
+        meta?: Record<string, string | string[] | object> | null;
+      } | null;
       /** A linked step's ↗ becomes an <a href> when this names a URL for it. */
       linkHref?: ((link: string, row: unknown) => string | null) | null;
     },
@@ -158,22 +165,65 @@ declare module "@swimlane-cloud/editor/serialize" {
 // Mobile-view package (separate, JSX, no bundled types).
 declare module "@swimlane-cloud/diagram-converter/markdown-doc" {
   /** A diagram stored as markdown: frontmatter + prose + a ```kai-swimlane fence. */
-  /** How a key was written, so it can be written back the same way. */
+  /**
+   * A frontmatter value. A scalar is a string, a sequence is an array, and a
+   * nested map is an object — matching what `splitFrontmatter` really builds.
+   */
+  export type MetaValue = string | string[] | { [key: string]: MetaValue };
+  export type MetaRecord = Record<string, MetaValue>;
+  /**
+   * How a key was written, so it can be written back the same way.
+   *
+   * `before` is the run of lines that preceded the key and belong to no key of
+   * their own — a comment, a blank line the author grouped with. They are
+   * re-emitted ahead of it, so editing one key costs nothing else in the file.
+   *
+   * The runtime map also holds a symbol-keyed entry for the lines after the
+   * last key. It is deliberately not in this type: a symbol cannot collide with
+   * a real key, and every consumer here walks the map for metadata keys only.
+   * Anything iterating it must still tolerate a non-string key at runtime.
+   *
+   * Must stay in lockstep with `markdown-doc.js` — nothing typechecks an
+   * ambient declaration against the module it describes, so a wrong entry here
+   * is only discovered at runtime.
+   */
   export type FrontmatterShape = Map<
     string,
-    { kind: "scalar" | "list" | "flowList" } | { kind: "verbatim"; lines: string[] }
+    | { kind: "scalar"; quoted?: boolean; blank?: boolean; before?: string[] }
+    | { kind: "list"; indent: string; quoted?: boolean; before?: string[] }
+    | { kind: "flowList"; quoted?: boolean; before?: string[] }
+    | { kind: "map"; indent: string; shape: FrontmatterShape; before?: string[] }
+    | { kind: "verbatim"; lines: string[]; before?: string[] }
   >;
   export function splitFrontmatter(md: string): {
-    meta: Record<string, string>;
+    meta: MetaRecord;
     body: string;
     hadFrontmatter: boolean;
     shape: FrontmatterShape;
   };
   export function serializeFrontmatter(
-    meta: Record<string, string> | undefined,
+    meta: MetaRecord | undefined,
     shape?: FrontmatterShape,
   ): string;
-  export function orderedMetaKeys(meta: Record<string, string> | undefined): string[];
+  export function orderedMetaKeys(meta: MetaRecord | undefined): string[];
+  /**
+   * A value as one line of text, for display and search. Lossy on purpose —
+   * the deliberate opposite of `projectMeta`, which refuses anything it cannot
+   * flatten losslessly because its output is written to a file.
+   */
+  export function metaText(value: MetaValue | undefined): string;
+  /** The keys whose value can only be carried through verbatim, not modelled. */
+  export function verbatimKeys(shape: FrontmatterShape | undefined): string[];
+  /** The subset of `meta` that `/meta/` inside the fence can represent. */
+  export function projectMeta(meta: MetaRecord | undefined): Record<string, string>;
+  /**
+   * `projected` merged back over the document's full frontmatter, so a rich
+   * key the fence never carried survives an edit made through the fence.
+   */
+  export function mergeMetaProjection(
+    before: MetaRecord | undefined,
+    projected: Record<string, string> | undefined,
+  ): MetaRecord;
   export function extractDiagramFence(
     body: string,
   ): { dsl: string; start: number; end: number; fence: string } | null;

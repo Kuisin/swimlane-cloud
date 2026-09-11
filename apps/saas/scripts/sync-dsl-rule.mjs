@@ -7,7 +7,7 @@
 // never go stale silently.
 //
 // The copies are gitignored (apps/saas/.gitignore): edit the originals.
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
@@ -16,9 +16,55 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "../../..");
 const contentDir = join(here, "../content");
 
+/**
+ * Loud on purpose: anything this route hands a model must parse. A stale
+ * document here is not a broken build later, it is a model faithfully copying
+ * grammar that no longer exists.
+ */
+function assertParses(label, text, lineOffset = 0) {
+  const { errors } = parseDSL(text);
+  const real = (errors ?? []).filter((e) => e.severity !== "warning");
+  if (real.length) {
+    throw new Error(
+      `${label} no longer parses cleanly, so it cannot be served by /api/mcp:\n` +
+        real.map((e) => `  line ${e.line + lineOffset}: ${e.msg}`).join("\n"),
+    );
+  }
+}
+
+/**
+ * Every fenced block in the spec that is a whole document — first line
+ * `@kai-swimlane`, last non-space `@end`. Today that is the `## Example`
+ * section, which `get_dsl_syntax` returns *by default, with no arguments*, so
+ * it is the very first DSL an authoring model ever sees; and the squashed
+ * one-liner below it, whose `if[manager](...)` spelling has no spaces and so
+ * survives a grep for the expanded form. The spec's other fences are grammar
+ * productions and fragments, which are not documents and are skipped.
+ */
+function fullDocumentFences(md) {
+  const lines = md.split("\n");
+  const fences = lines.flatMap((l, i) => (l.startsWith("```") ? [i] : []));
+  const out = [];
+  for (let k = 0; k + 1 < fences.length; k += 2) {
+    const [open, close] = [fences[k], fences[k + 1]];
+    const text = lines.slice(open + 1, close).join("\n");
+    if (!text.trimStart().startsWith("@kai-swimlane")) continue;
+    if (!text.trimEnd().endsWith("@end")) continue;
+    // `open` is the 0-based index of the ``` line, so the fence's own line 1
+    // is file line open + 2 — report the file's numbering, not the fence's.
+    out.push({ label: `dsl-rule.md fence at line ${open + 1}`, text, lineOffset: open + 1 });
+  }
+  return out;
+}
+
 mkdirSync(contentDir, { recursive: true });
-copyFileSync(join(repoRoot, "dsl-rule.md"), join(contentDir, "dsl-rule.md"));
-console.log(`synced dsl-rule.md -> apps/saas/content/dsl-rule.md`);
+const spec = readFileSync(join(repoRoot, "dsl-rule.md"), "utf8");
+const fences = fullDocumentFences(spec);
+for (const { label, text, lineOffset } of fences) assertParses(label, text, lineOffset);
+writeFileSync(join(contentDir, "dsl-rule.md"), spec);
+console.log(
+  `synced dsl-rule.md -> apps/saas/content/dsl-rule.md (${fences.length} worked documents checked)`,
+);
 
 /**
  * The documents `get_dsl_example` offers, chosen to cover the constructs an
@@ -112,16 +158,7 @@ function titleOf(text) {
 
 const index = EXAMPLES.map(({ name, src, summary, teaches }) => {
   const text = readFileSync(join(repoRoot, src), "utf8");
-  const { errors } = parseDSL(text);
-  const real = (errors ?? []).filter((e) => e.severity !== "warning");
-  if (real.length) {
-    // Loud on purpose: an example that stopped parsing must fail the build,
-    // not ship to a model that will copy it.
-    throw new Error(
-      `${src} no longer parses cleanly, so it cannot be offered as an example:\n` +
-        real.map((e) => `  line ${e.line}: ${e.msg}`).join("\n"),
-    );
-  }
+  assertParses(src, text);
   writeFileSync(join(examplesDir, `${name}.txt`), text);
   return { name, title: titleOf(text), summary, teaches, lines: text.split("\n").length };
 });

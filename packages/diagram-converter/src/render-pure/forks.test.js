@@ -160,7 +160,7 @@ describe("blank else-if () than draws no label chip", () => {
 
 /line/
 [a: 開始]
-if [a] (q?) is (はい) than #green
+if (q?) is (はい) than #green
   [a: 対応]
 else-if () than
   [a: 何もしない]
