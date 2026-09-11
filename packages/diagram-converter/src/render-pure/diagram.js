@@ -329,6 +329,48 @@ function PrintLayer({
       }),
   );
 }
+/**
+ * The lines of the document info panel: the path, then `key: value` for each
+ * metadata entry, each cut to the panel's column budget. Nothing when there
+ * is nothing to say.
+ */
+function documentInfoLines(documentInfo, L) {
+  if (!documentInfo) return [];
+  const lines = [];
+  const path = String(documentInfo.path ?? "").trim();
+  if (path) lines.push(truncateToColumns(path, L.infoMaxCols));
+  for (const [key, value] of Object.entries(documentInfo.meta ?? {})) {
+    const v = String(value ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!key || !v) continue;
+    lines.push(truncateToColumns(`${key}: ${v}`, L.infoMaxCols));
+    if (lines.length >= L.infoMaxLines) break;
+  }
+  return lines;
+}
+function DocumentInfoPanel({ lines, x, y, theme, L }) {
+  if (!lines.length) return null;
+  return /* @__PURE__ */ h(
+    "text",
+    {
+      "data-document-info": "",
+      x,
+      y,
+      textAnchor: "end",
+      fill: theme.laneText || theme.title,
+      fontFamily: DIAGRAM_LAYOUT.fontFamily,
+      fontSize: String(L.infoFontSize),
+    },
+    lines.map((line, i) =>
+      /* @__PURE__ */ h(
+        "tspan",
+        { key: i, x, dy: i === 0 ? 0 : L.infoLineH, fontWeight: i === 0 ? "600" : "400" },
+        line,
+      ),
+    ),
+  );
+}
 function renderDiagramSvg({
   model,
   theme,
@@ -343,6 +385,11 @@ function renderDiagramSvg({
   showGatewayIcons = true,
   blockMargin = 0,
   blockText = "truncate",
+  // `{ path, meta }` of the document, drawn top-right for a printed image.
+  documentInfo = null,
+  // `(link, row) => href | null`: when it names a URL, a linked step's glyph
+  // becomes an <a>; otherwise the glyph only carries `data-link`.
+  linkHref = null,
   interactive = false,
   selectedRowIndex = null,
   onRowSelect,
@@ -490,6 +537,15 @@ function renderDiagramSvg({
       title || pageDescLines.length > 0 ? L.topPadMinWithTitle : L.topPadMinDefault,
     );
   }
+  // The document info panel sits in the title band, top-right; make room
+  // when it is taller than whatever else the band holds.
+  const infoLines = documentInfoLines(documentInfo, L);
+  if (infoLines.length) {
+    topPad = Math.max(
+      topPad,
+      L.printLayoutStartY + infoLines.length * L.infoLineH + L.topPadTrailing,
+    );
+  }
   const rowMeta = [];
   let y = topPad + headerH + L.rowStartBelowHeader;
   const frames = [];
@@ -533,11 +589,46 @@ function renderDiagramSvg({
     }
     return extra;
   }
+  /**
+   * The "opens another flow" mark at a linked step's top-right corner: a
+   * small ↗ tile. It carries `data-link` so a host's preview can open the
+   * target, and becomes an <a> when the host can name a URL for it.
+   */
+  function linkGlyph(r, cx, cy, boxW, boxH) {
+    const size = 13;
+    const x = cx + boxW / 2 - size - 3;
+    const y = cy - boxH / 2 + 3;
+    const href = typeof linkHref === "function" ? linkHref(r.link, r) : null;
+    const tile = /* @__PURE__ */ h(
+      "g",
+      { "data-link": r.link, style: "cursor:pointer" },
+      /* @__PURE__ */ h("title", null, r.link),
+      /* @__PURE__ */ h("rect", {
+        x,
+        y,
+        width: size,
+        height: size,
+        rx: 2.5,
+        fill: theme.branchBg,
+        stroke: theme.branch,
+        strokeWidth: "0.9",
+      }),
+      /* @__PURE__ */ h("path", {
+        d: `M ${x + 4} ${y + 9} L ${x + 9} ${y + 4} M ${x + 5.5} ${y + 4} L ${x + 9} ${y + 4} L ${x + 9} ${y + 7.5}`,
+        fill: "none",
+        stroke: theme.branch,
+        strokeWidth: "1.3",
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+      }),
+    );
+    return href ? /* @__PURE__ */ h("a", { href }, tile) : tile;
+  }
   /** The step's box text as drawn: one truncated line, or wrapped lines. */
   function stepTextLines(row) {
     const text = (row?.text || "").trim();
     const block = row?.blockRef ? blocks[row.blockRef] : null;
-    const shape = (block && block.shape) || "rounded";
+    const shape = (block && block.shape) || (row?.link ? "subroutine" : "rounded");
     const cols = blockMaxTextCols(shape, Boolean(block && block.icon));
     if (blockText !== "wrap") return [truncateToColumns(text, cols)];
     const lines = wrapWordsToColumns(text, cols);
@@ -2698,7 +2789,7 @@ function renderDiagramSvg({
         const fill = (block && block.bg) || lane.bg || theme.boxBg;
         const txtColor = (block && block.textColor) || lane.textColor || theme.boxText;
         const stroke = (block && block.borderColor) || theme.stroke;
-        const shape = (block && block.shape) || "rounded";
+        const shape = (block && block.shape) || (r.link ? "subroutine" : "rounded");
         const blockIcon = block && block.icon;
         const blockIconAsset = block && block.iconAsset;
         const { left: leftProps, right: rightProps } = splitPropsBySide(r.props);
@@ -2816,6 +2907,7 @@ function renderDiagramSvg({
                   ),
                 ),
           ),
+          r.link && linkGlyph(r, cx, cy, boxW, boxH),
           showStepBlockCaptions &&
             r.blockRef &&
             /* @__PURE__ */ h(
@@ -3152,6 +3244,13 @@ function renderDiagramSvg({
           }
           return null;
         }),
+      /* @__PURE__ */ h(DocumentInfoPanel, {
+        lines: infoLines,
+        x: width - xPad,
+        y: L.printLayoutStartY + L.infoLineH,
+        theme,
+        L,
+      }),
       /* @__PURE__ */ h(PrintLayer, {
         theme,
         page,

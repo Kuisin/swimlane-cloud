@@ -995,6 +995,21 @@ export function parseDSL(src, parseOptions = {}) {
       if (level > 1) rows[lastRealStepIndex].level = level;
       continue;
     }
+    /** `link: <path>;` — this step opens another flow. Relative to this file, or `/` from the root. */
+    if (/^link:\s*/i.test(u)) {
+      if (lastRealStepIndex >= 0) appendLineToRow(lastRealStepIndex, line);
+      m = u.match(/^link:\s*(\S+?)\s*;\s*$/i);
+      if (!m) {
+        errors.push({ line, text, msg: "link must be written as link: <path>;" });
+        continue;
+      }
+      if (lastRealStepIndex < 0) {
+        errors.push({ line, text, msg: "link has no preceding step" });
+        continue;
+      }
+      rows[lastRealStepIndex].link = m[1];
+      continue;
+    }
     if (/^props:\s*/i.test(u)) {
       if (lastRealStepIndex >= 0) appendLineToRow(lastRealStepIndex, line);
       m = u.match(/^props:\s*(.+);\s*$/i);

@@ -14,6 +14,9 @@ import { renderDiagramSvg } from "./diagram.js";
  *
  * `diagramDefaults` are render options the document inherits — a
  * repository-wide setting — which its own `/option/` section overrides.
+ * `documentInfo` (`{ path, meta }`) is drawn top-right for a printed image;
+ * `linkHref(link, row)` turns a step's link into an `<a href>` when the host
+ * can name a URL for it.
  *
  * @param {string} src
  * @param {{ theme?: object, themeKey?: string, lang?: string,
@@ -24,13 +27,29 @@ import { renderDiagramSvg } from "./diagram.js";
  */
 export function textToSvg(
   src,
-  { theme, themeKey, lang, resolveImport, resolveAsset, filename, diagramDefaults } = {},
+  {
+    theme,
+    themeKey,
+    lang,
+    resolveImport,
+    resolveAsset,
+    filename,
+    diagramDefaults,
+    documentInfo,
+    linkHref,
+  } = {},
 ) {
   const model = parseDSL(src, { lang, resolveImport, resolveAsset, filename });
   const resolvedTheme = theme ?? (themeKey ? THEMES[themeKey] : null) ?? THEMES.basic;
   const opts = resolveDiagramOptions(model.options, diagramDefaults);
   try {
-    const svg = renderDiagramSvg({ model, theme: resolvedTheme, ...opts });
+    const svg = renderDiagramSvg({
+      model,
+      theme: resolvedTheme,
+      ...opts,
+      documentInfo,
+      linkHref,
+    });
     return { svg, model, errors: model.errors };
   } catch (err) {
     return {

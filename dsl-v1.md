@@ -188,17 +188,18 @@ Each is its own line after the step. Every one of them attaches to the **nearest
 which means a property written after an `if` or a `case` closer still lands on the step above it.
 A property with no step anywhere before it is an error naming the key.
 
-| line                   | meaning                                                                                                                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id: <name>;`          | names the step so `merge: <name>;` can target it. Must be unique across step ids and `[merge: name]` names; a collision reports `duplicate step id "<name>"` twice, once at each site |
-| `label: <text>;`       | the step's left-gutter caption, separate from the box text                                                                                                                            |
-| `desc: <text>;`        | the description column; takes the fenced form                                                                                                                                         |
-| `remark: <text>;`      | the remark column; takes the fenced form                                                                                                                                              |
-| `remark-desc: <text>;` | **appends** to `remark` with one blank line between paragraphs; may repeat. The serializer never writes it — it folds into `remark:` on the next save                                 |
-| `skip;`                | drops the step from the gutter numbering. Exactly this spelling: `skip: true;` is the error `skip must be written as skip;`                                                           |
-| `level: <1-9>;`        | the step's depth in the numbering tree (see below). `level: 1;` is the default and is not written back                                                                                |
-| `props: <id>, <id>;`   | the side-note chips on this step, in order. An id with no `/prop/` definition is created from itself                                                                                  |
-| `arrow: <type>;`       | the line style of this step's single outgoing edge: `solid`, `dashed`, `dotted`, `long-dash` or `dash-dot`. `solid` is the default and is not written back                            |
+| line                   | meaning                                                                                                                                                                                                                                                         |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id: <name>;`          | names the step so `merge: <name>;` can target it. Must be unique across step ids and `[merge: name]` names; a collision reports `duplicate step id "<name>"` twice, once at each site                                                                           |
+| `label: <text>;`       | the step's left-gutter caption, separate from the box text                                                                                                                                                                                                      |
+| `desc: <text>;`        | the description column; takes the fenced form                                                                                                                                                                                                                   |
+| `remark: <text>;`      | the remark column; takes the fenced form                                                                                                                                                                                                                        |
+| `remark-desc: <text>;` | **appends** to `remark` with one blank line between paragraphs; may repeat. The serializer never writes it — it folds into `remark:` on the next save                                                                                                           |
+| `skip;`                | drops the step from the gutter numbering. Exactly this spelling: `skip: true;` is the error `skip must be written as skip;`                                                                                                                                     |
+| `level: <1-9>;`        | the step's depth in the numbering tree (see below). `level: 1;` is the default and is not written back                                                                                                                                                          |
+| `link: <path>;`        | this step opens another flow. Relative to this file's folder (`../ops/pick.md`) or from the diagrams root with a leading `/`. The box takes the `subroutine` shape unless its `<block>` sets one, and carries a ↗ mark that opens the target in the web preview |
+| `props: <id>, <id>;`   | the side-note chips on this step, in order. An id with no `/prop/` definition is created from itself                                                                                                                                                            |
+| `arrow: <type>;`       | the line style of this step's single outgoing edge: `solid`, `dashed`, `dotted`, `long-dash` or `dash-dot`. `solid` is the default and is not written back                                                                                                      |
 
 `desc:`, `remark:` and `remark-desc:` take the same fence as `/page/`:
 
@@ -347,6 +348,7 @@ still renders what it could read.
 | `duplicate step id "…"`                                                                                              | two step `id:` values, or a step `id:` and a `[merge: name]`, that agree |
 | `skip must be written as skip;`                                                                                      | `skip`, `skip: true;`, `skip-reason:`                                    |
 | `level must be written as level: <1-9>;`                                                                             | `level: 0;`, `level: 10;`, a missing `;`                                 |
+| `link must be written as link: <path>;`                                                                              | `link: ;`, a path containing spaces, a missing `;`                       |
 | `arrow: must be one of solid, dashed, dotted, long-dash, dash-dot`                                                   | any other line type                                                      |
 | `merge outside if`                                                                                                   | `merge;` or `merge: x;` at the top level or inside a fork path or group  |
 | `use merge: <id>; instead of merge <id>;`                                                                            | the colon was left out                                                   |
