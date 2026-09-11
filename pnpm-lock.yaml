@@ -122,49 +122,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)
 
-  apps/mcp:
-    dependencies:
-      '@modelcontextprotocol/server':
-        specifier: ^2.0.0
-        version: 2.0.0
-      '@swimlane-cloud/diagram-converter':
-        specifier: workspace:*
-        version: link:../../packages/diagram-converter
-      mcp-handler:
-        specifier: ^2.1.1
-        version: 2.1.1(@modelcontextprotocol/server@2.0.0)(next@15.5.19(@playwright/test@1.63.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
-      next:
-        specifier: ^15.1.0
-        version: 15.5.19(@playwright/test@1.63.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      react:
-        specifier: ^19.0.0
-        version: 19.2.7
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.2.7(react@19.2.7)
-      zod:
-        specifier: ^4.0.0
-        version: 4.6.2
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.0
-        version: 22.19.19
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.16
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.2.3(@types/react@19.2.16)
-      prettier:
-        specifier: ^3.9.6
-        version: 3.9.6
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.6(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)
-
   apps/saas:
     dependencies:
       '@milkdown/kit':
@@ -173,6 +130,9 @@ importers:
       '@milkdown/react':
         specifier: ^7.22.1
         version: 7.22.1(@codemirror/language@6.12.4)(@codemirror/state@6.7.4)(@codemirror/view@6.43.11)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-view@1.42.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
+      '@modelcontextprotocol/server':
+        specifier: ^2.0.0
+        version: 2.0.0
       '@supabase/ssr':
         specifier: ^0.5.2
         version: 0.5.2(@supabase/supabase-js@2.107.0)
@@ -197,6 +157,9 @@ importers:
       lucide-react:
         specifier: ^0.469.0
         version: 0.469.0(react@19.2.7)
+      mcp-handler:
+        specifier: ^2.1.1
+        version: 2.1.1(@modelcontextprotocol/server@2.0.0)(next@15.5.19(@playwright/test@1.63.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
       next:
         specifier: ^15.1.0
         version: 15.5.19(@playwright/test@1.63.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -215,6 +178,9 @@ importers:
       stripe:
         specifier: ^17.4.0
         version: 17.7.0
+      zod:
+        specifier: ^4.0.0
+        version: 4.6.2
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.0.0
