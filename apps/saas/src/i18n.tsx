@@ -341,6 +341,9 @@ export const EN: Record<string, string> = {
   "commit.mode.preview": "preview",
   "commit.mode.diff": "diff",
   "commit.mode.text": "text",
+  "commit.diff.marks": "Change marks",
+  "commit.diff.asText": "Compare as text",
+  "commit.diff.asDiagram": "Show on the diagram",
   // pr panel
   "pr.empty": "No pull requests yet. On the Edit page, start an edit and request a review.",
   "pr.review": "Review & comments",
@@ -887,6 +890,9 @@ export const JA: Record<string, string> = {
   "commit.mode.preview": "プレビュー",
   "commit.mode.diff": "差分",
   "commit.mode.text": "テキスト",
+  "commit.diff.marks": "変更マーク",
+  "commit.diff.asText": "テキストで比較",
+  "commit.diff.asDiagram": "図の上で表示",
   // pr panel
   "pr.empty":
     "プルリクエストはまだありません。編集ページで編集を開始し、レビューを依頼してください。",

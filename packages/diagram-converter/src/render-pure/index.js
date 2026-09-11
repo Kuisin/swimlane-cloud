@@ -18,7 +18,8 @@ export { renderBlockIcon, BlockIcon } from "./block-icon.js";
 export { LUCIDE_ICON_NODES, getLucideIconNode } from "./icon-paths.js";
 export { renderPartsPreviewHtml } from "./parts-preview-static.js";
 export { renderTemplatePartsPreviewHtml } from "./template-parts-preview.js";
-export { textToSvg } from "./text-to-svg.js";
+export { textToSvg, textDiffToSvg } from "./text-to-svg.js";
+export { diffModelRows, diffModels, rowCaption } from "./row-diff.js";
 export { relativeLinkPath, resolveLinkPath } from "../link-path.js";
 export { migrateLegacyDsl, migrateLegacySpellings } from "../legacy-migrate.js";
 export {
