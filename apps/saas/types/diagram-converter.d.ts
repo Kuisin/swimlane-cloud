@@ -149,17 +149,26 @@ declare module "@swimlane-cloud/diagram-converter/markdown-doc" {
   /**
    * How a key was written, so it can be written back the same way.
    *
+   * `before` is the run of lines that preceded the key and belong to no key of
+   * their own — a comment, a blank line the author grouped with. They are
+   * re-emitted ahead of it, so editing one key costs nothing else in the file.
+   *
+   * The runtime map also holds a symbol-keyed entry for the lines after the
+   * last key. It is deliberately not in this type: a symbol cannot collide with
+   * a real key, and every consumer here walks the map for metadata keys only.
+   * Anything iterating it must still tolerate a non-string key at runtime.
+   *
    * Must stay in lockstep with `markdown-doc.js` — nothing typechecks an
    * ambient declaration against the module it describes, so a wrong entry here
    * is only discovered at runtime.
    */
   export type FrontmatterShape = Map<
     string,
-    | { kind: "scalar"; quoted?: boolean; blank?: boolean }
-    | { kind: "list"; indent: string; quoted?: boolean }
-    | { kind: "flowList"; quoted?: boolean }
-    | { kind: "map"; indent: string; shape: FrontmatterShape }
-    | { kind: "verbatim"; lines: string[] }
+    | { kind: "scalar"; quoted?: boolean; blank?: boolean; before?: string[] }
+    | { kind: "list"; indent: string; quoted?: boolean; before?: string[] }
+    | { kind: "flowList"; quoted?: boolean; before?: string[] }
+    | { kind: "map"; indent: string; shape: FrontmatterShape; before?: string[] }
+    | { kind: "verbatim"; lines: string[]; before?: string[] }
   >;
   export function splitFrontmatter(md: string): {
     meta: MetaRecord;

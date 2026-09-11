@@ -245,16 +245,27 @@ function emitKey(rawKey, value, how, indent) {
  *
  * A `verbatim` key has no value to carry, so it is kept whenever its shape is —
  * dropping it would delete a line this module merely failed to understand.
+ *
+ * `how.before` and the `TRAILING` entry carry the lines that belong to no key
+ * at all — comments, blank lines. They are written back where they were found.
  */
 function emitMap(values, kept, indent) {
   const all = { ...values };
-  for (const [key, how] of kept) if (how.kind === "verbatim" && !(key in all)) all[key] = "";
-  const known = [...kept.keys()].filter((k) => k in all);
+  for (const [key, how] of kept) {
+    if (how.kind === "verbatim" && !(key in all)) all[key] = "";
+  }
+  const known = [...kept.keys()].filter((k) => typeof k === "string" && k in all);
   const added = Object.keys(all).filter((k) => !kept.has(k));
   const keys = [...known, ...orderedMetaKeys(Object.fromEntries(added.map((k) => [k, all[k]])))];
 
   const lines = [];
-  for (const key of keys) lines.push(...emitKey(key, values[key], kept.get(key), indent));
+  for (const key of keys) {
+    const how = kept.get(key);
+    if (how?.before) lines.push(...how.before);
+    lines.push(...emitKey(key, values[key], how, indent));
+  }
+  const trailing = kept.get(TRAILING);
+  if (trailing && lines.length) lines.push(...trailing.lines);
   return lines;
 }
 
@@ -393,6 +404,14 @@ function ownedLines(lines, from, indent) {
 
 const VERBATIM = Symbol("verbatim");
 
+/**
+ * Where a mapping's shape remembers the lines that follow its last key — a
+ * closing comment, a trailing blank. A symbol, so it can share the shape map
+ * with the real keys while never colliding with one or being mistaken for one
+ * by anything that walks the map looking for metadata.
+ */
+const TRAILING = Symbol("trailing");
+
 /** The value and shape for one key, or `VERBATIM` when it cannot be modelled. */
 function parseEntry(line, cut, owned, indent) {
   const inline = line.slice(cut + 1).trim();
@@ -423,8 +442,11 @@ function parseEntry(line, cut, owned, indent) {
   if (!nested.shape.size) return VERBATIM;
   // A sequence of mappings (`- x: 1`) re-reads as a mapping whose keys are
   // `- x`. It round-trips, but those are not keys anyone can edit, so the whole
-  // value goes through verbatim instead.
-  for (const key of nested.shape.keys()) if (SEQUENCE_ENTRY.test(key)) return VERBATIM;
+  // value goes through verbatim instead. Only real keys are tested: a shape map
+  // also holds symbol entries, which are this module's own, never the author's.
+  for (const key of nested.shape.keys()) {
+    if (typeof key === "string" && SEQUENCE_ENTRY.test(key)) return VERBATIM;
+  }
   return { value: nested.values, how: { kind: "map", indent: childIndent, shape: nested.shape } };
 }
 
@@ -464,13 +486,18 @@ function readMapKey(line, indent) {
 function parseMapBlock(lines, indent) {
   const values = {};
   const shape = new Map();
+  // Lines that are not a key of this mapping — a comment, a blank line, an
+  // orphan this parser could not place. They belong to the next key that
+  // follows them, so an author's grouping and notes come back where they were.
+  let before = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!line.trim()) continue;
-    if (indentOf(line) !== indent) continue;
-    const found = readMapKey(line, indent);
-    if (!found) continue;
+    const found = line.trim() && indentOf(line) === indent ? readMapKey(line, indent) : null;
+    if (!found) {
+      before.push(line);
+      continue;
+    }
     const { key, cut } = found;
 
     const owned = ownedLines(lines, i + 1, indent);
@@ -479,17 +506,17 @@ function parseMapBlock(lines, indent) {
     const source = [line, ...owned];
     const parsed = parseEntry(line, cut, owned, indent);
     if (parsed !== VERBATIM && found.quoted) parsed.how.quotedKey = true;
-    if (
+    const modelled =
       parsed !== VERBATIM &&
-      emitKey(key, parsed.value, parsed.how, indent).join("\n") === source.join("\n")
-    ) {
-      values[key] = parsed.value;
-      shape.set(key, parsed.how);
-      continue;
-    }
-    shape.set(key, { kind: "verbatim", lines: source });
+      emitKey(key, parsed.value, parsed.how, indent).join("\n") === source.join("\n");
+    const how = modelled ? parsed.how : { kind: "verbatim", lines: source };
+    if (before.length) how.before = before;
+    before = [];
+    if (modelled) values[key] = parsed.value;
+    shape.set(key, how);
   }
 
+  if (before.length) shape.set(TRAILING, { kind: "trailing", lines: before });
   return { values, shape };
 }
 

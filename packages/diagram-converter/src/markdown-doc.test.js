@@ -135,6 +135,60 @@ body
     expect(serializeFrontmatter(rest, shape)).not.toContain("status:");
   });
 
+  it("keeps a comment, and the blank line an author grouped with it", () => {
+    // Frontmatter a person wrote by hand can carry notes to the next person.
+    // Nothing in the value model has anywhere to put them, so before this they
+    // were simply gone the first time anyone edited any other key.
+    const md = `---
+# who to ask about this flow
+owner: x
+
+# set by the release job — do not edit
+version: 3
+---
+
+body
+`;
+    const { meta, shape } = splitFrontmatter(md);
+    expect(meta).toEqual({ owner: "x", version: "3" });
+    expect(serializeFrontmatter(meta, shape)).toBe(md.slice(0, md.indexOf("\nbody")));
+  });
+
+  it("keeps a comment left after the last key", () => {
+    const md = "---\nowner: x\n# nothing follows this\n---\n\nbody\n";
+    const { meta, shape } = splitFrontmatter(md);
+    expect(serializeFrontmatter(meta, shape)).toBe("---\nowner: x\n# nothing follows this\n---\n");
+  });
+
+  it("keeps a comment when the key above it is edited", () => {
+    // The point of the whole mechanism: an edit to one key must not cost the
+    // author anything else in the file.
+    const md = "---\n# ask finance\nowner: x\n# generated\nversion: 3\n---\n\nbody\n";
+    const { meta, shape } = splitFrontmatter(md);
+    expect(serializeFrontmatter({ ...meta, owner: "y" }, shape)).toBe(
+      "---\n# ask finance\nowner: y\n# generated\nversion: 3\n---\n",
+    );
+  });
+
+  it("keeps a comment inside a nested map", () => {
+    const md = "---\napprovals:\n  # both are required\n  finance: alice\n---\n\nbody\n";
+    const { meta, shape } = splitFrontmatter(md);
+    expect(meta.approvals).toEqual({ finance: "alice" });
+    expect(serializeFrontmatter(meta, shape)).toBe(
+      "---\napprovals:\n  # both are required\n  finance: alice\n---\n",
+    );
+  });
+
+  it("drops a comment only when the key it introduces is itself removed", () => {
+    // A comment belongs to the key below it, so deleting that key takes its
+    // note with it. Leaving the note behind would strand it on the next key,
+    // where it would say something untrue.
+    const md = "---\nowner: x\n# how many times this shipped\nversion: 3\n---\n\nbody\n";
+    const { meta, shape } = splitFrontmatter(md);
+    const { version: _gone, ...rest } = meta;
+    expect(serializeFrontmatter(rest, shape)).toBe("---\nowner: x\n---\n");
+  });
+
   it("models a nested map, and keeps a block scalar verbatim", () => {
     // A nested map is part of the value model now. A `|` block scalar is not —
     // it has no form this module can rebuild, so it is carried through exactly
