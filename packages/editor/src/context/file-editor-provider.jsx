@@ -275,13 +275,36 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
         setFiles((cur) => cur.filter((f) => f.id !== e.id));
         return;
       }
+      // A host that only knows *that* a file changed (its listing moved) sends
+      // no content. That is not "the file is now empty" — treating it so
+      // re-initialised a freshly renamed document from a blank template. Read
+      // the file instead, and only replace what nobody has edited since.
+      if (e.dsl == null) {
+        if (documents.some((d) => d.id === e.id) && hostHas(host, "read")) {
+          host
+            .read(e.id)
+            .then((text) => {
+              if (typeof text !== "string") return;
+              setDocuments((cur) =>
+                cur.map((d) =>
+                  d.id === e.id && !isDocumentDirty(d)
+                    ? syncDocumentFromDisk(d, text, { isDirty: false, skipStaleBlank: true })
+                    : d,
+                ),
+              );
+            })
+            .catch(() => {});
+        }
+        refreshFileList();
+        return;
+      }
       setDocuments((cur) => {
         const existing = cur.find((d) => d.id === e.id);
         if (!existing) return cur; // not open; will appear on next list refresh
         const dirty = isDocumentDirty(existing);
         return cur.map((d) =>
           d.id === e.id
-            ? syncDocumentFromDisk(d, e.dsl ?? "", { isDirty: dirty, skipStaleBlank: true })
+            ? syncDocumentFromDisk(d, e.dsl, { isDirty: dirty, skipStaleBlank: true })
             : d,
         );
       });

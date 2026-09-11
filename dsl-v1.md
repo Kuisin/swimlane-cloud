@@ -290,6 +290,7 @@ Inside an `if` case, two statements jump to one:
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `merge;`         | the **first marker row after this `if`'s `end-if`**. With none, the error is `merge; has no [merge] marker after this if`                         |
 | `merge: <name>;` | the step whose `id:` is `<name>`, or the `[merge: <name>]` marker of that name, wherever it sits. With neither, `merge: no step with id "<name>"` |
+| `[merge: <name>]` | inside an `if`, the same jump in the bracket spelling — the block whose `id:` is `<name>`, ahead or **back up the flow**; `[merge]` alone is the bare `merge;`. Outside an `if` the brackets define a landing marker (above) |
 
 Both are legal only inside an `if` — inside a `fork` path or at the top level the error is `merge
 outside if`. `merge <name>;` without the colon is rejected with the message that names the fix, `use

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, Plus, Settings } from "lucide-react";
 import { renderDiagramSvg } from "@swimlane-cloud/diagram-converter";
 import { resolveDiagramOptions } from "@swimlane-cloud/diagram-converter/diagram-options";
@@ -438,21 +439,28 @@ export function GuiMode({
                   >
                     <ChevronDown size={12} />
                   </button>
-                  {dropOpen && (
-                    <AddStepMenu
-                      position={dropPos}
-                      onClose={() => setDropOpen(false)}
-                      onAddIf={addIfBranch}
-                      onAddSwitch={addSwitch}
-                      onAddFork={addFork}
-                      onAddSection={addSection}
-                      onAddBranch={addSubBranch}
-                      onAddMergeMarker={addMergeMarker}
-                      onAddLoop={addLoop}
-                      onAddMerge={addMerge}
-                      canJump={enclosingIfId(rows, selectedIndex) != null}
-                    />
-                  )}
+                  {dropOpen &&
+                    // Portaled to <body>: the menu is `position: fixed`, and
+                    // inside a host page whose ancestors transform, clip or
+                    // stack it would land off-screen or under something.
+                    createPortal(
+                      <div className="sw-editor sw-dialog-root">
+                        <AddStepMenu
+                          position={dropPos}
+                          onClose={() => setDropOpen(false)}
+                          onAddIf={addIfBranch}
+                          onAddSwitch={addSwitch}
+                          onAddFork={addFork}
+                          onAddSection={addSection}
+                          onAddBranch={addSubBranch}
+                          onAddMergeMarker={addMergeMarker}
+                          onAddLoop={addLoop}
+                          onAddMerge={addMerge}
+                          canJump={enclosingIfId(rows, selectedIndex) != null}
+                        />
+                      </div>,
+                      document.body,
+                    )}
                 </div>
               )}
               <button

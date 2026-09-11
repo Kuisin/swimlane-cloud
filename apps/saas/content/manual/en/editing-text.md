@@ -250,13 +250,14 @@ The ten colour names are `blue`, `green`, `red`, `orange`, `purple`,
 
 ### Jumps and landing points
 
-| Construct       | What it does                                                            | Example          |
-| --------------- | ----------------------------------------------------------------------- | ---------------- |
-| `[merge]`       | A landing point in the main flow                                        | `[merge]`        |
-| `[merge: name]` | A _named_ landing point                                                 | `[merge: join]`  |
-| `merge;`        | From inside a case: continue at the first landing point after this `if` | `merge;`         |
-| `merge: name;`  | From inside a case: continue at that step `id:` or named landing point  | `merge: closed;` |
-| `[loop]`        | From inside a case: go back to the question                             | `[loop]`         |
+| Construct       | What it does                                                              | Example          |
+| --------------- | ------------------------------------------------------------------------- | ---------------- |
+| `[merge]`       | A landing point in the main flow                                          | `[merge]`        |
+| `[merge: name]` | A _named_ landing point                                                   | `[merge: join]`  |
+| `merge;`        | From inside a case: continue at the first landing point after this `if`   | `merge;`         |
+| `[merge: id]`   | From inside a case: jump to the block whose `id:` is `id` — ahead or back | `[merge: check]` |
+| `merge: name;`  | From inside a case: continue at that step `id:` or named landing point    | `merge: closed;` |
+| `[loop]`        | From inside a case: go back to the question                               | `[loop]`         |
 
 ```
 @kai-swimlane
