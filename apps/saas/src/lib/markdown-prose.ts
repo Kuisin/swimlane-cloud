@@ -61,81 +61,6 @@ export function carriedValues(shape: FrontmatterShape): Map<string, string[]> {
 }
 
 /**
- * The engine's frontmatter API still types a value as a plain string, because
- * the ambient declaration in `apps/saas/types/diagram-converter.d.ts` has not
- * been widened to the `string | string[] | nested map` model the package now
- * has. This cast is the only place that gap lives.
- */
-function asEngineMeta(meta: MetaRecord): Record<string, string> {
-  return meta as unknown as Record<string, string>;
-}
-
-/** Keys whose value comes back different after one serialize/parse trip. */
-function roundTripFailures(meta: MetaRecord, shape?: FrontmatterShape): string[] {
-  const back = splitFrontmatter(serializeFrontmatter(asEngineMeta(meta), shape)).meta as MetaRecord;
-  return Object.keys(meta).filter((key) => metaText(meta[key]) !== metaText(back[key]));
-}
-
-/**
- * The metadata to hand the engine, and the keys it could not take at all.
- *
- * Asked of the engine rather than assumed: serialize, parse it back, and see
- * what changed. A sequence that does not survive as a sequence is retried as
- * the comma-joined scalar the engine flattens one to, which is how a list still
- * round-trips through a build of the engine that cannot yet write an array.
- * Whatever still fails is left out entirely, so `serializeFrontmatter` re-emits
- * it from `shape` exactly as the document already had it.
- *
- * DELETE THIS WHOLE FUNCTION when `feat/md-metadata-engine` merges, and call
- * `serializeFrontmatter(meta, shape)` directly with the structured values.
- * `splitFrontmatter` round-trip-verifies every key on that branch and keeps any
- * key it cannot re-emit byte-identically as `verbatim` — so this outer check
- * becomes strictly redundant with the engine's inner one and can never fire.
- * Left standing it would read like a guard while guarding nothing; the engine
- * author confirmed the direct call is supported and covered by tests.
- * `md.notWritable` goes with it — that string exists only to explain a value
- * this rejected.
- *
- * `unwritableKeys` and `rewritable` DO NOT go with it. `rewritable` compares
- * re-emitted bytes against the file's own bytes, which is upstream of the
- * engine's model rather than inside it: the engine's parse-time verification
- * catches anything its *model* mangles, but neither it nor this could catch a
- * value flattened before serialization ever ran — which is exactly the bug that
- * put the check here. Two checks at two layers, not one check twice. After the
- * merge `unwritableKeys` keeps only its `parts.rewritable` branch and drops the
- * `forEngine` call.
- *
- * Before deleting it, know what it did once, and why that is not a reason to
- * keep it. `MapControl` used to write a nested value back as the *text* of
- * itself, and this rejected the write — which is the only reason that bug never
- * reached a file. It would not catch it after the merge either: post-merge the
- * engine can write `{ repo: "name: docs" }` and read back that exact string, so
- * the trip is clean and the structure is gone. What makes the deletion safe is
- * that the bug is fixed at its source — `mapEntriesOf` now marks an entry the
- * editor cannot take back, and the control keeps the original value. Delete
- * this; do not delete that.
- */
-function forEngine(
-  meta: MetaRecord,
-  shape?: FrontmatterShape,
-): { engine: MetaRecord; rejected: string[] } {
-  let engine = meta;
-  let failing = roundTripFailures(engine, shape);
-  const flattenable = failing.filter((key) => Array.isArray(engine[key]));
-  if (flattenable.length) {
-    engine = { ...engine };
-    for (const key of flattenable) engine[key] = metaText(meta[key]);
-    failing = roundTripFailures(engine, shape);
-  }
-  if (!failing.length) return { engine, rejected: [] };
-  const kept: MetaRecord = {};
-  for (const [key, value] of Object.entries(engine)) {
-    if (!failing.includes(key)) kept[key] = value;
-  }
-  return { engine: kept, rejected: failing };
-}
-
-/**
  * Whether this document's frontmatter may be rewritten at all.
  *
  * The test is the strongest one available: re-emit exactly what was parsed and
@@ -143,27 +68,31 @@ function forEngine(
  * engine's model of this file is lossy somewhere, and writing it back would
  * edit lines nobody touched.
  *
- * This is not hypothetical. Today's engine reads a sequence of mappings —
+ * The engine already verifies each key this way as it parses — it re-emits the
+ * key and demotes it to `verbatim` unless the result matches the lines it came
+ * from — so on a healthy document this can only agree with it. That makes the
+ * question worth asking precisely: what does a whole-document check add over a
+ * per-key one that is already byte-exact?
  *
- *     reviewers:
- *       - name: Jane
+ * It covers the lines that belong to no key. That gap was not hypothetical: a
+ * standalone `# comment` and an author's blank line were silently deleted on
+ * every save until the engine learned to carry them, because the per-key check
+ * had nothing to attach them to and a green gate had nothing to notice. The
+ * shape of that bug is the point — the per-key check is only as wide as the set
+ * of things the model knows are there. This one compares the whole block and so
+ * does not need to know what it is looking for, which is what makes it worth
+ * keeping now that the known gaps are closed: it is the thing that sees the
+ * next one.
  *
- * — as an ordinary flattenable list whose one item is the string `name: Jane`,
- * and re-emits it quoted, as `- "name: Jane"`. A sequence of mappings has
- * silently become a sequence of strings, in a file the author only opened to
- * change some other key. The per-key round-trip check in `forEngine` does not
- * catch it, because that compares the flattened projection and the projection
- * is identical on both sides: it verifies serialization fidelity against a
- * value that was already wrong. Only comparing against the original bytes sees
- * it.
- *
- * So a document that fails this keeps its frontmatter exactly as it is, and the
- * form reports every key as unwritable rather than saving some of them over a
- * structure it cannot reproduce. Refusing an edit is recoverable; rewriting
- * somebody's YAML underneath them is not.
+ * A document that fails this keeps its frontmatter exactly as it is, and the
+ * form says so once rather than saving some keys over a structure it cannot
+ * reproduce. Refusing an edit is recoverable; rewriting somebody's YAML
+ * underneath them is not. The one shape known to fail today is a duplicate key,
+ * which collapses to last-wins — YAML calls that document an error, so freezing
+ * it rather than silently rewriting it is the right answer anyway.
  */
 function rewritable(meta: MetaRecord, shape: FrontmatterShape, frontmatter: string): boolean {
-  return serializeFrontmatter(asEngineMeta(meta), shape) === frontmatter;
+  return serializeFrontmatter(meta, shape) === frontmatter;
 }
 
 /** Split a stored document into metadata, prose, and the untouched fence. */
@@ -192,23 +121,6 @@ export function toProse(stored: string): MarkdownParts {
 }
 
 /**
- * Keys whose value would not survive being written and read back — the ones
- * the form must show as "left unchanged" rather than pretend it saved.
- *
- * Every key when the document's frontmatter cannot be reproduced at all: none
- * of it is being rewritten, so none of it can be edited. Pass `parts` to get
- * that answer; the bare `(meta, shape)` form only knows about single values.
- */
-export function unwritableKeys(
-  meta: MetaRecord,
-  shape?: FrontmatterShape,
-  parts?: Pick<MarkdownParts, "rewritable">,
-): string[] {
-  if (parts && !parts.rewritable) return Object.keys(meta);
-  return forEngine(meta, shape).rejected;
-}
-
-/**
  * Reassemble a stored document.
  *
  * If the placeholder is gone — the editor dropped the HTML comment, or the
@@ -222,7 +134,7 @@ export function unwritableKeys(
  */
 export function fromProse(parts: MarkdownParts, prose: string): string {
   const frontmatter = parts.rewritable
-    ? serializeFrontmatter(asEngineMeta(forEngine(parts.meta, parts.shape).engine), parts.shape)
+    ? serializeFrontmatter(parts.meta, parts.shape)
     : parts.frontmatter;
   if (!parts.fence) return frontmatter + prose;
 

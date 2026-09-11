@@ -398,7 +398,6 @@ export const EN: Record<string, string> = {
   "md.undeclared": "extra",
   "md.applyDefaults": "Fill in the project's defaults",
   "md.carried": "Kept exactly as written. Edit this value in the file itself.",
-  "md.notWritable": "This value cannot be saved in this form yet, so it was left unchanged.",
   "md.frozen":
     "This file's metadata is written in a form the editor cannot rewrite without changing it, so it is kept exactly as it is. Your prose still saves; edit these values in the file itself.",
   "md.field.none": "— none —",
@@ -1006,7 +1005,6 @@ export const JA: Record<string, string> = {
   "md.undeclared": "追加",
   "md.applyDefaults": "プロジェクトの初期値を入れる",
   "md.carried": "書かれたとおりに保持します。この値はファイル本体で編集してください。",
-  "md.notWritable": "この値はまだこのフォームから保存できないため、変更しませんでした。",
   "md.frozen":
     "このファイルのメタデータは、エディタが書き戻すと内容が変わってしまう形式で書かれているため、そのまま保持します。本文の変更は保存されます。値はファイル本体で編集してください。",
   "md.field.none": "— なし —",
