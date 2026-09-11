@@ -5,6 +5,7 @@ import { resolveDiagramOptions } from "@swimlane-cloud/diagram-converter/diagram
 import { THEMES } from "@swimlane-cloud/diagram-converter/themes";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
 import { useT } from "../../i18n.jsx";
+import { useEditor } from "../../context/editor-context.js";
 import { useDragWidth } from "../../hooks/use-drag-width.js";
 import { parseGuiModel, applyModelEdit } from "../../lib/gui-model.js";
 import {
@@ -46,9 +47,20 @@ export function GuiMode({
   errors,
   parseOptions,
   diagramDefaults,
+  documentInfo,
+  onLinkClick,
   onSwitchToText,
 }) {
   const { t } = useT();
+  const { files, activeDocumentId } = useEditor();
+  // Every other diagram file, for the step inspector's "link to another flow".
+  const linkTargets = useMemo(
+    () =>
+      (files || [])
+        .filter((f) => f.id !== activeDocumentId && /\.(txt|md)$/i.test(f.id))
+        .map((f) => ({ id: f.id, label: f.id })),
+    [files, activeDocumentId],
+  );
   const stepList = useDragWidth(260, {
     min: 180,
     max: 520,
@@ -84,13 +96,14 @@ export function GuiMode({
         model: guiModel,
         theme: theme ?? THEMES.basic,
         ...opts,
+        documentInfo,
         interactive: true,
         selectedRowIndex: selectedIndex >= 0 ? selectedIndex : null,
       });
     } catch {
       return null;
     }
-  }, [guiModel, theme, selectedIndex, diagramDefaults]);
+  }, [guiModel, theme, selectedIndex, diagramDefaults, documentInfo]);
 
   const target = resolveInspectorTarget(rows, selectedIndex);
   const inspectorRow = target.inspectorRow;
@@ -485,6 +498,8 @@ export function GuiMode({
               onMove={moveStep}
               onOpenMove={() => setShowMove(true)}
               onDelete={deleteRow}
+              linkTargets={linkTargets}
+              currentFileId={activeDocumentId}
             />
           ) : inspectorRow ? (
             <BranchInspector
@@ -516,6 +531,7 @@ export function GuiMode({
             svg={interactiveSvg ?? svg}
             hasErrors={errors?.length > 0}
             onRowClick={!readOnly ? setSelectedIndex : undefined}
+            onLinkClick={onLinkClick}
           />
         </div>
       </div>

@@ -38,7 +38,8 @@ export async function GET(
     ]);
     if (!blob) return new NextResponse("Not found", { status: 404 });
 
-    const { svg } = render(blob.text, config.themeKey);
+    // The path is the one thing an embedded image cannot otherwise say.
+    const { svg } = render(blob.text, config.themeKey, { path: filePath });
     if (!svg) return new NextResponse("This diagram could not be rendered.", { status: 422 });
 
     return new NextResponse(svg, {

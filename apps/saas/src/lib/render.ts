@@ -18,13 +18,25 @@ export interface RenderResult {
  * Never throws. A DSL error must degrade to "we could not draw this", not a
  * 500 — a flagged version may legitimately contain a half-finished file.
  */
+export interface RenderExtras {
+  /** Drawn top-right for a printed image: the file's path and metadata. */
+  documentInfo?: { path?: string; meta?: Record<string, string> };
+  /** A linked step's ↗ becomes an <a href> when this names a URL for it. */
+  linkHref?: (link: string) => string | null;
+}
+
 function renderUncached(
   dsl: string,
   themeKey = "basic",
   diagramDefaults?: DiagramSettings | null,
+  extras?: RenderExtras,
 ): RenderResult {
   try {
-    const { svg, errors } = textToSvg(dsl, { themeKey, diagramDefaults: diagramDefaults ?? {} });
+    const { svg, errors } = textToSvg(dsl, {
+      themeKey,
+      diagramDefaults: diagramDefaults ?? {},
+      ...(extras ?? {}),
+    });
     return { svg, errors: errors ?? [] };
   } catch (err) {
     return { svg: null, errors: [{ msg: err instanceof Error ? err.message : String(err) }] };

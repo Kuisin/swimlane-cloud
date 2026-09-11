@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { resolveLinkPath } from "@swimlane-cloud/diagram-converter";
 import { FileEditorProvider } from "./context/file-editor-provider.jsx";
 import { useEditor } from "./context/editor-context.js";
 import { useLivePreview } from "./hooks/use-live-preview.js";
@@ -107,6 +108,15 @@ function DslEditorInner({ options }) {
   // Same resolved imports as the context's own `model`, or this debounced
   // parse would show an @use error the text editor's live error list already
   // cleared (or vice versa).
+  // What a printed image says about this file: its path, and its metadata —
+  // the host's (a `.md` file's frontmatter) when it can say, else the
+  // document's own `/meta/`.
+  const documentInfo = useMemo(() => {
+    if (!activeDocumentId) return null;
+    const hostMeta = hostHas(host, "metaOf") ? host.metaOf(activeDocumentId) : null;
+    return { path: activeDocumentId, meta: hostMeta ?? model?.meta ?? null };
+  }, [host, activeDocumentId, model]);
+
   const { svg, errors } = useLivePreview(src, {
     themeKey,
     theme,
@@ -114,7 +124,18 @@ function DslEditorInner({ options }) {
     resolveAsset: parseOptions.resolveAsset,
     filename: parseOptions.filename,
     diagramDefaults: options?.diagramDefaults,
+    documentInfo,
   });
+
+  /** A linked step's ↗ was clicked: open the flow it points at. */
+  async function openLinkedFlow(link) {
+    const target = resolveLinkPath(link, activeDocumentId);
+    if (target && files.some((f) => f.id === target)) {
+      await openFile(target);
+      return;
+    }
+    await dialog.alert(t("link.missing", { path: target ?? link }));
+  }
   const { leftPct, containerRef, onDividerMouseDown } = useSplitPane(options?.initialSplit ?? 52, {
     storageKey: "sw-editor:split-pct",
   });
@@ -440,6 +461,8 @@ function DslEditorInner({ options }) {
             errors={errors}
             parseOptions={parseOptions}
             diagramDefaults={options?.diagramDefaults}
+            documentInfo={documentInfo}
+            onLinkClick={openLinkedFlow}
             onSwitchToText={() => setMode("text")}
           />
         ) : (
@@ -471,7 +494,7 @@ function DslEditorInner({ options }) {
             />
 
             <div className="sw-split-right sw-preview-pane" style={{ width: `${100 - leftPct}%` }}>
-              <PreviewPane svg={svg} hasErrors={errors?.length > 0} />
+              <PreviewPane svg={svg} hasErrors={errors?.length > 0} onLinkClick={openLinkedFlow} />
             </div>
           </div>
         )}

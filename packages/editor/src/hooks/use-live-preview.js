@@ -12,7 +12,16 @@ import { textToSvg } from "@swimlane-cloud/diagram-converter";
  */
 export function useLivePreview(
   src,
-  { themeKey, theme, delay = 300, resolveImport, resolveAsset, filename, diagramDefaults } = {},
+  {
+    themeKey,
+    theme,
+    delay = 300,
+    resolveImport,
+    resolveAsset,
+    filename,
+    diagramDefaults,
+    documentInfo,
+  } = {},
 ) {
   const [result, setResult] = useState({ svg: null, model: null, errors: [] });
   const timer = useRef(null);
@@ -28,6 +37,7 @@ export function useLivePreview(
           resolveAsset,
           filename,
           diagramDefaults,
+          documentInfo,
         });
         setResult({
           svg: out?.svg ?? null,
@@ -45,7 +55,17 @@ export function useLivePreview(
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [src, themeKey, theme, delay, resolveImport, resolveAsset, filename, diagramDefaults]);
+  }, [
+    src,
+    themeKey,
+    theme,
+    delay,
+    resolveImport,
+    resolveAsset,
+    filename,
+    diagramDefaults,
+    documentInfo,
+  ]);
 
   return result;
 }

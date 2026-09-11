@@ -176,6 +176,10 @@ export const EN = {
   "step.none": "(none)",
   "step.arrow": "Arrow",
   "step.mergeId": "Landing point name (optional) — lets a branch jump here",
+  "step.link": "Link to another flow",
+  "step.linkNone": "(none)",
+  "step.linkHint": "Shown as ↗ on the block; click it in the preview to open the flow.",
+  "step.linkMissing": "Target not found: {path}",
   "step.level": "Numbering level",
   "step.levelHint": "1 counts 1, 2, 3; 2 counts under the previous level-1 step as 2-1, 2-2.",
   "step.props": "Side notes (optional)",
@@ -331,6 +335,8 @@ export const EN = {
   "flow.stepN": "Step {n}",
   // fatal
   "fatal.load": "Failed to load: {msg}",
+  // flow links (a step linking to another diagram file)
+  "link.missing": "No flow at {path}. Fix the link or create the file.",
 };
 
 export const JA = {
@@ -503,6 +509,11 @@ export const JA = {
   "step.none": "（なし）",
   "step.arrow": "矢印",
   "step.mergeId": "合流先の名前（任意）— 分岐からここへジャンプできます",
+  "step.link": "別のフローへリンク",
+  "step.linkNone": "（なし）",
+  "step.linkHint":
+    "ブロックに↗として表示されます。プレビューでクリックするとそのフローが開きます。",
+  "step.linkMissing": "リンク先が見つかりません: {path}",
   "step.level": "番号の階層",
   "step.levelHint": "1は1、2、3と数えます。2は直前のレベル1のステップの下で2-1、2-2と数えます。",
   "step.props": "補足チップ（任意）",
@@ -657,6 +668,8 @@ export const JA = {
   "flow.stepN": "ステップ {n}",
   // fatal
   "fatal.load": "読み込みに失敗しました：{msg}",
+  // flow links (a step linking to another diagram file)
+  "link.missing": "{path} にフローがありません。リンクを修正するか、ファイルを作成してください。",
 };
 
 const DICTS = { en: EN, ja: JA };
