@@ -31,6 +31,7 @@ import {
   editLockReason,
   getSnapshot,
   isLocked,
+  renameFile,
   resolveFileId,
   saveDrafts,
   startEdit,
@@ -575,6 +576,18 @@ function EditPageInner() {
                     void saveDrafts(projectId, branch, [{ id: p, dsl: d }])
                       .then(() => setLocalDirty(true))
                       .catch((e) => setNotice(describeError(e, t)));
+                  }}
+                  onRename={async (from, to) => {
+                    const res = await renameFile(projectId, branch, from, to);
+                    // The server may have normalised the destination (into the
+                    // diagrams root, or across .txt/.md); follow what it did.
+                    setMobileFiles((f) => {
+                      if (!f || f[from] === undefined) return f;
+                      const { [from]: text, ...rest } = f;
+                      return { ...rest, [res.to]: text };
+                    });
+                    setLocalDirty(true);
+                    setMFile(res.to);
                   }}
                   path={mFile}
                   onPath={setMFile}

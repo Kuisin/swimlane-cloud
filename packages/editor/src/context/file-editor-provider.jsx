@@ -781,12 +781,19 @@ export function FileEditorProvider({ host, projectId, options, dialogs, children
       {children}
       {/* Only ever activates for the alert/confirm/prompt methods a host's
           `dialogs` override (if any) didn't replace — a fully-overriding host
-          (e.g. the VS Code webview) never triggers a request here. */}
-      <DialogHost
-        request={dialogHost.request}
-        onOk={dialogHost.handleOk}
-        onCancel={dialogHost.handleCancel}
-      />
+          (e.g. the VS Code webview) never triggers a request here.
+
+          Wrapped in `.sw-editor` because the dialog sits *beside* the editor's
+          root, not inside it, and every colour it uses is a CSS variable that
+          root defines — without this the modal drew with no background at
+          all. `display: contents` keeps the wrapper from laying anything out. */}
+      <div className="sw-editor sw-dialog-root">
+        <DialogHost
+          request={dialogHost.request}
+          onOk={dialogHost.handleOk}
+          onCancel={dialogHost.handleCancel}
+        />
+      </div>
     </EditorContext.Provider>
   );
 }
