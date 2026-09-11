@@ -15,6 +15,7 @@ import {
   isMarkdownDiagram,
   markdownFromDsl,
   mergeMetaProjection,
+  metaText,
   orderedMetaKeys,
   projectMeta,
   readMetaSection,
@@ -370,6 +371,30 @@ ${DSL}
     const { meta, shape } = splitFrontmatter(markdownFromDsl(dsl, RICH));
     expect(meta).toEqual({ reviewers: ["Doe, Jane"], sourceRef: { system: "SAP", module: "FI" } });
     expect(verbatimKeys(shape)).toEqual(["notes"]);
+  });
+
+  /**
+   * `metaText` is the display counterpart of `projectMeta`: the projection
+   * refuses anything it cannot flatten losslessly, because it is storing;
+   * `metaText` never refuses, because it is only showing. Both live here so
+   * the renderer and a host that must flatten at its own boundary cannot drift
+   * apart and show the same document differently.
+   */
+  it("metaText flattens any value to one readable line", () => {
+    expect(metaText("plain")).toBe("plain");
+    expect(metaText(["order", "credit"])).toBe("order, credit");
+    expect(metaText({ system: "SAP", module: "FI" })).toBe("system: SAP, module: FI");
+    expect(metaText({ repo: { name: "docs", tags: ["a", "b"] } })).toBe(
+      "repo: name: docs, tags: a, b",
+    );
+    // nothing to say stays nothing, so a caller can skip the line entirely
+    expect(metaText({})).toBe("");
+    expect(metaText([])).toBe("");
+    expect(metaText(undefined)).toBe("");
+    expect(metaText(null)).toBe("");
+    // and unlike the projection, it flattens what /meta/ would have refused
+    expect(projectMeta({ k: ["Doe, Jane"] })).toEqual({});
+    expect(metaText(["Doe, Jane"])).toBe("Doe, Jane");
   });
 
   it("mergeMetaProjection is the rule on its own", () => {

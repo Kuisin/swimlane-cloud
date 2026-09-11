@@ -558,6 +558,36 @@ export function isMarkdownDiagram(md) {
   return extractDiagramFence(splitFrontmatter(md).body) !== null;
 }
 
+/* ──────────────────────────── showing a value ──────────────────────────── */
+
+/**
+ * One metadata value as a single line of human-readable text.
+ *
+ * A value may be a list or a nested map, so `String(value)` prints
+ * `[object Object]` or loses a separator. This is the one flattening for
+ * *display* — distinct from `projectMeta`, which flattens for the `/meta/`
+ * section and refuses anything it cannot flatten losslessly. This one never
+ * refuses: it is for showing, not for storing, so it is lossy on purpose.
+ *
+ * It lives here rather than in the renderer because more than one place has to
+ * do it — the diagram's document-info panel, and any host whose own contract is
+ * strings (`saas-host`'s `metaOf`). Two implementations would drift, and the
+ * same document would then read differently in two products.
+ */
+export function metaText(value) {
+  if (Array.isArray(value)) return value.map(metaText).filter(Boolean).join(LIST_SEP);
+  if (isPlainObject(value)) {
+    return Object.entries(value)
+      .map(([key, inner]) => {
+        const text = metaText(inner);
+        return text ? `${key}: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join(LIST_SEP);
+  }
+  return String(value ?? "");
+}
+
 /* ───────────────────────── the DSL's /meta/ section ────────────────────── */
 
 function markerAt(line) {
