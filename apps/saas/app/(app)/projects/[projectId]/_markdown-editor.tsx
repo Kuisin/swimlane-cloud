@@ -20,9 +20,37 @@ import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
-import { Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Lock, Plus, Trash2, X } from "lucide-react";
 import { useT } from "@/i18n";
-import { fromProse, toProse, type MarkdownParts } from "@/lib/markdown-prose";
+import {
+  carriedValues,
+  fromProse,
+  toProse,
+  unwritableKeys,
+  type MarkdownParts,
+} from "@/lib/markdown-prose";
+import {
+  booleanValueOf,
+  hasFillableDefaults,
+  isMapValue,
+  labelOf,
+  listItemsOf,
+  mapEntriesOf,
+  metaText,
+  metadataRows,
+  problemsByKey,
+  removeMetaKey,
+  validateMetadata,
+  withDefaults,
+  withoutCarried,
+  BOOLEAN_FALSE,
+  BOOLEAN_TRUE,
+  type MetaRecord,
+  type MetaRow,
+  type MetaValue,
+  type MetadataField,
+  type MetadataProblem,
+} from "@/lib/metadata-schema";
 import "./markdown-editor.css";
 
 function Surface({
@@ -66,26 +94,285 @@ function Surface({
   return <Milkdown />;
 }
 
-/** The frontmatter editor: `/meta/` is not editable anywhere else in the GUI. */
-function MetadataForm({
-  meta,
+const INPUT =
+  "min-w-0 w-full rounded-md border border-neutral-300 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none disabled:bg-neutral-50";
+
+/** One key's editor, chosen by the type the project declared for it. */
+function ValueControl({
+  row,
+  readOnly,
+  invalid,
+  onChange,
+}: {
+  row: MetaRow;
+  readOnly: boolean;
+  invalid: boolean;
+  onChange: (value: MetaValue) => void;
+}) {
+  const { t } = useT();
+  const type = row.field?.type ?? guessType(row.value);
+  const border = invalid ? "border-red-400" : "";
+  const text = metaText(row.value);
+
+  switch (type) {
+    case "text":
+      return (
+        <textarea
+          value={text}
+          rows={3}
+          disabled={readOnly}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${INPUT} ${border} resize-y`}
+        />
+      );
+    case "enum": {
+      const values = row.field?.values ?? [];
+      return (
+        <select
+          value={text}
+          disabled={readOnly}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${INPUT} ${border}`}
+        >
+          <option value="">{t("md.field.none")}</option>
+          {values.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+          {/* A value the schema has since dropped is still offered, or choosing
+              anything else would be the only way to find out what it was. */}
+          {text !== "" && !values.includes(text) && (
+            <option value={text}>{t("md.field.offList", { value: text })}</option>
+          )}
+        </select>
+      );
+    }
+    case "list":
+      return <ListControl items={listItemsOf(row.value)} readOnly={readOnly} onChange={onChange} />;
+    case "date":
+      return (
+        <input
+          type="date"
+          value={/^\d{4}-\d{2}-\d{2}$/.test(text) ? text : ""}
+          disabled={readOnly}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${INPUT} ${border}`}
+        />
+      );
+    case "number":
+      return (
+        <input
+          type="number"
+          value={text}
+          disabled={readOnly}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${INPUT} ${border}`}
+        />
+      );
+    case "boolean":
+      return (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={booleanValueOf(row.value)}
+            disabled={readOnly}
+            onChange={(e) => onChange(e.target.checked ? BOOLEAN_TRUE : BOOLEAN_FALSE)}
+          />
+          {booleanValueOf(row.value) ? t("md.field.yes") : t("md.field.no")}
+        </label>
+      );
+    case "map":
+      return <MapControl value={row.value} readOnly={readOnly} onChange={onChange} />;
+    default:
+      return (
+        <input
+          value={text}
+          disabled={readOnly}
+          placeholder={metaText(row.field?.default)}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${INPUT} ${border}`}
+        />
+      );
+  }
+}
+
+/** What control an undeclared key gets: whatever its value already looks like. */
+function guessType(value: MetaValue): MetadataField["type"] {
+  if (Array.isArray(value)) return "list";
+  if (isMapValue(value)) return "map";
+  return "string";
+}
+
+/** A tag editor: one chip per item, so a comma inside a value cannot split it. */
+function ListControl({
+  items,
   readOnly,
   onChange,
 }: {
-  meta: Record<string, string>;
+  items: string[];
   readOnly: boolean;
-  onChange: (next: Record<string, string>) => void;
+  onChange: (value: string[]) => void;
+}) {
+  const { t } = useT();
+  const [draft, setDraft] = useState("");
+  const add = () => {
+    const value = draft.trim();
+    setDraft("");
+    if (!value || items.includes(value)) return;
+    onChange([...items, value]);
+  };
+  return (
+    <div className="space-y-1">
+      {items.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {items.map((item) => (
+            <span
+              key={item}
+              className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700"
+            >
+              {item}
+              {!readOnly && (
+                <button
+                  type="button"
+                  title={t("common.delete")}
+                  onClick={() => onChange(items.filter((v) => v !== item))}
+                  className="text-indigo-400 hover:text-red-600"
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+      {!readOnly && (
+        <input
+          value={draft}
+          placeholder={t("md.field.addItem")}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={add}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" && e.key !== ",") return;
+            e.preventDefault();
+            add();
+          }}
+          className={INPUT}
+        />
+      )}
+    </div>
+  );
+}
+
+/** A nested map: key/value pairs one level deep, which is what a schema `map` is. */
+function MapControl({
+  value,
+  readOnly,
+  onChange,
+}: {
+  value: MetaValue;
+  readOnly: boolean;
+  onChange: (value: Record<string, string>) => void;
+}) {
+  const { t } = useT();
+  const entries = mapEntriesOf(value);
+  const set = (from: string, key: string, v: string) => {
+    const next: Record<string, string> = {};
+    for (const [k, existing] of entries) {
+      if (k === from) next[key] = v;
+      else next[k] = existing;
+    }
+    onChange(next);
+  };
+  return (
+    <div className="space-y-1">
+      {entries.map(([key, v]) => (
+        <div key={key} className="flex items-center gap-1">
+          <input
+            value={key}
+            disabled={readOnly}
+            onChange={(e) => set(key, e.target.value, v)}
+            className={`${INPUT} w-24 shrink-0 font-mono text-xs`}
+          />
+          <input
+            value={v}
+            disabled={readOnly}
+            onChange={(e) => set(key, key, e.target.value)}
+            className={INPUT}
+          />
+          {!readOnly && (
+            <button
+              type="button"
+              title={t("common.delete")}
+              onClick={() => onChange(Object.fromEntries(entries.filter(([k]) => k !== key)))}
+              className="rounded p-1 text-neutral-400 hover:bg-red-50 hover:text-red-600"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
+      ))}
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={() => onChange({ ...Object.fromEntries(entries), "": "" })}
+          disabled={entries.some(([k]) => k === "")}
+          className="inline-flex items-center gap-1 rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-40"
+        >
+          <Plus size={12} /> {t("md.field.addPair")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** One problem as a sentence, in the reader's language. */
+function problemText(
+  problem: MetadataProblem,
+  t: (key: string, vars?: Record<string, string>) => string,
+): string {
+  switch (problem.code) {
+    case "required":
+      return t("md.problem.required");
+    case "enum":
+      return t("md.problem.enum", { values: (problem.values ?? []).join(", ") });
+    case "date":
+      return t("md.problem.date");
+    default:
+      return t("md.problem.type", { type: t(`metadata.type.${problem.type}`) });
+  }
+}
+
+/**
+ * The frontmatter editor: `/meta/` is not editable anywhere else in the GUI.
+ *
+ * Schema-driven where the project has declared one, and a plain key/value list
+ * where it has not — a key somebody wrote by hand is shown and kept either way,
+ * because the schema says what a document *should* hold, not all it may hold.
+ */
+function MetadataForm({
+  meta,
+  fields,
+  carried,
+  readOnly,
+  onChange,
+}: {
+  meta: MetaRecord;
+  fields: MetadataField[];
+  /** Keys the engine can only carry verbatim, with the lines it holds them on. */
+  carried: Map<string, string[]>;
+  readOnly: boolean;
+  onChange: (next: MetaRecord) => void;
 }) {
   const { t } = useT();
   const [newKey, setNewKey] = useState("");
-  const entries = Object.entries(meta);
+  const rows = metadataRows(meta, fields, carried);
+  const problems = problemsByKey(
+    withoutCarried(validateMetadata(meta, fields), [...carried.keys()]),
+  );
+  const unwritable = new Set(unwritableKeys(meta));
 
-  const setValue = (key: string, value: string) => onChange({ ...meta, [key]: value });
-  const remove = (key: string) => {
-    const next = { ...meta };
-    delete next[key];
-    onChange(next);
-  };
+  const setValue = (key: string, value: MetaValue) => onChange({ ...meta, [key]: value });
   const add = () => {
     const key = newKey.trim();
     if (!key || key in meta) return;
@@ -94,34 +381,86 @@ function MetadataForm({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
         {t("md.metadata")}
       </h2>
-      {entries.length === 0 && <p className="text-xs text-neutral-400">{t("md.noMetadata")}</p>}
-      {entries.map(([key, value]) => (
-        <div key={key} className="flex items-center gap-2">
-          <span className="w-24 shrink-0 truncate font-mono text-xs text-neutral-500" title={key}>
-            {key}
-          </span>
-          <input
-            value={value}
-            disabled={readOnly}
-            onChange={(e) => setValue(key, e.target.value)}
-            className="min-w-0 flex-1 rounded-md border border-neutral-300 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none disabled:bg-neutral-50"
-          />
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={() => remove(key)}
-              title={t("common.delete")}
-              className="rounded-md p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-600"
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
-      ))}
+      {rows.length === 0 && <p className="text-xs text-neutral-400">{t("md.noMetadata")}</p>}
+
+      {!readOnly && hasFillableDefaults(meta, fields) && (
+        <button
+          type="button"
+          onClick={() => onChange(withDefaults(meta, fields))}
+          className="w-full rounded-md border border-dashed border-neutral-300 px-2 py-1 text-xs text-neutral-500 hover:border-indigo-400 hover:text-indigo-600"
+        >
+          {t("md.applyDefaults")}
+        </button>
+      )}
+
+      {rows.map((row) => {
+        if (row.kind === "carried") {
+          return (
+            <div key={`carried:${row.key}`} className="space-y-1">
+              <span className="flex items-center gap-1 font-mono text-xs text-neutral-500">
+                <Lock size={11} /> {row.key}
+              </span>
+              <pre className="overflow-x-auto rounded-md border border-neutral-200 bg-neutral-100 p-2 text-[11px] leading-tight text-neutral-600">
+                {(row.lines ?? []).join("\n")}
+              </pre>
+              <p className="text-[11px] text-neutral-400">{t("md.carried")}</p>
+            </div>
+          );
+        }
+        const keyProblems = problems[row.key] ?? [];
+        return (
+          <div key={row.key} className="space-y-1">
+            <div className="flex items-center gap-1">
+              <span
+                className="min-w-0 flex-1 truncate text-xs font-medium text-neutral-600"
+                title={row.key}
+              >
+                {row.field ? labelOf(row.field) : row.key}
+                {row.field?.required && <span className="text-red-500"> *</span>}
+              </span>
+              {row.kind === "extra" && (
+                <span className="shrink-0 rounded bg-neutral-200 px-1 text-[10px] text-neutral-600">
+                  {t("md.undeclared")}
+                </span>
+              )}
+              {!readOnly && row.present && (
+                <button
+                  type="button"
+                  onClick={() => onChange(removeMetaKey(meta, row.key))}
+                  title={t("common.delete")}
+                  className="shrink-0 rounded-md p-1 text-neutral-400 hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
+            <ValueControl
+              row={row}
+              readOnly={readOnly}
+              invalid={keyProblems.length > 0}
+              onChange={(value) => setValue(row.key, value)}
+            />
+            {row.field?.help && <p className="text-[11px] text-neutral-400">{row.field.help}</p>}
+            {keyProblems.map((problem, i) => (
+              <p key={i} className="flex items-start gap-1 text-[11px] text-red-600">
+                <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+                {problemText(problem, t)}
+              </p>
+            ))}
+            {unwritable.has(row.key) && (
+              <p className="flex items-start gap-1 text-[11px] text-amber-700">
+                <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+                {t("md.notWritable")}
+              </p>
+            )}
+          </div>
+        );
+      })}
+
       {!readOnly && (
         <div className="flex items-center gap-2 pt-1">
           <input
@@ -148,12 +487,15 @@ function MetadataForm({
 export default function MarkdownEditor({
   path,
   stored,
+  fields = [],
   readOnly = false,
   onSave,
 }: {
   path: string;
   /** The file exactly as stored: frontmatter, prose and (maybe) the fence. */
   stored: string;
+  /** The project's declared metadata schema; empty when it has none. */
+  fields?: MetadataField[];
   readOnly?: boolean;
   onSave: (path: string, next: string) => void;
 }) {
@@ -161,7 +503,8 @@ export default function MarkdownEditor({
   // Re-derived only when the document itself changes, so typing does not
   // rebuild the parts (and the fence) on every keystroke.
   const initial = useMemo<MarkdownParts>(() => toProse(stored), [stored]);
-  const [meta, setMeta] = useState(initial.meta);
+  const carried = useMemo(() => carriedValues(initial.shape), [initial]);
+  const [meta, setMeta] = useState<MetaRecord>(initial.meta);
   const proseRef = useRef(initial.prose);
 
   useEffect(() => {
@@ -170,7 +513,7 @@ export default function MarkdownEditor({
   }, [initial]);
 
   const save = useCallback(
-    (nextMeta: Record<string, string>, nextProse: string) => {
+    (nextMeta: MetaRecord, nextProse: string) => {
       onSave(path, fromProse({ ...initial, meta: nextMeta }, nextProse));
     },
     [initial, onSave, path],
@@ -185,7 +528,7 @@ export default function MarkdownEditor({
   );
 
   const onMetaChange = useCallback(
-    (next: Record<string, string>) => {
+    (next: MetaRecord) => {
       setMeta(next);
       save(next, proseRef.current);
     },
@@ -209,7 +552,13 @@ export default function MarkdownEditor({
         </div>
       </div>
       <aside className="hidden w-72 shrink-0 overflow-auto border-l border-neutral-200 bg-neutral-50 p-4 lg:block">
-        <MetadataForm meta={meta} readOnly={readOnly} onChange={onMetaChange} />
+        <MetadataForm
+          meta={meta}
+          fields={fields}
+          carried={carried}
+          readOnly={readOnly}
+          onChange={onMetaChange}
+        />
       </aside>
     </div>
   );

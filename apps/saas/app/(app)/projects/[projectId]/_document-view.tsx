@@ -15,6 +15,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n";
+import type { MetadataField } from "@/lib/metadata-schema";
 import type { SaasEditorHost } from "@/lib/saas-host";
 
 const MarkdownEditor = dynamic(() => import("./_markdown-editor"), {
@@ -36,6 +37,7 @@ function Centered({ children }: { children: React.ReactNode }) {
 export function DocumentView({
   host,
   path,
+  fields,
   readOnly,
   onSaved,
   onError,
@@ -43,6 +45,8 @@ export function DocumentView({
 }: {
   host: SaasEditorHost;
   path: string;
+  /** The project's declared metadata schema, driving the form beside the prose. */
+  fields?: MetadataField[];
   readOnly: boolean;
   onSaved: () => void;
   onError: (message: string) => void;
@@ -114,5 +118,13 @@ export function DocumentView({
 
   if (failed) return <Centered>{t("edit.fileNotFound")}</Centered>;
   if (stored == null) return <Centered>{t("loading")}</Centered>;
-  return <MarkdownEditor path={path} stored={stored} readOnly={readOnly} onSave={onSave} />;
+  return (
+    <MarkdownEditor
+      path={path}
+      stored={stored}
+      fields={fields}
+      readOnly={readOnly}
+      onSave={onSave}
+    />
+  );
 }

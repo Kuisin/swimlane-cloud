@@ -1,17 +1,23 @@
 import {
   parseDiagramSettings,
-  parseRepoSettings,
   PROD_BRANCH,
-  repoSettingsJson,
   REPO_SETTINGS_PATH,
   TEMPLATE_MODES,
   TEMPLATE_SECTIONS,
   type DiagramSettings,
-  type SwimlaneSettings,
   type TemplateMode,
   type TemplateSection,
 } from "@swimlane-cloud/github-client";
 import { withApi, json, readJson, ApiError } from "@/lib/api";
+import {
+  METADATA_FIELD_TYPES,
+  isMetadataKey,
+  parseMetadataFields,
+  parseProjectSettings,
+  projectSettingsJson,
+  type MetadataField,
+  type ProjectSettings,
+} from "@/lib/metadata-schema";
 import { requireProjectRole } from "@/lib/projects";
 import { readTextAt } from "@/lib/repo-files";
 import { getServiceSupabase } from "@/lib/supabase/server";
@@ -23,13 +29,42 @@ export const runtime = "nodejs";
 export const GET = withApi(async (_req, ctx: { params: Promise<{ projectId: string }> }) => {
   const { projectId } = await ctx.params;
   const project = await requireProjectRole(projectId, "viewer");
-  const settings = parseRepoSettings(await readTextAt(project, REPO_SETTINGS_PATH, PROD_BRANCH));
+  const settings = parseProjectSettings(await readTextAt(project, REPO_SETTINGS_PATH, PROD_BRANCH));
   return json({ settings });
 });
 
 interface PatchBody {
   diagram?: Partial<DiagramSettings>;
   templates?: Partial<Record<TemplateSection, TemplateMode>>;
+  /** The declared document-metadata fields, replacing whatever is on file. */
+  metadata?: { fields?: unknown };
+}
+
+/**
+ * The fields to store, refusing anything the settings page should not have
+ * been able to send. `parseMetadataFields` is forgiving by design — a hand-
+ * edited file must not break the app — but a request that means to declare a
+ * field and gets it wrong should hear about it rather than have it silently
+ * vanish.
+ */
+function checkedFields(raw: unknown): MetadataField[] {
+  if (!Array.isArray(raw)) throw new ApiError(400, "metadata.fields must be an array");
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    const e = (entry ?? {}) as Record<string, unknown>;
+    const key = typeof e.key === "string" ? e.key.trim() : "";
+    if (!key) throw new ApiError(400, "every metadata field needs a key");
+    if (!isMetadataKey(key)) throw new ApiError(400, `invalid metadata key "${key}"`);
+    if (seen.has(key)) throw new ApiError(400, `duplicate metadata key "${key}"`);
+    seen.add(key);
+    if (!(METADATA_FIELD_TYPES as readonly unknown[]).includes(e.type)) {
+      throw new ApiError(400, `invalid type for metadata key "${key}"`);
+    }
+    if (e.type === "enum" && !(Array.isArray(e.values) && e.values.some((v) => String(v).trim()))) {
+      throw new ApiError(400, `metadata key "${key}" is a choice list with no choices`);
+    }
+  }
+  return parseMetadataFields(raw);
 }
 
 /** The file's vocabulary → the policy table's. */
@@ -103,7 +138,7 @@ export const PATCH = withApi(async (req, ctx: { params: Promise<{ projectId: str
   const input = await readJson<PatchBody>(req);
 
   const existing = await readTextAt(project, REPO_SETTINGS_PATH, PROD_BRANCH);
-  const current = parseRepoSettings(existing);
+  const current = parseProjectSettings(existing);
 
   const diagram = { ...current.diagram, ...(input.diagram ?? {}) };
   const checked = parseDiagramSettings(diagram);
@@ -122,12 +157,21 @@ export const PATCH = withApi(async (req, ctx: { params: Promise<{ projectId: str
     templates[section as TemplateSection] = mode as TemplateMode;
   }
 
+  // Absent means "leave the schema alone"; an empty array means "declare
+  // nothing", which is how the settings page removes the last field.
+  const fields = input.metadata ? checkedFields(input.metadata.fields) : current.metadata?.fields;
+
   await syncTemplatePolicies(projectId, project.user.id, input.templates ?? {});
 
-  const next: SwimlaneSettings = { ...current, diagram: checked, templates };
+  const next: ProjectSettings = {
+    ...current,
+    diagram: checked,
+    templates,
+    ...(fields?.length ? { metadata: { fields } } : { metadata: undefined }),
+  };
   await project.write.putFile(
     REPO_SETTINGS_PATH,
-    repoSettingsJson(next),
+    projectSettingsJson(next),
     PROD_BRANCH,
     `Update ${REPO_SETTINGS_PATH}`,
   );

@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   Smartphone,
   Upload,
 } from "lucide-react";
@@ -21,6 +22,8 @@ import { INTEGRATION_BRANCH, isEditBranch, PROD_BRANCH } from "@swimlane-cloud/g
 import { branchKindOf, branchLabel } from "@/lib/branch-label";
 import { createSaasHost } from "@/lib/saas-host";
 import { dslOf, isMarkdownFile } from "@/lib/diagram-file";
+import { MetadataSearch } from "@/components/metadata-search";
+import type { MetadataDocumentEntry } from "@/lib/types";
 import { DocumentView } from "../_document-view";
 import {
   abandonEdit,
@@ -29,6 +32,7 @@ import {
   defaultBranch,
   discardDrafts,
   editLockReason,
+  getMetadata,
   getSnapshot,
   isLocked,
   renameFile,
@@ -42,6 +46,7 @@ import {
   Badge,
   MobileView,
   MobilePrompt,
+  Modal,
   describeError,
   isMobileDevice,
   useProject,
@@ -302,6 +307,37 @@ function EditPageInner() {
     };
   }, [ready, mobile, mFile, host]);
 
+  // "Find by metadata": one read of the branch's documents, made when the
+  // panel is first opened and again whenever the branch changes under it, so
+  // nobody pays for it who never searches.
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchDocs, setSearchDocs] = useState<MetadataDocumentEntry[] | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const metadataFields = useMemo(
+    () => state?.settings.metadata?.fields ?? [],
+    [state?.settings.metadata],
+  );
+
+  useEffect(() => {
+    setSearchDocs(null);
+  }, [branch]);
+
+  useEffect(() => {
+    if (!showSearch || searchDocs) return;
+    let cancelled = false;
+    setSearchError(null);
+    void getMetadata(projectId, branch)
+      .then((res) => {
+        if (!cancelled) setSearchDocs(res.documents);
+      })
+      .catch((e) => {
+        if (!cancelled) setSearchError(describeError(e, t));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showSearch, searchDocs, projectId, branch]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Diagrams still stored as raw DSL. The tree listing already gave us every
   // path, so offering the conversion costs no extra request — and the offer
   // disappears by itself once a project has none left.
@@ -482,6 +518,10 @@ function EditPageInner() {
                 </>
               ))}
 
+            <Action onClick={() => setShowSearch(true)}>
+              <Search size={14} /> {t("search.action")}
+            </Action>
+
             {markdownFile && !mobile && (
               <Action onClick={() => setDocPref(!docView)}>
                 {docView ? (
@@ -614,6 +654,7 @@ function EditPageInner() {
               <DocumentView
                 host={host}
                 path={mFile}
+                fields={metadataFields}
                 readOnly={readOnly}
                 onSaved={() => setLocalDirty(true)}
                 onError={setNotice}
@@ -639,6 +680,22 @@ function EditPageInner() {
               />
             )}
           </div>
+
+          {showSearch && (
+            <Modal title={t("search.title")} onClose={() => setShowSearch(false)} maxW="max-w-2xl">
+              <MetadataSearch
+                documents={searchDocs}
+                fields={metadataFields}
+                loading={!searchDocs && !searchError}
+                error={searchError}
+                onOpen={(path) => {
+                  setShowSearch(false);
+                  setMFile(path);
+                  setMStep(null);
+                }}
+              />
+            </Modal>
+          )}
 
           {showPrompt && <MobilePrompt onMobile={chooseMobile} onStay={stayEditor} />}
 
