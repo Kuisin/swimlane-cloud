@@ -52,9 +52,9 @@ const MESSAGES = {
     subBranch: "sub-branch",
     case: "case",
     cases: "cases",
-    mergeTo: "merges to",
-    mergeNext: "next landing marker",
-    mergeTarget: "merge point",
+    mergeTo: "jumps to",
+    mergeNext: "(no target)",
+    mergeTarget: "step id",
     mergeBack: "rejoins main flow",
     dragStep: "drag to reorder",
     parseIssues: (n) => `${n} parse issue${n === 1 ? "" : "s"} — showing what parsed.`,
@@ -85,9 +85,9 @@ const MESSAGES = {
     subBranch: "サブ分岐",
     case: "ケース",
     cases: "ケース",
-    mergeTo: "合流先",
-    mergeNext: "次の合流地点",
-    mergeTarget: "合流ポイント",
+    mergeTo: "ジャンプ先",
+    mergeNext: "（未設定）",
+    mergeTarget: "ステップID",
     mergeBack: "本流へ合流",
     dragStep: "ドラッグして並べ替え",
     parseIssues: (n) => `${n} 件の解析エラー — 解析できた範囲を表示しています。`,
@@ -513,6 +513,8 @@ function Node({ node, ctx, hasNext = false }) {
         </>
       );
     case "merge": {
+      // `[goto: id]` always names a real step, so a target is the norm; the
+      // fallback only shows for a document the reader already flagged.
       const hasTarget = Boolean(node.target);
       const targetLabel = hasTarget ? ctx.tree.mergeTargets?.[node.target] : null;
       return (
@@ -543,25 +545,6 @@ function Node({ node, ctx, hasNext = false }) {
         </>
       );
     }
-    case "landing":
-      // 0-height in the desktop SVG render (the merge arrow itself shows
-      // where it lands); on mobile it still needs *some* presence so a
-      // landing marker with a name can be told apart from empty space —
-      // shown as a subtle labeled divider rather than a card.
-      return (
-        <>
-          <div className="flex items-center gap-2 self-stretch px-1 py-1">
-            <span className="h-px flex-1 bg-slate-200" aria-hidden />
-            {node.name && (
-              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                ⤓ {node.name}
-              </span>
-            )}
-            <span className="h-px flex-1 bg-slate-200" aria-hidden />
-          </div>
-          {hasNext && <FlowConnector />}
-        </>
-      );
     default:
       return null;
   }

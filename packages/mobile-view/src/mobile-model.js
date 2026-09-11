@@ -135,9 +135,6 @@ export function buildMobileTree(model) {
       case "branchMerge":
         push({ type: "merge", target: (row.mergeTarget || "").trim(), rowIndex: ri });
         break;
-      case "mergeMarker":
-        push({ type: "landing", name: (row.name || "").trim(), rowIndex: ri });
-        break;
       case "branchStart": {
         const branch = {
           type: "branch",
@@ -228,17 +225,12 @@ export function buildMobileTree(model) {
     }
   }
 
-  // Map each merge-target id to a display label, so a mid-flow `merge: <id>`
-  // (or `goto @id`) can show where the branch rejoins, not just the raw id.
-  // A step's `id:` maps to that step's label; a landing marker's name maps to
-  // itself with a "⤓ " prefix so it reads as a marker rather than a step.
+  // Map each jump-target id to a display label, so a mid-flow `[goto: <id>]`
+  // can show where the branch rejoins, not just the raw id. Every target is a
+  // step now (the landing-marker row kind is gone), so a step's `id:` maps to
+  // that step's own label.
   const mergeTargets = {};
   for (const row of model.rows || []) {
-    if (row.kind === "mergeMarker") {
-      const name = (row.name || "").trim();
-      if (name) mergeTargets[name] = `⤓ ${name}`;
-      continue;
-    }
     if (row.kind !== "step" || row.empty) continue;
     const id = (row.mergeId || "").trim();
     if (id) mergeTargets[id] = (row.name || row.text || "").trim() || id;

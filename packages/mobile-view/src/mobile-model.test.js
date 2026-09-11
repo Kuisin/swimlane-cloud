@@ -64,15 +64,16 @@ label: Alice;
 if (cancel?)
 case (yes)
 [a: Stop]
-goto @fin
+[goto: fin]
 case ()
 [a: Continue]
 end-if
-[a: Finish] @fin
+[a: Finish]
+id: fin;
 @end
 `;
 
-describe("mid-flow merge", () => {
+describe("mid-flow jump", () => {
   const { tree } = dslToMobile(MERGE_DSL);
 
   it("renders a merge node pointing at the target id", () => {
@@ -189,7 +190,7 @@ describe("case nodes carry what a host needs to edit them", () => {
   });
 });
 
-const LANDING_DSL = `@kai-swimlane
+const JUMP_DSL = `@kai-swimlane
 /title/
 L;
 /role/
@@ -201,33 +202,39 @@ label: Alice;
 if (cancel?)
 case (yes)
 [a: Stop]
-goto
+[goto: done]
 case ()
 [a: Continue]
 end-if
-merge @done
 [a: End]
+id: done;
 @end
 `;
 
-describe("landing markers (mergeMarker rows)", () => {
-  const { tree } = dslToMobile(LANDING_DSL);
+/**
+ * There is no landing-marker row kind any more, so a jump's destination is an
+ * ordinary step that named itself with `id:` — nothing extra appears in the
+ * flow at the landing point, and `mergeTargets` is just a step-label lookup.
+ */
+describe("a jump lands on a real step, not a marker row", () => {
+  const { tree } = dslToMobile(JUMP_DSL);
 
-  it("renders a top-level landing node carrying its name", () => {
-    const landing = tree.nodes.find((n) => n.type === "landing");
-    expect(landing).toBeTruthy();
-    expect(landing.name).toBe("done");
+  it("parses cleanly and adds no node of its own at the destination", () => {
+    expect(tree.errors).toEqual([]);
+    expect(tree.nodes.some((n) => n.type === "landing")).toBe(false);
+    // The destination is just the step, in its normal place in the flow.
+    expect(tree.nodes.filter((n) => n.type === "step").at(-1).text).toBe("End");
   });
 
-  it("maps a named landing marker into mergeTargets with a ⤓ prefix", () => {
-    expect(tree.mergeTargets.done).toBe("⤓ done");
+  it("labels the target with the destination step's own text", () => {
+    expect(tree.mergeTargets.done).toBe("End");
   });
 
-  it("keeps a bare merge's target empty (lands on the next marker)", () => {
+  it("always names a target — there is no bare jump to leave it empty", () => {
     const branch = tree.nodes.find((n) => n.type === "branch");
     const merge = branch.cases[0].children.find((n) => n.type === "merge");
     expect(merge).toBeTruthy();
-    expect(merge.target).toBe("");
+    expect(merge.target).toBe("done");
   });
 });
 
