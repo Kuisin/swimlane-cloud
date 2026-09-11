@@ -22,7 +22,7 @@ import {
   writeMetaSection,
 } from "./markdown-doc.js";
 
-const DSL = `@kai-swimlane-v2
+const DSL = `@kai-swimlane
 
 /title/
 Order to cash;
@@ -191,16 +191,17 @@ body
 });
 
 /**
- * `/meta/` is a version 2 section — version 1's entry in dsl-rule.md:142 is
- * "—". Injecting one into a version 1 diagram wrote a section its reader
- * ignores, so a GUI save (which regenerates the diagram from the model) found
- * no `/meta/` to lift back out and wiped the frontmatter entirely.
+ * There is one grammar now, and every document can hold `/meta/` — so a
+ * document with no diagram-level metadata simply has none, rather than
+ * being unable to carry any. `dslFromMarkdown` / `markdownFromDsl` inject and
+ * lift `/meta/` uniformly; the case that used to be special (a "version 1"
+ * header that could not hold `/meta/` at all) no longer exists.
  */
-describe("a version 1 diagram, which cannot hold metadata", () => {
-  const V1 = `@kai-swimlane
+describe("a diagram with no metadata of its own", () => {
+  const BARE = `@kai-swimlane
 
 /title/
-Sample
+Sample;
 
 /line/
 [a: x]
@@ -212,20 +213,25 @@ owner: fi.coe@example.com
 ---
 
 \`\`\`kai-swimlane
-${V1}
+${BARE}
 \`\`\`
 `;
 
-  it("keeps its frontmatter out of the fence", () => {
+  it("injects the frontmatter into the fence as /meta/", () => {
     const dsl = dslFromMarkdown(DOC);
-    expect(dsl).toBe(V1);
-    expect(dsl).not.toContain("/meta/");
+    expect(dsl).not.toBe(BARE);
+    expect(dsl).toContain("/meta/");
+    const model = parseDSL(dsl);
+    expect(model.errors).toEqual([]);
+    expect(model.meta).toEqual({ id: "BF-AC-010-001", owner: "fi.coe@example.com" });
   });
 
   it("keeps the frontmatter through a save that regenerates the diagram", () => {
-    // Stands in for GUI mode, which rebuilds the DSL from the parsed model and
-    // so cannot carry anything version 1 has no syntax for.
-    const regenerated = `${V1.replace("[a: x]", "[a: edited]")}`;
+    // Stands in for GUI mode, which rebuilds the DSL from the parsed model.
+    const regenerated = writeMetaSection(BARE.replace("[a: x]", "[a: edited]"), {
+      id: "BF-AC-010-001",
+      owner: "fi.coe@example.com",
+    });
     const saved = markdownFromDsl(regenerated, DOC);
     expect(splitFrontmatter(saved).meta).toEqual({
       id: "BF-AC-010-001",
@@ -234,8 +240,8 @@ ${V1}
     expect(saved).toContain("[a: edited]");
   });
 
-  it("invents no frontmatter for a brand new version 1 document", () => {
-    expect(markdownFromDsl(V1).startsWith("---")).toBe(false);
+  it("invents no frontmatter for a brand new document with no metadata", () => {
+    expect(markdownFromDsl(BARE).startsWith("---")).toBe(false);
   });
 
   it("still round-trips byte for byte", () => {
@@ -290,13 +296,13 @@ describe("extractDiagramFence", () => {
   });
 
   it("ignores an unclosed fence rather than swallowing the rest of the file", () => {
-    expect(extractDiagramFence("```kai-swimlane\n@kai-swimlane-v2\n")).toBeNull();
+    expect(extractDiagramFence("```kai-swimlane\n@kai-swimlane\n")).toBeNull();
   });
 
   it("survives a DSL that itself contains a fenced value", () => {
     // A `desc:` can be a ```-fenced multi-line value, so the wrapper fence has
     // to be longer than anything inside it.
-    const inner = "@kai-swimlane-v2\n/line/\n[a: x]\n  desc: ```\n  one\n  two\n  ```;\n@end";
+    const inner = "@kai-swimlane\n/line/\n[a: x]\n  desc: ```\n  one\n  two\n  ```;\n@end";
     const md = markdownFromDsl(inner);
     expect(extractDiagramFence(splitFrontmatter(md).body)?.dsl).toBe(inner);
     // and it must still parse
@@ -400,7 +406,7 @@ const EXAMPLES = join(
   "..",
   "..",
   "examples",
-  "kai-swimlane-v2",
+  "kai-swimlane",
   "diagrams",
 );
 

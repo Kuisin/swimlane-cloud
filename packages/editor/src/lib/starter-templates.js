@@ -44,9 +44,10 @@ label: Approver;
 /line/
 
 [applicant: Submit request]
-if (approved?) is (yes) than #green
+if (approved?) #green
+case (yes) #green
   [approver: Approve request]
-else-if (no) than #red
+case (no) #red
   [approver: Reject request]
 end-if
 

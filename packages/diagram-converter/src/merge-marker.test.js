@@ -5,7 +5,7 @@ import { renderDiagramSvg } from "./render-pure/diagram.js";
 
 const render = (dsl) => renderDiagramSvg({ model: parseDSL(dsl), theme: THEMES.basic });
 
-const v1 = (body) => `@kai-swimlane
+const doc = (body) => `@kai-swimlane
 /role/
 <a>
 label: A;
@@ -16,104 +16,10 @@ ${body}
 @end
 `;
 
-const v2 = (body) => `@kai-swimlane-v2
-/role/
-<a>
-label: A;
-<b>
-label: B;
-/line/
-${body}
-@end
-`;
-
-describe("a landing marker (v1)", () => {
-  it("parses `[merge]` and a bare `merge;` that lands on it", () => {
-    const model = parseDSL(
-      v1(`[a: start]
-if (cancel?) is (yes) than
-  [a: accept]
-  merge;
-else
-  [b: normal]
-end-if
-[a: refund]
-[merge]
-[a: done]`),
-    );
-    expect(model.errors).toEqual([]);
-    const merge = model.rows.find((r) => r.kind === "branchMerge");
-    expect(merge.mergeTarget).toBeNull();
-    const marker = model.rows.find((r) => r.kind === "mergeMarker");
-    expect(marker).toMatchObject({ name: null });
-    expect(model.rows[model.rows.indexOf(marker) + 1]).toMatchObject({ text: "done" });
-  });
-
-  it("parses `[merge: name]` and lets `merge: name;` target it", () => {
-    const model = parseDSL(
-      v1(`if (x?) is (yes) than
-  [a: one]
-  merge: done;
-else
-  [b: two]
-end-if
-[merge: done]
-[a: after]`),
-    );
-    expect(model.errors).toEqual([]);
-    expect(model.rows.find((r) => r.kind === "mergeMarker")).toMatchObject({ name: "done" });
-  });
-
-  it("rejects a bare merge with no marker after its if", () => {
-    const model = parseDSL(
-      v1(`if (x?) is (yes) than
-  [a: one]
-  merge;
-end-if
-[a: after]`),
-    );
-    expect(model.errors.map((e) => e.msg)).toContain("merge; has no [merge] marker after this if");
-  });
-
-  it("rejects a marker name that is also a step id", () => {
-    const model = parseDSL(
-      v1(`[a: one]
-id: done;
-[merge: done]
-[a: two]`),
-    );
-    expect(model.errors.filter((e) => e.msg === 'duplicate step id "done"')).toHaveLength(2);
-  });
-
-  it("renders exactly as the id-based form does, with the marker taking no space", () => {
-    const withMarker = v1(`[a: start]
-if (cancel?) is (yes) than
-  [a: accept]
-  merge;
-else
-  [b: normal]
-end-if
-[a: refund]
-[merge]
-[a: done]`);
-    const withId = v1(`[a: start]
-if (cancel?) is (yes) than
-  [a: accept]
-  merge: done;
-else
-  [b: normal]
-end-if
-[a: refund]
-[a: done]
-id: done;`);
-    expect(render(withMarker)).toBe(render(withId));
-  });
-});
-
-describe("a landing marker (v2)", () => {
+describe("a landing marker", () => {
   it("parses `merge` / `merge @name` and a bare or named `goto`", () => {
     const model = parseDSL(
-      v2(`[a: start]
+      doc(`[a: start]
 if (cancel?)
 case (yes)
   [a: accept]
@@ -137,7 +43,7 @@ merge @late
 
   it("rejects a bare goto with no marker after its if", () => {
     const model = parseDSL(
-      v2(`if (x?)
+      doc(`if (x?)
 case (yes)
   [a: one]
   goto
@@ -146,10 +52,44 @@ end-if
     );
     expect(model.errors.map((e) => e.msg)).toContain("goto has no merge marker after this if");
   });
+
+  it("rejects a marker name that is also a step id", () => {
+    const model = parseDSL(
+      doc(`[a: one] @done
+[a: two]
+merge @done`),
+    );
+    expect(model.errors.filter((e) => e.msg === 'duplicate node id "done"')).toHaveLength(1);
+  });
+
+  it("renders exactly as the id-based form does, with the marker taking no space", () => {
+    const withMarker = doc(`[a: start]
+if (cancel?)
+case (yes)
+  [a: accept]
+  goto
+case ()
+  [b: normal]
+end-if
+[a: refund]
+merge
+[a: done]`);
+    const withId = doc(`[a: start]
+if (cancel?)
+case (yes)
+  [a: accept]
+  goto @done
+case ()
+  [b: normal]
+end-if
+[a: refund]
+[a: done] @done`);
+    expect(render(withMarker)).toBe(render(withId));
+  });
 });
 
 describe("step numbering with level", () => {
-  const doc = v1(`[a: take order]
+  const body = doc(`[a: take order]
 [a: check stock]
 [b: warehouse A]
 level: 2;
@@ -163,7 +103,7 @@ skip;
 [a: bill]`);
 
   it("counts sub-steps under the previous shallower step", () => {
-    const model = parseDSL(doc);
+    const model = parseDSL(body);
     expect(model.errors).toEqual([]);
     const info = buildStepRowDisplayInfo(model.rows);
     const numbers = model.rows
@@ -174,14 +114,14 @@ skip;
   });
 
   it("writes the hierarchical number into the left gutter", () => {
-    const svg = render(doc);
+    const svg = render(body);
     expect(svg).toContain("2-2-1. ");
     expect(svg).toContain("3. ");
   });
 
   it("counts a sub-step with no parent under an implicit 1, which the next step follows", () => {
     const model = parseDSL(
-      v1(`[a: first]
+      doc(`[a: first]
 level: 2;
 [a: second]`),
     );
@@ -189,59 +129,33 @@ level: 2;
     expect([...info.values()].map((d) => d.displayIndex)).toEqual(["1-1", "2"]);
   });
 
-  it("rejects a level outside 1-9 (v1) and a non-integer level (v2)", () => {
-    expect(parseDSL(v1(`[a: x]\nlevel: 0;`)).errors.map((e) => e.msg)).toContain(
-      "level must be written as level: <1-9>;",
+  it("rejects a level outside 1-9, and a non-integer level, with the same message", () => {
+    expect(parseDSL(doc(`[a: x]\nlevel: 0;`)).errors.map((e) => e.msg)).toContain(
+      "level must be a whole number from 1 to 9",
     );
-    expect(parseDSL(v2(`[a: x]\nlevel: 1.5;`)).errors.map((e) => e.msg)).toContain(
+    expect(parseDSL(doc(`[a: x]\nlevel: 1.5;`)).errors.map((e) => e.msg)).toContain(
       "level must be a whole number from 1 to 9",
     );
   });
 });
 
-describe("the bracket spelling inside an if is the jump itself", () => {
-  it("[merge: id] sends the case to the block whose id: it names — backwards too", () => {
-    const model = parseDSL(
-      v1(`[a: start]
-id: again;
-[a: middle]
-[b: check]
-if (ok?) is (no) than
-  [merge: again]
-else
-  [b: done]
-end-if`),
-    );
-    expect(model.errors).toEqual([]);
-    const jump = model.rows.find((r) => r.kind === "branchMerge");
-    expect(jump.mergeTarget).toBe("again");
-    expect(model.rows.some((r) => r.kind === "mergeMarker")).toBe(false);
-  });
-
-  it("[merge] alone inside an if is the bare merge to the next marker", () => {
-    const model = parseDSL(
-      v1(`if (ok?) is (no) than
-  [merge]
-else
-  [b: done]
-end-if
-[merge]
-[a: after]`),
-    );
-    expect(model.errors).toEqual([]);
-    expect(model.rows.find((r) => r.kind === "branchMerge").mergeTarget).toBeNull();
-    expect(model.rows.filter((r) => r.kind === "mergeMarker")).toHaveLength(1);
-  });
-
-  it("routes a backward jump around the blocks between, not up the flow's spine", () => {
+// The earlier grammar's `[merge]` / `[merge: id]` bracket form was two
+// spellings collapsed onto one meaning depending on context — a marker
+// outside an if, a jump inside one. `legacy-migrate.test.js` covers that
+// ambiguity being converted away; the current grammar has no such thing to
+// assert here, since `goto` (jump) and `merge` (marker) are distinct
+// keywords regardless of nesting. What is still worth asserting on its own
+// is the renderer's routing geometry for a backward jump.
+describe("a backward goto's routing", () => {
+  it("routes around the blocks between, not up the flow's spine", () => {
     const svg = render(
-      v1(`[a: start]
-id: again;
+      doc(`[a: start] @again
 [a: middle]
 [a: check]
-if (ok?) is (no) than
-  [merge: again]
-else
+if (ok?)
+case (no)
+  goto @again
+case ()
   [a: done]
 end-if`),
     );

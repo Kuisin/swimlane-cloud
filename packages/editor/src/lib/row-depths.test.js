@@ -73,7 +73,8 @@ label: A;
 /line/
 
 section (Audit)
-if (x?) is (yes) than
+if (x?)
+case (yes)
 [a: inside]
 end-if
 end-section
@@ -81,11 +82,12 @@ end-section
 @end
 `;
     const result = formatDsl(src);
-    expect(result.ok).toBe(true);
+    expect(result.ok, JSON.stringify(result.errors)).toBe(true);
     const flow = result.value.split("/line/")[1].split("@end")[0].trim().split("\n");
     expect(flow).toEqual([
       "section (Audit)",
-      "  if (x?) is (yes) than",
+      "  if (x?)",
+      "  case (yes)",
       "    [a: inside]",
       "  end-if",
       "end-section",
@@ -93,7 +95,7 @@ end-section
   });
 
   it("indents a section inside a case one level under the case", () => {
-    const src = `@kai-swimlane-v2
+    const src = `@kai-swimlane
 
 /role/
 

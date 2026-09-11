@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
+import { migrateLegacyDsl } from "@swimlane-cloud/diagram-converter";
 import { formatDsl } from "./format-dsl.js";
 
 const flowOf = (text) =>
@@ -10,56 +11,8 @@ const flowOf = (text) =>
     .filter((l) => l.trim());
 
 describe("landing markers and levels survive Format", () => {
-  it("v1: [merge], [merge: name], merge;, merge: name; and level:", () => {
+  it("merge, merge @name, goto, goto @name and level:", () => {
     const src = `@kai-swimlane
-
-/role/
-
-<a>
-label: A;
-
-/line/
-
-[a: start]
-level: 2;
-if (x?) is (yes) than
-[a: one]
-merge;
-else-if (no) than
-[a: two]
-merge: late;
-end-if
-[merge]
-[a: after]
-[merge: late]
-[a: last]
-
-@end
-`;
-    const once = formatDsl(src);
-    expect(once.ok, JSON.stringify(once.errors)).toBe(true);
-    expect(flowOf(once.value)).toEqual([
-      "[a: start]",
-      "level: 2;",
-      "if (x?) is (yes) than",
-      "  [a: one]",
-      "  merge;",
-      "else-if (no) than",
-      "  [a: two]",
-      "  merge: late;",
-      "end-if",
-      "[merge]",
-      "[a: after]",
-      "[merge: late]",
-      "[a: last]",
-    ]);
-    const twice = formatDsl(once.value);
-    expect(twice.value).toBe(once.value);
-    expect(parseDSL(once.value).errors).toEqual([]);
-  });
-
-  it("v2: merge, merge @name, goto, goto @name and level:", () => {
-    const src = `@kai-swimlane-v2
 
 /role/
 
@@ -95,5 +48,40 @@ merge @late
     expect(flow).toContain("merge @late");
     expect(formatDsl(once.value).value).toBe(once.value);
     expect(parseDSL(once.value).errors).toEqual([]);
+  });
+
+  it("migrates the older [merge], [merge: name], merge;/else-if landing markers", () => {
+    const old = `@kai-swimlane
+
+/role/
+
+<a>
+label: A;
+
+/line/
+
+[a: start]
+level: 2;
+if (x?) is (yes) than
+[a: one]
+merge;
+else-if (no) than
+[a: two]
+merge: late;
+end-if
+[merge]
+[a: after]
+[merge: late]
+[a: last]
+
+@end
+`;
+    const { text: migrated, changed } = migrateLegacyDsl(old);
+    expect(changed).toBeGreaterThan(0);
+    const once = formatDsl(migrated);
+    expect(once.ok, JSON.stringify(once.errors)).toBe(true);
+    expect(parseDSL(once.value).errors).toEqual([]);
+    const twice = formatDsl(once.value);
+    expect(twice.value).toBe(once.value);
   });
 });

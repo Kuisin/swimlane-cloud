@@ -16,17 +16,17 @@ describe("tokenizeDslLine", () => {
       "",
       "   ",
       "  arrow: dashed;",
-      "if (status) is (ok) than #Done",
+      "if (status) #Done",
+      "case (ok)",
       "// a comment",
-      "*** another comment",
+      "/* another comment */",
       "@meta directive",
       "/role/",
       "<lane>: Do the thing and wait;",
-      "section-start (Intake) #S1",
-      "merge: target;",
-      "[loop];",
-      "[merge];",
-      "[merge: done];",
+      "section (Intake) #S1",
+      "goto @target",
+      "merge @done",
+      "[]",
       "level: 2;",
       "résumé: 日本語のテキスト;",
     ];
@@ -39,27 +39,35 @@ describe("tokenizeDslLine", () => {
     expect(types("/role/")).toEqual(["section:/role/"]);
     expect(types("@x")).toEqual(["meta:@x"]);
     expect(types("end-if")).toEqual(["keyword:end-if"]);
-    expect(types("end-if")).toEqual(["keyword:end-if"]);
+    expect(types("end-phase")).toEqual(["keyword:end-phase"]);
     expect(types("<ref>")).toEqual(["ref:<ref>"]);
   });
 
-  it("tokenizes [merge] / [merge: name] as one keyword/marker token, like [loop]", () => {
-    expect(types("[loop];")).toEqual(["keyword:[loop]", "punct:;"]);
-    expect(types("[merge];")).toEqual(["keyword:[merge]", "punct:;"]);
-    expect(types("[merge: done];")).toEqual(["keyword:[merge: done]", "punct:;"]);
+  it("colours the bare spacer statement", () => {
+    expect(types("[]")).toEqual(["keyword:[]"]);
   });
 
-  it("recognises `level` as a property key, like `skip`/`id`", () => {
+  it("colours goto and merge, with or without an @id", () => {
+    expect(types("goto")).toEqual(["keyword:goto"]);
+    expect(types("goto @done")).toEqual(["keyword:goto", "plain:@done"]);
+    expect(types("merge")).toEqual(["keyword:merge"]);
+    expect(types("merge @done")).toEqual(["keyword:merge", "plain:@done"]);
+  });
+
+  it("recognises `level` and `skip` as property keys, like `id`", () => {
     expect(types("level: 2;")).toEqual(["key:level", "punct::", "plain:2", "punct:;"]);
-    expect(types("id: fin;")).toEqual(["key:id", "punct::", "plain:fin", "punct:;"]);
-    expect(types("skip;")).toEqual(["keyword:skip", "punct:;"]);
+    expect(types("skip;")).toEqual(["key:skip", "punct:;"]);
   });
 
   it("colours inline keywords only on control-flow lines", () => {
-    // `is` / `than` highlight inside an `if` line...
-    expect(types("if (a) is (b) than #X")).toContain("keyword:is");
-    expect(types("if (a) is (b) than #X")).toContain("anchor:#X");
+    // `and` highlights inside a `fork` line...
+    expect(types("fork (Shipping)")).toContain("keyword:fork");
+    expect(types("and (Billing)")).toContain("keyword:and");
     // ...but a bare "and" inside step text stays plain.
     expect(types("<lane>: review and approve;")).not.toContain("keyword:and");
+  });
+
+  it("colours a blank case () as a keyword, same as a labelled one", () => {
+    expect(types("case ()")).toContain("keyword:case");
   });
 });

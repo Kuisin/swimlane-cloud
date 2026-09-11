@@ -143,10 +143,10 @@ export const convertToMarkdown = (pid: string, branch: string) =>
     renames?: { from: string; to: string }[];
   }>(`${base(pid)}/convert-markdown`, { branch });
 
-/** Rewrite the spellings the grammar no longer reads, in every diagram on a branch, in one commit. */
-export const migrateSpellings = (pid: string, branch: string) =>
+/** Rewrite every diagram on a branch from the earlier grammar into the current one, in one commit. */
+export const migrateDsl = (pid: string, branch: string) =>
   postJson<{ updated: number; lines: number; commitSha: string | null; branch: string }>(
-    `${base(pid)}/migrate-spellings`,
+    `${base(pid)}/migrate-dsl`,
     { branch },
   );
 

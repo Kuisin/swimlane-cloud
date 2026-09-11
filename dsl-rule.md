@@ -1,27 +1,21 @@
-# kai-swimlane-v2 — DSL specification
+# kai-swimlane — DSL specification
 
-This is the specification of the swimlane DSL, version 2. It is the grammar chosen from the
-candidates in [dsl-proposals.md](dsl-proposals.md) (grammar A there), where the shared
-multilingual model (§1), the squash and format-on-save rule (§2) and the intermediate
-representation (grammar F) are motivated; this document states the rules. A complete worked
-example lives in [examples/kai-swimlane-v2](examples/kai-swimlane-v2/README.md).
+This is the specification of the swimlane DSL. It is the grammar chosen from the candidates in
+[dsl-proposals.md](dsl-proposals.md) (grammar A there), where the shared multilingual model (§1),
+the squash and format-on-save rule (§2) and the intermediate representation (grammar F) are
+motivated; this document states the rules. A complete worked example lives in
+[examples/kai-swimlane](examples/kai-swimlane/README.md).
 
-**Two readers are live, and the header line picks one.** `parseDSL` in
-`packages/diagram-converter/src/parser.js` dispatches on the version it reads from the first
-non-empty line: a bare `@kai-swimlane` file is parsed by the version 1 reader in that same module,
-and a `@kai-swimlane-v2` file by `parser-v2.js`, which implements this document. Version 1 is still
-what the editor writes by default — the new-file template and every starter template carry the bare
-header — so it is the syntax most existing documents are in; it is specified in
-[dsl-v1.md](dsl-v1.md). Version 2 is opt-in per file, entered either by writing the `-v2` header or
-by converting (see _Converting from v1_). A file whose major version is 3 or higher is refused.
+**One grammar, one reader.** `parseDSL` in `packages/diagram-converter/src/parser.js` is the reader
+in `parser-v2.js`, which implements this document, and the header line is the plain
+`@kai-swimlane`. There are no versions and there is no compatibility layer: a document written in
+the earlier grammar fails on its first old construct until it is brought across, once, by the
+migration described under _Migrating older files_ — never silently, and never by this reader.
 
 **Goal.** Keep the shape of the current file, remove the three biggest sources of syntax errors
-(`;`, `than`, the asymmetric `if … is … than` / `elseif`), and add the roadmap features. Within a
-version 2 file there is one spelling per construct: no legacy production is part of this grammar,
-`else-if`, `else` and `merge:` are read only by the version 1 reader, and the version 2
-formatter re-spells what it read and never repairs. Every rule below is stated once, for one
-reader. An existing version 1 file is moved across by the standalone converter described under
-_Converting from v1_, in a reviewable diff — never silently, and never by this reader.
+(`;`, `than`, the asymmetric `if … is … than` / `elseif`), and add the roadmap features. There is
+one spelling per construct: no legacy production is part of this grammar, and the formatter
+re-spells what it read and never repairs. Every rule below is stated once, for one reader.
 
 ## Design invariants
 
@@ -52,7 +46,7 @@ token sequence and re-parse to one IR. The squashed form keeps the `@use` line, 
 selects; the default compact form inlines its closure, and the lanes it names come from it.
 
 ```
-@kai-swimlane-v2
+@kai-swimlane
 @use templates/role/standard.swim;
 
 /meta/
@@ -123,7 +117,7 @@ end-if
 ```
 
 ```
-@kai-swimlane-v2@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>@quote+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;if[manager](承認する？)/* 上長の一次判断のみ */case(はい)#green[system:受注登録]case(いいえ)#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]and(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)case(あり)#red[sales:キャンセル受付]goto@done case(なし)#gray[manager:通常クローズ処理]end-if[sales:完了]@done@end
+@kai-swimlane@use templates/role/standard.swim;/meta/owner:sales-ops;status:draft;tags:order,approval;/title/受注処理;/option/show-right-gutter:true;right-title:備考;/block/<hex>background-color:#ffe0b3;shape:hex;/prop/<RQ>label:申請書;side:right;<LG>label:承認ログ;side:left;max-chars:10;/line/phase(見積)#gray[sales:見積作成]<hex>@quote+RQ desc:顧客要件を確認して見積を作成;remark:金額が 100 万円超なら本部承認;if[manager](承認する？)/* 上長の一次判断のみ */case(はい)#green[system:受注登録]case(いいえ)#red[sales:見積を修正]..>loop@quote end-if end-phase fork(通知)#purple[system:メール送信]and(出荷)[warehouse:出荷準備]=>./shipping-prep.swim end-fork section(監査)@audit#blue[system:監査ログ保存]+LG note:保存期間は 7 年;note-side:left;end-section if(キャンセル要求は？)case(あり)#red[sales:キャンセル受付]goto@done case(なし)#gray[manager:通常クローズ処理]end-if[sales:完了]@done@end
 ```
 
 Ten of the surviving spaces are separators. Nine are invariant 2's fusion case — the left token
@@ -135,24 +129,6 @@ and four are bytes inside a run, `金額が 100 万円` and `保存期間は 7 �
 not: `loop@quote`, `goto@done`, `@quote+RQ`, `@audit#blue`, `]and(`, `@done@end` and `#gray[sales:`
 — `@`, `+`, `#` and `(` cannot continue the word to their left, the four directive names are never
 an `@id` suffix, and a colour token ends at the first character outside `[A-Za-z0-9-]`.
-
-## What changed from v1
-
-| Area                          | v1                                                                                                                           | v2                                                                                                                                                                                                                                                                                 |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Header                        | `@kai-swimlane`                                                                                                              | `@kai-swimlane-v2`, matched as a **prefix**, not as a line; the bare header selects the version 1 reader instead of this one                                                                                                                                                       |
-| Terminator                    | `;` on every property                                                                                                        | `;` on properties, directives and the `/title/` payload only; everything else self-delimits                                                                                                                                                                                        |
-| Whitespace                    | newline-significant, one row per line                                                                                        | insignificant; the squash is a token-stream transform, and `/title/` is a `;`-terminated statement                                                                                                                                                                                 |
-| Imports and metadata          | —                                                                                                                            | `@use <path>;` merges `/page/ /option/ /role/ /block/ /prop/ /i18n/`, recursively, prologue-only, local last; `/meta/` adds five reserved typed keys plus opaque free ones, never rendered                                                                                         |
-| Definitions and step suffixes | `<id>` alone on its line; `<block>` only, ids on the next line                                                               | `<id>` may carry properties on the same line; suffixes `<block> @id +prop* glyph => path`, read in **any** order and written in that one                                                                                                                                           |
-| Property block                | attaches to the nearest preceding **step**                                                                                   | attaches to the preceding **statement**, each of which declares a closed key set                                                                                                                                                                                                   |
-| Exclusive branch              | `if (q) is (a) than #c` / `elseif (b) than` / `else than #c`                                                                 | `if [lane] (q) @id #c`, then uniform `case (a) #c`; a blank `case () #c` is the catch-all, unlabelled case — there is no `else`; the v1 spellings are converter input only                                                                                                         |
-| Loop and mid-merge            | `[loop]`, back to the same `if` only; `merge: id;` and bare `merge;`, `if`-only; the `[merge]` / `[merge: name]` landing row | `loop` = the nearest enclosing `if` through any frame, `loop @id` = any upstream node; `goto @id`, legal in every body, containment an error and direction a warning; bare `goto` = the next `merge` marker after the enclosing `end-if`; the landing row is `merge` / `merge @id` |
-| Parallel, frames and closers  | `fork` / `and` / `endfork`; two untyped stacks                                                                               | plus `fork (label)` and `and (label)`, one path legal; one block stack; every closer is spelled `"end-" + opener` and nothing else closes a frame                                                                                                                                  |
-| Phases, sub-process and notes | —                                                                                                                            | `phase (name) @id #c` … `end-phase`, a horizontal band at root scope, transparent to jumps; `=> <path>` sets `link` and defaults the shape; `note:` plus `note-side:`                                                                                                              |
-| Comments                      | preserved only inside `/line/`                                                                                               | preserved everywhere; `// text` at the start of a physical line, `/* text */` anywhere                                                                                                                                                                                             |
-| Languages, ids and spacers    | `id: <free text>;`, lone `:` row, `skip;`                                                                                    | `@lang ja, en;`, inline `a \| b`, `key.lang:`, the `/i18n/` catalog; `@id`, Unicode and case-sensitive; `[]` spacer; `key;` is the flag form of any boolean key                                                                                                                    |
-| Diagnostics                   | line-keyed message strings                                                                                                   | camelCase codes with `severity` and `impact`; unknown colours, icons, shapes and keys are warnings that round-trip byte for byte                                                                                                                                                   |
 
 ## Lexical rules
 
@@ -293,27 +269,25 @@ is a warning with a documented fallback, retained verbatim, case included.
 
 ## File and sections
 
-**Header and version.** The header is a statement, not a line: `HEADER := "@kai-swimlane" ("-v"
-VERSION)?` with `VERSION := [0-9]+ ("." [0-9]+)?`, ended by a statement boundary. Major 2 → this
-grammar, advisory minor recorded and dropped on format. Version absent or major 1 is a version 1
-file, handed to the version 1 reader specified in [dsl-v1.md](dsl-v1.md) rather than read here;
-major ≥ 3 is a newer one and is `unsupportedVersion`, the source returned unmodified with an empty
-flow. `@kai-swimlane 2` (the retired v1-era spelling, a
-space rather than `-v`) is `malformedHeader`, `2` being no `VERSION` attachment, and so is
-`@kai-swimlane2`, whose statement does not end at a boundary. Detection is one ordered procedure:
-strip one U+FEFF, split on `\n` stripping
+**Header.** The header is a statement, not a line: `HEADER := "@kai-swimlane"`, ended by a
+statement boundary. There is nothing after the name to carry a version, so a header that still
+carries one is refused rather than read as something else: `@kai-swimlane-v2` and `@kai-swimlane 2`,
+the two retired versioned spellings, are `malformedHeader` — _the header is `@kai-swimlane` — there
+are no versions any more; run Update DSL_ — with the source returned unmodified and an empty flow,
+and so is `@kai-swimlane2`, whose statement does not end at a boundary. Detection is one ordered
+procedure: strip one U+FEFF, split on `\n` stripping
 one trailing `\r`, and take as **probe line** the first line non-empty once trimmed. (1) `HEADER`
-matches as a **prefix** of it → dispatch and stop; (2) the probe line begins with `@kai-swimlane`
+matches as a **prefix** of it → read and stop; (2) the probe line begins with `@kai-swimlane`
 but does not match → `malformedHeader` and stop; (3) otherwise scan for the first line whose
-trimmed content begins with `HEADER` → dispatch on it and report `textOutsideDiagram`; (4)
+trimmed content begins with `HEADER` → read from it and report `textOutsideDiagram`; (4)
 otherwise `headerMissing`, the sole code licensing starter-template initialisation. A file holds
 one diagram, so a header inside a run, string, fence or comment is content.
 
-**A header-less region is version 2.** A Markdown fence, a template fragment or an API body that
-omits the header is read by this grammar; an explicit header inside the region wins, and a bare
-`@kai-swimlane` there selects the version 1 reader, like anywhere else. The _Fragments_ rule under
-_Imports_ chooses a reader **shape** only. A `kai-swimlane-parts` fence is the same mechanism,
-narrower: a header-less fragment whose only legal sections are `/block/` and `/prop/`.
+**A header-less region is read by this grammar.** A Markdown fence, a template fragment or an API
+body that omits the header is read exactly as a file carrying one; an explicit header inside the
+region wins. The _Fragments_ rule under _Imports_ chooses a reader **shape** only. A
+`kai-swimlane-parts` fence is the same mechanism, narrower: a header-less fragment whose only legal
+sections are `/block/` and `/prop/`.
 
 **Directives.** `@lang tag (, tag)*;` and `@use path;` are legal **only in the prologue**: after
 the header, before the first section marker, at most one `@lang`. Anywhere else is
@@ -470,10 +444,9 @@ derived placement and the formatter never materialises one. A bracket run contai
 `:` is a step head and one without is a lane reference, and an opener's bracket always follows a
 keyword. Between the `if` opener and its first `case` only comments and the `if`'s own property
 block may appear. An `if` has one or more `case` rows; a `case`'s parenthesised run is optional,
-exactly like every other opener's — a blank or absent one is the unlabelled, catch-all case (v1's
-`else`, unified into `case` rather than a second keyword), any number of cases may be unlabelled,
-and none is positionally special; an empty case **body** is legal and renders as a bare edge to the
-join. An unlabelled case's chip is simply not drawn, the same as an unlabelled `and` path's.
+exactly like every other opener's — a blank or absent one is the unlabelled, catch-all case, there
+being no second keyword for it, any number of cases may be unlabelled, and none is positionally
+special; an empty case **body** is legal and renders as a bare edge to the join. An unlabelled case's chip is simply not drawn, the same as an unlabelled `and` path's.
 
 ### `loop`, `goto` and `merge`
 
@@ -666,11 +639,10 @@ containment, and **every import diagnostic quotes the path and nothing else**, n
 imported file.
 
 **Fragments.** An imported file may omit the header and `@end`. Its **reader shape** is chosen by
-the probe line of _Header and version_ applied to the fragment, and chooses a shape only: an
-explicit header selects a **document** and supplies its version; `@lang` or `@use` selects a
-**fragment with a prologue**; a section marker selects a **fragment**; anything else is
-`notAFragment`. In every header-less case the version is the one the extractor supplied, and a
-marker-less mirrored template is fixed by prepending its marker, never by inferring it.
+the probe line of _Header_ applied to the fragment, and chooses a shape only: an explicit header
+selects a **document**; `@lang` or `@use` selects a **fragment with a prologue**; a section marker
+selects a **fragment**; anything else is `notAFragment`. A marker-less mirrored template is fixed
+by prepending its marker, never by inferring it.
 
 **Caps, provenance and failures.** Depth ≤ 8, closure ≤ 32 files, closure ≤ 1 MiB, all errors.
 Re-entering a path on the resolution stack is `importCycle` and the offending edge alone is
@@ -694,7 +666,7 @@ it.
 ## Multiple languages
 
 ```
-@kai-swimlane-v2
+@kai-swimlane
 @lang ja, en;
 @use templates/i18n/glossary.swim;
 
@@ -725,8 +697,8 @@ slot**, so they are two spellings of one value: supplying both for one `(node, f
 language)` is strict first-match-wins over four levels: the node-local value → `/i18n/
 id.field.tag` → `/i18n/ "source".tag` → the source language, recording a missing translation.
 
-`|` and `｜` are separators **unconditionally in every translatable position of every v2 file**:
-there is no "two or more languages declared" mode. A literal bar is `\|` or `\｜`, and with one
+`|` and `｜` are separators **unconditionally in every translatable position of every file**: there
+is no "two or more languages declared" mode. A literal bar is `\|` or `\｜`, and with one
 declared language an unescaped bar in a translatable position is an error; a file with no `@lang`
 declares one unnamed source language, every `.lang` suffix in it is an error, and `/i18n/` has no
 legal tag there. Everywhere else — `icon:`, a path, `tags:`, an `/i18n/` value — a bar is ordinary
@@ -822,9 +794,8 @@ imports and spans.
 ## Grammar sketch
 
 ```
-file         := bom? header prologue section* end?
-header       := "@kai-swimlane" ([ \t]+ version)?    -- a statement, not a line; prefix-matched
-version      := [0-9]+ ("." [0-9]+)?                 end := "@end"
+file         := bom? header prologue section* end?   end := "@end"
+header       := "@kai-swimlane"                      -- a statement, not a line; prefix-matched
 prologue     := (directive | comment)*               -- at most one "@lang"
 directive    := "@lang" tag ("," tag)* ";" | "@use" path ("as" id)? ";"
 
@@ -853,7 +824,7 @@ block        := ifBlock | forkBlock | sectionBlock | branchBlock | phaseBlock
 ifBlock      := ifOpen comment* caseClause+ "end-if"
 ifOpen       := "if" lane? lparen text rparen idSlot? color? property*
 caseClause   := "case" (lparen text rparen)? idSlot? color? property* row*
-                -- a blank or absent run is the unlabelled, catch-all case (v1's `else`)
+                -- a blank or absent run is the unlabelled, catch-all case
 forkBlock    := forkOpen row* andClause* "end-fork"
 forkOpen     := "fork" (lparen text rparen)? idSlot? color? property*
 andClause    := "and" (lparen text rparen)? idSlot? color? property* row*
@@ -926,7 +897,7 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | **Properties.** `skip;`, `skip: true;`, `skip-reason:`; `[]`, `[sales:]` (P01)                                                                     | the first two are one fact and the third an unknown key; `[]` is never numbered while `[sales:]` is                                                                                                                | `unknownKey`; none                                                                           |
 | `+RQ +RQ`, a second `@id` (P02); `+RQ` written after a property row                                                                                | `+prop` accumulates and dedupes; `@id` and the glyph are single-valued; suffixes precede the property block                                                                                                        | `badSuffix`                                                                                  |
 | `hint:` and `title:` in one block (P03); `remark-desc:` before `remark:` (P04)                                                                     | aliases are one key, while `label:` and `label.en:` are not; `remark-desc` appends, so it must follow the block's `remark:`                                                                                        | `duplicateKey`; `duplicateKey`                                                               |
-| `lang: fr;` with `@lang ja, en;`; a gutter title in both `/page/` and `/option/` (P05)                                                             | rejected, since it selects what renders; `/option/` wins, as in v1                                                                                                                                                 | `unknownLanguage`; `titleInBothSections`                                                     |
+| `lang: fr;` with `@lang ja, en;`; a gutter title in both `/page/` and `/option/` (P05)                                                             | rejected, since it selects what renders; `/option/` wins                                                                                                                                                           | `unknownLanguage`; `titleInBothSections`                                                     |
 | `colour:` in `/role/`, `x-figma-node: 12:345;` (P06); `status: wip;`, `updated: 2026/09/05;`, `max-chars: 十;` (P07)                               | kept verbatim in an ordered `unknown` bag and re-emitted after the known keys; `x-` is opaque; each falls back to its default                                                                                      | `unknownKey`; none; `badValue`                                                               |
 | `icon: ;` vs `icon: "";` vs `icon: none;` (P08)                                                                                                    | error, explicitly empty, clears an inherited value and is always re-emitted                                                                                                                                        | `emptyValue`                                                                                 |
 | `[sales: 見積作成] +RQ` with no definitions (P09); `desc:` under a `case`, `note:` after `end-if` (P10)                                            | stubbed from the id and flagged provisional; closers, jumps, `[]` and markers take no properties                                                                                                                   | `undefinedReference`; `keyNotAllowedHere`                                                    |
@@ -968,18 +939,17 @@ a jump's target must satisfy containment; (5) each statement kind has a closed p
 | A file with no `/page/` content (S10); blank lines anywhere in the source (S11)                                                                    | no `/page/` header is emitted; one separator, never significant, output blank lines being a function of kind and depth                                                                                             | none                                                                                         |
 | The same diagram as a file, a Markdown fence or an API body (S12)                                                                                  | identical bytes and identical `sourceHash`; `@end` is optional and emitted iff it was present                                                                                                                      | `textOutsideDiagram`                                                                         |
 | `[sales: 予算]確定]を承認]` (S13)                                                                                                                  | an _unbalanced_ `]` ends the run at the first `]`; escape it or quote the run                                                                                                                                      | `unbalancedBracket`                                                                          |
-| **Converting from v1.** A bare `@kai-swimlane` header (V06, V10); `@kai-swimlane-v3`, `@kai-swimlane2` (V08)                                       | a version 1 file is handed to the version 1 reader, never to this one; a newer file is refused read-only; a malformed header is never a fallthrough                                                                | none; `unsupportedVersion`; `malformedHeader`                                                |
-| A squashed one-line file; `@kai-swimlane v2` (V03)                                                                                                 | detected exactly as an expanded one, the header being prefix-matched                                                                                                                                               | `malformedHeader`                                                                            |
-| `merge: done;`, `[loop]` (V01); `merge: x;` pointing upstream (V17)                                                                                | the converter writes `goto @done` or `loop @x` by position, and bare `loop`                                                                                                                                        | converter report                                                                             |
-| `&lt;hex&gt;` in step text or in suffix position (V02)                                                                                             | the converter decodes entities in the positions v1 unescaped, so a `&lt;hex&gt;` suffix becomes `<hex>`; the reader decodes nothing                                                                                | converter report                                                                             |
-| `end-branch` closing a `section`; `end-point` (V04)                                                                                                | the converter writes the opener's closer for a same-family mismatch and `end-section` for `end-point`; a cross-family mismatch is refused                                                                          | converter report; `closerMismatch`                                                           |
-| `label.en:`, `/i18n/`, `/option/ lang:` (V05)                                                                                                      | version 2 features; the converter carries nothing multilingual, and adding them is an edit after conversion                                                                                                        | none                                                                                         |
-| `if (q) is (a) than #blue` (V07); `else than #gray` (V18)                                                                                          | the converter writes `if (q) #blue` plus `case (a) #blue`, and a blank `case () #gray`, since v1's one token coloured the diamond and the first case                                                               | converter report                                                                             |
-| A build predating version 2 opening a version 2 file (V09)                                                                                         | must report `unsupportedVersion`, never a missing marker, which would license overwriting                                                                                                                          | `unsupportedVersion`                                                                         |
-| Format-on-save (V11); `desc: ``` … @end … ```;` (V12)                                                                                              | never writes a version 1 file; the fence-aware scan keeps a fenced `@end` as content                                                                                                                               | none; `missingEnd`                                                                           |
+| **Migrating older files.** `@kai-swimlane-v2`, `@kai-swimlane 2`, `@kai-swimlane2` (V06, V08, V10)                                                 | a header carrying a version is refused, never read as something else and never a fallthrough; Update DSL rewrites it                                                                                               | `malformedHeader`                                                                            |
+| A squashed one-line file; `@kai-swimlane v2` (V03)                                                                                                 | detected exactly as an expanded one, the header being prefix-matched                                                                                                                                               | none; `malformedHeader`                                                                      |
+| `merge: done;`, `[loop]` (V01); `merge: x;` pointing upstream (V17)                                                                                | the migration writes `goto @done` or `loop @x` by position, and bare `loop`                                                                                                                                        | migration report                                                                             |
+| `&lt;hex&gt;` in step text or in suffix position (V02)                                                                                             | the migration decodes entities in the positions the older grammar left unescaped, so a `&lt;hex&gt;` suffix becomes `<hex>`; the reader decodes nothing                                                            | migration report                                                                             |
+| `end-branch` closing a `section`; `end-point` (V04)                                                                                                | the migration writes the opener's closer for a same-family mismatch and `end-section` for `end-point`; a cross-family mismatch is refused                                                                          | migration report; `closerMismatch`                                                           |
+| `label.en:`, `/i18n/`, `/option/ lang:` (V05)                                                                                                      | the migration carries nothing multilingual, so adding them is an edit afterwards                                                                                                                                   | none                                                                                         |
+| `if (q) is (a) than #blue` (V07); `else than #gray` (V18)                                                                                          | the migration writes `if (q) #blue` plus `case (a)`, and a blank `case () #gray`; the old one token coloured the diamond, and the case inherits it                                                                 | migration report                                                                             |
+| Format-on-save (V11); `desc: ``` … @end … ```;` (V12)                                                                                              | never writes an older spelling back; the fence-aware scan keeps a fenced `@end` as content                                                                                                                         | none; `missingEnd`                                                                           |
 | Two headers in one file (V13); `/meta/` after `/role/` (V14)                                                                                       | the first header wins and the trailer is an error; a marker always closes the current section                                                                                                                      | `textOutsideDiagram`; none                                                                   |
-| A `/role/` fragment posted for validation (V15)                                                                                                    | validated in fragment mode as version 2, never by string-wrapping it in a synthetic document                                                                                                                       | none                                                                                         |
-| Any valid v1 file (V16); `id: 完了 ステップ;` (V19)                                                                                                | the converter's output renders the same picture, checked by `renderHash`; an out-of-charset id is slugified once with every reference rewritten                                                                    | converter report                                                                             |
+| A `/role/` fragment posted for validation (V15)                                                                                                    | validated in fragment mode, never by string-wrapping it in a synthetic document                                                                                                                                    | none                                                                                         |
+| Any older file (V16); `id: 完了 ステップ;` (V19)                                                                                                   | the migration's output renders the same picture, checked by `renderHash`; an out-of-charset id is slugified once with every reference rewritten                                                                    | migration report                                                                             |
 | **Tooling.** Two steps sharing one `<block>` (T01)                                                                                                 | a step's id comes only from `@id` or the explicit transform, never from its `<block>` reference                                                                                                                    | `duplicateId` on a real collision                                                            |
 | A diagnostic in a squashed file (T02); a `/meta/ status:` edit (T03)                                                                               | anchored by offset and node path, the GUI lock being a path-prefix test; `sourceHash` changes and `renderHash` does not                                                                                            | none                                                                                         |
 | A host rendering the IR as something other than the diagram (T04)                                                                                  | it walks the same node kinds, and a jump resolves through an index built over every kind and not steps only, so a target that is an `if` or a frame shows a label                                                  | none                                                                                         |
@@ -1004,8 +974,7 @@ delimiter or a key — exactly the value-level codes listed below as errors.
 | `unterminated`           | error    | render | unterminated string, fence or `/* */`                                                                                                                                                                         | Insert the closer before the next statement       |
 | `danglingEscape`         | error    | render | `\` must be followed by the character it escapes                                                                                                                                                              | Write `\\`                                        |
 | `headerMissing`          | error    | render | `@kai-swimlane` marker not found                                                                                                                                                                              | — (the sole code licensing starter-template init) |
-| `malformedHeader`        | error    | render | malformed header: "…" is not a version                                                                                                                                                                        | Replace with `@kai-swimlane-v2`                   |
-| `unsupportedVersion`     | error    | render | version N ≥ 3 — this file needs a newer build (a version 1 header is not this code: it selects the version 1 reader)                                                                                          | — (read-only, source returned unmodified)         |
+| `malformedHeader`        | error    | render | the header is `@kai-swimlane` — there are no versions any more                                                                                                                                                | Run **Update DSL** (read-only until it has)       |
 | `limitExceeded`          | error    | render | file exceeds 1 MiB / 10 000 nodes                                                                                                                                                                             | —                                                 |
 | `missingSemicolon`       | error    | format | "…" must end with `;`                                                                                                                                                                                         | Insert `;` before the next sync token             |
 | `unterminatedTitle`      | error    | format | `/title/` value must end with `;`                                                                                                                                                                             | Insert `;`                                        |
@@ -1075,56 +1044,57 @@ delimiter or a key — exactly the value-level codes listed below as errors.
 | `importsUnsupportedHere` | info     | none   | this host cannot resolve imports                                                                                                                                                                              | —                                                 |
 | `missingTranslation`     | info     | none   | `<lang>`: N/M — missing …                                                                                                                                                                                     | Rekey / Add an inline segment                     |
 
-## Converting from v1
+## Migrating older files
 
-Version 1 files are not read by this grammar — they are read by the version 1 reader, specified in
-[dsl-v1.md](dsl-v1.md), and keep working untouched. Conversion is a choice, not a gate.
-`swimlane convert`, and the SaaS "Convert to version
-2" action that opens a `tmp-*` branch, rewrites a file once, reports every change, and is checked
-by one identity over the whole corpus: the converted file renders the same picture,
-`renderHash(render(v1)) == renderHash(convert(v1))`. Spelling rewrites:
+A document written in the grammar that preceded this one is not read here: there is one reader and
+no compatibility layer, so it fails on its first old construct. `migrateLegacyDsl(text)` in
+`packages/diagram-converter/src/legacy-migrate.js` is the one-shot rewrite that brings it across,
+line-based, touching only the constructs that changed and leaving fenced values and definitions
+alone; it returns the new text and the number of lines it changed. The app exposes it as the
+**Update DSL** action, which rewrites the file once, in one commit per branch, in a reviewable
+diff — never silently, and never as part of a save. Spelling rewrites:
 
-| v1 construct                                                                                 | written as                                                                           |
-| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `if (q) is (a) than #c`                                                                      | `if (q) #c` + `case (a) #c` — v1's one token coloured the diamond and the first case |
-| `elseif (b) than #c`; `else than #c`                                                         | `case (b) #c`; a blank `case () #c` — v2 has no `else`                               |
-| `[loop]`, `[loop];`; `merge: id;`                                                            | `loop`; `goto @id` or `loop @id` by position                                         |
-| bare `merge;`; `[merge]`, `[merge: name]`                                                    | bare `goto`; `merge`, `merge @name`                                                  |
-| `id: name;`, `props: A,B;`, `arrow: dashed;`                                                 | the suffixes `@name`, `+A +B`, `~>` (`solid` → nothing)                              |
-| `section-start (n)`, `start-point`, `end-point`; `endif` and the other un-hyphenated closers | `section (n)`, `section`, `end-section`; `"end-" + opener`                           |
-| a group closer naming another member of the group family                                     | the opener's closer                                                                  |
-| a lone `:` row; `remark-desc:`                                                               | `[]`; folded into `remark:`                                                          |
-| `***` comment rows                                                                           | `// …`                                                                               |
-| `shape: if;`                                                                                 | `shape: rounded;`                                                                    |
-| `yes on 1` / `no off 0`                                                                      | `true` / `false`                                                                     |
-| a `/title/` with no `;`                                                                      | the lines joined with one space, then `;`                                            |
+| older construct                                                                              | written as                                                                                  |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `@kai-swimlane-v2`, `@kai-swimlane 2`                                                        | `@kai-swimlane` — the one header                                                            |
+| `if (q) is (a) than #c`                                                                      | `if (q) #c` + `case (a)` — the old one token coloured the diamond, and the case inherits it |
+| `else-if (b) than #c`; `else than #c`                                                        | `case (b) #c`; a blank `case () #c` — there is no `else`                                    |
+| `[loop]`, `[loop];`; `merge: id;` and `[merge: id]` in a case                                | `loop`; `goto @id`                                                                          |
+| bare `merge;` and `[merge]` in a case; a `[merge]` / `[merge: name]` marker in the flow      | bare `goto`; `merge`, `merge @name`                                                         |
+| `id: name;`, `props: A,B;`, `arrow: dashed;`, `link: path;`                                  | the suffixes `@name`, `+A +B`, `~>` (`solid` → nothing), `=> path`                          |
+| `section-start (n)`, `start-point`, `end-point`; `endif` and the other un-hyphenated closers | `section (n)`, `section`, `end-section`; `"end-" + opener`                                  |
+| a group closer naming another member of the group family                                     | the opener's closer                                                                         |
+| a lone `:` row; `remark-desc:`                                                               | `[]`; folded into `remark:`                                                                 |
+| `***` comment rows                                                                           | `// …`                                                                                      |
+| `shape: if;`                                                                                 | `shape: rounded;`                                                                           |
+| `yes on 1` / `no off 0`                                                                      | `true` / `false`                                                                            |
+| a `/title/` with no `;`                                                                      | the lines joined with one space, then `;`                                                   |
 
-Byte-changing rewrites, each because v1 gave the bytes a different meaning: HTML entities are
-decoded in the positions v1 unescaped; an unbalanced `]` or `)` is escaped; a literal `|` or `｜`
-in a translatable position is escaped once; a `\` before a table character is doubled; a value
-containing its own terminator, a bare `none`, and a run whose whole extent is wrapped in `"` are
-quoted; `key: ;` becomes `key: "";`; a Unicode space outside the six structural ones in delimiter
-position becomes U+0020; a missing `;` is inserted at the end of the statement's last token; the
-earlier of two rows writing one key is deleted, keeping v1's winner; every `else` becomes a blank
-`case ()`, v2 having no positional or uniqueness constraint on an unlabelled case; out-of-charset
-ids are slugified and every reference rewritten
+Byte-changing rewrites, each because the older grammar gave the bytes a different meaning: HTML
+entities are decoded in the positions it left unescaped; an unbalanced `]` or `)` is escaped; a
+literal `|` or `｜` in a translatable position is escaped once; a `\` before a table character is
+doubled; a value containing its own terminator, a bare `none`, and a run whose whole extent is
+wrapped in `"` are quoted; `key: ;` becomes `key: "";`; a Unicode space outside the six structural
+ones in delimiter position becomes U+0020; a missing `;` is inserted at the end of the statement's
+last token; the earlier of two rows writing one key is deleted, keeping the older reader's winner;
+every `else` becomes a blank `case ()`, there being no positional or uniqueness constraint on an
+unlabelled case; out-of-charset ids are slugified and every reference rewritten
 (`slug()`: NFKC and trim, every run outside the id charset to one `-`, collapse and strip `-`, the
-literal `id` when empty, `-2`, `-3` on collision in declaration order); a property row that v1
-attached to the last step across a control row is moved under that step; fenced bodies are
-re-indented, v1 having trimmed the join once and never dedented; text outside the diagram is moved
-into a comment; the lanes and props v1 invented silently are materialised; and the header is set
-last. Four inputs are refused rather than guessed — a closer crossing the group/control boundary,
-a `merge:` into a sibling case, a row after a jump, and a nested `branch` — and the file is left
-untouched with the offending rows named.
+literal `id` when empty, `-2`, `-3` on collision in declaration order); a property row the older
+reader attached to the last step across a control row is moved under that step; fenced bodies are
+re-indented, the older reader having trimmed the join once and never dedented; text outside the
+diagram is moved into a comment; the lanes and props it invented silently are materialised; and the
+header is set last. Four inputs are refused rather than guessed — a closer crossing the
+group/control boundary, a `merge:` into a sibling case, a row after a jump, and a nested `branch` —
+and the file is left untouched with the offending rows named.
 
 ## Trade-offs
 
 - **Pro:** zero relearning. The file keeps its shape — sections, `[role: text]`, `key: value;` —
   and the parser is an extension of the current one: row kinds unchanged, `phase` a new group mode,
   `note` a step field, `@use` a pre-pass.
-- **Pro:** one spelling per construct _inside a version 2 file_. No legacy production is part of
-  this grammar; the old spellings live in the version 1 reader, which the header keeps entirely
-  separate, and the converter is checked by `renderHash` over the corpus rather than trusted.
+- **Pro:** one spelling per construct. No legacy production is part of this grammar and no reader
+  accepts one, so there is no second way to write anything and nothing to keep in sync.
 - **Pro:** the `than` / `elseif` error class is gone, and value-level problems no longer hard-lock
   a diagram: an unknown colour today blocks formatting and can lose the token on save, where here
   it is a warning that renders, formats and round-trips byte for byte.
@@ -1133,9 +1103,9 @@ untouched with the offending rows named.
   break.
 - **Con:** still a keyword-terminated language, so nesting depth is invisible until the formatter
   has run.
-- **Con:** two readers ship side by side until the corpus has moved, so a feature added to one has
-  to be considered for the other; a file must be converted before it can use anything on this page,
-  and the converter refuses four inputs rather than guess, so those files need a hand edit first.
+- **Con:** an older file does not render until **Update DSL** has run on it — a breaking change,
+  taken deliberately — and the migration refuses four inputs rather than guess, so those files need
+  a hand edit first.
 - **Con:** the surface is large — two hashes, two IRs, a provenance layer, a closed escape table
   and sixty-odd diagnostic codes — and several ◎ ratings are provisional: `fork (label)`,
   `if.color`, `skip`, the spacer node, comment nodes, the icon sigil and hex colours need IR fields

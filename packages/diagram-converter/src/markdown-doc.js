@@ -3,10 +3,9 @@
  *
  * A diagram may live in a `.md` file rather than a `.txt` one: frontmatter
  * carrying its metadata, ordinary prose, and the DSL inside a fenced
- * ```` ```kai-swimlane ```` block. dsl-rule.md:311-314 already specifies that a
- * header-less region inside a Markdown fence reads as version 2, and
- * `utils.js`'s `TEMPLATE_FENCE_RE` already recognises the same fence for
- * templates — this module is the read/write half of that idea.
+ * ```` ```kai-swimlane ```` block. `utils.js`'s `TEMPLATE_FENCE_RE` already
+ * recognises the same fence for templates — this module is the read/write
+ * half of that idea.
  *
  * **Frontmatter is exactly the `/meta/` section.** Reading injects it into the
  * DSL as `/meta/`; writing lifts `/meta/` back out. Nothing else crosses the
@@ -22,8 +21,6 @@
  * any shape this module cannot rebuild (a nested map, a `|`/`>` block scalar) is
  * carried through verbatim instead of being flattened into a lossy scalar.
  */
-
-import { dslVersion } from "./parser-v2.js";
 
 const FENCE_LANG = "kai-swimlane";
 
@@ -304,23 +301,6 @@ export function isMarkdownDiagram(md) {
 
 /* ───────────────────────── the DSL's /meta/ section ────────────────────── */
 
-/**
- * Whether a diagram can carry its own metadata.
- *
- * `/meta/` is a version 2 section — version 1's entry in dsl-rule.md:142 is
- * "—". A version 1 diagram has nowhere to put metadata, so injecting a
- * `/meta/` block into one writes a section its reader silently ignores; the
- * next save regenerates the diagram from that model, finds no `/meta/` to lift
- * back out, and the frontmatter is gone.
- *
- * So version 1 keeps its frontmatter *beside* the diagram rather than through
- * it. `dslVersion` returns null for a header-less region, which dsl-rule.md
- * :311-314 reads as version 2 — so only an explicit version 1 is excluded.
- */
-function carriesMetaSection(dsl) {
-  return dslVersion(dsl) !== 1;
-}
-
 function markerAt(line) {
   const t = line.trim();
   return SECTION_MARKERS.includes(t) ? t : null;
@@ -394,7 +374,6 @@ export function dslFromMarkdown(md) {
   const { meta, body } = splitFrontmatter(md);
   const found = extractDiagramFence(body);
   if (!found) return null;
-  if (!carriesMetaSection(found.dsl)) return found.dsl;
   return writeMetaSection(found.dsl, meta);
 }
 
@@ -417,17 +396,11 @@ export function storedMarkdown(dsl, previousMd) {
  * other line of prose exactly as it was.
  */
 export function markdownFromDsl(dsl, previousMd) {
-  const carries = carriesMetaSection(dsl);
-  const { meta, dsl: withoutMeta } = carries ? readMetaSection(dsl) : { meta: {}, dsl };
+  const { meta, dsl: withoutMeta } = readMetaSection(dsl);
   // How the document being replaced wrote each key. Without this a block
   // sequence would come back as a flat scalar and its items would be lost.
   const previous = previousMd != null ? splitFrontmatter(previousMd) : null;
-  // A version 1 diagram cannot hold metadata, so the document's own
-  // frontmatter is authoritative and passes straight through untouched.
-  const frontmatter = serializeFrontmatter(
-    carries ? meta : (previous?.meta ?? {}),
-    previous?.shape,
-  );
+  const frontmatter = serializeFrontmatter(meta, previous?.shape);
 
   if (previous && extractDiagramFence(previous.body)) {
     return frontmatter + replaceDiagramFence(previous.body, withoutMeta);

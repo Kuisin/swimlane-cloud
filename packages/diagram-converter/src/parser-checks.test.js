@@ -19,11 +19,8 @@ describe("parser validation — document structure", () => {
   });
 
   it("errors on unclosed if (missing end-if)", () => {
-    const errors = parseDSL(DOC(`if (確認) is (OK) than\n  [a: 手順]`)).errors;
+    const errors = parseDSL(DOC(`if (確認)\ncase (OK)\n  [a: 手順]`)).errors;
     expect(errors.map((e) => e.msg)).toContain("unclosed if (missing end-if)");
-    // The error points at the opening line, like the unclosed-section check.
-    const err = errors.find((e) => e.msg.startsWith("unclosed if"));
-    expect(err.text).toContain("if (確認)");
   });
 
   it("errors on unclosed fork (missing end-fork)", () => {
@@ -33,7 +30,7 @@ describe("parser validation — document structure", () => {
   });
 
   it("reports every unclosed nested frame", () => {
-    const m = msgs(DOC(`if (外) is (yes) than\n  fork\n    [a: x]`));
+    const m = msgs(DOC(`if (外)\ncase (yes)\n  fork\n    [a: x]`));
     expect(m).toContain("unclosed if (missing end-if)");
     expect(m).toContain("unclosed fork (missing end-fork)");
   });
@@ -54,9 +51,9 @@ label: 帳票;
 side: left;
 max-chars: 12;
 /line/
-[a: 提出] <b1>
-props: p1;
-if (承認) is (yes) than #green
+[a: 提出] <b1> +p1
+if (承認) #green
+case (yes)
   [a: 登録]
 end-if
 @end`;
@@ -64,7 +61,16 @@ end-if
   });
 });
 
-describe("parser — the older closer spellings are refused by name", () => {
+// The earlier grammar's un-hyphenated closers (`endif`, `endfork`, `elseif`,
+// `section-start`, `start-point`, `end-point`) were refused by name, one
+// message per old spelling, because the version 1 reader still recognised
+// them well enough to say what to write instead. Those spellings are not
+// words this grammar's scanner recognises at all any more — `legacy-migrate`
+// is what turns a file that still has them into one that does not, and
+// `legacy-migrate.test.js` covers that conversion. What is left to assert
+// here is that a *correctly spelled* closer or `case` with no matching
+// opener still errors, naming the construct.
+describe("parser — a closer or case with no matching opener", () => {
   const doc = (body) => `@kai-swimlane
 /role/
 <a>
@@ -73,42 +79,20 @@ label: A;
 ${body}
 @end`;
 
-  it("names the spelling to use for each old one", () => {
-    const cases = [
-      [`if (x) is (y) than\n[a: 1]\nendif`, '"endif" is no longer read; write end-if'],
-      [`fork\n[a: 1]\nendfork`, '"endfork" is no longer read; write end-fork'],
-      [
-        `if (x) is (y) than\n[a: 1]\nelseif (z) than\n[a: 2]\nend-if`,
-        '"elseif" is no longer read; write else-if (…) than',
-      ],
-      [`start-point\n[a: 1]\nend-point`, '"start-point" is no longer read; write section'],
-      [
-        `section-start (S)\n[a: 1]\nend-section`,
-        '"section-start" is no longer read; write section (…)',
-      ],
-    ];
-    for (const [body, msg] of cases) {
-      expect(
-        parseDSL(doc(body)).errors.map((e) => e.msg),
-        body,
-      ).toContain(msg);
-    }
+  it("errors on end-if without an open if", () => {
+    expect(parseDSL(doc(`[a: 1]\nend-if`)).errors.map((e) => e.msg)).toContain(
+      "end-if closes nothing",
+    );
   });
 
-  it("errors on end-if without an open if, mentioning end-if", () => {
-    expect(parseDSL(doc(`[a: 1]\nend-if`)).errors.map((e) => e.msg)).toContain("end-if without if");
-  });
-
-  it("errors on end-fork without an open fork, mentioning end-fork", () => {
+  it("errors on end-fork without an open fork", () => {
     expect(parseDSL(doc(`[a: 1]\nend-fork`)).errors.map((e) => e.msg)).toContain(
-      "end-fork without fork",
+      "end-fork closes nothing",
     );
   });
 
-  it("errors on else-if without an open if, mentioning else-if", () => {
-    expect(parseDSL(doc(`[a: 1]\nelse-if (z) than`)).errors.map((e) => e.msg)).toContain(
-      "else-if without if",
-    );
+  it("errors on case without an open if", () => {
+    expect(parseDSL(doc(`[a: 1]\ncase (z)`)).errors.map((e) => e.msg)).toContain("case outside if");
   });
 });
 
@@ -127,7 +111,8 @@ describe("parser validation — definition sections", () => {
 
   it("errors on an empty definition id", () => {
     const src = `@kai-swimlane\n/role/\n< >\nlabel: A;\n/line/\n[a: x]\n@end`;
-    expect(msgs(src)).toContain("definition id must not be empty");
+    expect(msgs(src)).toContain("empty <id> in /role/ — name the role between < and >");
+    expect(parseDSL(src).roles[""]).toBeUndefined();
   });
 
   // dsl-rule.md:1015 makes `unknownKey` a warning with `impact: none`, and :889
@@ -148,12 +133,12 @@ describe("parser validation — definition sections", () => {
 
   it("errors on a property line before any <id> definition", () => {
     const src = `@kai-swimlane\n/role/\nlabel: A;\n<a>\n/line/\n[a: x]\n@end`;
-    expect(msgs(src)).toContain("property line must follow a <id> definition");
+    expect(msgs(src)).toContain("property must follow a <id> definition");
   });
 
-  it("errors on unrecognized lines in definition sections", () => {
+  it("errors once per unrecognized line in a definition section", () => {
     const src = `@kai-swimlane\n/role/\n<a>\nstray text\n/line/\n[a: x]\n@end`;
-    expect(msgs(src)).toContain("unrecognized /role/ line");
+    expect(msgs(src)).toEqual(["unrecognized /role/ statement"]);
   });
 
   // dsl-rule.md P11: an unknown shape is `badValue`, a warning that falls back
@@ -192,10 +177,10 @@ describe("parser validation — branch colors", () => {
     }
   });
 
-  it("errors on unknown #color tokens on if/else-if/fork/and/section", () => {
+  it("errors on unknown #color tokens on if/case/fork/and/section", () => {
     const m = msgs(
       DOC(
-        `if (確認) is (OK) than #salmon\n  [a: 手順]\nelse-if (NG) than #magenta\n  [a: 差戻]\nend-if\nfork #cyan\n  [a: p1]\nand #indigo\n  [a: p2]\nend-fork\nsection (S) #ivory\n  [a: s1]\nend-section`,
+        `if (確認) #salmon\ncase (OK)\n  [a: 手順]\ncase () #magenta\n  [a: 差戻]\nend-if\nfork #cyan\n  [a: p1]\nand #indigo\n  [a: p2]\nend-fork\nsection (S) #ivory\n  [a: s1]\nend-section`,
       ),
     );
     for (const bad of ["#salmon", "#magenta", "#cyan", "#indigo", "#ivory"]) {
@@ -206,7 +191,7 @@ describe("parser validation — branch colors", () => {
   it("accepts all palette colors", () => {
     const m = msgs(
       DOC(
-        `if (c) is (y) than #blue\n  [a: 1]\nelse-if (n) than #green\n  [a: 2]\nend-if\nfork #purple\n  [a: 3]\nand #gray\n  [a: 4]\nend-fork\nsection (S) #orange\n  [a: 5]\nend-section`,
+        `if (c) #blue\ncase (y)\n  [a: 1]\ncase () #green\n  [a: 2]\nend-if\nfork #purple\n  [a: 3]\nand #gray\n  [a: 4]\nend-fork\nsection (S) #orange\n  [a: 5]\nend-section`,
       ),
     );
     expect(m.filter((x) => x.includes("unknown color"))).toEqual([]);

@@ -16,8 +16,8 @@ label: Sales;
 @end
 `;
 
-/** Version 2 is the only version with a `/meta/` section (dsl-rule.md:142). */
-const DSL_V2 = `@kai-swimlane-v2
+/** A diagram with a `/meta/` section (dsl-rule.md:142). */
+const DSL_WITH_META = `@kai-swimlane
 
 /meta/
 owner: sales-ops;
@@ -88,17 +88,17 @@ describe("planMarkdownConversion", () => {
     expect(plan.writes[0]!.path).toBe("diagrams/flow.md");
   });
 
-  it("moves a version 2 /meta/ into frontmatter", () => {
-    const plan = planMarkdownConversion({ "diagrams/flow.txt": DSL_V2 });
+  it("moves a /meta/ section into frontmatter", () => {
+    const plan = planMarkdownConversion({ "diagrams/flow.txt": DSL_WITH_META });
     const text = plan.writes[0]!.text;
     expect(text.startsWith("---\nowner: sales-ops\n---\n")).toBe(true);
     expect(text).toContain("```kai-swimlane");
-    expect(dslOf("diagrams/flow.md", text)).toBe(DSL_V2);
+    expect(dslOf("diagrams/flow.md", text)).toBe(DSL_WITH_META);
   });
 
-  // Version 1 has no `/meta/`, so there is nothing to lift and no metadata to
-  // invent — the diagram simply moves inside a fence, unchanged.
-  it("invents no frontmatter for a version 1 diagram", () => {
+  // A diagram with no `/meta/` has nothing to lift and no metadata to
+  // invent — it simply moves inside a fence, unchanged.
+  it("invents no frontmatter for a diagram with no /meta/", () => {
     const plan = planMarkdownConversion({ "diagrams/flow.txt": DSL });
     const text = plan.writes[0]!.text;
     expect(text.startsWith("---")).toBe(false);
@@ -106,7 +106,7 @@ describe("planMarkdownConversion", () => {
   });
 
   it("is byte-reversible, which is what makes it safe to revert as one commit", () => {
-    for (const src of [DSL, DSL_V2]) {
+    for (const src of [DSL, DSL_WITH_META]) {
       const plan = planMarkdownConversion({ "diagrams/flow.txt": src });
       expect(dslOf("diagrams/flow.md", plan.writes[0]!.text)).toBe(src);
     }

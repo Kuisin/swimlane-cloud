@@ -28,7 +28,9 @@ declare module "@swimlane-cloud/diagram-converter" {
   export function resolveLinkPath(link: string, fromFile: string): string | null;
   /** The shortest relative link from `fromFile` to `targetFile`. */
   export function relativeLinkPath(targetFile: string, fromFile: string): string;
-  /** Rewrite the spellings the grammar no longer reads; `changed` counts lines. */
+  /** Rewrite a document written in the earlier grammar into the current one; `changed` counts lines. */
+  export function migrateLegacyDsl(text: string): { text: string; changed: number };
+  /** @deprecated Alias of `migrateLegacyDsl`, kept for callers written before the rename. */
   export function migrateLegacySpellings(text: string): { text: string; changed: number };
   export function renderPartsPreviewHtml(
     code: string,

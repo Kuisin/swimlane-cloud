@@ -1,5 +1,5 @@
 /**
- * Reader for `kai-swimlane-v2` — the DSL specified in dsl-rule.md.
+ * Reader for the kai-swimlane DSL specified in dsl-rule.md.
  *
  * Version 2 is whitespace-insensitive: `;` terminates properties, directives and
  * the `/title/` payload, and every other statement self-delimits, so a file can
@@ -20,6 +20,7 @@
  */
 import { BLOCK_SHAPE_WIDTH_FACTOR, BRANCH_COLOR_STYLES } from "./render-pure/diagram-layout.js";
 import { normalizeArrowLine } from "./arrow-line.js";
+import { getLucideIconNode } from "./render-pure/icon-paths.js";
 import {
   DIAGRAM_OPTION_DSL_MAP,
   DIAGRAM_OPTION_VALUE_MAP,
@@ -28,7 +29,15 @@ import {
   emptyDiagramOptions,
 } from "./diagram-options.js";
 
-export const V2_HEADER_RE = /^\uFEFF?[ \t]*@kai-swimlane(?:-v([0-9]+(?:\.[0-9]+)?))?/;
+/**
+ * The one header. There are no versions any more: a file that still says
+ * `@kai-swimlane-v2` or `@kai-swimlane 2` is refused with a pointer to the
+ * migration rather than read as something else.
+ */
+export const V2_HEADER_RE = /^\uFEFF?[ \t]*@kai-swimlane(?![\w-])/;
+// Any probe line that starts with the marker but is not exactly it: a
+// version suffix, a stray character — malformed, never "no header".
+const VERSIONED_HEADER_RE = /^\uFEFF?[ \t]*@kai-swimlane(?:[\w-]|[ \t]+\d)/;
 
 /** The header version of `src`, or null when it carries no header at all. */
 export function dslVersion(src) {
@@ -36,9 +45,9 @@ export function dslVersion(src) {
     .split(/\r?\n/)
     .find((l) => l.trim() !== "");
   if (probe === undefined) return null;
-  const m = V2_HEADER_RE.exec(probe);
-  if (!m) return null;
-  return m[1] ? Math.trunc(Number(m[1])) : 1;
+  // Kept for callers that still ask: the grammar is one, so a header is
+  // simply present (2, the current grammar) or absent.
+  return V2_HEADER_RE.test(probe) ? 2 : null;
 }
 
 const SECTIONS = ["meta", "title", "page", "option", "role", "block", "prop", "line", "i18n"];
@@ -345,18 +354,30 @@ function readText(sc, stops, depth) {
 }
 
 /**
- * Parse a `kai-swimlane-v2` document into the model `parseDSL` returns.
+ * Parse a document into the model `parseDSL` returns.
  *
  * @param {string} src
  * @param {{ resolveImport?: (path: string) => string | null, lang?: string }} [options]
  */
 export function parseDSLv2(src, options = {}) {
   const errors = [];
+  const warnings = [];
+  let sawEnd = false;
   const raw = String(src ?? "");
   const lines = raw.split(/\r?\n/);
   const headerLine = lines.findIndex((l) => V2_HEADER_RE.test(l));
   const m = headerLine < 0 ? null : V2_HEADER_RE.exec(lines[headerLine]);
-  if (!m) {
+  if (!m || VERSIONED_HEADER_RE.test(lines[headerLine])) {
+    const versioned = lines.findIndex((l) => VERSIONED_HEADER_RE.test(l));
+    if (versioned >= 0) {
+      return emptyModel([
+        {
+          line: versioned + 1,
+          text: lines[versioned],
+          msg: "the header is @kai-swimlane — there are no versions any more; run Update DSL",
+        },
+      ]);
+    }
     return emptyModel([{ line: 1, text: "", msg: "@kai-swimlane marker not found" }]);
   }
   const headerStart = raw.indexOf(m[0]);
@@ -413,6 +434,14 @@ export function parseDSLv2(src, options = {}) {
   const stepDepth = bodyDepth;
 
   const err = (pos, msg, text = "") => errors.push({ line: sc.lineAt(pos), text, msg });
+  // A warning is reported but blocks nothing: the value is kept (or omitted)
+  // and the document still renders and still opens in the GUI.
+  const warn = (pos, msg, text = "") =>
+    warnings.push({ line: sc.lineAt(pos), text, msg, severity: "warning" });
+  // One error per stray line: resume at the next line, never one character on.
+  const skipLine = () => {
+    while (!sc.eof && sc.s[sc.i] !== "\n") sc.i++;
+  };
   const push = (fields, pos) => {
     const row = { ...fields, dslLines: [sc.lineAt(pos)] };
     if (pendingComments.length) {
@@ -637,7 +666,10 @@ export function parseDSLv2(src, options = {}) {
       uses.push({ path, alias, pos });
       continue;
     }
-    if (name === "end") break;
+    if (name === "end") {
+      sawEnd = true;
+      break;
+    }
     err(pos, `unknown directive "@${name}"`);
   }
 
@@ -688,7 +720,10 @@ export function parseDSLv2(src, options = {}) {
     if (sc.peek("@")) {
       sc.i++;
       const name = sc.word();
-      if (name === "end") break;
+      if (name === "end") {
+        sawEnd = true;
+        break;
+      }
       if (name === "use" || name === "lang") {
         readRun(sc, [";"], null);
         if (sc.s[sc.i] === ";") sc.i++;
@@ -711,9 +746,10 @@ export function parseDSLv2(src, options = {}) {
     }
 
     if (section === "title") {
-      const t = readText(sc, [";"], null);
+      // One line; a trailing `;` is accepted but not required. Reading on to
+      // the next `;` swallowed whatever sections followed into the title.
+      const t = readText(sc, [";", "\n"], null);
       if (sc.s[sc.i] === ";") sc.i++;
-      else err(pos, "/title/ value must end with ';'");
       title = seg(t);
       title$langs = langsOf(t);
       continue;
@@ -722,10 +758,16 @@ export function parseDSLv2(src, options = {}) {
     if (section === "role" || section === "block" || section === "prop") {
       if (sc.s[sc.i] === "<") {
         sc.i++;
-        const id = readRun(sc, [">"], null);
+        const id = readRun(sc, [">"], null).trim();
         if (sc.s[sc.i] === ">") sc.i++;
+        if (!id) {
+          err(pos, `empty <id> in /${section}/ — name the ${section} between < and >`);
+          activeDef = null;
+          continue;
+        }
         activeDef = id;
         const bag = section === "role" ? roles : section === "block" ? blocks : props;
+        if (localDefIds[section].has(id)) err(pos, `duplicate ${section} definition <${id}>`);
         localDefIds[section].add(id);
         if (!bag[id]) {
           bag[id] = section === "prop" ? { id, label: id, side: "right" } : { id };
@@ -735,7 +777,7 @@ export function parseDSLv2(src, options = {}) {
       const prop = readProperty();
       if (!prop) {
         err(pos, `unrecognized /${section}/ statement`);
-        sc.i = Math.max(sc.i + 1, pos + 1);
+        skipLine();
         continue;
       }
       if (!activeDef) {
@@ -750,7 +792,7 @@ export function parseDSLv2(src, options = {}) {
       const prop = readProperty();
       if (!prop) {
         err(pos, `unrecognized /${section}/ statement`);
-        sc.i = Math.max(sc.i + 1, pos + 1);
+        skipLine();
         continue;
       }
       if (section === "meta") {
@@ -778,10 +820,11 @@ export function parseDSLv2(src, options = {}) {
 
     // Content before any section marker.
     err(pos, "statement outside a section");
-    sc.i = Math.max(sc.i + 1, pos + 1);
+    skipLine();
   }
 
   // ---------------------------------------------------------------- closing
+  if (!sawEnd) errors.push({ line: lines.length, text: "", msg: "missing @end marker" });
   for (const open of groupStack) {
     errors.push({
       line: 0,
@@ -831,17 +874,19 @@ export function parseDSLv2(src, options = {}) {
       ordered.push(r.role);
     }
   }
+  // Every role the document knows, in definition order, so the GUI can offer a
+  // role that no step uses yet. `used` is what the renderer draws a lane for.
   const usedLanes = new Set(rows.filter((r) => r.kind === "step" && r.role).map((r) => r.role));
-  const lanes = ordered
-    .filter((id) => usedLanes.has(id))
-    .map((id) => ({
-      id,
-      label: (roles[id] && roles[id].label) || id,
-      textColor: (roles[id] && roles[id].textColor) || null,
-      bg: (roles[id] && roles[id].bg) || null,
-      icon: (roles[id] && roles[id].icon) || null,
-      iconAsset: (roles[id] && roles[id].iconAsset) || null,
-    }));
+  const lanes = ordered.map((id) => ({
+    id,
+    label: (roles[id] && roles[id].label) || id,
+    textColor: (roles[id] && roles[id].textColor) || null,
+    bg: (roles[id] && roles[id].bg) || null,
+    icon: (roles[id] && roles[id].icon) || null,
+    iconAsset: (roles[id] && roles[id].iconAsset) || null,
+    unknown: (roles[id] && roles[id].unknown) || undefined,
+    used: usedLanes.has(id),
+  }));
 
   return {
     title,
@@ -854,6 +899,7 @@ export function parseDSLv2(src, options = {}) {
     blocks,
     props,
     errors,
+    warnings,
     trailingLineComments: pendingComments,
     providedPageKeys: [...providedPageKeys],
     assets,
@@ -924,7 +970,9 @@ export function parseDSLv2(src, options = {}) {
     }
     const field = map[prop.key];
     if (!field) {
-      err(prop.pos, `unknown /${kind}/ key: ${prop.key}`);
+      // A typo is not a broken file: keep the line so a save re-emits it.
+      warn(prop.pos, `unknown /${kind}/ key: ${prop.key} — kept, not rendered`);
+      bag[id].unknown = { ...(bag[id].unknown || {}), [prop.key]: prop.value };
       return;
     }
     if (prop.value === "none") {
@@ -936,8 +984,18 @@ export function parseDSLv2(src, options = {}) {
       prop.key === "shape" &&
       !BLOCK_SHAPE_WIDTH_FACTOR[prop.value.toLowerCase()]
     ) {
-      err(prop.pos, `unknown shape "${prop.value}"`);
+      warn(prop.pos, `unknown shape "${prop.value}" — kept, drawn as rect`);
+      bag[id].shape = prop.value;
       return;
+    }
+    if (field === "icon" && prop.value.startsWith("#")) {
+      // `#name` is a Lucide icon; an unknown name is omitted, not fatal.
+      if (!getLucideIconNode(prop.value.slice(1))) {
+        warn(prop.pos, `unknown icon "${prop.value}" — omitted`);
+        delete bag[id].icon;
+        delete bag[id].iconAsset;
+        return;
+      }
     }
     if (kind === "prop" && field === "side") {
       const side = prop.value.toLowerCase();
@@ -1083,12 +1141,18 @@ export function parseDSLv2(src, options = {}) {
     let arrowLine = null;
     let link = null;
     const stepProps = [];
+    // Suffixes stay on the step's own line; each may appear once.
+    const once = (what, already, at) => {
+      if (already) err(at, `${what} given twice on one step`);
+    };
     for (;;) {
       const mark = sc.i;
-      sc.skipWs();
+      while (sc.s[sc.i] === " " || sc.s[sc.i] === "\t") sc.i++;
+      const at = sc.i;
       if (sc.s[sc.i] === "<") {
         sc.i++;
-        blockRef = readRun(sc, [">"], null);
+        once("<block>", blockRef != null, at);
+        blockRef = readRun(sc, [">"], null).trim();
         if (sc.s[sc.i] === ">") sc.i++;
         continue;
       }
@@ -1099,26 +1163,41 @@ export function parseDSLv2(src, options = {}) {
           sc.i = mark;
           break;
         }
-        stepId = w;
+        once("@id", stepId != null, at);
+        if (!w) err(at, "@ needs an id");
+        else stepId = w;
         continue;
       }
       if (sc.s[sc.i] === "+") {
         sc.i++;
         const id = sc.word();
-        if (id) stepProps.push(id);
+        if (!id) err(at, "+ needs a prop id");
+        else if (stepProps.includes(id)) err(at, `+${id} given twice on one step`);
+        else stepProps.push(id);
         continue;
       }
       if (sc.peek("=>")) {
         sc.i += 2;
-        sc.skipWs();
-        const start = sc.i;
-        while (!sc.eof && !isWs(sc.s[sc.i]) && sc.s[sc.i] !== ";" && sc.s[sc.i] !== "]") sc.i++;
-        link = sc.s.slice(start, sc.i);
+        once("=>", link != null, at);
+        while (sc.s[sc.i] === " " || sc.s[sc.i] === "\t") sc.i++;
+        let path;
+        if (sc.s[sc.i] === '"') {
+          sc.i++;
+          path = readRun(sc, ['"'], null);
+          if (sc.s[sc.i] === '"') sc.i++;
+        } else {
+          const start = sc.i;
+          while (!sc.eof && !isWs(sc.s[sc.i]) && sc.s[sc.i] !== ";") sc.i++;
+          path = sc.s.slice(start, sc.i);
+        }
+        if (!path) err(at, "=> needs a path to another flow");
+        else link = path;
         continue;
       }
       const glyph = GLYPHS.find(([g]) => sc.peek(g));
       if (glyph) {
         sc.i += glyph[0].length;
+        once("arrow glyph", arrowLine != null, at);
         arrowLine = normalizeArrowLine(glyph[1]);
         continue;
       }
@@ -1396,13 +1475,29 @@ export function parseDSLv2(src, options = {}) {
     );
   }
 
-  function readJump(kw, pos) {
-    sc.skipWs();
-    let target = null;
-    if (sc.s[sc.i] === "@") {
-      sc.i++;
-      target = sc.word();
+  /**
+   * An optional `@id` on the same line as `goto` / `loop` / `merge`. Never
+   * crosses a newline and never takes a directive (`@end`, `@use`, `@lang`),
+   * so a bare marker at the end of the flow leaves `@end` alone.
+   */
+  function readInlineTarget() {
+    const mark = sc.i;
+    while (sc.s[sc.i] === " " || sc.s[sc.i] === "\t") sc.i++;
+    if (sc.s[sc.i] !== "@") {
+      sc.i = mark;
+      return null;
     }
+    sc.i++;
+    const w = sc.word();
+    if (!w || ["end", "use", "lang", "kai-swimlane"].includes(w)) {
+      sc.i = mark;
+      return null;
+    }
+    return w;
+  }
+
+  function readJump(kw, pos) {
+    const target = readInlineTarget();
     const top = stack[stack.length - 1];
     if (kw === "loop") {
       if (!top || top.type !== "if") {
@@ -1440,12 +1535,7 @@ export function parseDSLv2(src, options = {}) {
 
   /** `merge` / `merge @id` — a landing marker a case's `goto` lands on. */
   function readMergeMarker(pos) {
-    sc.skipWs();
-    let name = null;
-    if (sc.s[sc.i] === "@") {
-      sc.i++;
-      name = sc.word() || null;
-    }
+    const name = readInlineTarget();
     if (name) {
       if (stepIds.has(name)) err(pos, `duplicate node id "${name}"`);
       stepIds.set(name, rows.length);
@@ -1487,6 +1577,7 @@ function emptyModel(errors) {
     blocks: {},
     props: {},
     errors,
+    warnings: [],
     trailingLineComments: [],
     dslVersion: 2,
   };
@@ -1526,7 +1617,7 @@ export function scanImports(src, filename = "") {
 
 /** A header-less fragment: definitions and catalog entries only. */
 export function parseFragmentV2(text, options = {}) {
-  const model = parseDSLv2(`@kai-swimlane-v2\n${text}`, options);
+  const model = parseDSLv2(`@kai-swimlane\n${text}`, options);
   return {
     page: model.page,
     options: model.options,

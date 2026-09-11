@@ -1,19 +1,19 @@
 /**
  * `serializeDSL` (the dispatcher in `serialize-dsl.js`) must round-trip a
- * `@kai-swimlane-v2` document without the v1-only corruption this package
- * shipped before: every declared language, `@use`, `phase` vs `section`, an
- * opener's own `@id`, and a `loop`'s own `@target` all have to survive a
- * parse → serialize → reparse cycle, since that's exactly what happens every
- * time the GUI editor saves a v2 document.
+ * `@kai-swimlane` document without corruption: every declared language,
+ * `@use`, `phase` vs `section`, an opener's own `@id`, and a `loop`'s own
+ * `@target` all have to survive a parse → serialize → reparse cycle, since
+ * that's exactly what happens every time the GUI editor saves a document.
  */
 import { describe, it, expect } from "vitest";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseDSL } from "@swimlane-cloud/diagram-converter/parser";
+import { migrateLegacyDsl } from "@swimlane-cloud/diagram-converter";
 import { serializeDSL } from "./serialize-dsl.js";
 
-const doc = (body) => `@kai-swimlane-v2\n${body}\n@end\n`;
+const doc = (body) => `@kai-swimlane\n${body}\n@end\n`;
 
 /** Idempotence: once canonicalized, a second round-trip must not drift. */
 function assertStableRoundTrip(src, options) {
@@ -35,16 +35,11 @@ function allLangs(obj, field, n) {
   return Array.from({ length: n }, (_, i) => (arr && arr[i] != null ? arr[i] : obj[field]));
 }
 
-describe("serializeDSL dispatches on dslVersion", () => {
-  it("still writes a bare v1 header for a version 1 model", () => {
-    const out = serializeDSL(parseDSL("@kai-swimlane\n/title/\nT\n/line/\n[a: x]\n@end\n"));
+describe("serializeDSL", () => {
+  it("writes @kai-swimlane for every model — there is only one grammar", () => {
+    const out = serializeDSL(parseDSL(doc("/line/\n[a: x]")));
     expect(out.startsWith("@kai-swimlane\n")).toBe(true);
     expect(out).not.toContain("@kai-swimlane-v2");
-  });
-
-  it("writes @kai-swimlane-v2 for a version 2 model", () => {
-    const out = serializeDSL(parseDSL(doc("/line/\n[a: x]")));
-    expect(out.startsWith("@kai-swimlane-v2")).toBe(true);
   });
 });
 
@@ -204,7 +199,7 @@ describe("serializeDSLv2: real worked-example fixtures", () => {
     "..",
     "..",
     "examples",
-    "kai-swimlane-v2",
+    "kai-swimlane",
   );
   const ROOT = join(EXAMPLE, "diagrams");
 
@@ -242,7 +237,7 @@ describe("serializeDSLv2: real worked-example fixtures", () => {
     };
   }
 
-  describe.skipIf(!existsSync(ROOT))("examples/kai-swimlane-v2", () => {
+  describe.skipIf(!existsSync(ROOT))("examples/kai-swimlane", () => {
     const files = diagrams(ROOT);
 
     it("has the sample diagrams", () => {
@@ -252,7 +247,10 @@ describe("serializeDSLv2: real worked-example fixtures", () => {
     it.each(files.map((f) => [f.slice(ROOT.length + 1), f]))(
       "%s survives a parse -> serialize -> reparse cycle with no data loss",
       (_name, path) => {
-        const src = readFileSync(path, "utf8");
+        // The fixtures under examples/kai-swimlane predate the one-grammar
+        // change and still carry the old `@kai-swimlane-v2` header; that
+        // directory isn't this package's to rewrite, so migrate on the fly.
+        const src = migrateLegacyDsl(readFileSync(path, "utf8")).text;
         const options = resolversFor(path);
         const m1 = parseDSL(src, options);
         expect(m1.errors).toEqual([]);

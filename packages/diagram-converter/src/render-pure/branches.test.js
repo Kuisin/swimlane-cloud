@@ -61,13 +61,14 @@ function caseLabels(svg) {
 describe("a case that opens with a nested fork or if", () => {
   it("runs its rail into the fork gateway, not to a fixed distance above it", () => {
     const svg = render(
-      doc(`if (q?) is (yes) than
+      doc(`if (q?)
+case (yes)
   fork
     [ops: a]
   and
     [sales: b]
   end-fork
-else
+case ()
   [ops: c]
 end-if`),
     );
@@ -83,13 +84,15 @@ end-if`),
 
   it("runs its rail into the nested diamond's top vertex", () => {
     const svg = render(
-      doc(`if (q?) is (yes) than
-  if (r?) is (y) than
+      doc(`if (q?)
+case (yes)
+  if (r?)
+  case (y)
     [ops: a]
-  else
+  case ()
     [ops: b]
   end-if
-else
+case ()
   [ops: c]
 end-if`),
     );
@@ -105,13 +108,14 @@ end-if`),
 
   it("draws the case label on that rail, not beside it", () => {
     const svg = render(
-      doc(`if (q?) is (yes) than
+      doc(`if (q?)
+case (yes)
   fork
     [ops: a]
   and
     [sales: b]
   end-fork
-else
+case ()
   [ops: c]
 end-if`),
     );
@@ -126,9 +130,10 @@ end-if`),
 describe("a blank case", () => {
   it("hangs straight under the decision instead of at the canvas centre", () => {
     const svg = render(
-      doc(`if (q?) is (yes) than
+      doc(`if (q?)
+case (yes)
   [ops: work]
-else
+case ()
 end-if`),
     );
     const [diamond] = diamonds(svg);
@@ -145,8 +150,9 @@ end-if`),
 
   it("does not stack on a second blank case", () => {
     const svg = render(
-      doc(`if (q?) is (yes) than
-else-if (no) than
+      doc(`if (q?)
+case (yes)
+case (no)
 end-if`),
     );
     const labels = caseLabels(svg).filter((l) => l.text === "yes" || l.text === "no");
@@ -158,14 +164,15 @@ end-if`),
 describe("a case that holds only [loop]", () => {
   const svg = render(
     doc(`[ops: confirm]
-if (approved?) is (yes) than
+if (approved?)
+case (yes)
   fork
     [sales: a]
   and
     [ops: b]
   end-fork
-else-if (no) than
-  [loop]
+case (no)
+  loop
 end-if`),
   );
 

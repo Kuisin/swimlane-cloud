@@ -13,7 +13,7 @@ const theme = THEMES.basic;
  * renderer's side of that contract directly, without depending on any
  * particular alignment algorithm.
  */
-const LINEAR = `@kai-swimlane-v2
+const LINEAR = `@kai-swimlane
 /role/
 <a>
   label: A;
@@ -112,7 +112,7 @@ describe("diffRows: added / changed / removed", () => {
   });
 
   it("shows an inserted word underlined and marks it for the hide toggle", () => {
-    const edited = `@kai-swimlane-v2
+    const edited = `@kai-swimlane
 /role/
 <a>
   label: A;
@@ -137,7 +137,7 @@ describe("diffRows: added / changed / removed", () => {
   });
 
   it("marks a deleted word for full removal on hide, not just de-emphasis", () => {
-    const edited = `@kai-swimlane-v2
+    const edited = `@kai-swimlane
 /role/
 <a>
   label: A;
