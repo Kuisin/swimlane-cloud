@@ -9,7 +9,12 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isCurrentMainGuard, MAIN_GUARD_WORKFLOW, MAIN_GUARD_WORKFLOW_PATH } from "./main-guard.ts";
+import {
+  isCurrentMainGuard,
+  MAIN_GUARD_WORKFLOW,
+  MAIN_GUARD_WORKFLOW_PATH,
+  MANAGED_PATHS,
+} from "./main-guard.ts";
 import { repoSettingsJson } from "./repo-settings.ts";
 
 /** The dedented body of the `run: |` block belonging to `jobName`. */
@@ -141,5 +146,29 @@ describe("isCurrentMainGuard", () => {
 
   it("lives under .github/workflows so GitHub actually runs it", () => {
     expect(MAIN_GUARD_WORKFLOW_PATH.startsWith(".github/workflows/")).toBe(true);
+  });
+});
+
+/**
+ * `rule.md` documents the guard workflow and the guard workflow exempts
+ * `rule.md`, which made those two modules import each other — a cycle that
+ * typechecked cleanly and then threw `Cannot access 'REPO_RULES_PATH' before
+ * initialization` at module-evaluation time. The path constants live in
+ * `repo-paths.ts` now; this fails again if they move back.
+ */
+describe("the managed-path constants do not reintroduce an import cycle", () => {
+  it("loads both content modules, from either entry point", async () => {
+    const rules = await import("./repo-rules.ts");
+    const guard = await import("./main-guard.ts");
+    expect(rules.REPO_RULES.length).toBeGreaterThan(0);
+    expect(guard.MAIN_GUARD_WORKFLOW.length).toBeGreaterThan(0);
+  });
+
+  it("exempts only this app's own bookkeeping, never a diagram", () => {
+    expect(MANAGED_PATHS).toContain(MAIN_GUARD_WORKFLOW_PATH);
+    expect(MANAGED_PATHS).toContain("rule.md");
+    expect(MANAGED_PATHS).toContain("swimlane-settings.json");
+    expect(MANAGED_PATHS).toContain(".swimlane.json");
+    expect(MANAGED_PATHS.some((p) => p.includes("diagram"))).toBe(false);
   });
 });

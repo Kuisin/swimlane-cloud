@@ -15,7 +15,7 @@
 
 import { INTEGRATION_BRANCH, PROD_BRANCH } from "./branch-model.ts";
 
-export const REPO_SETTINGS_PATH = "swimlane-settings.json";
+export { REPO_SETTINGS_PATH } from "./repo-paths.ts";
 
 export interface SwimlaneSettings {
   /** Bumped when a later version of the app must migrate this file. */

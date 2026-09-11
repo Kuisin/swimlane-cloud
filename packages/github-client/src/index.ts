@@ -25,7 +25,12 @@ export { createRestClient, nextPageUrl } from "./rest.ts";
 export type { RestClient, RestClientOptions, RestRequestOptions } from "./rest.ts";
 export { createWriteApi } from "./write.ts";
 export type { CommitFilesOptions, CommitResult, FileWrite, WriteApi } from "./write.ts";
-export { isCurrentMainGuard, MAIN_GUARD_WORKFLOW, MAIN_GUARD_WORKFLOW_PATH } from "./main-guard.ts";
+export {
+  isCurrentMainGuard,
+  MAIN_GUARD_WORKFLOW,
+  MAIN_GUARD_WORKFLOW_PATH,
+  MANAGED_PATHS,
+} from "./main-guard.ts";
 export { isCurrentRepoRules, REPO_RULES, REPO_RULES_PATH } from "./repo-rules.ts";
 export {
   DEFAULT_SETTINGS,

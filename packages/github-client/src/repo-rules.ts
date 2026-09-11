@@ -8,9 +8,9 @@
  */
 
 import { INTEGRATION_BRANCH, PROD_BRANCH } from "./branch-model.ts";
-import { MAIN_GUARD_WORKFLOW_PATH } from "./main-guard.ts";
+import { MAIN_GUARD_WORKFLOW_PATH } from "./repo-paths.ts";
 
-export const REPO_RULES_PATH = "rule.md";
+export { REPO_RULES_PATH } from "./repo-paths.ts";
 
 export const REPO_RULES = `# How this repository works
 

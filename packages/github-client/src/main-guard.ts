@@ -31,9 +31,9 @@
  */
 
 import { INTEGRATION_BRANCH, PROD_BRANCH } from "./branch-model.ts";
-import { REPO_SETTINGS_PATH } from "./repo-settings.ts";
+import { MAIN_GUARD_WORKFLOW_PATH, MANAGED_PATHS, REPO_SETTINGS_PATH } from "./repo-paths.ts";
 
-export const MAIN_GUARD_WORKFLOW_PATH = ".github/workflows/swimlane-main-guard.yml";
+export { MAIN_GUARD_WORKFLOW_PATH, MANAGED_PATHS } from "./repo-paths.ts";
 
 /**
  * The workflow body. A plain string rather than a template read from disk so
@@ -118,15 +118,41 @@ jobs:
             echo "::error::${PROD_BRANCH} was force-pushed. Its history is the published record and must not be rewritten."
             exit 1
           fi
-          parents="$(gh api "repos/$REPO/commits/$SHA" --jq '.parents | length')"
+          commit="$(gh api "repos/$REPO/commits/$SHA")"
+          parents="$(printf '%s' "$commit" | jq -r '.parents | length')"
           echo "Commit $SHA has $parents parent(s)."
+
           # Every legitimate change arrives as a merge, so one parent means
           # something was committed straight onto the branch.
-          if [ "$parents" -lt 2 ]; then
-            echo "::error::A commit was pushed straight onto ${PROD_BRANCH}. Every change must arrive by merging ${INTEGRATION_BRANCH} — edit on an edit branch, open a pull request into ${INTEGRATION_BRANCH}, then publish a version."
-            exit 1
+          if [ "$parents" -ge 2 ]; then
+            echo "Commit $SHA arrived as a merge."
+            exit 0
           fi
-          echo "Commit $SHA arrived as a merge."
+
+          # …with one exception: the files Swimlane Cloud manages itself. They
+          # are written directly when a project is connected, which is also the
+          # push that introduces this very workflow — without this, the guard
+          # would fail on its own arrival. Diagrams are not in this list, so
+          # content still cannot reach ${PROD_BRANCH} outside the flow.
+          managed='${MANAGED_PATHS.join(" ")}'
+          changed="$(printf '%s' "$commit" | jq -r '.files[]?.filename')"
+          if [ -n "$changed" ]; then
+            unmanaged=""
+            for file in $changed; do
+              case " $managed " in
+                *" $file "*) ;;
+                *) unmanaged="$unmanaged $file" ;;
+              esac
+            done
+            if [ -z "$unmanaged" ]; then
+              echo "Commit $SHA only touches files Swimlane Cloud manages:$changed"
+              exit 0
+            fi
+            echo "::error::Pushed straight onto ${PROD_BRANCH}:$unmanaged"
+          fi
+
+          echo "::error::A commit was pushed straight onto ${PROD_BRANCH}. Every change must arrive by merging ${INTEGRATION_BRANCH} — edit on an edit branch, open a pull request into ${INTEGRATION_BRANCH}, then publish a version."
+          exit 1
 `;
 
 /** True when `text` is already exactly the workflow this version writes. */
