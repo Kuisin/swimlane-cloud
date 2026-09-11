@@ -1274,6 +1274,10 @@ function renderDiagramSvg({
     }
     return null;
   }
+  /** Where a loop-only case turns back: clear of its label chip. */
+  function loopOnlyOriginY(bendY) {
+    return bendY + caseLabelOffsetY + caseLabelHeight;
+  }
   function isStubCase(c, branchId) {
     if (loopAnchorInCase(c.rowIndices, branchId)) return false;
     if (c.childFrame) return false;
@@ -1417,6 +1421,13 @@ function renderDiagramSvg({
         targetY = bendY;
       }
       labelClampY = stepTarget ? stepTarget.y : stepBlockCenterY(firstStepIdx) - 22;
+    } else if (loopAnchorInCase(c.rowIndices, f.id)) {
+      // A case holding only `[loop]`: its loop row is laid out in document
+      // order, after every row of the cases before it, so aiming there drew
+      // a rail down the whole diagram for a path that does nothing but turn
+      // back. It turns back just under its label instead.
+      targetY = loopOnlyOriginY(bendY);
+      labelClampY = mergeTopY;
     } else if (isStubCase(c, f.id)) {
       targetY = bendY;
       labelClampY = mergeTopY;
@@ -2488,9 +2499,11 @@ function renderDiagramSvg({
                 fromX2 = li >= 0 ? nodeCenterX(anchor.prevStepIdx, r.role) : c.x;
                 fromBottomY = stepBlockBottomY(anchor.prevStepIdx);
               } else {
-                fromX2 = c.x;
-                const loopY = rowMeta[anchor.loopIdx]?.y ?? f.yDecision;
-                fromBottomY = loopY + (stepRowHeightByIndex.get(anchor.loopIdx) || branchLoopH);
+                // No step before the loop: the rail from the decision ends
+                // just under the label (see caseFanOutTarget), so turn back
+                // from there rather than from the loop row's document position.
+                fromX2 = caseAnchorX(c);
+                fromBottomY = loopOnlyOriginY(caseRailY);
               }
               const d2 = buildLoopBackPath({
                 fromX: fromX2,
